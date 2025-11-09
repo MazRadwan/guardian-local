@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Testing
+coverage/
+*.log
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Environment variables
+.env
+.env*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.tsbuildinfo
+.turbo
+
+# Agent summaries (ephemeral)
+summaries/
+
+# Claude local state
+.claude/settings.local.json
+.claude/review-*.md
+
+# Planning artifacts (local only)
+chats/
+sample_assessments/
+tasks/
+
+# Ad-hoc test scripts
+test-*.js
+verify-*.sh
+
+# GUARDIAN original docs (keep only in .claude/documentation/)
+GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md
+GUARDIAN_Training_Guide_v1.0.md
