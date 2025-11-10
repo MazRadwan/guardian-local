@@ -114,20 +114,55 @@ export class ChatServer {
     chatNamespace.on('connection', async (socket: AuthenticatedSocket) => {
       console.log(`[ChatServer] Client connected: ${socket.id} (User: ${socket.userId})`);
 
-      // Auto-create conversation for this session
-      const conversation = await this.conversationService.createConversation({
-        userId: socket.userId!,
-        mode: 'consult',
-      });
+      // Check if client wants to resume an existing conversation
+      const resumeConversationId = socket.handshake.auth.conversationId;
+      let conversation;
+      let resumed = false;
+
+      if (resumeConversationId) {
+        try {
+          // Try to resume existing conversation
+          const existing = await this.conversationService.getConversation(resumeConversationId);
+
+          // Validate ownership - only allow resuming own conversations
+          if (existing && existing.userId === socket.userId) {
+            conversation = existing;
+            resumed = true;
+            console.log(`[ChatServer] Resumed conversation ${resumeConversationId} for user ${socket.userId}`);
+          } else {
+            // Invalid or not owned - create new
+            console.log(`[ChatServer] Cannot resume conversation ${resumeConversationId} - creating new`);
+            conversation = await this.conversationService.createConversation({
+              userId: socket.userId!,
+              mode: 'consult',
+            });
+          }
+        } catch (error) {
+          // Resume failed - create new
+          console.error('[ChatServer] Error resuming conversation:', error);
+          conversation = await this.conversationService.createConversation({
+            userId: socket.userId!,
+            mode: 'consult',
+          });
+        }
+      } else {
+        // No saved conversation - create new
+        conversation = await this.conversationService.createConversation({
+          userId: socket.userId!,
+          mode: 'consult',
+        });
+        console.log(`[ChatServer] Created new conversation ${conversation.id} for user ${socket.userId}`);
+      }
 
       // Store conversationId in socket for this session
       socket.conversationId = conversation.id;
 
       // Send welcome message with conversationId
       socket.emit('connected', {
-        message: 'Connected to Guardian chat server',
+        message: resumed ? 'Reconnected to existing conversation' : 'Connected to Guardian chat server',
         userId: socket.userId,
         conversationId: conversation.id,
+        resumed,
       });
 
       // Handle send_message event

@@ -6,18 +6,24 @@ import { WebSocketClient, ChatMessage, StreamEvent } from '@/lib/websocket';
 export interface UseWebSocketOptions {
   url: string;
   token?: string;
+  conversationId?: string;
   onMessage?: (message: ChatMessage) => void;
   onMessageStream?: (chunk: string, messageId?: string) => void;
   onError?: (error: string) => void;
+  onConnected?: (data: { conversationId: string; resumed: boolean }) => void;
+  onHistory?: (messages: ChatMessage[]) => void;
   autoConnect?: boolean;
 }
 
 export function useWebSocket({
   url,
   token,
+  conversationId,
   onMessage,
   onMessageStream,
   onError,
+  onConnected,
+  onHistory,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -31,7 +37,7 @@ export function useWebSocket({
 
     setIsConnecting(true);
     try {
-      const client = new WebSocketClient({ url, token });
+      const client = new WebSocketClient({ url, token, conversationId });
       await client.connect();
       clientRef.current = client;
       setIsConnected(true);
@@ -41,7 +47,7 @@ export function useWebSocket({
     } finally {
       setIsConnecting(false);
     }
-  }, [url, token, isConnecting, isConnected, onError]);
+  }, [url, token, conversationId, isConnecting, isConnected, onError]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -57,6 +63,16 @@ export function useWebSocket({
         throw new Error('WebSocket not connected');
       }
       clientRef.current.sendMessage(content);
+    },
+    [isConnected]
+  );
+
+  const requestHistory = useCallback(
+    (conversationId: string, limit?: number) => {
+      if (!clientRef.current || !isConnected) {
+        throw new Error('WebSocket not connected');
+      }
+      clientRef.current.requestHistory(conversationId, limit);
     },
     [isConnected]
   );
@@ -91,10 +107,24 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onConnected) {
+      const unsub = client.onConnected((data) => {
+        onConnected(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onHistory) {
+      const unsub = client.onHistory((messages) => {
+        onHistory(messages);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError]);
+  }, [isConnected, onMessage, onMessageStream, onError, onConnected, onHistory]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -116,5 +146,6 @@ export function useWebSocket({
     connect,
     disconnect,
     sendMessage,
+    requestHistory,
   };
 }

@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 export interface WebSocketConfig {
   url: string;
   token?: string;
+  conversationId?: string; // Optional - resume existing conversation
 }
 
 export interface EmbeddedComponent {
@@ -116,6 +117,7 @@ export class WebSocketClient {
         this.socket = io(this.config.url, {
           auth: {
             token: this.config.token,
+            conversationId: this.config.conversationId, // Pass conversationId to resume session
           },
           transports: ['websocket', 'polling'],
           reconnection: true,
@@ -216,6 +218,36 @@ export class WebSocketClient {
     return () => {
       this.socket?.off('error', handler);
     };
+  }
+
+  onConnected(callback: (data: { conversationId: string; resumed: boolean; message: string }) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    this.socket.on('connected', callback);
+    return () => {
+      this.socket?.off('connected', callback);
+    };
+  }
+
+  onHistory(callback: (messages: ChatMessage[]) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId: string; messages: any[] }) => {
+      const normalized = data.messages.map((msg: any) => normalizeMessage(msg as BackendMessage));
+      callback(normalized);
+    };
+
+    this.socket.on('history', handler);
+    return () => {
+      this.socket?.off('history', handler);
+    };
+  }
+
+  requestHistory(conversationId: string, limit: number = 50): void {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('WebSocket not connected');
+    }
+    this.socket.emit('get_history', { conversationId, limit });
   }
 
   isConnected(): boolean {

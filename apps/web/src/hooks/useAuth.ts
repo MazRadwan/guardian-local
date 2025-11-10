@@ -84,6 +84,7 @@ export function useAuth() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('guardian_token');
       localStorage.removeItem('guardian_user');
+      localStorage.removeItem('guardian_conversation_id'); // Clear conversation session
     }
     setAuthState({
       user: null,

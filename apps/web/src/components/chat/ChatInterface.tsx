@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ModeSwitcher, ConversationMode } from './ModeSwitcher';
@@ -14,10 +14,21 @@ import { AlertCircle } from 'lucide-react';
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
 
 export function ChatInterface() {
-  const { messages, isLoading, error, addMessage, startStreaming, appendToLastMessage, finishStreaming, setError } =
+  const { messages, isLoading, error, addMessage, setMessages, startStreaming, appendToLastMessage, finishStreaming, setError } =
     useChatStore();
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
+  const [savedConversationId, setSavedConversationId] = useState<string | undefined>();
+
+  // Load saved conversationId from localStorage on mount (client-side only)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('guardian_conversation_id');
+      if (saved) {
+        setSavedConversationId(saved);
+      }
+    }
+  }, []);
 
   const handleMessage = useCallback(
     (message: ChatMessageType) => {
@@ -47,14 +58,41 @@ export function ChatInterface() {
     [setError, finishStreaming]
   );
 
-  const { isConnected, isConnecting, sendMessage } = useWebSocket({
+  const handleConnected = useCallback(
+    (data: { conversationId: string; resumed: boolean }) => {
+      // Save conversationId to localStorage for session persistence
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('guardian_conversation_id', data.conversationId);
+      }
+    },
+    []
+  );
+
+  const handleHistory = useCallback(
+    (loadedMessages: ChatMessageType[]) => {
+      setMessages(loadedMessages);
+    },
+    [setMessages]
+  );
+
+  const { isConnected, isConnecting, sendMessage, requestHistory } = useWebSocket({
     url: WEBSOCKET_URL,
-    token: token || undefined, // Pass JWT token to WebSocket
+    token: token || undefined,
+    conversationId: savedConversationId, // Pass saved conversationId to resume
     onMessage: handleMessage,
     onMessageStream: handleMessageStream,
     onError: handleError,
-    autoConnect: Boolean(token), // Only connect when token is available
+    onConnected: handleConnected,
+    onHistory: handleHistory,
+    autoConnect: Boolean(token),
   });
+
+  // Request history when connected and we have a saved conversation
+  useEffect(() => {
+    if (isConnected && savedConversationId && requestHistory) {
+      requestHistory(savedConversationId);
+    }
+  }, [isConnected, savedConversationId, requestHistory]);
 
   const handleSendMessage = useCallback(
     (content: string) => {
