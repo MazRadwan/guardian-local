@@ -41,7 +41,17 @@ import { createExportRoutes } from './infrastructure/http/routes/export.routes.j
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-here';
+
+// Validate ANTHROPIC_API_KEY (required for Claude integration)
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+if (!ANTHROPIC_API_KEY && process.env.NODE_ENV !== 'test') {
+  throw new Error(
+    'ANTHROPIC_API_KEY environment variable is required. Please set it in packages/backend/.env'
+  );
+}
+if (!ANTHROPIC_API_KEY && process.env.NODE_ENV === 'test') {
+  console.warn('[App] ANTHROPIC_API_KEY not set - Claude features will fail in tests');
+}
 
 // Initialize repositories
 const userRepo = new DrizzleUserRepository();

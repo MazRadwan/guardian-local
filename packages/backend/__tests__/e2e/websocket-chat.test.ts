@@ -16,6 +16,27 @@ import { User } from '../../src/domain/entities/User'
 import { testDb, closeTestDb } from '../setup/test-db'
 import { sql } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
+import type { IClaudeClient, ClaudeMessage, StreamChunk } from '../../src/application/interfaces/IClaudeClient'
+
+// Mock Claude client for deterministic test responses
+class MockClaudeClient implements IClaudeClient {
+  async sendMessage(messages: ClaudeMessage[], systemPrompt?: string): Promise<any> {
+    return {
+      content: 'This is a mocked Claude response for testing',
+      stop_reason: 'end_turn',
+      model: 'claude-test-model',
+    }
+  }
+
+  async *streamMessage(messages: ClaudeMessage[], systemPrompt?: string): AsyncGenerator<StreamChunk> {
+    // Emit test chunks
+    yield { content: 'This ', isComplete: false }
+    yield { content: 'is ', isComplete: false }
+    yield { content: 'a mocked ', isComplete: false }
+    yield { content: 'streaming response', isComplete: false }
+    yield { content: '', isComplete: true }
+  }
+}
 
 describe('WebSocket Chat E2E Tests', () => {
   let httpServer: HTTPServer
@@ -56,10 +77,12 @@ describe('WebSocket Chat E2E Tests', () => {
     // Setup JWT provider
     jwtProvider = new JWTProvider('test-jwt-secret-key', '1h')
 
-    // Setup chat server
+    // Setup chat server with mock Claude client
+    const mockClaudeClient = new MockClaudeClient()
     chatServer = new ChatServer(
       ioServer,
       conversationService,
+      mockClaudeClient,
       'test-jwt-secret-key'
     )
 
@@ -202,6 +225,8 @@ describe('WebSocket Chat E2E Tests', () => {
   })
 
   describe('send_message event', () => {
+    let socketConversationId: string
+
     beforeEach((done) => {
       clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
         auth: {
@@ -209,7 +234,9 @@ describe('WebSocket Chat E2E Tests', () => {
         },
       })
 
-      clientSocket.on('connect', () => {
+      // Capture the auto-created conversationId
+      clientSocket.on('connected', (data) => {
+        socketConversationId = data.conversationId
         done()
       })
     })
@@ -218,13 +245,12 @@ describe('WebSocket Chat E2E Tests', () => {
       const messageText = 'Hello, I need help with vendor assessment'
 
       clientSocket.emit('send_message', {
-        conversationId: testConversationId,
-        text: messageText,
+        text: messageText, // Use socket's auto-created conversation
       })
 
       clientSocket.on('message_sent', (data) => {
         expect(data.messageId).toBeDefined()
-        expect(data.conversationId).toBe(testConversationId)
+        expect(data.conversationId).toBe(socketConversationId)
         expect(data.timestamp).toBeDefined()
         done()
       })
@@ -234,24 +260,24 @@ describe('WebSocket Chat E2E Tests', () => {
       const messageText = 'Test message for database'
 
       clientSocket.emit('send_message', {
-        conversationId: testConversationId,
         text: messageText,
       })
 
       clientSocket.on('message_sent', async (data) => {
         // Verify message was saved
         const messages = await conversationService.getHistory(
-          testConversationId
+          socketConversationId
         )
 
-        expect(messages).toHaveLength(1)
-        expect(messages[0].content.text).toBe(messageText)
-        expect(messages[0].role).toBe('user')
+        // Should have user message + assistant response
+        expect(messages.length).toBeGreaterThanOrEqual(1)
+        const userMessage = messages.find(m => m.role === 'user')
+        expect(userMessage?.content.text).toBe(messageText)
         done()
       })
     })
 
-    it('should send message with components', (done) => {
+    it('should handle message with components', (done) => {
       const messageText = 'Message with components'
       const components = [
         {
@@ -261,14 +287,20 @@ describe('WebSocket Chat E2E Tests', () => {
       ]
 
       clientSocket.emit('send_message', {
-        conversationId: testConversationId,
         text: messageText,
         components,
       })
 
-      clientSocket.on('message', (data) => {
-        expect(data.content.text).toBe(messageText)
-        expect(data.content.components).toEqual(components)
+      // Verify message was sent
+      clientSocket.on('message_sent', async (data) => {
+        expect(data.messageId).toBeDefined()
+        expect(data.conversationId).toBe(socketConversationId)
+
+        // Verify components were saved
+        const messages = await conversationService.getHistory(socketConversationId)
+        const userMessage = messages.find(m => m.role === 'user')
+        expect(userMessage?.content.text).toBe(messageText)
+        expect(userMessage?.content.components).toEqual(components)
         done()
       })
     })
@@ -286,19 +318,19 @@ describe('WebSocket Chat E2E Tests', () => {
       })
     })
 
-    it('should receive message event after send', (done) => {
-      const messageText = 'Test message for event'
+    it('should receive assistant response after user message', (done) => {
+      const messageText = 'Test message for Claude response'
 
       clientSocket.emit('send_message', {
-        conversationId: testConversationId,
         text: messageText,
       })
 
+      // Should receive assistant response via message event
       clientSocket.on('message', (data) => {
         expect(data.id).toBeDefined()
-        expect(data.conversationId).toBe(testConversationId)
-        expect(data.role).toBe('user')
-        expect(data.content.text).toBe(messageText)
+        expect(data.conversationId).toBe(socketConversationId)
+        expect(data.role).toBe('assistant')
+        expect(data.content.text).toContain('mocked') // From MockClaudeClient
         expect(data.createdAt).toBeDefined()
         done()
       })

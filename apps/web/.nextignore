@@ -1,0 +1,11 @@
+coverage
+**/coverage/**
+dist
+build
+**/*.test.*
+**/*.spec.*
+packages/**
+packages/backend/**
+**/.DS_Store
+
+

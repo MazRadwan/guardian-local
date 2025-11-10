@@ -8,6 +8,7 @@ interface AuthenticatedSocket extends Socket {
   userId?: string;
   userEmail?: string;
   userRole?: string;
+  conversationId?: string; // Auto-created conversation ID for this socket session
 }
 
 interface JWTPayload {
@@ -17,8 +18,9 @@ interface JWTPayload {
 }
 
 interface SendMessagePayload {
-  conversationId: string;
-  text: string;
+  conversationId?: string; // Optional - can use socket.conversationId
+  text?: string; // Message text (preferred)
+  content?: string; // Backward compatibility with frontend
   components?: Array<{
     type: 'button' | 'link' | 'code' | 'form';
     data: unknown;
@@ -115,7 +117,7 @@ export class ChatServer {
       });
 
       // Store conversationId in socket for this session
-      (socket as any).conversationId = conversation.id;
+      socket.conversationId = conversation.id;
 
       // Send welcome message with conversationId
       socket.emit('connected', {
@@ -125,7 +127,7 @@ export class ChatServer {
       });
 
       // Handle send_message event
-      socket.on('send_message', async (payload: any) => {
+      socket.on('send_message', async (payload: SendMessagePayload) => {
         try {
           // Validate payload
           if (!payload || typeof payload !== 'object') {
@@ -137,7 +139,7 @@ export class ChatServer {
           }
 
           // Use conversationId from socket (auto-created on connection) or from payload
-          const conversationId = (socket as any).conversationId || payload.conversationId;
+          const conversationId = socket.conversationId || payload.conversationId;
           const messageText = payload.text || payload.content; // Support both formats
 
           // Validate conversationId
@@ -190,20 +192,10 @@ export class ChatServer {
 
           // Stream Claude response
           let fullResponse = '';
-          let assistantMessageId: string | null = null;
 
           try {
-            // Create initial partial assistant message
-            const partialMessage = await this.conversationService.sendMessage({
-              conversationId,
-              role: 'assistant',
-              content: { text: '' },
-            });
-            assistantMessageId = partialMessage.id;
-
-            // Emit stream start event
+            // Emit stream start event (no partial message in DB yet)
             socket.emit('assistant_stream_start', {
-              messageId: partialMessage.id,
               conversationId,
             });
 
@@ -217,14 +209,13 @@ export class ChatServer {
 
                 // Emit each chunk to client
                 socket.emit('assistant_token', {
-                  messageId: partialMessage.id,
                   conversationId,
                   token: chunk.content,
                 });
               }
             }
 
-            // Save complete message (replace partial)
+            // Save complete message to database
             const completeMessage = await this.conversationService.sendMessage({
               conversationId,
               role: 'assistant',
