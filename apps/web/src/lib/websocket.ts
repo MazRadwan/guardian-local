@@ -238,6 +238,7 @@ export class WebSocketClient {
     if (!this.socket) throw new Error('WebSocket not initialized');
 
     const handler = (data: { conversationId: string; messages: any[] }) => {
+      console.log('[WebSocket] History event received:', data.messages?.length, 'messages for conversation', data.conversationId);
       const normalized = data.messages.map((msg: any) => normalizeMessage(msg as BackendMessage));
       callback(normalized);
     };

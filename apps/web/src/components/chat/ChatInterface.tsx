@@ -68,6 +68,7 @@ export function ChatInterface() {
 
   const handleHistory = useCallback(
     (loadedMessages: ChatMessageType[]) => {
+      console.log('[ChatInterface] History received:', loadedMessages.length, 'messages');
       setMessages(loadedMessages);
     },
     [setMessages]
