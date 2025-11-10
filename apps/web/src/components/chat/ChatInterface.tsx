@@ -95,7 +95,11 @@ export function ChatInterface() {
   // Request history when connected and we have a saved conversation
   useEffect(() => {
     if (isConnected && savedConversationId && requestHistory) {
-      requestHistory(savedConversationId);
+      // Add small delay to ensure history listener is registered
+      setTimeout(() => {
+        console.log('[ChatInterface] Requesting history for:', savedConversationId);
+        requestHistory(savedConversationId);
+      }, 100);
     }
   }, [isConnected, savedConversationId, requestHistory]);
 
