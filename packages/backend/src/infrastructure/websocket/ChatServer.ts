@@ -197,7 +197,9 @@ export class ChatServer {
           });
 
           // Get conversation context and generate Claude response
+          console.log('[ChatServer] Building conversation context...');
           const { messages, systemPrompt } = await this.buildConversationContext(conversationId);
+          console.log('[ChatServer] Context built, starting Claude streaming...');
 
           // Add current user message to context
           const contextWithCurrentMessage: ClaudeMessage[] = [
@@ -215,12 +217,14 @@ export class ChatServer {
             });
 
             // Stream response chunks from Claude
+            console.log('[ChatServer] Calling Claude API for streaming...');
             for await (const chunk of this.claudeClient.streamMessage(
               contextWithCurrentMessage,
               systemPrompt
             )) {
               if (!chunk.isComplete && chunk.content) {
                 fullResponse += chunk.content;
+                console.log('[ChatServer] Streaming chunk:', chunk.content.substring(0, 20) + '...');
 
                 // Emit each chunk to client
                 socket.emit('assistant_token', {
@@ -229,6 +233,7 @@ export class ChatServer {
                 });
               }
             }
+            console.log('[ChatServer] Streaming complete. Full response length:', fullResponse.length);
 
             // Save complete message to database
             const completeMessage = await this.conversationService.sendMessage({
