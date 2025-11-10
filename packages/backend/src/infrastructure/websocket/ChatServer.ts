@@ -248,15 +248,6 @@ export class ChatServer {
               conversationId,
               fullText: fullResponse,
             });
-
-            // Also emit full message for compatibility
-            socket.emit('message', {
-              id: completeMessage.id,
-              conversationId: completeMessage.conversationId,
-              role: completeMessage.role,
-              content: completeMessage.content,
-              createdAt: completeMessage.createdAt,
-            });
           } catch (claudeError) {
             console.error('[ChatServer] Claude API error:', claudeError);
 
