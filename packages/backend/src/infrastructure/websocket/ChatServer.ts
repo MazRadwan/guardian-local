@@ -232,13 +232,9 @@ export class ChatServer {
           });
 
           // Get conversation context and generate Claude response
+          // Note: buildConversationContext loads history which already includes
+          // the message we just saved above, so no need to add it again
           const { messages, systemPrompt } = await this.buildConversationContext(conversationId);
-
-          // Add current user message to context
-          const contextWithCurrentMessage: ClaudeMessage[] = [
-            ...messages,
-            { role: 'user', content: messageText },
-          ];
 
           // Stream Claude response
           let fullResponse = '';
@@ -250,8 +246,9 @@ export class ChatServer {
             });
 
             // Stream response chunks from Claude
+            // Use messages directly - current message already in history
             for await (const chunk of this.claudeClient.streamMessage(
-              contextWithCurrentMessage,
+              messages,
               systemPrompt
             )) {
               if (!chunk.isComplete && chunk.content) {
