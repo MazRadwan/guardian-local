@@ -7,6 +7,7 @@ export interface ChatState {
   error: string | null;
   currentStreamingMessage: string | null;
   addMessage: (message: ChatMessage) => void;
+  setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
   appendToLastMessage: (chunk: string) => void;
   startStreaming: () => void;
@@ -26,6 +27,11 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => ({
       messages: [...state.messages, message],
     })),
+
+  setMessages: (messages) =>
+    set({
+      messages,
+    }),
 
   updateLastMessage: (content) =>
     set((state) => {
