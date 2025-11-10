@@ -28,12 +28,10 @@ export const useChatStore = create<ChatState>((set) => ({
       messages: [...state.messages, message],
     })),
 
-  setMessages: (messages) => {
-    console.log('[chatStore] setMessages called with', messages.length, 'messages');
+  setMessages: (messages) =>
     set({
       messages,
-    });
-  },
+    }),
 
   updateLastMessage: (content) =>
     set((state) => {
