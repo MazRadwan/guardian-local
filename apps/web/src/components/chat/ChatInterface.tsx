@@ -59,10 +59,28 @@ export function ChatInterface() {
     [setError, finishStreaming, setLoading]
   );
 
+  const [shouldLoadHistory, setShouldLoadHistory] = useState(false);
+
+  const handleConnected = useCallback(
+    (data: { conversationId: string; resumed: boolean }) => {
+      // Save conversationId to localStorage for session persistence
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('guardian_conversation_id', data.conversationId);
+      }
+
+      // Mark that we should load history if resumed
+      if (data.resumed) {
+        setShouldLoadHistory(true);
+      }
+    },
+    []
+  );
+
   const handleHistory = useCallback(
     (loadedMessages: ChatMessageType[]) => {
       setMessages(loadedMessages);
       setLoading(false); // Hide skeleton loaders
+      setShouldLoadHistory(false);
     },
     [setMessages, setLoading]
   );
@@ -74,23 +92,17 @@ export function ChatInterface() {
     onMessage: handleMessage,
     onMessageStream: handleMessageStream,
     onError: handleError,
-    onConnected: useCallback(
-      (data: { conversationId: string; resumed: boolean }) => {
-        // Save conversationId to localStorage for session persistence
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('guardian_conversation_id', data.conversationId);
-        }
-
-        // If resumed, request history immediately (listeners already registered at this point)
-        if (data.resumed && requestHistory) {
-          requestHistory(data.conversationId);
-        }
-      },
-      [requestHistory]
-    ),
+    onConnected: handleConnected,
     onHistory: handleHistory,
     autoConnect: Boolean(token) && savedConversationId !== null, // Wait for localStorage check to complete
   });
+
+  // Request history after connection when needed
+  useEffect(() => {
+    if (shouldLoadHistory && isConnected && savedConversationId && requestHistory) {
+      requestHistory(savedConversationId);
+    }
+  }, [shouldLoadHistory, isConnected, savedConversationId, requestHistory]);
 
   const handleSendMessage = useCallback(
     (content: string) => {
