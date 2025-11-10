@@ -1,5 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ConversationService } from '../../application/services/ConversationService.js';
+import type { IClaudeClient, ClaudeMessage } from '../../application/interfaces/IClaudeClient.js';
+import { getSystemPrompt } from '../ai/prompts.js';
 import jwt from 'jsonwebtoken';
 
 interface AuthenticatedSocket extends Socket {
@@ -32,13 +34,51 @@ interface GetHistoryPayload {
 export class ChatServer {
   private io: SocketIOServer;
   private conversationService: ConversationService;
+  private claudeClient: IClaudeClient;
   private jwtSecret: string;
 
-  constructor(io: SocketIOServer, conversationService: ConversationService, jwtSecret: string) {
+  constructor(
+    io: SocketIOServer,
+    conversationService: ConversationService,
+    claudeClient: IClaudeClient,
+    jwtSecret: string
+  ) {
     this.io = io;
     this.conversationService = conversationService;
+    this.claudeClient = claudeClient;
     this.jwtSecret = jwtSecret;
     this.setupNamespace();
+  }
+
+  /**
+   * Build conversation context for Claude API
+   * Loads recent message history and selects appropriate system prompt
+   */
+  private async buildConversationContext(
+    conversationId: string
+  ): Promise<{ messages: ClaudeMessage[]; systemPrompt: string; mode: 'consult' | 'assessment' }> {
+    // Get conversation to determine mode
+    const conversation = await this.conversationService.findById(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    // Load last 10 messages for context
+    const history = await this.conversationService.getHistory(conversationId, 10);
+
+    // Format messages for Claude API (only user/assistant, skip system messages)
+    const messages: ClaudeMessage[] = history
+      .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
+      .map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: typeof msg.content === 'string' ? msg.content : msg.content.text || '',
+      }));
+
+    // Get system prompt based on conversation mode
+    const systemPrompt = getSystemPrompt(conversation.mode);
+
+    return { messages, systemPrompt, mode: conversation.mode };
   }
 
   private setupNamespace(): void {
@@ -87,9 +127,36 @@ export class ChatServer {
       // Handle send_message event
       socket.on('send_message', async (payload: any) => {
         try {
+          // Validate payload
+          if (!payload || typeof payload !== 'object') {
+            socket.emit('error', {
+              event: 'send_message',
+              message: 'Invalid message payload',
+            });
+            return;
+          }
+
           // Use conversationId from socket (auto-created on connection) or from payload
           const conversationId = (socket as any).conversationId || payload.conversationId;
           const messageText = payload.text || payload.content; // Support both formats
+
+          // Validate conversationId
+          if (!conversationId) {
+            socket.emit('error', {
+              event: 'send_message',
+              message: 'Conversation ID required',
+            });
+            return;
+          }
+
+          // Validate message text
+          if (!messageText || typeof messageText !== 'string' || messageText.trim().length === 0) {
+            socket.emit('error', {
+              event: 'send_message',
+              message: 'Message text required',
+            });
+            return;
+          }
 
           console.log(
             `[ChatServer] Message received from ${socket.userId} for conversation ${conversationId}`
@@ -121,23 +188,93 @@ export class ChatServer {
             createdAt: message.createdAt,
           });
 
-          // TODO: In full implementation, call Claude here to generate response
-          // For now, send a simple acknowledgment so user sees chat working
-          const response = await this.conversationService.sendMessage({
-            conversationId,
-            role: 'assistant',
-            content: {
-              text: `I received your message: "${messageText}". (Note: Full Guardian AI responses will be implemented in Phase 2. For now, this is just infrastructure testing.)`,
-            },
-          });
+          // Get conversation context and generate Claude response
+          const { messages, systemPrompt } = await this.buildConversationContext(conversationId);
 
-          socket.emit('message', {
-            id: response.id,
-            conversationId: response.conversationId,
-            role: response.role,
-            content: response.content,
-            createdAt: response.createdAt,
-          });
+          // Add current user message to context
+          const contextWithCurrentMessage: ClaudeMessage[] = [
+            ...messages,
+            { role: 'user', content: messageText },
+          ];
+
+          // Stream Claude response
+          let fullResponse = '';
+          let assistantMessageId: string | null = null;
+
+          try {
+            // Create initial partial assistant message
+            const partialMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'assistant',
+              content: { text: '' },
+            });
+            assistantMessageId = partialMessage.id;
+
+            // Emit stream start event
+            socket.emit('assistant_stream_start', {
+              messageId: partialMessage.id,
+              conversationId,
+            });
+
+            // Stream response chunks from Claude
+            for await (const chunk of this.claudeClient.streamMessage(
+              contextWithCurrentMessage,
+              systemPrompt
+            )) {
+              if (!chunk.isComplete && chunk.content) {
+                fullResponse += chunk.content;
+
+                // Emit each chunk to client
+                socket.emit('assistant_token', {
+                  messageId: partialMessage.id,
+                  conversationId,
+                  token: chunk.content,
+                });
+              }
+            }
+
+            // Save complete message (replace partial)
+            const completeMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'assistant',
+              content: { text: fullResponse },
+            });
+
+            // Emit stream complete with final message
+            socket.emit('assistant_done', {
+              messageId: completeMessage.id,
+              conversationId,
+              fullText: fullResponse,
+            });
+
+            // Also emit full message for compatibility
+            socket.emit('message', {
+              id: completeMessage.id,
+              conversationId: completeMessage.conversationId,
+              role: completeMessage.role,
+              content: completeMessage.content,
+              createdAt: completeMessage.createdAt,
+            });
+          } catch (claudeError) {
+            console.error('[ChatServer] Claude API error:', claudeError);
+
+            // Send user-friendly error message
+            const errorMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'system',
+              content: {
+                text: "I apologize, but I'm experiencing technical difficulties. Please try again in a moment.",
+              },
+            });
+
+            socket.emit('message', {
+              id: errorMessage.id,
+              conversationId: errorMessage.conversationId,
+              role: errorMessage.role,
+              content: errorMessage.content,
+              createdAt: errorMessage.createdAt,
+            });
+          }
         } catch (error) {
           console.error('[ChatServer] Error sending message:', error);
           socket.emit('error', {

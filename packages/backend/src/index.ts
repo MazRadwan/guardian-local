@@ -100,7 +100,7 @@ server.registerRoutes('/api', createQuestionRoutes(questionController, authServi
 server.finalize404Handler();
 
 // Initialize ChatServer with WebSocket
-const chatServer = new ChatServer(server.getIO(), conversationService, JWT_SECRET);
+const chatServer = new ChatServer(server.getIO(), conversationService, claudeClient, JWT_SECRET);
 
 console.log('[App] ChatServer initialized');
 console.log('[App] Vendor, Assessment, and Question routes registered');
