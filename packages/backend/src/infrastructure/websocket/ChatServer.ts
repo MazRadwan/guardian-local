@@ -58,7 +58,7 @@ export class ChatServer {
     conversationId: string
   ): Promise<{ messages: ClaudeMessage[]; systemPrompt: string; mode: 'consult' | 'assessment' }> {
     // Get conversation to determine mode
-    const conversation = await this.conversationService.findById(conversationId);
+    const conversation = await this.conversationService.getConversation(conversationId);
 
     if (!conversation) {
       throw new Error(`Conversation ${conversationId} not found`);
@@ -172,20 +172,11 @@ export class ChatServer {
             },
           });
 
-          // Emit confirmation
+          // Emit confirmation only (frontend already added user message to UI)
           socket.emit('message_sent', {
             messageId: message.id,
             conversationId: message.conversationId,
             timestamp: message.createdAt,
-          });
-
-          // Emit message back to client (for display)
-          socket.emit('message', {
-            id: message.id,
-            conversationId: message.conversationId,
-            role: message.role,
-            content: message.content,
-            createdAt: message.createdAt,
           });
 
           // Get conversation context and generate Claude response
