@@ -17,6 +17,7 @@ import { testDb, closeTestDb } from '../setup/test-db'
 import { sql } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
 import type { IClaudeClient, ClaudeMessage, StreamChunk } from '../../src/application/interfaces/IClaudeClient'
+import { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter'
 
 // Mock Claude client for deterministic test responses
 class MockClaudeClient implements IClaudeClient {
@@ -77,12 +78,14 @@ describe('WebSocket Chat E2E Tests', () => {
     // Setup JWT provider
     jwtProvider = new JWTProvider('test-jwt-secret-key', '1h')
 
-    // Setup chat server with mock Claude client
+    // Setup chat server with mock Claude client and rate limiter
     const mockClaudeClient = new MockClaudeClient()
+    const rateLimiter = new RateLimiter(100, 60000) // High limit for tests
     chatServer = new ChatServer(
       ioServer,
       conversationService,
       mockClaudeClient,
+      rateLimiter,
       'test-jwt-secret-key'
     )
 

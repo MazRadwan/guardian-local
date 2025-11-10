@@ -11,6 +11,7 @@ config({ path: resolve(__dirname, '../../../.env') });
 
 import { Server } from './infrastructure/http/server.js';
 import { ChatServer } from './infrastructure/websocket/ChatServer.js';
+import { RateLimiter } from './infrastructure/websocket/RateLimiter.js';
 import { AuthService } from './application/services/AuthService.js';
 import { ConversationService } from './application/services/ConversationService.js';
 import { AssessmentService } from './application/services/AssessmentService.js';
@@ -109,8 +110,14 @@ server.registerRoutes('/api', createQuestionRoutes(questionController, authServi
 // Finalize 404 handler (after all routes)
 server.finalize404Handler();
 
+// Initialize rate limiter (10 messages per user per minute)
+const rateLimiter = new RateLimiter(
+  parseInt(process.env.RATE_LIMIT_MAX_MESSAGES || '10', 10),
+  parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10)
+);
+
 // Initialize ChatServer with WebSocket
-const chatServer = new ChatServer(server.getIO(), conversationService, claudeClient, JWT_SECRET);
+const chatServer = new ChatServer(server.getIO(), conversationService, claudeClient, rateLimiter, JWT_SECRET);
 
 console.log('[App] ChatServer initialized');
 console.log('[App] Vendor, Assessment, and Question routes registered');

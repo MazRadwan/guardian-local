@@ -2,6 +2,7 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ConversationService } from '../../application/services/ConversationService.js';
 import type { IClaudeClient, ClaudeMessage } from '../../application/interfaces/IClaudeClient.js';
 import { getSystemPrompt } from '../ai/prompts.js';
+import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
 
 interface AuthenticatedSocket extends Socket {
@@ -37,17 +38,20 @@ export class ChatServer {
   private io: SocketIOServer;
   private conversationService: ConversationService;
   private claudeClient: IClaudeClient;
+  private rateLimiter: RateLimiter;
   private jwtSecret: string;
 
   constructor(
     io: SocketIOServer,
     conversationService: ConversationService,
     claudeClient: IClaudeClient,
+    rateLimiter: RateLimiter,
     jwtSecret: string
   ) {
     this.io = io;
     this.conversationService = conversationService;
     this.claudeClient = claudeClient;
+    this.rateLimiter = rateLimiter;
     this.jwtSecret = jwtSecret;
     this.setupNamespace();
   }
@@ -156,6 +160,17 @@ export class ChatServer {
             socket.emit('error', {
               event: 'send_message',
               message: 'Message text required',
+            });
+            return;
+          }
+
+          // Check rate limit
+          if (socket.userId && this.rateLimiter.isRateLimited(socket.userId)) {
+            const resetTime = this.rateLimiter.getResetTime(socket.userId);
+            socket.emit('error', {
+              event: 'send_message',
+              message: `Rate limit exceeded. Please wait ${resetTime} seconds before sending more messages.`,
+              code: 'RATE_LIMIT_EXCEEDED',
             });
             return;
           }
