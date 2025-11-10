@@ -10,11 +10,14 @@ export interface MessageListProps {
 }
 
 export function MessageList({ messages, isLoading }: MessageListProps) {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   }, [messages]);
 
   if (messages.length === 0 && !isLoading) {
@@ -31,7 +34,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   }
 
   return (
-    <div className="scrollbar-hide flex flex-col overflow-y-auto">
+    <div ref={scrollContainerRef} className="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-6">
       {messages.map((message, index) => (
         <ChatMessage
           key={message.id || `msg-${index}`}
@@ -42,7 +45,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         />
       ))}
       {isLoading && (
-        <div className="flex gap-3 px-4 py-6">
+        <div className="flex gap-3 py-6">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600">
             <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
           </div>
