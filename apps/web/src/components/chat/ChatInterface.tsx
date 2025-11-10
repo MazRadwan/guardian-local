@@ -18,15 +18,13 @@ export function ChatInterface() {
     useChatStore();
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
-  const [savedConversationId, setSavedConversationId] = useState<string | undefined>();
+  const [savedConversationId, setSavedConversationId] = useState<string | undefined | null>(null);
 
   // Load saved conversationId from localStorage on mount (client-side only)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('guardian_conversation_id');
-      if (saved) {
-        setSavedConversationId(saved);
-      }
+      setSavedConversationId(saved || undefined); // undefined if no saved conversation
     }
   }, []);
 
@@ -78,13 +76,13 @@ export function ChatInterface() {
   const { isConnected, isConnecting, sendMessage, requestHistory } = useWebSocket({
     url: WEBSOCKET_URL,
     token: token || undefined,
-    conversationId: savedConversationId, // Pass saved conversationId to resume
+    conversationId: savedConversationId || undefined, // Pass saved conversationId to resume
     onMessage: handleMessage,
     onMessageStream: handleMessageStream,
     onError: handleError,
     onConnected: handleConnected,
     onHistory: handleHistory,
-    autoConnect: Boolean(token),
+    autoConnect: Boolean(token) && savedConversationId !== null, // Wait for localStorage check to complete
   });
 
   // Request history when connected and we have a saved conversation
