@@ -71,10 +71,13 @@ export function ChatInterface() {
 
   const handleHistory = useCallback(
     (loadedMessages: ChatMessageType[]) => {
+      console.log('[ChatInterface] History received:', loadedMessages.length, 'messages');
+      console.log('[ChatInterface] Current messages before setMessages:', messages.length);
       setMessages(loadedMessages);
       setLoading(false); // Hide skeleton loaders
+      console.log('[ChatInterface] setMessages called');
     },
-    [setMessages, setLoading]
+    [setMessages, setLoading, messages]
   );
 
   const { isConnected, isConnecting, sendMessage, requestHistory } = useWebSocket({
