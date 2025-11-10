@@ -113,9 +113,11 @@ export class ChatServer {
     // Connection handler
     chatNamespace.on('connection', async (socket: AuthenticatedSocket) => {
       console.log(`[ChatServer] Client connected: ${socket.id} (User: ${socket.userId})`);
+      console.log('[Connect] namespace:', socket.nsp.name, 'auth:', JSON.stringify(socket.handshake.auth));
 
       // Check if client wants to resume an existing conversation
       const resumeConversationId = socket.handshake.auth.conversationId;
+      console.log('[Connect] resumeConversationId from handshake:', resumeConversationId);
       let conversation;
       let resumed = false;
 

@@ -114,6 +114,11 @@ export class WebSocketClient {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        console.log('[WS connect]', this.config.url, {
+          hasToken: !!this.config.token,
+          conversationId: this.config.conversationId,
+        });
+
         this.socket = io(this.config.url, {
           auth: {
             token: this.config.token,
