@@ -34,7 +34,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   }
 
   return (
-    <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto px-4 py-6">
+    <div ref={scrollContainerRef} className="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-6">
       {messages.map((message, index) => (
         <ChatMessage
           key={message.id || `msg-${index}`}
