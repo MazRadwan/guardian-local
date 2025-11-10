@@ -6,15 +6,17 @@
 
 import { Router } from 'express'
 import { AssessmentController } from '../controllers/AssessmentController'
+import { AuthService } from '../../../application/services/AuthService'
 import { authMiddleware } from '../middleware/auth.middleware'
 
 export function createAssessmentRoutes(
-  controller: AssessmentController
+  controller: AssessmentController,
+  authService: AuthService
 ): Router {
   const router = Router()
 
   // All routes require authentication
-  router.use(authMiddleware)
+  router.use(authMiddleware(authService))
 
   // POST /api/assessments - Create assessment
   router.post('/', controller.createAssessment)

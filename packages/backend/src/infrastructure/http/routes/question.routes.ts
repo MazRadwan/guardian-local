@@ -6,11 +6,17 @@
 
 import { Router } from 'express';
 import { QuestionController } from '../controllers/QuestionController.js';
+import { AuthService } from '../../../application/services/AuthService.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 export function createQuestionRoutes(
-  questionController: QuestionController
+  questionController: QuestionController,
+  authService: AuthService
 ): Router {
   const router = Router();
+
+  // All routes require authentication
+  router.use(authMiddleware(authService));
 
   // Generate questions for an assessment
   router.post(

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Assessment Questionnaire - {{vendorName}}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #333;
+      padding: 40px 60px;
+    }
+
+    .header {
+      margin-bottom: 40px;
+      padding-bottom: 20px;
+      border-bottom: 3px solid #2563eb;
+    }
+
+    .header h1 {
+      font-size: 24pt;
+      color: #1e40af;
+      margin-bottom: 10px;
+    }
+
+    .header .subtitle {
+      font-size: 14pt;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+
+    .metadata {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+      font-size: 10pt;
+    }
+
+    .metadata-item {
+      display: flex;
+      gap: 8px;
+    }
+
+    .metadata-label {
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .metadata-value {
+      color: #64748b;
+    }
+
+    .section {
+      page-break-inside: avoid;
+      margin-bottom: 40px;
+    }
+
+    .section-header {
+      background-color: #f1f5f9;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      border-left: 4px solid #2563eb;
+    }
+
+    .section-title {
+      font-size: 14pt;
+      color: #1e40af;
+      font-weight: 600;
+    }
+
+    .question {
+      margin-bottom: 24px;
+      page-break-inside: avoid;
+    }
+
+    .question-number {
+      font-weight: 600;
+      color: #2563eb;
+      margin-bottom: 6px;
+    }
+
+    .question-text {
+      margin-bottom: 12px;
+      color: #334155;
+    }
+
+    .question-metadata {
+      font-size: 9pt;
+      color: #94a3b8;
+      font-style: italic;
+      margin-top: 4px;
+    }
+
+    .response-area {
+      border: 1px solid #e2e8f0;
+      background-color: #f8fafc;
+      padding: 12px;
+      min-height: 60px;
+      margin-top: 8px;
+      border-radius: 4px;
+    }
+
+    .footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 2px solid #e2e8f0;
+      font-size: 9pt;
+      color: #94a3b8;
+      text-align: center;
+    }
+
+    @media print {
+      body {
+        padding: 30px 40px;
+      }
+
+      .page-break {
+        page-break-before: always;
+      }
+
+      .section {
+        page-break-inside: avoid;
+      }
+    }
+
+    /* Page numbers */
+    @page {
+      margin: 20mm;
+      @bottom-right {
+        content: "Page " counter(page) " of " counter(pages);
+        font-size: 9pt;
+        color: #94a3b8;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>AI Vendor Assessment Questionnaire</h1>
+    <div class="subtitle">{{vendorName}}</div>
+
+    <div class="metadata">
+      <div class="metadata-item">
+        <span class="metadata-label">Assessment Type:</span>
+        <span class="metadata-value">{{assessmentType}}</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">Solution:</span>
+        <span class="metadata-value">{{solutionName}}</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">Created:</span>
+        <span class="metadata-value">{{createdAt}}</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">Total Questions:</span>
+        <span class="metadata-value">{{totalQuestions}}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Introduction -->
+  <div class="section">
+    <p style="margin-bottom: 16px; color: #475569;">
+      This questionnaire is designed to comprehensively assess the AI vendor's capabilities,
+      compliance posture, and risk profile across multiple dimensions including privacy,
+      security, clinical safety, and operational resilience.
+    </p>
+    <p style="color: #475569;">
+      Please provide detailed responses to all questions. Your answers will be used to
+      evaluate the vendor's suitability and identify any gaps that need to be addressed.
+    </p>
+  </div>
+
+  <!-- Sections and Questions -->
+  {{#sections}}
+  <div class="section {{#isFirstSection}}{{else}}page-break{{/isFirstSection}}">
+    <div class="section-header">
+      <h2 class="section-title">Section {{sectionNumber}}: {{sectionName}}</h2>
+    </div>
+
+    {{#questions}}
+    <div class="question">
+      <div class="question-number">
+        Question {{sectionNumber}}.{{questionNumber}}
+      </div>
+      <div class="question-text">
+        {{questionText}}
+      </div>
+      {{#questionMetadata.helpText}}
+      <div class="question-metadata">
+        Help: {{questionMetadata.helpText}}
+      </div>
+      {{/questionMetadata.helpText}}
+      {{#questionMetadata.required}}
+      <div class="question-metadata" style="color: #dc2626;">
+        * Required
+      </div>
+      {{/questionMetadata.required}}
+      <div class="response-area">
+        <!-- Response area for vendor to fill in -->
+      </div>
+    </div>
+    {{/questions}}
+  </div>
+  {{/sections}}
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Generated by Guardian AI Vendor Assessment System</p>
+    <p style="margin-top: 4px;">© 2025 - Confidential Assessment Document</p>
+  </div>
+</body>
+</html>

@@ -6,13 +6,17 @@
 
 import { Router } from 'express'
 import { VendorController } from '../controllers/VendorController'
+import { AuthService } from '../../../application/services/AuthService'
 import { authMiddleware } from '../middleware/auth.middleware'
 
-export function createVendorRoutes(controller: VendorController): Router {
+export function createVendorRoutes(
+  controller: VendorController,
+  authService: AuthService
+): Router {
   const router = Router()
 
   // All routes require authentication
-  router.use(authMiddleware)
+  router.use(authMiddleware(authService))
 
   // POST /api/vendors - Create vendor
   router.post('/', controller.createVendor)

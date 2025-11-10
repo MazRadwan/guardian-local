@@ -15,6 +15,10 @@ import { AuthService } from './application/services/AuthService.js';
 import { ConversationService } from './application/services/ConversationService.js';
 import { AssessmentService } from './application/services/AssessmentService.js';
 import { QuestionService } from './application/services/QuestionService.js';
+import { ExportService } from './application/services/ExportService.js';
+import { PDFExporter } from './infrastructure/export/PDFExporter.js';
+import { WordExporter } from './infrastructure/export/WordExporter.js';
+import { ExcelExporter } from './infrastructure/export/ExcelExporter.js';
 import { DrizzleUserRepository } from './infrastructure/database/repositories/DrizzleUserRepository.js';
 import { DrizzleConversationRepository } from './infrastructure/database/repositories/DrizzleConversationRepository.js';
 import { DrizzleMessageRepository } from './infrastructure/database/repositories/DrizzleMessageRepository.js';
@@ -27,10 +31,12 @@ import { AuthController } from './infrastructure/http/controllers/AuthController
 import { VendorController } from './infrastructure/http/controllers/VendorController.js';
 import { AssessmentController } from './infrastructure/http/controllers/AssessmentController.js';
 import { QuestionController } from './infrastructure/http/controllers/QuestionController.js';
+import { ExportController } from './infrastructure/http/controllers/ExportController.js';
 import { createAuthRoutes } from './infrastructure/http/routes/auth.routes.js';
 import { createVendorRoutes } from './infrastructure/http/routes/vendor.routes.js';
 import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.routes.js';
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
+import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -51,17 +57,31 @@ const jwtProvider = new JWTProvider(JWT_SECRET);
 // Initialize Claude client
 const claudeClient = new ClaudeClient(ANTHROPIC_API_KEY);
 
+// Initialize exporters
+const pdfExporter = new PDFExporter();
+const wordExporter = new WordExporter();
+const excelExporter = new ExcelExporter();
+
 // Initialize services
 const authService = new AuthService(userRepo, jwtProvider);
 const conversationService = new ConversationService(conversationRepo, messageRepo);
 const assessmentService = new AssessmentService(vendorRepo, assessmentRepo);
 const questionService = new QuestionService(claudeClient, questionRepo, assessmentRepo);
+const exportService = new ExportService(
+  assessmentRepo,
+  questionRepo,
+  vendorRepo,
+  pdfExporter,
+  wordExporter,
+  excelExporter
+);
 
 // Initialize controllers
 const authController = new AuthController(authService);
 const vendorController = new VendorController(assessmentService);
 const assessmentController = new AssessmentController(assessmentService);
 const questionController = new QuestionController(questionService);
+const exportController = new ExportController(exportService, assessmentRepo);
 
 // Initialize server
 const server = new Server({
@@ -71,9 +91,10 @@ const server = new Server({
 
 // Register routes
 server.registerRoutes('/api/auth', createAuthRoutes(authController));
-server.registerRoutes('/api/vendors', createVendorRoutes(vendorController));
-server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentController));
-server.registerRoutes('/api', createQuestionRoutes(questionController));
+server.registerRoutes('/api/vendors', createVendorRoutes(vendorController, authService));
+server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentController, authService));
+server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
+server.registerRoutes('/api', createQuestionRoutes(questionController, authService));
 
 // Finalize 404 handler (after all routes)
 server.finalize404Handler();
