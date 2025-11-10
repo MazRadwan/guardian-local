@@ -187,9 +187,19 @@ export class WebSocketClient {
 
   onMessageStream(callback: (event: StreamEvent) => void): () => void {
     if (!this.socket) throw new Error('WebSocket not initialized');
-    this.socket.on('message:stream', callback);
+
+    // Listen to assistant_token events (backend emits these during streaming)
+    const tokenHandler = (data: { token: string; conversationId: string; messageId?: string }) => {
+      callback({
+        chunk: data.token,
+        messageId: data.messageId,
+      });
+    };
+
+    this.socket.on('assistant_token', tokenHandler);
+
     return () => {
-      this.socket?.off('message:stream', callback);
+      this.socket?.off('assistant_token', tokenHandler);
     };
   }
 
