@@ -14,7 +14,7 @@ import { AlertCircle } from 'lucide-react';
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
 
 export function ChatInterface() {
-  const { messages, isLoading, error, addMessage, setMessages, startStreaming, appendToLastMessage, finishStreaming, setError } =
+  const { messages, isLoading, error, addMessage, setMessages, startStreaming, appendToLastMessage, finishStreaming, setLoading, setError } =
     useChatStore();
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
@@ -33,8 +33,9 @@ export function ChatInterface() {
       // Add message to store (critical - this was missing!)
       addMessage(message);
       finishStreaming();
+      setLoading(false); // Hide typing indicator
     },
-    [addMessage, finishStreaming]
+    [addMessage, finishStreaming, setLoading]
   );
 
   const handleMessageStream = useCallback(
@@ -42,18 +43,20 @@ export function ChatInterface() {
       // If this is the first chunk, start a new streaming message
       if (messages.length === 0 || messages[messages.length - 1].role !== 'assistant') {
         startStreaming();
+        setLoading(false); // Hide typing indicator, show streaming message instead
       }
       appendToLastMessage(chunk);
     },
-    [messages, startStreaming, appendToLastMessage]
+    [messages, startStreaming, appendToLastMessage, setLoading]
   );
 
   const handleError = useCallback(
     (errorMessage: string) => {
       setError(errorMessage);
       finishStreaming();
+      setLoading(false); // Hide typing indicator on error
     },
-    [setError, finishStreaming]
+    [setError, finishStreaming, setLoading]
   );
 
   const handleConnected = useCallback(
@@ -69,9 +72,12 @@ export function ChatInterface() {
   const handleHistory = useCallback(
     (loadedMessages: ChatMessageType[]) => {
       console.log('[ChatInterface] History received:', loadedMessages.length, 'messages');
+      console.log('[ChatInterface] Current messages before setMessages:', messages.length);
       setMessages(loadedMessages);
+      setLoading(false); // Hide skeleton loaders
+      console.log('[ChatInterface] setMessages called');
     },
-    [setMessages]
+    [setMessages, setLoading, messages]
   );
 
   const { isConnected, isConnecting, sendMessage, requestHistory } = useWebSocket({
@@ -89,7 +95,11 @@ export function ChatInterface() {
   // Request history when connected and we have a saved conversation
   useEffect(() => {
     if (isConnected && savedConversationId && requestHistory) {
-      requestHistory(savedConversationId);
+      // Add small delay to ensure history listener is registered
+      setTimeout(() => {
+        console.log('[ChatInterface] Requesting history for:', savedConversationId);
+        requestHistory(savedConversationId);
+      }, 100);
     }
   }, [isConnected, savedConversationId, requestHistory]);
 
@@ -107,15 +117,19 @@ export function ChatInterface() {
         timestamp: new Date(),
       });
 
+      // Set loading state (show typing indicator)
+      setLoading(true);
+
       // Send to server
       try {
         sendMessage(content);
       } catch (err) {
         setError('Failed to send message');
+        setLoading(false);
         console.error('Send message error:', err);
       }
     },
-    [isConnected, sendMessage, addMessage, setError]
+    [isConnected, sendMessage, addMessage, setLoading, setError]
   );
 
   const handleModeChange = useCallback(

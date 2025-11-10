@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { ChatMessage } from './ChatMessage';
+import { SkeletonMessage } from './SkeletonMessage';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
 
 export interface MessageListProps {
@@ -33,6 +34,17 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
     );
   }
 
+  // Show skeleton loaders while loading history
+  if (messages.length === 0 && isLoading) {
+    return (
+      <div className="flex h-full flex-col overflow-y-auto px-4 py-6">
+        <SkeletonMessage />
+        <SkeletonMessage />
+        <SkeletonMessage />
+      </div>
+    );
+  }
+
   return (
     <div ref={scrollContainerRef} className="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-6">
       {messages.map((message, index) => (
@@ -46,11 +58,15 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
       ))}
       {isLoading && (
         <div className="flex gap-3 py-6">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600">
-            <div className="h-2 w-2 animate-pulse rounded-full bg-white" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+            </svg>
           </div>
-          <div className="flex items-center text-sm text-gray-500">
-            <span className="animate-pulse">Guardian is typing...</span>
+          <div className="flex items-center gap-1 py-2">
+            <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></span>
+            <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></span>
+            <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></span>
           </div>
         </div>
       )}
