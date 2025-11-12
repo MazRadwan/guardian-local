@@ -90,6 +90,30 @@ This roadmap defines **what we're building and when**. Features are organized by
 
 **Dependency:** MVP must be validated (users find questionnaire generation valuable).
 
+### Deferred from MVP (Epic 8)
+
+**Production Readiness:**
+- ⏸️ PHI/PII log redaction (ensure logs never include message text or sensitive data)
+- ⏸️ Claude config externalization (model, maxTokens, temperature to environment variables)
+
+**Vendor Management:**
+- ⏸️ Vendor Directory View (Story 8.5 - requires UX decisions)
+  - `/vendors` page with list and search
+  - Vendor cards showing assessment count
+  - Click to view vendor assessment history
+
+**UI/UX Enhancements (Epic 9):**
+- ⏸️ Conversation browsing UI (Story 8.4 - ConversationList component)
+- ⏸️ Multi-conversation selection and resume
+- ⏸️ Progress indicators for question generation
+- ⏸️ Export progress spinners
+
+**Rationale for Deferral:**
+- Not blocking core MVP functionality
+- Vendor directory needs product decisions about workflow
+- UI enhancements better suited after user feedback
+- Production readiness items can be addressed during Phase 2 prep
+
 ### Features
 
 **Response Input (Method TBD During MVP):**
@@ -97,6 +121,13 @@ This roadmap defines **what we're building and when**. Features are organized by
 - ⏸️ Option B: Web form (all questions visible, batch entry)
 - ⏸️ Option C: Document upload + parsing (OCR handwritten notes or typed Word doc)
 - ⏸️ Option D: Hybrid (user chooses method)
+
+**AI Tool Use & Research:**
+- ⏸️ Web search integration (Brave Search API or similar)
+- ⏸️ Real-time vendor documentation lookup
+- ⏸️ Current compliance law research (PIPEDA, ATIPP updates)
+- ⏸️ Industry standard verification (NIST CSF, ITIL4 latest versions)
+- ⏸️ Tool result streaming (show search results in chat)
 
 **Risk Analysis:**
 - ⏸️ Claude interpretation (analyze responses against rubrics)

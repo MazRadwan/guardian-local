@@ -1205,68 +1205,84 @@ describe('Complete Assessment Workflow', () => {
 
 ### Story 8.3: Add Loading States & Progress Indicators
 
+**Status:** ✅ Core Complete, Polish Deferred
+
 **Description:** Add loading spinners, progress indicators, and skeleton loaders for better UX.
 
-**Acceptance Criteria:**
-- [ ] Chat shows "Guardian is typing..." when waiting for response
-- [ ] Question generation shows progress (e.g., "Generating questions... 3 of 11 sections complete")
-- [ ] Export shows spinner while generating
-- [ ] Skeleton loaders for chat history loading
-- [ ] No jarring blank states
-- [ ] **PHI/PII log redaction:** Ensure logs never include message text or sensitive data
-- [ ] **Config externalization:** Move Claude model, maxTokens, temperature to environment variables
+**Completed (MVP):**
+- [x] Chat shows typing indicator (animated bouncing dots)
+- [x] Skeleton loaders for chat history loading
+- [x] No jarring blank states
+- [x] Input auto-focus after response completes
 
-**Files to Create:**
-- `apps/web/src/components/ui/LoadingSpinner.tsx`
-- `apps/web/src/components/chat/TypingIndicator.tsx`
-- `apps/web/src/components/chat/SkeletonMessage.tsx`
-- `packages/backend/src/config/claude.config.ts` (externalized config)
+**Deferred to Phase 2:**
+- [ ] Question generation progress indicators → **Epic 9** (requires UI decisions)
+- [ ] **PHI/PII log redaction** → **Production Hardening (PH-2)**
+- [ ] **Config externalization** → **Production Hardening (Task: Config Management)**
+- [ ] Export spinner (low priority)
+
+**Files Created:**
+- `apps/web/src/components/chat/SkeletonMessage.tsx` ✅
+- `apps/web/src/components/chat/MessageList.tsx` (typing indicator inline) ✅
+- `apps/web/src/components/chat/MessageInput.tsx` (auto-focus) ✅
 
 **Dependencies:** Story 8.1 (workflow exists)
 
 **Tests:**
-```typescript
-// Component tests
-- Shows typing indicator when assistant is typing
-- Hides typing indicator when message received
-- Progress bar updates during question generation
-```
+- Component tests for typing indicator ✅
+- Component tests for skeleton loaders ✅
+- Input auto-focus tests ✅
 
 ---
 
 ### Story 8.4: Implement Conversation Resume
 
+**Status:** ✅ Core Complete, UI Enhancements Deferred
+
 **Description:** Allow users to resume previous conversations from database.
 
-**Acceptance Criteria:**
-- [ ] On login, show user's active conversations
-- [ ] User can click to resume conversation
-- [ ] Load last 50 messages from database
-- [ ] Restore conversation mode and context
-- [ ] User can continue where they left off
-- [ ] All tests pass
+**Completed (MVP):**
+- [x] Auto-resume last conversation on page reload
+- [x] Load conversation history from database
+- [x] Restore conversation mode and context
+- [x] User can continue where they left off
+- [x] Session persistence with ownership validation
+- [x] All tests pass
 
-**Files to Create:**
-- `apps/web/src/components/chat/ConversationList.tsx`
-- `apps/web/src/components/chat/ResumeButton.tsx`
+**Deferred to Epic 9 (UI/UX Overhaul):**
+- [ ] ConversationList component (browse past conversations) → **Epic 9**
+- [ ] ResumeButton component (explicit resume UI) → **Epic 9**
+- [ ] Multi-conversation selection UI → **Epic 9**
+
+**Files Created:**
+- `apps/web/src/hooks/useWebSocket.ts` (added conversationId, onConnected, onHistory) ✅
+- `apps/web/src/lib/websocket.ts` (session persistence methods) ✅
+- `apps/web/src/components/chat/ChatInterface.tsx` (auto-resume logic) ✅
 
 **Dependencies:** Story 3.4 (ConversationService.getHistory), Story 4.5 (chat interface)
 
 **Tests:**
-```typescript
-// Component tests
-- Displays list of user's conversations
-- Clicking resume loads conversation history
-- Messages display in correct order
-```
+- Session persistence integration tests ✅
+- WebSocket connection with conversationId ✅
+- History loading tests ✅
 
 ---
 
 ### Story 8.5: Add Basic Vendor Directory View
 
+**Status:** ⏸️ Deferred to Phase 2 (Requires UX Decisions)
+
 **Description:** Create simple page to list all vendors and their assessment count.
 
-**Acceptance Criteria:**
+**Reason for Deferral:**
+- Requires product decisions about vendor management workflow
+- UX design needed for directory/search patterns
+- Not blocking MVP (vendors managed via API, accessed through chat flow)
+- Better suited for Phase 2 after user feedback
+
+**Moved to:** Phase 2 roadmap
+
+**Original Acceptance Criteria:**
 - [ ] /vendors page lists all vendors
 - [ ] Shows vendor name, industry, assessment count
 - [ ] Click vendor to see assessment history
@@ -1427,7 +1443,18 @@ Epic 8 (Integration & Polish)
 
 **Status:** Planned for Phase 2 (Post-MVP)
 
-**Scope (TBD):**
+**Scope:**
+
+### From Epic 8 (Deferred Items)
+- **Conversation browsing UI** (Story 8.4)
+  - ConversationList component (browse past conversations)
+  - ResumeButton component (explicit resume button)
+  - Multi-conversation selection UI
+- **Progress indicators** (Story 8.3)
+  - Question generation progress ("3 of 11 sections complete")
+  - Export progress indicators
+
+### UI/UX Enhancements (TBD)
 - Redesign chat interface with modern UI patterns
 - Add animations and transitions
 - Improve mobile responsiveness
