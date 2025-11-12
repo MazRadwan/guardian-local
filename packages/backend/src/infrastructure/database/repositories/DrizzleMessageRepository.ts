@@ -14,9 +14,12 @@ export class DrizzleMessageRepository implements IMessageRepository {
   }
 
   async create(message: Omit<Message, 'id' | 'createdAt'>): Promise<Message> {
+    const id = crypto.randomUUID();
+
     const [row] = await this.db
       .insert(messages)
       .values({
+        id,
         conversationId: message.conversationId,
         role: message.role,
         content: message.content as any,

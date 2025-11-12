@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { MessageList } from './MessageList';
-import { MessageInput } from './MessageInput';
+import { MessageInput, MessageInputRef } from './MessageInput';
 import { ModeSwitcher, ConversationMode } from './ModeSwitcher';
 import { useChatStore } from '@/stores/chatStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
@@ -19,6 +19,7 @@ export function ChatInterface() {
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
   const [savedConversationId, setSavedConversationId] = useState<string | undefined | null>(null);
+  const messageInputRef = useRef<MessageInputRef>(null);
 
   // Load saved conversationId from localStorage on mount (client-side only)
   useEffect(() => {
@@ -34,6 +35,9 @@ export function ChatInterface() {
       addMessage(message);
       finishStreaming();
       setLoading(false); // Hide typing indicator
+
+      // Auto-focus input after assistant response completes
+      messageInputRef.current?.focus();
     },
     [addMessage, finishStreaming, setLoading]
   );
@@ -85,6 +89,13 @@ export function ChatInterface() {
     [setMessages, setLoading]
   );
 
+  const handleStreamComplete = useCallback(() => {
+    // Stream is complete, finish streaming and auto-focus input
+    finishStreaming();
+    setLoading(false);
+    messageInputRef.current?.focus();
+  }, [finishStreaming, setLoading]);
+
   const { isConnected, isConnecting, sendMessage, requestHistory } = useWebSocket({
     url: WEBSOCKET_URL,
     token: token || undefined,
@@ -94,6 +105,7 @@ export function ChatInterface() {
     onError: handleError,
     onConnected: handleConnected,
     onHistory: handleHistory,
+    onStreamComplete: handleStreamComplete,
     autoConnect: Boolean(token) && savedConversationId !== null, // Wait for localStorage check to complete
   });
 
@@ -183,7 +195,7 @@ export function ChatInterface() {
       </div>
 
       {/* Input */}
-      <MessageInput onSendMessage={handleSendMessage} disabled={!isConnected || isLoading} />
+      <MessageInput ref={messageInputRef} onSendMessage={handleSendMessage} disabled={!isConnected || isLoading} />
     </div>
   );
 }

@@ -28,6 +28,7 @@ export class DrizzleUserRepository implements IUserRepository {
     const [inserted] = await this.db
       .insert(users)
       .values({
+        id: userData.id,
         email: userData.email,
         passwordHash: userData.passwordHash,
         name: userData.name,

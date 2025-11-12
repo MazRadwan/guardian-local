@@ -41,6 +41,7 @@ describe('useWebSocket', () => {
     renderHook(() =>
       useWebSocket({
         url: mockUrl,
+        token: 'test-token',
         autoConnect: true,
       })
     );

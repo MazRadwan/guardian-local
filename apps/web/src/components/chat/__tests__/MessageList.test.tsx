@@ -22,7 +22,9 @@ describe('MessageList', () => {
     render(<MessageList messages={[]} isLoading={true} />);
 
     expect(screen.queryByText('Welcome to Guardian')).not.toBeInTheDocument();
-    expect(screen.getByText('Guardian is typing...')).toBeInTheDocument();
+    // When no messages and loading, shows 3 skeleton loaders
+    const skeletons = screen.getAllByTestId('skeleton-message');
+    expect(skeletons).toHaveLength(3);
   });
 
   it('renders list of messages', () => {
@@ -66,7 +68,7 @@ describe('MessageList', () => {
 
     render(<MessageList messages={messages} isLoading={true} />);
 
-    expect(screen.getByText('Guardian is typing...')).toBeInTheDocument();
+    expect(screen.getByTestId('typing-indicator')).toBeInTheDocument();
   });
 
   it('does not show loading indicator when isLoading is false', () => {
@@ -80,7 +82,7 @@ describe('MessageList', () => {
 
     render(<MessageList messages={messages} isLoading={false} />);
 
-    expect(screen.queryByText('Guardian is typing...')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('typing-indicator')).not.toBeInTheDocument();
   });
 
   it('renders multiple user and assistant messages', () => {

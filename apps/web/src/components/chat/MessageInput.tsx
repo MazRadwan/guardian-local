@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, KeyboardEvent } from 'react';
+import React, { useState, useRef, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Send } from 'lucide-react';
@@ -11,13 +11,21 @@ export interface MessageInputProps {
   placeholder?: string;
 }
 
-export function MessageInput({
-  onSendMessage,
-  disabled = false,
-  placeholder = 'Type a message...',
-}: MessageInputProps) {
-  const [message, setMessage] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+export interface MessageInputRef {
+  focus: () => void;
+}
+
+export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
+  ({ onSendMessage, disabled = false, placeholder = 'Type a message...' }, ref) => {
+    const [message, setMessage] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    // Expose focus method to parent
+    useImperativeHandle(ref, () => ({
+      focus: () => {
+        inputRef.current?.focus();
+      },
+    }));
 
   const handleSend = () => {
     const trimmedMessage = message.trim();
@@ -28,36 +36,39 @@ export function MessageInput({
     inputRef.current?.focus();
   };
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+    const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    };
 
-  return (
-    <div className="border-t bg-white px-4 py-4">
-      <div className="flex gap-2">
-        <Input
-          ref={inputRef}
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={disabled}
-          className="flex-1"
-          aria-label="Message input"
-        />
-        <Button
-          onClick={handleSend}
-          disabled={disabled || !message.trim()}
-          size="icon"
-          aria-label="Send message"
-        >
-          <Send className="h-4 w-4" />
-        </Button>
+    return (
+      <div className="border-t bg-white px-4 py-4">
+        <div className="flex gap-2">
+          <Input
+            ref={inputRef}
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={disabled}
+            className="flex-1"
+            aria-label="Message input"
+          />
+          <Button
+            onClick={handleSend}
+            disabled={disabled || !message.trim()}
+            size="icon"
+            aria-label="Send message"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
+);
+
+MessageInput.displayName = 'MessageInput';

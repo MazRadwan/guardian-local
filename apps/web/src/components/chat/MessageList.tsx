@@ -57,7 +57,7 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
         />
       ))}
       {isLoading && (
-        <div className="flex gap-3 py-6">
+        <div data-testid="typing-indicator" className="flex gap-3 py-6">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>

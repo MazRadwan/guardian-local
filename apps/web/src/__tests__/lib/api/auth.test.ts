@@ -53,6 +53,9 @@ describe('Auth API', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 401,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({
           message: 'Invalid credentials',
           code: 'INVALID_CREDENTIALS',
@@ -73,6 +76,9 @@ describe('Auth API', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({
           message: 'Email is required',
         }),
@@ -134,6 +140,9 @@ describe('Auth API', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 409,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({
           message: 'Email already exists',
           code: 'EMAIL_EXISTS',
@@ -156,6 +165,9 @@ describe('Auth API', () => {
       (global.fetch as jest.Mock).mockResolvedValueOnce({
         ok: false,
         status: 400,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({
           message: 'Password must be at least 8 characters',
         }),

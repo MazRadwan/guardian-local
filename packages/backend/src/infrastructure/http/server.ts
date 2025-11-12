@@ -18,9 +18,14 @@ export class Server {
     this.config = config;
     this.app = express();
     this.httpServer = createServer(this.app);
+
+    // Parse CORS origins (comma-separated list supported)
+    const allowedOrigins = config.corsOrigin.split(',').map(o => o.trim());
+    const corsOrigin = allowedOrigins.length > 1 ? allowedOrigins : allowedOrigins[0];
+
     this.io = new SocketIOServer(this.httpServer, {
       cors: {
-        origin: config.corsOrigin,
+        origin: corsOrigin,
         methods: ['GET', 'POST'],
         credentials: true,
       },
@@ -31,10 +36,14 @@ export class Server {
   }
 
   private setupMiddleware(): void {
+    // Parse CORS origins (comma-separated list supported)
+    const allowedOrigins = this.config.corsOrigin.split(',').map(o => o.trim());
+    const corsOrigin = allowedOrigins.length > 1 ? allowedOrigins : allowedOrigins[0];
+
     // CORS configuration
     this.app.use(
       cors({
-        origin: this.config.corsOrigin,
+        origin: corsOrigin,
         credentials: true,
       })
     );

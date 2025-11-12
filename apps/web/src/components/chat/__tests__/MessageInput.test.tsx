@@ -69,4 +69,25 @@ describe('MessageInput', () => {
     expect(screen.getByLabelText('Message input')).toBeDisabled();
     expect(screen.getByLabelText('Send message')).toBeDisabled();
   });
+
+  it('exposes focus method via ref', () => {
+    const ref = React.createRef<{ focus: () => void }>();
+    render(<MessageInput ref={ref} onSendMessage={jest.fn()} />);
+
+    expect(ref.current).toBeDefined();
+    expect(typeof ref.current?.focus).toBe('function');
+  });
+
+  it('focuses input when focus method is called', () => {
+    const ref = React.createRef<{ focus: () => void }>();
+    render(<MessageInput ref={ref} onSendMessage={jest.fn()} />);
+
+    const input = screen.getByLabelText('Message input');
+
+    // Call focus via ref
+    ref.current?.focus();
+
+    // Input should be focused
+    expect(input).toHaveFocus();
+  });
 });

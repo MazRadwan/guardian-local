@@ -12,6 +12,7 @@ export interface UseWebSocketOptions {
   onError?: (error: string) => void;
   onConnected?: (data: { conversationId: string; resumed: boolean }) => void;
   onHistory?: (messages: ChatMessage[]) => void;
+  onStreamComplete?: (data: { messageId: string; conversationId: string; fullText: string }) => void;
   autoConnect?: boolean;
 }
 
@@ -24,6 +25,7 @@ export function useWebSocket({
   onError,
   onConnected,
   onHistory,
+  onStreamComplete,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -121,10 +123,17 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onStreamComplete) {
+      const unsub = client.onStreamComplete((data) => {
+        onStreamComplete(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onConnected, onHistory]);
+  }, [isConnected, onMessage, onMessageStream, onError, onConnected, onHistory, onStreamComplete]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {

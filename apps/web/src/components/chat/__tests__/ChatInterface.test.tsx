@@ -68,12 +68,15 @@ describe('ChatInterface', () => {
       appendToLastMessage: mockAppendToLastMessage,
       finishStreaming: mockFinishStreaming,
       setError: mockSetError,
+      setLoading: jest.fn(),
+      setMessages: jest.fn(),
     });
 
     (useWebSocket as jest.Mock).mockReturnValue({
       isConnected: true,
       isConnecting: false,
       sendMessage: mockSendMessage,
+      requestHistory: jest.fn(),
       connect: jest.fn(),
       disconnect: jest.fn(),
     });

@@ -19,9 +19,12 @@ export class DrizzleConversationRepository implements IConversationRepository {
   }
 
   async create(conversation: Omit<Conversation, 'id' | 'startedAt'>): Promise<Conversation> {
+    const id = crypto.randomUUID();
+
     const [row] = await this.db
       .insert(conversations)
       .values({
+        id,
         userId: conversation.userId,
         mode: conversation.mode,
         assessmentId: conversation.assessmentId,

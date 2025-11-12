@@ -75,7 +75,7 @@ export class User {
     const now = new Date()
 
     return new User(
-      '', // ID will be set by repository
+      crypto.randomUUID(),
       email,
       data.passwordHash,
       data.name.trim(),
