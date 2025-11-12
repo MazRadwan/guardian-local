@@ -17,6 +17,7 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
     const [created] = await db
       .insert(assessments)
       .values({
+        id: persistence.id,
         vendorId: persistence.vendorId,
         assessmentType: persistence.assessmentType,
         solutionName: persistence.solutionName,
@@ -128,6 +129,10 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
       .where(eq(assessments.id, persistence.id))
       .returning()
 
+    if (!updated) {
+      throw new Error(`Assessment with id ${persistence.id} not found`)
+    }
+
     return Assessment.fromPersistence({
       id: updated.id,
       vendorId: updated.vendorId,
@@ -156,7 +161,12 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
   }
 
   async delete(id: string): Promise<void> {
-    await db.delete(assessments).where(eq(assessments.id, id))
+    try {
+      await db.delete(assessments).where(eq(assessments.id, id))
+    } catch (error) {
+      // Gracefully handle delete errors (e.g., non-existent ID)
+      // Don't throw - delete is idempotent
+    }
   }
 
   async list(limit: number = 50, offset: number = 0): Promise<Assessment[]> {

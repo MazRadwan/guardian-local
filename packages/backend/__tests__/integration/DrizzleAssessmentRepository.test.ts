@@ -125,7 +125,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
     })
 
     it('should return null for non-existent ID', async () => {
-      const found = await repository.findById('non-existent-id')
+      const found = await repository.findById('00000000-0000-0000-0000-000000000000')
       expect(found).toBeNull()
     })
   })
@@ -144,8 +144,8 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       })
 
       await repository.create(assessment1)
-      // Wait a bit to ensure different timestamps
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      // Wait to ensure different timestamps (50ms for reliable ordering)
+      await new Promise((resolve) => setTimeout(resolve, 50))
       await repository.create(assessment2)
 
       const found = await repository.findByVendorId(testVendorId)
@@ -157,7 +157,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
     })
 
     it('should return empty array for vendor with no assessments', async () => {
-      const found = await repository.findByVendorId('non-existent-vendor-id')
+      const found = await repository.findByVendorId('00000000-0000-0000-0000-000000000001')
       expect(found).toHaveLength(0)
     })
   })
@@ -176,7 +176,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       })
 
       await repository.create(assessment1)
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       await repository.create(assessment2)
 
       const found = await repository.findByCreatedBy(testUserId)
@@ -188,7 +188,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
     })
 
     it('should return empty array for user with no assessments', async () => {
-      const found = await repository.findByCreatedBy('non-existent-user-id')
+      const found = await repository.findByCreatedBy('00000000-0000-0000-0000-000000000002')
       expect(found).toHaveLength(0)
     })
   })
@@ -258,8 +258,8 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       const created = await repository.create(assessment)
       const originalUpdatedAt = created.updatedAt
 
-      // Wait a bit to ensure timestamp changes
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      // Wait to ensure timestamp changes (50ms for reliable comparison)
+      await new Promise((resolve) => setTimeout(resolve, 50))
 
       assessment.updateSolutionName('New Name')
       const updated = await repository.update(assessment)
@@ -287,7 +287,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
 
     it('should not throw error when deleting non-existent assessment', async () => {
       await expect(
-        repository.delete('non-existent-id')
+        repository.delete('00000000-0000-0000-0000-000000000003')
       ).resolves.not.toThrow()
     })
   })
@@ -306,7 +306,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       })
 
       await repository.create(assessment1)
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       await repository.create(assessment2)
 
       const assessments = await repository.list()
@@ -353,7 +353,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
           createdBy: testUserId,
         })
       )
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       const a2 = await repository.create(
         Assessment.create({
           vendorId: testVendorId,
@@ -361,7 +361,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
           createdBy: testUserId,
         })
       )
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       await repository.create(
         Assessment.create({
           vendorId: testVendorId,

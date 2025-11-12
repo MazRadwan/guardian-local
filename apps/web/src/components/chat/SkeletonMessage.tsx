@@ -1,6 +1,6 @@
 export function SkeletonMessage() {
   return (
-    <div className="flex gap-3 px-4 py-6 animate-pulse">
+    <div data-testid="skeleton-message" className="flex gap-3 px-4 py-6 animate-pulse">
       {/* Avatar skeleton */}
       <div className="h-8 w-8 shrink-0 rounded-full bg-gray-300" />
 

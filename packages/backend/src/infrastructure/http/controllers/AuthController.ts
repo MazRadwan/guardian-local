@@ -128,6 +128,7 @@ export class AuthController {
           })
           return
         } catch (createError) {
+          console.error('[AuthController] Dev user creation failed:', createError);
           res.status(500).json({
             success: false,
             error: 'Failed to create dev user',

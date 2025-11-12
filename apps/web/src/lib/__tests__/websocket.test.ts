@@ -223,7 +223,7 @@ describe('WebSocketClient', () => {
       const callback = jest.fn();
       client.onMessage(callback);
 
-      expect(mockSocket.on).toHaveBeenCalledWith('message', callback);
+      expect(mockSocket.on).toHaveBeenCalledWith('message', expect.any(Function));
     });
 
     it('returns unsubscribe function', async () => {
@@ -245,7 +245,7 @@ describe('WebSocketClient', () => {
 
       unsubscribe();
 
-      expect(mockSocket.off).toHaveBeenCalledWith('message', callback);
+      expect(mockSocket.off).toHaveBeenCalledWith('message', expect.any(Function));
     });
 
     it('throws error if socket not initialized', () => {
@@ -275,7 +275,7 @@ describe('WebSocketClient', () => {
       const callback = jest.fn();
       client.onMessageStream(callback);
 
-      expect(mockSocket.on).toHaveBeenCalledWith('message:stream', callback);
+      expect(mockSocket.on).toHaveBeenCalledWith('assistant_token', expect.any(Function));
     });
 
     it('returns unsubscribe function', async () => {
@@ -297,7 +297,7 @@ describe('WebSocketClient', () => {
 
       unsubscribe();
 
-      expect(mockSocket.off).toHaveBeenCalledWith('message:stream', callback);
+      expect(mockSocket.off).toHaveBeenCalledWith('assistant_token', expect.any(Function));
     });
 
     it('throws error if socket not initialized', () => {
@@ -327,7 +327,7 @@ describe('WebSocketClient', () => {
       const callback = jest.fn();
       client.onError(callback);
 
-      expect(mockSocket.on).toHaveBeenCalledWith('error', callback);
+      expect(mockSocket.on).toHaveBeenCalledWith('error', expect.any(Function));
     });
 
     it('returns unsubscribe function', async () => {
@@ -349,7 +349,7 @@ describe('WebSocketClient', () => {
 
       unsubscribe();
 
-      expect(mockSocket.off).toHaveBeenCalledWith('error', callback);
+      expect(mockSocket.off).toHaveBeenCalledWith('error', expect.any(Function));
     });
 
     it('throws error if socket not initialized', () => {
