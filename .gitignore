@@ -42,7 +42,14 @@ summaries/
 # Planning artifacts (local only)
 chats/
 sample_assessments/
-tasks/
+tasks/implementation-logs/
+
+# Task files that should be committed
+!tasks/*.md
+!tasks/agent-workflow.md
+!tasks/mvp-tasks.md
+!tasks/roadmap.md
+!tasks/task-overview.md
 
 # Ad-hoc test scripts
 test-*.js
