@@ -243,6 +243,15 @@ export class WebSocketClient {
     };
   }
 
+  onStreamComplete(callback: (data: { messageId: string; conversationId: string; fullText: string }) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    this.socket.on('assistant_done', callback);
+    return () => {
+      this.socket?.off('assistant_done', callback);
+    };
+  }
+
   requestHistory(conversationId: string, limit: number = 50): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
