@@ -272,4 +272,164 @@ describe('chatStore', () => {
     expect(updatedMessage.content).toBe('Hello world');
     expect(updatedMessage.timestamp).toEqual(new Date('2024-01-01'));
   });
+
+  describe('Sidebar State Management', () => {
+    it('initializes with correct sidebar defaults', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // sidebarOpen defaults based on viewport (tested in separate test)
+      expect(typeof result.current.sidebarOpen).toBe('boolean');
+      expect(result.current.sidebarMinimized).toBe(false);
+    });
+
+    it('toggles sidebar open/closed state', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const initialState = result.current.sidebarOpen;
+
+      act(() => {
+        result.current.toggleSidebar();
+      });
+
+      expect(result.current.sidebarOpen).toBe(!initialState);
+
+      act(() => {
+        result.current.toggleSidebar();
+      });
+
+      expect(result.current.sidebarOpen).toBe(initialState);
+    });
+
+    it('sets sidebar open state explicitly', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setSidebarOpen(true);
+      });
+
+      expect(result.current.sidebarOpen).toBe(true);
+
+      act(() => {
+        result.current.setSidebarOpen(false);
+      });
+
+      expect(result.current.sidebarOpen).toBe(false);
+    });
+
+    it('toggles sidebar minimized state', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Initially not minimized
+      expect(result.current.sidebarMinimized).toBe(false);
+
+      act(() => {
+        result.current.toggleSidebarMinimized();
+      });
+
+      expect(result.current.sidebarMinimized).toBe(true);
+
+      act(() => {
+        result.current.toggleSidebarMinimized();
+      });
+
+      expect(result.current.sidebarMinimized).toBe(false);
+    });
+
+    it('sets sidebar minimized state explicitly', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setSidebarMinimized(true);
+      });
+
+      expect(result.current.sidebarMinimized).toBe(true);
+
+      act(() => {
+        result.current.setSidebarMinimized(false);
+      });
+
+      expect(result.current.sidebarMinimized).toBe(false);
+    });
+  });
+
+  describe('Persistence', () => {
+    beforeEach(() => {
+      // Clear localStorage before each test
+      localStorage.clear();
+    });
+
+    it('persists sidebar minimized state to localStorage', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setSidebarMinimized(true);
+      });
+
+      // Check localStorage
+      const storedData = localStorage.getItem('guardian-chat-store');
+      expect(storedData).toBeTruthy();
+
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        expect(parsed.state.sidebarMinimized).toBe(true);
+      }
+    });
+
+    it('does not persist sidebar open state (by design)', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setSidebarOpen(true);
+      });
+
+      // Check localStorage
+      const storedData = localStorage.getItem('guardian-chat-store');
+
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        // sidebarOpen should not be in persisted state
+        expect(parsed.state.sidebarOpen).toBeUndefined();
+      }
+    });
+
+    it('does not persist messages (by design)', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const message: ChatMessage = {
+        role: 'user',
+        content: 'Test message',
+        timestamp: new Date(),
+      };
+
+      act(() => {
+        result.current.addMessage(message);
+      });
+
+      // Check localStorage
+      const storedData = localStorage.getItem('guardian-chat-store');
+
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        // messages should not be in persisted state
+        expect(parsed.state.messages).toBeUndefined();
+      }
+    });
+
+    it('loads persisted sidebar minimized state on mount', () => {
+      // Set up localStorage with persisted state
+      const persistedState = {
+        state: {
+          sidebarMinimized: true,
+        },
+        version: 0,
+      };
+      localStorage.setItem('guardian-chat-store', JSON.stringify(persistedState));
+
+      // Create new store instance
+      const { result } = renderHook(() => useChatStore());
+
+      // Should load persisted state
+      expect(result.current.sidebarMinimized).toBe(true);
+    });
+  });
 });

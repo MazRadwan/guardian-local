@@ -3,8 +3,10 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { useChatStore } from '@/stores/chatStore';
+import { Sidebar } from '@/components/chat/Sidebar';
+import { User, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { LogOut, User } from 'lucide-react';
 
 export default function DashboardLayout({
   children,
@@ -13,6 +15,14 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const { isAuthenticated, isLoading, user, logout } = useAuth();
+
+  const {
+    sidebarOpen,
+    sidebarMinimized,
+    toggleSidebar,
+    toggleSidebarMinimized,
+    clearMessages,
+  } = useChatStore();
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -24,6 +34,22 @@ export default function DashboardLayout({
   const handleLogout = () => {
     logout();
     router.push('/login');
+  };
+
+  const handleNewChat = () => {
+    clearMessages();
+    // TODO: Future - create new conversation in backend
+  };
+
+  // Separate handlers for desktop vs mobile toggle behavior
+  const handleDesktopToggle = () => {
+    // Desktop: Always toggle minimized state
+    toggleSidebarMinimized();
+  };
+
+  const handleMobileToggle = () => {
+    // Mobile: Toggle open/closed state
+    toggleSidebar();
   };
 
   // Show loading state while checking auth
@@ -41,29 +67,56 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b bg-white px-6 py-4">
-        <h1 className="text-2xl font-bold text-gray-900">Guardian</h1>
-        <div className="flex items-center gap-4">
-          {user && (
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <User className="h-4 w-4" />
-              <span>{user.name}</span>
-              <span className="text-xs text-gray-400">({user.role})</span>
-            </div>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLogout}
-            className="flex items-center gap-2"
-          >
-            <LogOut className="h-4 w-4" />
-            Logout
-          </Button>
-        </div>
-      </header>
-      <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+    <div className="flex h-screen">
+      {/* Sidebar */}
+      <Sidebar
+        isOpen={sidebarOpen}
+        isMinimized={sidebarMinimized}
+        onToggle={handleDesktopToggle}
+        onCloseMobile={handleMobileToggle}
+        onNewChat={handleNewChat}
+        onLogout={handleLogout}
+        userName={user?.name}
+        userRole={user?.role}
+      />
+
+      {/* Main Content Area */}
+      <div
+        className={`
+          flex flex-1 flex-col transition-all duration-300 ease-in-out
+          ${sidebarMinimized ? 'md:ml-12' : 'md:ml-64'}
+        `}
+      >
+        {/* Header */}
+        <header className="flex items-center justify-between border-b bg-white px-6 py-4">
+          <div className="flex items-center gap-4">
+            {/* Mobile menu button - only visible on mobile/tablet */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleMobileToggle}
+              className="md:hidden"
+              aria-label="Toggle sidebar"
+            >
+              <Menu className="h-5 w-5 text-gray-700" />
+            </Button>
+            <h1 className="text-2xl font-bold text-gray-900">Guardian</h1>
+            {/* Connection status will be added here later */}
+          </div>
+          <div className="flex items-center gap-4">
+            {user && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <User className="h-4 w-4" />
+                <span>{user.name}</span>
+                <span className="text-xs text-gray-400">({user.role})</span>
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+      </div>
     </div>
   );
 }
