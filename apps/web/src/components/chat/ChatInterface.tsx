@@ -2,8 +2,8 @@
 
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { MessageList } from './MessageList';
-import { MessageInput, MessageInputRef } from './MessageInput';
-import { ModeSwitcher, ConversationMode } from './ModeSwitcher';
+import { Composer, ComposerRef } from './Composer';
+import { ConversationMode } from './ModeSelector';
 import { useChatStore } from '@/stores/chatStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useConversationMode } from '@/hooks/useConversationMode';
@@ -19,7 +19,7 @@ export function ChatInterface() {
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
   const [savedConversationId, setSavedConversationId] = useState<string | undefined | null>(null);
-  const messageInputRef = useRef<MessageInputRef>(null);
+  const composerRef = useRef<ComposerRef>(null);
 
   // Load saved conversationId from localStorage on mount (client-side only)
   useEffect(() => {
@@ -37,7 +37,7 @@ export function ChatInterface() {
       setLoading(false); // Hide typing indicator
 
       // Auto-focus input after assistant response completes
-      messageInputRef.current?.focus();
+      composerRef.current?.focus();
     },
     [addMessage, finishStreaming, setLoading]
   );
@@ -93,7 +93,7 @@ export function ChatInterface() {
     // Stream is complete, finish streaming and auto-focus input
     finishStreaming();
     setLoading(false);
-    messageInputRef.current?.focus();
+    composerRef.current?.focus();
   }, [finishStreaming, setLoading]);
 
   const { isConnected, isConnecting, sendMessage, requestHistory } = useWebSocket({
@@ -164,8 +164,8 @@ export function ChatInterface() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header with mode switcher */}
-      <div className="flex items-center justify-between border-b bg-white px-6 py-3">
+      {/* Header with connection status */}
+      <div className="flex items-center justify-between bg-white px-6 py-3">
         <div className="flex items-center gap-2">
           <div
             className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : isConnecting ? 'bg-yellow-500' : 'bg-red-500'}`}
@@ -175,7 +175,6 @@ export function ChatInterface() {
             {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
           </span>
         </div>
-        <ModeSwitcher currentMode={mode} onModeChange={handleModeChange} disabled={isChanging || !isConnected} />
       </div>
 
       {/* Error banner */}
@@ -189,13 +188,43 @@ export function ChatInterface() {
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <MessageList messages={messages} isLoading={isLoading} />
-      </div>
-
-      {/* Input */}
-      <MessageInput ref={messageInputRef} onSendMessage={handleSendMessage} disabled={!isConnected || isLoading} />
+      {/* Conditional Layout: Centered vs Active State */}
+      {messages.length === 0 ? (
+        // Empty state: Centered composer
+        <div className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center px-4">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to Guardian</h1>
+            <p className="text-gray-600">Start a conversation to assess AI vendors or get guidance.</p>
+          </div>
+          <div className="w-full max-w-3xl">
+            <Composer
+              ref={composerRef}
+              onSendMessage={handleSendMessage}
+              disabled={!isConnected || isLoading}
+              currentMode={mode}
+              onModeChange={handleModeChange}
+              modeChangeDisabled={isChanging || !isConnected}
+            />
+          </div>
+        </div>
+      ) : (
+        // Active state: Messages + composer at bottom
+        <>
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <MessageList messages={messages} isLoading={isLoading} />
+          </div>
+          <div className="flex-shrink-0">
+            <Composer
+              ref={composerRef}
+              onSendMessage={handleSendMessage}
+              disabled={!isConnected || isLoading}
+              currentMode={mode}
+              onModeChange={handleModeChange}
+              modeChangeDisabled={isChanging || !isConnected}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

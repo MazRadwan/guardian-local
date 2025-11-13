@@ -22,6 +22,10 @@ export default function DashboardLayout({
     toggleSidebar,
     toggleSidebarMinimized,
     clearMessages,
+    conversations,
+    activeConversationId,
+    setActiveConversation,
+    deleteConversation,
   } = useChatStore();
 
   useEffect(() => {
@@ -78,6 +82,10 @@ export default function DashboardLayout({
         onLogout={handleLogout}
         userName={user?.name}
         userRole={user?.role}
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        onSelectConversation={setActiveConversation}
+        onDeleteConversation={deleteConversation}
       />
 
       {/* Main Content Area */}
@@ -88,7 +96,7 @@ export default function DashboardLayout({
         `}
       >
         {/* Header */}
-        <header className="flex items-center justify-between border-b bg-white px-6 py-4">
+        <header className="flex items-center justify-between bg-white px-6 py-4">
           <div className="flex items-center gap-4">
             {/* Mobile menu button - only visible on mobile/tablet */}
             <Button

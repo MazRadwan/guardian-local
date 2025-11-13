@@ -66,63 +66,50 @@ export function Sidebar({
       {/* Sidebar */}
       <aside
         className={`
-          fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-50 border-r border-gray-200
+          fixed inset-y-0 left-0 z-50 flex flex-col border-r border-gray-200
           transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-          ${isMinimized ? 'md:w-12' : 'md:w-64'}
-          w-64
+          ${isMinimized ? 'md:w-12 bg-white' : 'md:w-64 bg-gray-50'}
+          w-64 bg-gray-50
         `}
         role="navigation"
         aria-label="Sidebar navigation"
       >
-        {/* Header Section - Toggle + New Chat */}
-        <div className="border-b border-gray-200 p-3">
+        {/* Section 1: Toggle Button Only */}
+        <div className="p-2 border-b border-gray-200">
+          <button
+            onClick={onToggle}
+            className={`flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors ${
+              isMinimized ? 'h-10 w-10' : 'h-8 w-8'
+            }`}
+            title={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
+            aria-label={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
+            aria-expanded={!isMinimized}
+          >
+            <PanelLeft className={`h-5 w-5 text-gray-700 ${isMinimized ? '' : 'rotate-180'}`} />
+          </button>
+        </div>
+
+        {/* Section 2: New Chat Button */}
+        <div className="p-2 border-b border-gray-200">
           {isMinimized ? (
-            // Minimized: Toggle button on top, New chat below
-            <div className="flex flex-col gap-2">
-              {/* Toggle button */}
-              <button
-                onClick={onToggle}
-                className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-                title="Expand sidebar"
-                aria-label="Expand sidebar"
-                aria-expanded={false}
-              >
-                <PanelLeft className="h-5 w-5 text-gray-700" />
-              </button>
-              {/* New chat button */}
-              <button
-                onClick={onNewChat}
-                className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-                title="New Chat"
-                aria-label="New Chat"
-              >
-                <Plus className="h-5 w-5 text-gray-700" />
-              </button>
-            </div>
+            <button
+              onClick={onNewChat}
+              className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              title="New Chat"
+              aria-label="New Chat"
+            >
+              <Plus className="h-5 w-5 text-gray-700" />
+            </button>
           ) : (
-            // Expanded: Toggle button + New chat button in row
-            <div className="flex items-center gap-2">
-              {/* Toggle button */}
-              <button
-                onClick={onToggle}
-                className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
-                title="Minimize sidebar"
-                aria-label="Minimize sidebar"
-                aria-expanded={true}
-              >
-                <PanelLeft className="h-5 w-5 text-gray-700 rotate-180" />
-              </button>
-              {/* New chat button */}
-              <Button
-                onClick={onNewChat}
-                variant="outline"
-                className="flex-1 flex items-center gap-2 justify-start"
-              >
-                <Plus className="h-[18px] w-[18px]" />
-                <span>New chat</span>
-              </Button>
-            </div>
+            <Button
+              onClick={onNewChat}
+              variant="outline"
+              className="w-full flex items-center gap-2 justify-start"
+            >
+              <Plus className="h-[18px] w-[18px]" />
+              <span>New chat</span>
+            </Button>
           )}
         </div>
 
