@@ -129,16 +129,6 @@ describe('Sidebar', () => {
       expect(mockProps.onLogout).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onToggle when toggle button clicked', () => {
-      render(<Sidebar {...mockProps} />);
-
-      // Toggle button with PanelLeft icon
-      const toggleButton = screen.getByTitle('Minimize sidebar');
-      fireEvent.click(toggleButton);
-
-      expect(mockProps.onToggle).toHaveBeenCalledTimes(1);
-    });
-
     it('calls onCloseMobile when backdrop clicked on mobile', () => {
       const onCloseMobile = jest.fn();
       render(<Sidebar {...mockProps} onCloseMobile={onCloseMobile} />);
@@ -224,44 +214,70 @@ describe('Sidebar', () => {
     });
   });
 
-  describe('Toggle Button Positioning', () => {
-    it('positions toggle button correctly when sidebar is expanded', () => {
+  describe('Toggle Button in Header', () => {
+    it('renders toggle button in header when sidebar is expanded', () => {
       render(<Sidebar {...mockProps} isMinimized={false} />);
 
       const toggleButton = screen.getByTitle('Minimize sidebar');
-      // When expanded (256px sidebar + 12px gap = 268px)
-      expect(toggleButton).toHaveClass('left-[268px]');
+      expect(toggleButton).toBeInTheDocument();
+      expect(toggleButton).toBeVisible();
+
+      // Should NOT have floating positioning classes
+      expect(toggleButton).not.toHaveClass('fixed');
+      expect(toggleButton).not.toHaveClass('left-[268px]');
       expect(toggleButton).not.toHaveClass('left-14');
     });
 
-    it('positions toggle button correctly when sidebar is minimized', () => {
+    it('renders toggle button in header when sidebar is minimized', () => {
       render(<Sidebar {...mockProps} isMinimized={true} />);
 
       const toggleButton = screen.getByTitle('Expand sidebar');
-      // When minimized (48px sidebar + 8px gap = 56px = left-14)
-      expect(toggleButton).toHaveClass('left-14');
+      expect(toggleButton).toBeInTheDocument();
+      expect(toggleButton).toBeVisible();
+
+      // Should NOT have floating positioning classes
+      expect(toggleButton).not.toHaveClass('fixed');
       expect(toggleButton).not.toHaveClass('left-[268px]');
+      expect(toggleButton).not.toHaveClass('left-14');
     });
 
-    it('applies transition to toggle button position', () => {
-      render(<Sidebar {...mockProps} />);
+    it('toggle button in header triggers onToggle callback', () => {
+      render(<Sidebar {...mockProps} isMinimized={false} />);
 
       const toggleButton = screen.getByTitle('Minimize sidebar');
-      expect(toggleButton).toHaveClass('transition-all');
-      expect(toggleButton).toHaveClass('duration-300');
+      fireEvent.click(toggleButton);
+
+      expect(mockProps.onToggle).toHaveBeenCalledTimes(1);
     });
 
-    it('toggle button is visible in both states', () => {
-      const { rerender } = render(<Sidebar {...mockProps} isMinimized={false} />);
+    it('toggle button appears before new chat button in expanded state', () => {
+      const { container } = render(<Sidebar {...mockProps} isMinimized={false} />);
 
-      // Expanded state
-      let toggleButton = screen.getByTitle('Minimize sidebar');
-      expect(toggleButton).toBeVisible();
+      // Find the header section
+      const header = container.querySelector('.border-b.border-gray-200.p-3');
+      expect(header).toBeInTheDocument();
 
-      // Minimized state
-      rerender(<Sidebar {...mockProps} isMinimized={true} />);
-      toggleButton = screen.getByTitle('Expand sidebar');
-      expect(toggleButton).toBeVisible();
+      // Both toggle and new chat should be in header
+      const toggleButton = screen.getByTitle('Minimize sidebar');
+      const newChatButton = screen.getByText('New chat');
+
+      expect(header).toContainElement(toggleButton);
+      expect(header).toContainElement(newChatButton);
+    });
+
+    it('toggle button appears above new chat button in minimized state', () => {
+      const { container } = render(<Sidebar {...mockProps} isMinimized={true} />);
+
+      // Find the header section
+      const header = container.querySelector('.border-b.border-gray-200.p-3');
+      expect(header).toBeInTheDocument();
+
+      // Both toggle and new chat should be in header
+      const toggleButton = screen.getByTitle('Expand sidebar');
+      const newChatButton = screen.getByTitle('New Chat');
+
+      expect(header).toContainElement(toggleButton);
+      expect(header).toContainElement(newChatButton);
     });
   });
 

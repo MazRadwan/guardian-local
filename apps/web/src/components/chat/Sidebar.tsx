@@ -75,28 +75,54 @@ export function Sidebar({
         role="navigation"
         aria-label="Sidebar navigation"
       >
-        {/* Header Section - New Chat */}
+        {/* Header Section - Toggle + New Chat */}
         <div className="border-b border-gray-200 p-3">
           {isMinimized ? (
-            // Minimized: Icon only
-            <button
-              onClick={onNewChat}
-              className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-              title="New Chat"
-              aria-label="New Chat"
-            >
-              <Plus className="h-5 w-5 text-gray-700" />
-            </button>
+            // Minimized: Toggle button on top, New chat below
+            <div className="flex flex-col gap-2">
+              {/* Toggle button */}
+              <button
+                onClick={onToggle}
+                className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                title="Expand sidebar"
+                aria-label="Expand sidebar"
+                aria-expanded={false}
+              >
+                <PanelLeft className="h-5 w-5 text-gray-700" />
+              </button>
+              {/* New chat button */}
+              <button
+                onClick={onNewChat}
+                className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                title="New Chat"
+                aria-label="New Chat"
+              >
+                <Plus className="h-5 w-5 text-gray-700" />
+              </button>
+            </div>
           ) : (
-            // Expanded: Full button
-            <Button
-              onClick={onNewChat}
-              variant="outline"
-              className="w-full flex items-center gap-2 justify-start"
-            >
-              <Plus className="h-[18px] w-[18px]" />
-              <span>New chat</span>
-            </Button>
+            // Expanded: Toggle button + New chat button in row
+            <div className="flex items-center gap-2">
+              {/* Toggle button */}
+              <button
+                onClick={onToggle}
+                className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0"
+                title="Minimize sidebar"
+                aria-label="Minimize sidebar"
+                aria-expanded={true}
+              >
+                <PanelLeft className="h-5 w-5 text-gray-700 rotate-180" />
+              </button>
+              {/* New chat button */}
+              <Button
+                onClick={onNewChat}
+                variant="outline"
+                className="flex-1 flex items-center gap-2 justify-start"
+              >
+                <Plus className="h-[18px] w-[18px]" />
+                <span>New chat</span>
+              </Button>
+            </div>
           )}
         </div>
 
@@ -177,23 +203,6 @@ export function Sidebar({
           )}
         </div>
       </aside>
-
-      {/* Toggle Button (Desktop only, outside sidebar) */}
-      <button
-        onClick={onToggle}
-        className={`fixed top-4 z-30 hidden md:flex h-10 w-10 items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-all duration-300 shadow-sm ${
-          isMinimized ? 'left-14' : 'left-[268px]'
-        }`}
-        title={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
-        aria-label={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
-        aria-expanded={!isMinimized}
-      >
-        <PanelLeft
-          className={`h-5 w-5 text-gray-700 transition-transform duration-300 ${
-            isMinimized ? '' : 'rotate-180'
-          }`}
-        />
-      </button>
     </>
   );
 }
