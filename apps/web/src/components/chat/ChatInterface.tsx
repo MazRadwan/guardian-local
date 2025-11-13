@@ -164,19 +164,6 @@ export function ChatInterface() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header with connection status */}
-      <div className="flex items-center justify-between bg-white px-6 py-3">
-        <div className="flex items-center gap-2">
-          <div
-            className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : isConnecting ? 'bg-yellow-500' : 'bg-red-500'}`}
-            aria-label={isConnected ? 'Connected' : isConnecting ? 'Connecting' : 'Disconnected'}
-          />
-          <span className="text-sm text-gray-600">
-            {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
-          </span>
-        </div>
-      </div>
-
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 bg-red-50 px-6 py-3 text-sm text-red-800">
