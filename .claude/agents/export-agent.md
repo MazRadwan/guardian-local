@@ -105,6 +105,35 @@ See `tasks/mvp-tasks.md` Epic 7 for detailed specifications.
 - Epic 5 (assessments, questions exist)
 - Epic 6 (questions generated)
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 7 stories)
+- [ ] Tests written and passing (unit + integration, >70% coverage)
+- [ ] PDF export generates correctly (formatted, professional)
+- [ ] Word export works (.docx format)
+- [ ] Excel export works (spreadsheet format)
+- [ ] DownloadButton component functional in chat
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Clean architecture maintained (export services in application layer)
+
+**Extended Thinking:** For complex document generation or formatting issues, use "think hard" to evaluate library options and error handling systematically.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-7-export.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (PDF generation issues, formatting bugs, etc.)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Library selection and formatting decisions
+
+**Example:** Document PDF library comparisons, Word formatting iterations, Excel layout decisions with reasoning.
+
 ## When You're Done
 
 **Create summary file:** `/summaries/EPIC7_SUMMARY.md`

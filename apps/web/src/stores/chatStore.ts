@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ChatMessage } from '@/lib/websocket';
 
+export interface Conversation {
+  id: string;
+  title: string;
+  createdAt: Date;
+  updatedAt: Date;
+  mode: 'consult' | 'assessment';
+  messageCount: number;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -11,6 +20,10 @@ export interface ChatState {
   // Sidebar state
   sidebarOpen: boolean;
   sidebarMinimized: boolean;
+
+  // Conversation management
+  conversations: Conversation[];
+  activeConversationId: string | null;
 
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
@@ -27,6 +40,14 @@ export interface ChatState {
   setSidebarOpen: (open: boolean) => void;
   toggleSidebarMinimized: () => void;
   setSidebarMinimized: (minimized: boolean) => void;
+
+  // Conversation management actions
+  addConversation: (conversation: Conversation) => void;
+  setActiveConversation: (id: string | null) => void;
+  deleteConversation: (id: string) => void;
+  updateConversationTitle: (id: string, title: string) => void;
+  updateConversationMessageCount: (id: string, count: number) => void;
+  setConversations: (conversations: Conversation[]) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -40,6 +61,10 @@ export const useChatStore = create<ChatState>()(
       // Sidebar state - defaults based on viewport
       sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
       sidebarMinimized: false,
+
+      // Conversation management - defaults
+      conversations: [],
+      activeConversationId: null,
 
       addMessage: (message) =>
         set((state) => ({
@@ -120,12 +145,51 @@ export const useChatStore = create<ChatState>()(
         set({
           sidebarMinimized: minimized,
         }),
+
+      // Conversation management actions
+      addConversation: (conversation) =>
+        set((state) => ({
+          conversations: [...state.conversations, conversation],
+        })),
+
+      setActiveConversation: (id) =>
+        set({
+          activeConversationId: id,
+        }),
+
+      deleteConversation: (id) =>
+        set((state) => ({
+          conversations: state.conversations.filter((conv) => conv.id !== id),
+          // Clear active conversation if it's the one being deleted
+          activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
+        })),
+
+      updateConversationTitle: (id, title) =>
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
+            conv.id === id ? { ...conv, title, updatedAt: new Date() } : conv
+          ),
+        })),
+
+      updateConversationMessageCount: (id, count) =>
+        set((state) => ({
+          conversations: state.conversations.map((conv) =>
+            conv.id === id ? { ...conv, messageCount: count, updatedAt: new Date() } : conv
+          ),
+        })),
+
+      setConversations: (conversations) =>
+        set({
+          conversations,
+        }),
     }),
     {
       name: 'guardian-chat-store',
-      // Only persist sidebar preferences
+      // Persist sidebar preferences, active conversation ID, and conversations array
       partialize: (state) => ({
         sidebarMinimized: state.sidebarMinimized,
+        activeConversationId: state.activeConversationId,
+        conversations: state.conversations,
       }),
     }
   )

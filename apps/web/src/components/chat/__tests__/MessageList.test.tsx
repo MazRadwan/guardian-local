@@ -112,4 +112,74 @@ describe('MessageList', () => {
     expect(screen.getByTestId('chat-message-system')).toBeInTheDocument();
     expect(screen.getByText('System notification')).toBeInTheDocument();
   });
+
+  // Story 9.4: Centered content constraint tests
+  describe('Centered Content Layout', () => {
+    it('messages container has max-width constraint (max-w-3xl)', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test message', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      // Find the centered container (has max-w-3xl class)
+      const centeredContainer = container.querySelector('.max-w-3xl');
+      expect(centeredContainer).toBeInTheDocument();
+    });
+
+    it('container is horizontally centered (mx-auto)', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test message', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      // Find the centered container (has mx-auto class)
+      const centeredContainer = container.querySelector('.mx-auto');
+      expect(centeredContainer).toBeInTheDocument();
+    });
+
+    it('responsive padding applied (px-4)', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test message', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      // Find the centered container with padding
+      const centeredContainer = container.querySelector('.px-4');
+      expect(centeredContainer).toBeInTheDocument();
+    });
+
+    it('centered container wraps all messages', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+        { role: 'assistant', content: 'Message 2', timestamp: new Date() },
+        { role: 'user', content: 'Message 3', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      // Centered container should contain all messages
+      const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
+      expect(centeredContainer).toBeInTheDocument();
+
+      // All messages should be inside centered container
+      const messagesInContainer = centeredContainer?.querySelectorAll('[data-testid^="chat-message-"]');
+      expect(messagesInContainer).toHaveLength(3);
+    });
+
+    it('typing indicator is inside centered container', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} isLoading={true} />);
+
+      // Centered container should contain typing indicator
+      const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
+      const typingIndicator = centeredContainer?.querySelector('[data-testid="typing-indicator"]');
+      expect(typingIndicator).toBeInTheDocument();
+    });
+  });
 });

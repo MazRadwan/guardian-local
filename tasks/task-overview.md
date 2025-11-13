@@ -47,8 +47,9 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | Epic 6: Question Generation (Core Feature) | 6 stories | ✅ Complete | 2025-11-08 | 53 tests, 92% coverage, Claude integration working |
 | Epic 7: Export Functionality | 5 stories | ✅ Complete | 2025-11-09 | 24 tests passing, architecture fix applied |
 | Epic 8: Integration & Polish | 5 stories | ⬜ Pending | - | After all epics |
+| Epic 9: UI/UX Upgrade | 8 stories | 🔄 In Progress | Started 2025-11-13 | See `epic-9-ui-ux-upgrade.md` |
 
-**Progress:** 7 of 8 epics complete (87.5%)
+**Progress:** 7 of 8 MVP epics complete (87.5%), Epic 9 (UI/UX) in planning
 
 **Critical Path:** Epic 1 ✅ → Epic 2 ✅ → Epic 3 ✅ → Epic 4 ✅ → Epic 5 ✅ → Epic 6 → Epic 7 → Epic 8
 
@@ -114,3 +115,4 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | 1.2 | 2025-01-07 | code-reviewer | Epic 4 complete with all fixes applied. Test coverage 78.79%, 102 tests passing. |
 | 1.3 | 2025-11-08 | code-reviewer | Epic 5 complete after fixes applied. 176 tests passing, 89.55% coverage. |
 | 1.4 | 2025-11-09 | code-reviewer | Epic 7 complete after architecture fix. 24 export tests passing, clean architecture verified. |
+| 1.5 | 2025-11-13 | code-reviewer | Epic 9 Story 9.1 complete after fixes. 36 new tests, 81.48% coverage for components/chat. |

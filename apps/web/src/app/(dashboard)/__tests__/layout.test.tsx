@@ -18,7 +18,19 @@ jest.mock('@/stores/chatStore', () => ({
 }));
 
 jest.mock('@/components/chat/Sidebar', () => ({
-  Sidebar: ({ isOpen, isMinimized, onToggle, onNewChat, onLogout, userName, userRole }: any) => (
+  Sidebar: ({
+    isOpen,
+    isMinimized,
+    onToggle,
+    onNewChat,
+    onLogout,
+    userName,
+    userRole,
+    conversations,
+    activeConversationId,
+    onSelectConversation,
+    onDeleteConversation
+  }: any) => (
     <div data-testid="sidebar">
       <div data-testid="sidebar-state">
         {isOpen ? 'open' : 'closed'} / {isMinimized ? 'minimized' : 'expanded'}
@@ -28,6 +40,8 @@ jest.mock('@/components/chat/Sidebar', () => ({
       <button data-testid="sidebar-logout" onClick={onLogout}>Logout</button>
       {userName && <div data-testid="sidebar-user-name">{userName}</div>}
       {userRole && <div data-testid="sidebar-user-role">{userRole}</div>}
+      <div data-testid="sidebar-conversations-count">{conversations?.length || 0}</div>
+      {activeConversationId && <div data-testid="sidebar-active-conversation">{activeConversationId}</div>}
     </div>
   ),
 }));
@@ -42,6 +56,10 @@ describe('DashboardLayout', () => {
     toggleSidebar: jest.fn(),
     toggleSidebarMinimized: jest.fn(),
     clearMessages: jest.fn(),
+    conversations: [],
+    activeConversationId: null,
+    setActiveConversation: jest.fn(),
+    deleteConversation: jest.fn(),
   };
 
   beforeEach(() => {

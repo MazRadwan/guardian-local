@@ -11,9 +11,16 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 
 ### Single Source of Truth for Tasks
 **IMPORTANT:** Tasks live ONLY in `/tasks/` directory.
-- When starting work → Check `tasks/task-overview.md` first
+- When starting work → Check `tasks/task-overview.md` first (high-level status)
+- For detailed MVP specs → See `tasks/mvp-tasks.md` (Epic 1-8, referenced by task-overview.md)
+- For Epic 9 UI/UX → See `tasks/epic-9-ui-ux-upgrade.md` (25 granular stories)
 - When creating tasks → Add to `tasks/task-overview.md` only
 - Never add tasks to: docs, README, code comments, or anywhere else
+
+**Task File Hierarchy:**
+1. `task-overview.md` - High-level epic status and "what's next"
+2. `mvp-tasks.md` - Detailed story specs for MVP (Epic 1-8)
+3. `epic-9-ui-ux-upgrade.md` - Detailed story specs for UI/UX upgrade (Epic 9)
 
 ### Architecture Type
 **IMPORTANT:** This is a **chat-first application**, NOT a traditional form-based app.
@@ -94,6 +101,7 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 .claude/PROJECT_CONTEXT.md           # Quick project brief
 tasks/roadmap.md                     # Feature roadmap (MVP, Phase 2, Phase 3)
 tasks/task-overview.md               # Current tasks and status
+tasks/epic-9-ui-ux-upgrade.md        # Epic 9: UI/UX upgrade (25 stories, granular)
 tasks/implementation-logs/           # Epic implementation history (optional context)
 docs/design/architecture/overview.md # Vision and goals
 
@@ -146,7 +154,49 @@ Sample_assessment_YAML_COMPLETED.yaml # Test data example
 
 **See:** `tasks/agent-workflow.md` for complete workflow documentation
 
-**Available agents:** `.claude/agents/` (7 specialists + 1 reviewer + 1 bug-fix)
+**Available agents:** `.claude/agents/` (10 specialists including ui-ux-agent + 1 reviewer + 1 bug-fix)
+
+### Agent Delegation Rules
+
+**IMPORTANT:** Main agent should delegate to specialists, not do work directly.
+
+**When You Are Main Agent:**
+- ✅ Planning, research, architecture decisions
+- ✅ Delegating to specialist agents via Task tool
+- ✅ Reviewing summaries and providing feedback
+- ❌ **NEVER implement stories yourself when specialist exists**
+
+**Delegation Pattern:**
+1. **Epic 1-8:** Invoke respective specialist (setup-agent, auth-agent, chat-backend-agent, frontend-agent, assessment-agent, question-gen-agent, export-agent, login-agent)
+2. **Epic 9:** Invoke `ui-ux-agent` for ALL 25 stories
+3. **Bug fixes:** Invoke `bug-fix-agent`
+4. **Code review:** Specialists invoke `code-reviewer` automatically after each story
+
+**Example (CORRECT):**
+```
+Main Agent identifies: "Need to complete Epic 9 Stories 9.1-9.3"
+  → Task(subagent_type: "ui-ux-agent", prompt: "Complete Stories 9.1-9.3.
+      After each story: invoke code-reviewer, iterate until approved.
+      After 3 stories: provide summary for user manual review.")
+```
+
+**Anti-Pattern (WRONG):**
+```
+❌ Main Agent writes Sidebar.tsx directly (should delegate to ui-ux-agent)
+❌ Main Agent skips code-reviewer invocation (specialist must invoke it)
+❌ Specialist completes multiple stories without per-story code review
+```
+
+**Story-Level Code Review:**
+- Specialists invoke `code-reviewer` after **EACH story** (not after batch)
+- Code-reviewer reviews, provides feedback
+- Specialist fixes issues, re-invokes code-reviewer
+- Once approved, specialist moves to next story
+
+**User Manual Review:**
+- **Every 3 stories**, specialist provides summary to user
+- User reviews and approves before continuing next batch
+- Ensures quality gates throughout epic development
 
 ---
 

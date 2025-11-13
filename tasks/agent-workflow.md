@@ -1,7 +1,7 @@
 # Guardian Agent Workflow
 
-**Version:** 2.0
-**Last Updated:** 2025-01-12
+**Version:** 3.0
+**Last Updated:** 2025-01-13
 
 ---
 
@@ -26,6 +26,7 @@ Guardian development uses **specialized sub-agents** with **automated code revie
 | `assessment-agent` | Epic 5 | Vendor/assessment management | Sonnet |
 | `question-gen-agent` | Epic 6 | Question generation (Claude integration) | Sonnet |
 | `export-agent` | Epic 7 | Export functionality | Sonnet |
+| `ui-ux-agent` | Epic 9 | UI/UX upgrade (25 stories) | Sonnet |
 
 ### Review Agent (Opus)
 
@@ -77,35 +78,73 @@ Guardian development uses **specialized sub-agents** with **automated code revie
 
 ## Workflow Steps
 
-### Step 1: Invoke Specialist Agent
+### Overview: Story-Level Iteration with 3-Story User Checkpoints
 
-**Command:**
+**Pattern:**
 ```
-Use the setup-agent to complete Epic 1
-```
-
-**OR**
-```
-/task --subagent setup-agent
-[Describe Epic 1 stories to complete]
+Main Agent → Specialist (3 stories) → Code Review (per story) → User Review (every 3 stories) → Next batch
 ```
 
-**What happens:**
-- Specialist agent reads relevant docs
-- Implements stories for their epic
-- Writes tests
-- Runs tests
-- Outputs summary of work completed
+**Key Principles:**
+1. **Main agent delegates** to specialist (never does work directly)
+2. **Specialist reviews after EACH story** (not batched)
+3. **User reviews every 3 stories** (manual quality gate)
 
 ---
 
-### Step 2: Automatic Code Review (SubagentStop Hook)
+### Step 1: Main Agent Delegates to Specialist
 
-**Trigger:** When specialist completes, SubagentStop hook fires
+**Main agent identifies work** (e.g., "Epic 9 Stories 9.1-9.3")
+
+**Delegation command:**
+```
+Task(subagent_type: "ui-ux-agent",
+     prompt: "Complete Stories 9.1-9.3.
+             After EACH story: invoke code-reviewer, iterate until approved.
+             After all 3 stories: provide summary for user manual review.")
+```
 
 **What happens:**
-- Hook invokes `code-reviewer` sub-agent (Opus)
-- Code reviewer analyzes changes
+- Main agent hands off to specialist
+- Specialist reads epic file (`tasks/epic-9-ui-ux-upgrade.md`)
+- Specialist begins Story 9.1
+
+**Anti-Pattern (WRONG):**
+```
+❌ Main agent writes Sidebar.tsx directly
+❌ Main agent implements stories (should delegate to specialist)
+```
+
+---
+
+### Step 2: Specialist Builds Story (Per Story)
+
+**For EACH story** (e.g., Story 9.1):
+
+1. **Specialist reads story specs** from epic file
+2. **Implements feature** (creates/modifies files)
+3. **Writes tests** (unit + integration as needed)
+4. **Runs tests** (`npm test`)
+5. **Self-reviews** against Definition of Done checklist
+
+**Then proceeds to Step 3** (code review)
+
+---
+
+### Step 3: Specialist Invokes Code Reviewer (Per Story)
+
+**After EACH story completion**, specialist invokes code-reviewer:
+
+```
+Story 9.1 complete
+  → Task(subagent_type: "code-reviewer",
+         prompt: "Review Story 9.1 (Sidebar component).
+                 Files changed: Sidebar.tsx, chatStore.ts, layout.tsx
+                 Focus: Component structure, state management, responsive design")
+```
+
+**What happens:**
+- Code-reviewer (Opus) analyzes changes
 - Checks: architecture, tests, security, quality
 - Runs test suite
 - Generates review report
@@ -116,93 +155,174 @@ Use the setup-agent to complete Epic 1
 
 ---
 
-### Step 3: User Review & Decision
+### Step 4: Specialist Iterates on Feedback (If Needed)
 
-**Your action:**
+**If issues found:**
+1. Specialist reads `.claude/review-feedback.md`
+2. Fixes each documented issue
+3. Re-invokes code-reviewer for same story
+4. Repeats until approved
 
-1. **Read review file:**
-   ```bash
-   cat .claude/review-approved.md
-   # OR
-   cat .claude/review-feedback.md
-   ```
+**If approved:**
+1. Specialist moves to next story (e.g., Story 9.2)
+2. Repeats Steps 2-4 for each subsequent story
 
-2. **Make decision:**
-
-   **If APPROVED (✅):**
-   - Move to next story/epic
-   - Invoke next specialist agent
-   - Update task-overview.md
-
-   **If ISSUES FOUND (❌):**
-   - Review feedback details
-   - Decide: Fix now OR override and proceed
-   - If fixing: Re-invoke same specialist with feedback
-   - If overriding: Document why, proceed to next
+**Critical:** Do NOT batch stories before review. Review after EACH story.
 
 ---
 
-### Step 4: Repeat
+### Step 5: Specialist Provides 3-Story Summary
 
-Continue pattern: Specialist → Review → Approval → Next
+**After Stories 9.1, 9.2, 9.3 all approved:**
+
+Specialist creates summary for user:
+
+```markdown
+## Stories 9.1-9.3 Complete - Summary for Manual Review
+
+**Stories Completed:**
+- ✅ Story 9.1: Sidebar skeleton
+- ✅ Story 9.2: Three-panel layout
+- ✅ Story 9.3: Sidebar state persistence
+
+**Files Created:**
+- apps/web/src/components/chat/Sidebar.tsx
+- apps/web/src/components/chat/__tests__/Sidebar.test.tsx
+
+**Files Modified:**
+- apps/web/src/stores/chatStore.ts
+- apps/web/src/app/(dashboard)/layout.tsx
+
+**Tests:**
+- 18 new tests written
+- All tests passing (102 → 120 tests)
+- Coverage: 78% (maintained)
+
+**Known Issues:**
+- None
+
+**Next Batch:** Stories 9.4-9.6 (Composer component)
+
+**Awaiting your approval to proceed.**
+```
+
+Specialist **WAITS** for user response.
+
+---
+
+### Step 6: User Manual Review & Approval
+
+**User reviews summary:**
+- Check files make sense
+- Verify tests passing
+- Visual inspection (optional)
+- Approve or request changes
+
+**If approved:**
+```
+USER: "Approved. Continue with Stories 9.4-9.6."
+```
+
+**If changes needed:**
+```
+USER: "Change X in Sidebar.tsx, then re-review Story 9.1"
+```
+
+---
+
+### Step 7: Repeat for Next Batch
+
+Main agent (or specialist continues):
+```
+Stories 9.4-9.6
+  → Same process (build → review per story → 3-story summary → user approval)
+
+Stories 9.7-9.9
+  → Same process
+
+... until all 25 stories complete
+```
 
 ---
 
 ## Example Workflow
 
-### Complete Epic 2 (Auth System)
+### Example: Epic 9 Stories 9.1-9.3 (Story-Level Review Pattern)
 
 ```
-USER: "Use the auth-agent to complete Epic 2"
+USER: "Complete Epic 9 Stories 9.1-9.3"
 
-[auth-agent works...]
+MAIN AGENT: Delegating to ui-ux-agent...
+  → Task(ui-ux-agent, "Complete Stories 9.1-9.3 with per-story code review")
 
-auth-agent: ✅ Epic 2 complete. Stories 2.1-2.4 done.
-            Tests: 42 passed
-            Files: [lists 15 files created]
-            Ready for review.
+---
 
-[SubagentStop hook triggers]
+UI-UX-AGENT: Starting Story 9.1 (Sidebar skeleton)...
+  → Creates Sidebar.tsx
+  → Updates chatStore.ts with sidebar state
+  → Updates layout.tsx for three-panel layout
+  → Runs tests (all pass)
+  → Self-review complete
 
-code-reviewer (Opus): Reviewing Epic 2 changes...
+UI-UX-AGENT: Story 9.1 complete. Invoking code-reviewer...
+  → Task(code-reviewer, "Review Story 9.1: Sidebar.tsx, chatStore.ts, layout.tsx")
 
-[5 minutes later]
+CODE-REVIEWER (Opus): Reviewing Story 9.1...
+  ✅ Architecture: Component structure good
+  ✅ Tests: Would like tests for Sidebar component
+  ✅ TypeScript: Clean types
+  ⚠️ Missing: No tests for Sidebar.tsx
 
-code-reviewer: ❌ Issues found. See .claude/review-feedback.md
+CODE-REVIEWER: Minor issue - Need Sidebar.test.tsx
 
-USER: [Reads review-feedback.md]
+UI-UX-AGENT: Adding tests for Sidebar...
+  → Creates __tests__/Sidebar.test.tsx
+  → Runs tests (all pass)
 
-Feedback shows:
-- Critical: Domain layer imports Drizzle (violation)
-- Warning: Test coverage 65% (below 70%)
+UI-UX-AGENT: Tests added. Re-invoking code-reviewer...
+  → Task(code-reviewer, "Re-review Story 9.1 with new tests")
 
-USER: "Use auth-agent to fix issues in review-feedback.md"
+CODE-REVIEWER: ✅ APPROVED. Story 9.1 complete.
 
-[auth-agent fixes issues...]
+---
 
-auth-agent: ✅ Issues fixed. Re-running tests...
-            Tests: 46 passed
-            Coverage: 74%
+UI-UX-AGENT: Moving to Story 9.2...
+  → [builds Story 9.2]
+  → [invokes code-reviewer]
+  → [approved first try]
 
-            Updated /summaries/EPIC2_SUMMARY.md with:
-            ## Fixes Applied
-            - Issue 1: JWT security - FIXED
-            - Issue 2: Domain layer violation - FIXED
-            - Issue 3: Test coverage - ADDRESSED
+UI-UX-AGENT: Moving to Story 9.3...
+  → [builds Story 9.3]
+  → [invokes code-reviewer]
+  → [approved first try]
 
-            Ready for re-review.
+---
 
-[SubagentStop hook triggers again]
+UI-UX-AGENT: Stories 9.1-9.3 complete. Generating summary...
 
-code-reviewer (Opus): Re-reviewing...
+## Stories 9.1-9.3 Complete - Manual Review Required
 
-code-reviewer: ✅ APPROVED. All issues resolved.
+**Stories:**
+- ✅ 9.1: Sidebar skeleton
+- ✅ 9.2: [Story 9.2 description]
+- ✅ 9.3: [Story 9.3 description]
 
-USER: [Reads review-approved.md]
+**Files:** [lists files]
+**Tests:** 18 new, all passing
+**Coverage:** 78%
 
-USER: "Use chat-backend-agent to complete Epic 3"
+**Awaiting your approval to proceed to Stories 9.4-9.6.**
 
-[Process repeats...]
+---
+
+USER: [Reviews summary]
+
+USER: "Approved. Continue with Stories 9.4-9.6."
+
+MAIN AGENT: Invoking ui-ux-agent for next batch...
+  → Task(ui-ux-agent, "Complete Stories 9.4-9.6...")
+
+[Process repeats for Stories 9.4-9.6, then 9.7-9.9, etc.]
 ```
 
 ---
@@ -424,23 +544,27 @@ If you override a code review warning, document why in commit message or review 
 ## Files
 
 **Agent definitions:**
-- `.claude/agents/setup-agent.md`
-- `.claude/agents/auth-agent.md`
-- `.claude/agents/chat-backend-agent.md`
-- `.claude/agents/frontend-agent.md`
-- `.claude/agents/assessment-agent.md`
-- `.claude/agents/question-gen-agent.md`
-- `.claude/agents/export-agent.md`
-- `.claude/agents/code-reviewer.md`
-- `.claude/agents/bug-fix-agent.md`
+- `.claude/agents/setup-agent.md` (Epic 1)
+- `.claude/agents/auth-agent.md` (Epic 2)
+- `.claude/agents/login-agent.md` (Epic 2.5)
+- `.claude/agents/chat-backend-agent.md` (Epic 3)
+- `.claude/agents/frontend-agent.md` (Epic 4)
+- `.claude/agents/assessment-agent.md` (Epic 5)
+- `.claude/agents/question-gen-agent.md` (Epic 6)
+- `.claude/agents/export-agent.md` (Epic 7)
+- `.claude/agents/ui-ux-agent.md` (Epic 9) ⭐ NEW
+- `.claude/agents/code-reviewer.md` (Review agent)
+- `.claude/agents/bug-fix-agent.md` (Bug fixes)
 
 **Review outputs:**
-- `.claude/review-approved.md` (ephemeral, created per review)
-- `.claude/review-feedback.md` (ephemeral, created per review)
+- `.claude/review-approved.md` (ephemeral, created per story review)
+- `.claude/review-feedback.md` (ephemeral, created per story review)
 
 **Task tracking:**
-- `tasks/mvp-tasks.md` - Story definitions
-- `tasks/task-overview.md` - Status tracking (update manually after approval)
+- `tasks/task-overview.md` - High-level epic status
+- `tasks/mvp-tasks.md` - Epic 1-8 story definitions
+- `tasks/epic-9-ui-ux-upgrade.md` - Epic 9 story definitions (25 stories) ⭐ NEW
+- `tasks/roadmap.md` - Feature roadmap (all phases)
 
 **Implementation logs (optional):**
 - `tasks/implementation-logs/epic-X-[name].md` - Context and design decisions
@@ -454,6 +578,7 @@ If you override a code review warning, document why in commit message or review 
 |---------|------|---------|
 | 1.0 | 2025-01-04 | Initial agent workflow documentation - 7 specialist agents (Sonnet) + 1 code reviewer (Opus). Manual approval checkpoints between stories. |
 | 2.0 | 2025-01-12 | Added bug-fix agent workflow. Added implementation logs (optional context preservation). Updated source of truth hierarchy. |
+| 3.0 | 2025-01-13 | **MAJOR UPDATE:** Added ui-ux-agent (Epic 9). Clarified story-level code review pattern (review after EACH story, not batched). Added 3-story user manual review checkpoints. Updated example workflow to show correct delegation: Main Agent → Specialist → Code Review (per story) → User Review (every 3 stories). |
 
 ---
 

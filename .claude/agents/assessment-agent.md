@@ -112,6 +112,34 @@ See `tasks/mvp-tasks.md` Epic 5 for detailed specifications.
 - Epic 1 complete (database schema)
 - Epic 2 complete (auth, createdBy field)
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 5 stories)
+- [ ] Tests written and passing (unit + integration, >70% coverage)
+- [ ] Assessment CRUD operations work correctly
+- [ ] Vendor management functional (create, update, list)
+- [ ] Repository pattern implemented (IAssessmentRepository, IVendorRepository)
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Clean architecture maintained (domain layer has zero dependencies)
+
+**Extended Thinking:** For complex domain modeling or repository pattern decisions, use "think hard" to evaluate design systematically.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-5-assessment.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (repository bugs, domain logic issues, etc.)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Domain modeling decisions
+
+**Example:** Document entity design choices, repository pattern decisions, validation logic with reasoning.
+
 ## When You're Done
 
 **Create summary file:** `/summaries/EPIC5_SUMMARY.md`

@@ -121,6 +121,34 @@ infrastructure/
 **Requires complete:**
 - Story 1.3 (users table exists in database)
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 2 stories)
+- [ ] Tests written and passing (unit + integration, >70% coverage)
+- [ ] Code reviewed (self-review: clean architecture, no domain layer violations)
+- [ ] Security verified (passwords hashed with bcrypt, JWT secrets in env vars)
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Authentication flow works end-to-end (register → login → protected routes)
+- [ ] Role-based access control implemented correctly
+
+**Extended Thinking:** For complex security or architecture decisions, use "think hard" to evaluate trade-offs systematically.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-2-auth.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (as you find them)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Security decisions and rationale
+
+**Example:** Document JWT implementation choices, password hashing iterations, token expiry decisions with reasoning.
+
 ## When You're Done
 
 **Create summary file:** `/summaries/EPIC2_SUMMARY.md`
