@@ -46,31 +46,34 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
   }
 
   return (
-    <div ref={scrollContainerRef} className="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-6">
-      {messages.map((message, index) => (
-        <ChatMessage
-          key={message.id || `msg-${index}`}
-          role={message.role}
-          content={message.content}
-          components={message.components}
-          timestamp={message.timestamp}
-        />
-      ))}
-      {isLoading && (
-        <div data-testid="typing-indicator" className="flex gap-3 py-6">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-            </svg>
+    <div ref={scrollContainerRef} className="flex h-full min-h-0 flex-col overflow-y-auto">
+      {/* Centered content container (max-w-3xl = 768px) */}
+      <div className="max-w-3xl mx-auto w-full px-4 py-6">
+        {messages.map((message, index) => (
+          <ChatMessage
+            key={message.id || `msg-${index}`}
+            role={message.role}
+            content={message.content}
+            components={message.components}
+            timestamp={message.timestamp}
+          />
+        ))}
+        {isLoading && (
+          <div data-testid="typing-indicator" className="flex gap-3 py-6">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+              </svg>
+            </div>
+            <div className="flex items-center gap-1 py-2">
+              <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></span>
+              <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></span>
+              <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></span>
+            </div>
           </div>
-          <div className="flex items-center gap-1 py-2">
-            <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></span>
-            <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></span>
-            <span className="h-2 w-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></span>
-          </div>
-        </div>
-      )}
-      <div ref={bottomRef} />
+        )}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

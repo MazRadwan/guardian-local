@@ -148,6 +148,35 @@ res.json({ success: true, data: testUser })
 **Requires:**
 - Epic 2 complete (backend auth exists)
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 2.5 stories)
+- [ ] Tests written and passing (component + integration tests)
+- [ ] Login form functional (email + password validation)
+- [ ] Protected routes work (redirect to login if unauthenticated)
+- [ ] JWT token stored securely (httpOnly cookie or secure storage)
+- [ ] Error messages display correctly (invalid credentials, etc.)
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Responsive design (works on mobile, tablet, desktop)
+
+**Extended Thinking:** For complex form validation or routing logic, use "think hard" to evaluate patterns systematically.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-2-5-login.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (form validation bugs, routing issues, etc.)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Form and routing design decisions
+
+**Example:** Document Next.js auth routing patterns, form validation choices, token storage decisions with reasoning.
+
 ## When You're Done
 
 **Create summary file:** `/summaries/EPIC2.5_SUMMARY.md`

@@ -14,30 +14,29 @@ jest.mock('../MessageList', () => ({
   ),
 }));
 
-jest.mock('../MessageInput', () => ({
-  MessageInput: ({ onSendMessage, disabled }: { onSendMessage: (msg: string) => void; disabled: boolean }) => (
-    <div data-testid="message-input">
+jest.mock('../Composer', () => ({
+  Composer: ({
+    onSendMessage,
+    disabled,
+    currentMode,
+    onModeChange,
+    modeChangeDisabled,
+  }: {
+    onSendMessage: (msg: string) => void;
+    disabled: boolean;
+    currentMode?: string;
+    onModeChange?: (mode: string) => void;
+    modeChangeDisabled?: boolean;
+  }) => (
+    <div data-testid="composer">
       <button onClick={() => onSendMessage('test message')} disabled={disabled}>
         Send
       </button>
-    </div>
-  ),
-}));
-
-jest.mock('../ModeSwitcher', () => ({
-  ModeSwitcher: ({
-    currentMode,
-    onModeChange,
-    disabled,
-  }: {
-    currentMode: string;
-    onModeChange: (mode: string) => void;
-    disabled: boolean;
-  }) => (
-    <div data-testid="mode-switcher">
-      <button onClick={() => onModeChange('assessment')} disabled={disabled}>
-        Mode: {currentMode}
-      </button>
+      {onModeChange && (
+        <button onClick={() => onModeChange('assessment')} disabled={modeChangeDisabled}>
+          Mode: {currentMode}
+        </button>
+      )}
     </div>
   ),
 }));
@@ -91,9 +90,38 @@ describe('ChatInterface', () => {
   it('renders all main components', () => {
     render(<ChatInterface />);
 
+    expect(screen.getByTestId('composer')).toBeInTheDocument();
+  });
+
+  it('shows welcome message when no messages (empty state)', () => {
+    render(<ChatInterface />);
+
+    expect(screen.getByText('Welcome to Guardian')).toBeInTheDocument();
+    expect(screen.getByText('Start a conversation to assess AI vendors or get guidance.')).toBeInTheDocument();
+  });
+
+  it('shows messages and composer at bottom when messages exist (active state)', () => {
+    (useChatStore as unknown as jest.Mock).mockReturnValue({
+      messages: [
+        { role: 'user', content: 'Hello', timestamp: new Date() },
+        { role: 'assistant', content: 'Hi there!', timestamp: new Date() },
+      ],
+      isLoading: false,
+      error: null,
+      addMessage: mockAddMessage,
+      startStreaming: mockStartStreaming,
+      appendToLastMessage: mockAppendToLastMessage,
+      finishStreaming: mockFinishStreaming,
+      setError: mockSetError,
+      setLoading: jest.fn(),
+      setMessages: jest.fn(),
+    });
+
+    render(<ChatInterface />);
+
     expect(screen.getByTestId('message-list')).toBeInTheDocument();
-    expect(screen.getByTestId('message-input')).toBeInTheDocument();
-    expect(screen.getByTestId('mode-switcher')).toBeInTheDocument();
+    expect(screen.getByTestId('composer')).toBeInTheDocument();
+    expect(screen.queryByText('Welcome to Guardian')).not.toBeInTheDocument();
   });
 
   it('shows connection status indicator', () => {

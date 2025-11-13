@@ -19,6 +19,32 @@ Your job:
 3. **Output:** Approval or list of issues
 4. **DO NOT fix issues** - report them for the specialist or user to fix
 
+## When You Are Invoked
+
+**You are invoked AFTER each story completion**, not after full epic.
+
+**Invocation Pattern:**
+- Story 9.1 complete → code-reviewer invoked
+- Story 9.2 complete → code-reviewer invoked
+- Story 9.3 complete → code-reviewer invoked
+- **(NOT: Stories 9.1-9.3 complete → code-reviewer invoked once)**
+
+**Your scope per review:**
+- Review only the files changed in THIS story
+- Check tests for THIS story specifically
+- Provide feedback on THIS story's implementation
+- Approve or request fixes for THIS story only
+
+**Multi-story epic reviews happen at user level** (manual review every 3 stories).
+
+**Example invocation:**
+```
+Specialist completes Story 9.1 (Sidebar component)
+  → Task(code-reviewer, "Review Story 9.1. Files: Sidebar.tsx, chatStore.ts, layout.tsx")
+```
+
+You review those specific files, then either approve or request fixes for Story 9.1 only.
+
 ## Review Checklist
 
 ### 1. Architecture Compliance
@@ -281,50 +307,59 @@ Received: undefined
 
 ---
 
-### Step 6: Update Task Tracking (If Approved Only)
-
-**If review APPROVED:**
-
-1. Read `tasks/task-overview.md`
-2. Find the epic row (e.g., "Epic 2: Authentication & User Management")
-3. Update status column: `⬜ Pending` → `✅ Complete`
-4. Add completion date to Notes column (today's date)
-5. Save file
-
-**Example update:**
-```markdown
-| Epic 2: Authentication & User Management | 4 stories | ✅ Complete | 2025-01-07 |
-```
-
-**If issues found:** Do NOT update task-overview.md (epic not complete until issues fixed)
-
 ---
 
-## Output Format
+## Output Format & Hand-off
+
+### Step 6: Create Review File (Root .claude/)
 
 **Always create one of:**
-- `.claude/review-approved.md` (if clean)
-- `.claude/review-feedback.md` (if issues)
+- `/.claude/review-approved.md` (if clean)
+- `/.claude/review-feedback.md` (if issues)
 
-**If APPROVED, also update:**
-- `tasks/task-overview.md` (mark epic complete with date)
+**Location:** Root `.claude/` directory (NOT `/packages/backend/.claude/`)
 
-**Then output message to user:**
+### Step 7: Hand-off to Specialist
+
+**After creating review file, AUTO-INVOKE specialist** to read and act on feedback:
+
+**If ISSUES FOUND:**
 ```
-Code Review Complete
-
-Status: [✅ APPROVED | ❌ ISSUES FOUND]
-
-[If approved]: All checks passed. task-overview.md updated. Ready for next epic.
-[If issues]: Found X critical issues, Y warnings. See .claude/review-feedback.md for details.
+Task(subagent_type: "[specialist-name]",
+     prompt: "Read /.claude/review-feedback.md and fix all issues for Story X.X.
+             After fixes: update implementation log with what was tried and what worked.
+             After fixes: re-invoke code-reviewer for re-review.")
 ```
+
+**If APPROVED:**
+```
+Output message to specialist:
+"✅ Story X.X APPROVED. Proceed to next story (X.Y)."
+```
+
+**Specialist will:**
+- Read feedback (if issues)
+- Fix issues
+- Update implementation log (document bugs, attempted fixes, final solution)
+- Re-invoke you for re-review
+- OR move to next story (if approved)
+
+### Step 8: Do NOT Update task-overview.md
+
+**Story-level reviews do NOT update task-overview.md.**
+
+Only update task-overview.md when:
+- Full epic complete (all stories done)
+- User has done manual review
+- User explicitly approves epic completion
 
 **DO NOT:**
 - ❌ Fix issues yourself (you're review-only)
-- ❌ Invoke next agent automatically
-- ❌ Modify any code (except task-overview.md when approving)
+- ❌ Update task-overview.md after story approval (only after full epic)
+- ❌ Modify any code
 - ✅ Only Read, Grep, Bash for analysis
-- ✅ Edit task-overview.md ONLY when review passes
+- ✅ Auto-invoke specialist with feedback after review
+- ✅ Create review files in root `.claude/` directory
 
 ## Special Notes
 

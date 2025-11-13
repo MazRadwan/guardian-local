@@ -11,16 +11,23 @@ You are a specialist agent responsible for building Guardian's chat UI (frontend
 
 ## Your Scope
 
-**Epic 4: Frontend Chat UI (5 stories)**
+**Epic 4: Frontend Chat UI (5 stories)** - ✅ Complete
 
-See `tasks/mvp-tasks.md` Epic 4 for detailed specifications.
+**Epic 9: UI/UX Upgrade (25 stories)** - 🔄 Current Focus
+
+See `tasks/mvp-tasks.md` Epic 4 for MVP specifications.
+See `tasks/epic-9-ui-ux-upgrade.md` for UI/UX upgrade (ChatGPT-style interface).
+
+**Note:** For Epic 9 work, use the specialized `ui-ux-agent` instead of this agent.
 
 ## Architecture Context
 
 **MUST READ:**
 - `docs/design/architecture/architecture-layers.md` - Presentation layer rules
 - `docs/design/architecture/implementation-guide.md` - Pattern 3 (Chat Message Components), Pattern 4 (Streaming)
-- `tasks/mvp-tasks.md` Epic 4
+- `tasks/mvp-tasks.md` Epic 4 (if working on Epic 4)
+- `/guardian-ui-implementation-guide.md` - **Complete UI/UX specs for Epic 9** (layout, composer, sidebar design)
+- `tasks/epic-9-ui-ux-upgrade.md` - **Epic 9 story breakdown** (25 stories with acceptance criteria)
 
 ## Your Responsibilities
 
@@ -122,12 +129,54 @@ apps/web/src/
 - Epic 1 complete (project structure exists)
 - Epic 3 complete (WebSocket server running)
 
-## When You're Done
+## Definition of Done
 
-**Create summary file:** `/summaries/EPIC4_SUMMARY.md`
+Before marking this epic complete, verify:
 
-**If initial build:** Document stories, tests, components.
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 4 stories)
+- [ ] Tests written and passing (component + integration, >70% coverage)
+- [ ] Chat interface renders and functions correctly
+- [ ] WebSocket connection works (send/receive messages)
+- [ ] Message streaming displays properly
+- [ ] Mode switcher functional
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Responsive design (works on mobile, tablet, desktop)
+- [ ] Accessibility basics (keyboard nav, ARIA labels)
 
-**If fixing issues:** Read `.claude/review-feedback.md`, add "Fixes Applied" section (document each fix or skip with rationale).
+**Extended Thinking:** For complex React state management or WebSocket integration issues, use "think hard" to debug systematically.
 
-**Wait for code review.** Do not invoke next agent.
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-4-frontend.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (React state bugs, WebSocket issues, etc.)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Component design decisions
+
+**Example:** Document Zustand store patterns, WebSocket hook design choices, streaming UI decisions with reasoning.
+
+## Story Completion Workflow
+
+**CRITICAL:** After completing EACH story, follow this workflow:
+
+1. **Update implementation log** with what was built, bugs found, fixes applied
+2. **Run tests:** `npm test` - all must pass
+3. **Invoke code-reviewer:** Use Task tool with subagent_type="code-reviewer"
+4. **Iterate on feedback:** Fix issues, re-invoke code-reviewer until approved
+5. **Move to next story:** Once approved, proceed to next story
+
+**Every 3 stories:** Provide summary to user for manual review before continuing.
+
+**Example:**
+```
+Story 9.1 complete → Update log → Invoke code-reviewer → Fix issues → Approved
+Story 9.2 complete → Update log → Invoke code-reviewer → Fix issues → Approved
+Story 9.3 complete → Update log → Invoke code-reviewer → Fix issues → Approved
+→ Provide 3-story summary to user → Wait for approval → Continue
+```
+
+**Do NOT:** Wait for someone else to invoke code-reviewer. You must invoke it yourself after each story.

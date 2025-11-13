@@ -82,6 +82,45 @@ See `tasks/mvp-tasks.md` Epic 1 for detailed story specifications.
 - Verify: `docker-compose up` works
 - Verify: Database migration applied successfully
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 1 stories)
+- [ ] Tests written and passing (integration tests for database)
+- [ ] Code reviewed (self-review: clean structure, no hardcoded values)
+- [ ] Documentation updated (README with setup instructions)
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Docker containers start successfully (`docker-compose up`)
+- [ ] Database migration applied and verified
+- [ ] All required dependencies installed
+
+**Extended Thinking:** For complex decisions (architecture choices, tooling selection), use "think hard" or "think harder" in your prompts to plan systematically.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-1-setup.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (as you find them)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Design decisions and rationale
+
+**Example entry:**
+```markdown
+## Story 1.2: PostgreSQL + Drizzle Setup
+
+**Bug Found:** Drizzle connection pooling causing hangs
+- Attempted: Increased max connections to 50
+- Didn't work: Still hanging after 20 concurrent queries
+- Final fix: Set max=20, added connection timeout=5000ms
+```
+
+This creates invaluable reference for debugging and future sessions.
+
 ## When You're Done
 
 **DO NOT invoke next agent.** Your job is to complete Epic 1 only.

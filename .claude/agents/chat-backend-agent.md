@@ -118,6 +118,34 @@ See `tasks/mvp-tasks.md` Epic 3 for detailed specifications.
 - Epic 1 complete (database exists)
 - Epic 2 complete (auth middleware for WebSocket auth)
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 3 stories)
+- [ ] Tests written and passing (unit + integration + E2E, >70% coverage)
+- [ ] WebSocket server connects and streams messages correctly
+- [ ] Message persistence works (save/retrieve from database)
+- [ ] Authentication enforced (JWT required for WebSocket connection)
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Clean architecture maintained (no business logic in controllers)
+
+**Extended Thinking:** For complex WebSocket state management or message streaming issues, use "think hard" to systematically debug.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-3-chat-backend.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (WebSocket issues, streaming bugs, etc.)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ WebSocket architecture decisions
+
+**Example:** Document Socket.IO event naming decisions, streaming chunk size choices, rate limiting thresholds with reasoning.
+
 ## When You're Done
 
 **Create summary file:** `/summaries/EPIC3_SUMMARY.md`

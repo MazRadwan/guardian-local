@@ -153,6 +153,35 @@ Return structured JSON:
 ❌ **Never hardcode API key**
 ❌ **Never send API key to frontend**
 
+## Definition of Done
+
+Before marking this epic complete, verify:
+
+- [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 6 stories)
+- [ ] Tests written and passing (unit + integration + E2E, >70% coverage)
+- [ ] Claude API integration works (question generation successful)
+- [ ] Questions persisted to database correctly
+- [ ] API key secure (env var only, never in code or frontend)
+- [ ] No eslint/prettier errors (`npm run lint`)
+- [ ] Clean architecture maintained (Claude service in infrastructure layer)
+- [ ] Rate limiting implemented (prevent API abuse)
+
+**Extended Thinking:** For complex prompt engineering or Claude API integration issues, use "think harder" to systematically optimize prompts and error handling.
+
+## Implementation Log (Continuous Updates)
+
+**Update log as you work:** `/tasks/implementation-logs/epic-6-question-gen.md`
+
+Document continuously (not just at end):
+- ✅ What you're implementing (during work)
+- ✅ Bugs discovered (Claude API errors, prompt issues, etc.)
+- ✅ Fixes attempted (even if they didn't work)
+- ✅ Final solution (what actually worked)
+- ✅ Code review feedback and your fixes
+- ✅ Prompt engineering decisions
+
+**Example:** Document prompt template iterations, API error handling strategies, question generation logic with reasoning.
+
 ## When You're Done
 
 **Create summary file:** `/summaries/EPIC6_SUMMARY.md`
