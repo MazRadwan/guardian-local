@@ -1,7 +1,36 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Sidebar } from '../Sidebar';
+import { Conversation } from '@/stores/chatStore';
+
+// Mock ConversationList component
+jest.mock('../ConversationList', () => ({
+  ConversationList: jest.fn(({ conversations }) => (
+    <div data-testid="conversation-list">
+      {conversations.length > 0 ? 'Conversations' : 'No conversations yet'}
+    </div>
+  )),
+}));
 
 describe('Sidebar', () => {
+  const mockConversations: Conversation[] = [
+    {
+      id: 'conv-1',
+      title: 'Test Conversation 1',
+      createdAt: new Date('2025-01-13T10:00:00Z'),
+      updatedAt: new Date('2025-01-13T12:00:00Z'),
+      mode: 'consult',
+      messageCount: 5,
+    },
+    {
+      id: 'conv-2',
+      title: 'Test Conversation 2',
+      createdAt: new Date('2025-01-13T09:00:00Z'),
+      updatedAt: new Date('2025-01-13T11:00:00Z'),
+      mode: 'assessment',
+      messageCount: 3,
+    },
+  ];
+
   const mockProps = {
     isOpen: true,
     isMinimized: false,
@@ -10,6 +39,10 @@ describe('Sidebar', () => {
     onLogout: jest.fn(),
     userName: 'Test User',
     userRole: 'analyst',
+    conversations: mockConversations,
+    activeConversationId: 'conv-1',
+    onSelectConversation: jest.fn(),
+    onDeleteConversation: jest.fn(),
   };
 
   beforeEach(() => {
@@ -22,7 +55,7 @@ describe('Sidebar', () => {
 
       // Should show full text content
       expect(screen.getByText('New chat')).toBeInTheDocument();
-      expect(screen.getByText('No conversations yet')).toBeInTheDocument();
+      expect(screen.getByTestId('conversation-list')).toBeInTheDocument();
       expect(screen.getByText('Logout')).toBeInTheDocument();
     });
 
@@ -191,12 +224,53 @@ describe('Sidebar', () => {
     });
   });
 
+  describe('Toggle Button Positioning', () => {
+    it('positions toggle button correctly when sidebar is expanded', () => {
+      render(<Sidebar {...mockProps} isMinimized={false} />);
+
+      const toggleButton = screen.getByTitle('Minimize sidebar');
+      // When expanded (256px sidebar + 12px gap = 268px)
+      expect(toggleButton).toHaveClass('left-[268px]');
+      expect(toggleButton).not.toHaveClass('left-14');
+    });
+
+    it('positions toggle button correctly when sidebar is minimized', () => {
+      render(<Sidebar {...mockProps} isMinimized={true} />);
+
+      const toggleButton = screen.getByTitle('Expand sidebar');
+      // When minimized (48px sidebar + 8px gap = 56px = left-14)
+      expect(toggleButton).toHaveClass('left-14');
+      expect(toggleButton).not.toHaveClass('left-[268px]');
+    });
+
+    it('applies transition to toggle button position', () => {
+      render(<Sidebar {...mockProps} />);
+
+      const toggleButton = screen.getByTitle('Minimize sidebar');
+      expect(toggleButton).toHaveClass('transition-all');
+      expect(toggleButton).toHaveClass('duration-300');
+    });
+
+    it('toggle button is visible in both states', () => {
+      const { rerender } = render(<Sidebar {...mockProps} isMinimized={false} />);
+
+      // Expanded state
+      let toggleButton = screen.getByTitle('Minimize sidebar');
+      expect(toggleButton).toBeVisible();
+
+      // Minimized state
+      rerender(<Sidebar {...mockProps} isMinimized={true} />);
+      toggleButton = screen.getByTitle('Expand sidebar');
+      expect(toggleButton).toBeVisible();
+    });
+  });
+
   describe('Accessibility', () => {
     it('provides title attributes for icon-only buttons in minimized state', () => {
       render(<Sidebar {...mockProps} isMinimized={true} />);
 
       expect(screen.getByTitle('New Chat')).toBeInTheDocument();
-      expect(screen.getByTitle('Conversations')).toBeInTheDocument();
+      expect(screen.getByTitle('Test Conversation 1')).toBeInTheDocument(); // First conversation
       expect(screen.getByTitle('Logout')).toBeInTheDocument();
     });
 
@@ -216,7 +290,7 @@ describe('Sidebar', () => {
       render(<Sidebar {...mockProps} isMinimized={true} />);
 
       expect(screen.getByLabelText('New Chat')).toBeInTheDocument();
-      expect(screen.getByLabelText('Conversations')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select Test Conversation 1')).toBeInTheDocument(); // First conversation
       expect(screen.getByLabelText('Logout')).toBeInTheDocument();
     });
 
@@ -351,6 +425,73 @@ describe('Sidebar', () => {
 
       const sidebar = container.querySelector('aside');
       expect(sidebar).toHaveClass('z-50');
+    });
+  });
+
+  describe('Conversation Integration', () => {
+    it('renders ConversationList in expanded state', () => {
+      render(<Sidebar {...mockProps} />);
+
+      expect(screen.getByTestId('conversation-list')).toBeInTheDocument();
+    });
+
+    it('does not render ConversationList in minimized state', () => {
+      render(<Sidebar {...mockProps} isMinimized={true} />);
+
+      expect(screen.queryByTestId('conversation-list')).not.toBeInTheDocument();
+    });
+
+    it('renders conversation icons in minimized state', () => {
+      render(<Sidebar {...mockProps} isMinimized={true} />);
+
+      // Should show first letter of each conversation title
+      const iconButtons = screen.getAllByRole('button').filter(
+        (btn) => btn.textContent === 'T' // First letter of "Test Conversation"
+      );
+      expect(iconButtons.length).toBeGreaterThan(0);
+    });
+
+    it('renders empty state icon in minimized state when no conversations', () => {
+      render(
+        <Sidebar
+          {...mockProps}
+          isMinimized={true}
+          conversations={[]}
+        />
+      );
+
+      expect(screen.getByTitle('No conversations')).toBeInTheDocument();
+    });
+
+    it('highlights active conversation in minimized state', () => {
+      render(<Sidebar {...mockProps} isMinimized={true} />);
+
+      const activeButton = screen.getByTitle('Test Conversation 1');
+      expect(activeButton).toHaveClass('bg-blue-50', 'text-blue-700');
+    });
+
+    it('calls onSelectConversation when clicking conversation icon', () => {
+      render(<Sidebar {...mockProps} isMinimized={true} />);
+
+      const conversationButton = screen.getByTitle('Test Conversation 1');
+      fireEvent.click(conversationButton);
+
+      expect(mockProps.onSelectConversation).toHaveBeenCalledWith('conv-1');
+    });
+
+    it('passes correct props to ConversationList', () => {
+      const ConversationListMock = require('../ConversationList').ConversationList;
+
+      render(<Sidebar {...mockProps} />);
+
+      // Check that ConversationList was called with correct props
+      const lastCall = ConversationListMock.mock.calls[ConversationListMock.mock.calls.length - 1];
+      expect(lastCall[0]).toMatchObject({
+        conversations: mockConversations,
+        activeConversationId: 'conv-1',
+        onSelectConversation: mockProps.onSelectConversation,
+        onDeleteConversation: mockProps.onDeleteConversation,
+      });
     });
   });
 });

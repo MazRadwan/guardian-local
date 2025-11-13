@@ -3,6 +3,8 @@
 import { useEffect } from 'react';
 import { Plus, LogOut, MessageSquare, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ConversationList } from './ConversationList';
+import { Conversation } from '@/stores/chatStore';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -13,6 +15,11 @@ interface SidebarProps {
   onLogout: () => void;
   userName?: string;
   userRole?: string;
+  // Conversation management
+  conversations: Conversation[];
+  activeConversationId: string | null;
+  onSelectConversation: (id: string) => void;
+  onDeleteConversation: (id: string) => void;
 }
 
 export function Sidebar({
@@ -24,6 +31,10 @@ export function Sidebar({
   onLogout,
   userName,
   userRole,
+  conversations,
+  activeConversationId,
+  onSelectConversation,
+  onDeleteConversation,
 }: SidebarProps) {
   // Mobile: drawer overlay pattern
   // Desktop: persistent sidebar with toggle
@@ -89,26 +100,47 @@ export function Sidebar({
           )}
         </div>
 
-        {/* Middle Section - Conversation List (Empty for now) */}
-        <div className="flex-1 overflow-y-auto p-2">
-          {isMinimized ? (
-            // Minimized: Show conversation icon
+        {/* Middle Section - Conversation List */}
+        {isMinimized ? (
+          // Minimized: Show conversation icons (first letter of title)
+          <div className="flex-1 overflow-y-auto p-2">
             <div className="flex flex-col gap-2">
-              <button
-                className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-                title="Conversations"
-                aria-label="Conversations"
-              >
-                <MessageSquare className="h-5 w-5 text-gray-500" />
-              </button>
+              {conversations.length === 0 ? (
+                <button
+                  className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                  title="No conversations"
+                  aria-label="No conversations"
+                >
+                  <MessageSquare className="h-5 w-5 text-gray-500" />
+                </button>
+              ) : (
+                conversations.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    onClick={() => onSelectConversation(conversation.id)}
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors text-sm font-medium ${
+                      conversation.id === activeConversationId
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                    title={conversation.title}
+                    aria-label={`Select ${conversation.title}`}
+                  >
+                    {conversation.title.charAt(0).toUpperCase()}
+                  </button>
+                ))
+              )}
             </div>
-          ) : (
-            // Expanded: Show message (empty state for now)
-            <div className="text-center text-sm text-gray-500 py-8">
-              No conversations yet
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          // Expanded: Show full conversation list
+          <ConversationList
+            conversations={conversations}
+            activeConversationId={activeConversationId}
+            onSelectConversation={onSelectConversation}
+            onDeleteConversation={onDeleteConversation}
+          />
+        )}
 
         {/* Footer Section - Logout */}
         <div className="border-t border-gray-200 p-3">
@@ -149,7 +181,9 @@ export function Sidebar({
       {/* Toggle Button (Desktop only, outside sidebar) */}
       <button
         onClick={onToggle}
-        className="fixed top-4 left-4 z-30 hidden md:flex h-10 w-10 items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-colors shadow-sm"
+        className={`fixed top-4 z-30 hidden md:flex h-10 w-10 items-center justify-center rounded-lg bg-white border border-gray-200 hover:bg-gray-50 transition-all duration-300 shadow-sm ${
+          isMinimized ? 'left-14' : 'left-[268px]'
+        }`}
         title={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
         aria-label={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
         aria-expanded={!isMinimized}
