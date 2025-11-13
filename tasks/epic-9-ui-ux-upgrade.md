@@ -584,6 +584,66 @@ Only `sidebarMinimized` persists to localStorage. Mobile drawer state (`sidebarO
 
 ---
 
+### Story 9.14a: Add Conversation Search Modal
+**Estimated:** 1 day
+
+**Tasks:**
+- [ ] Create `ConversationSearchModal.tsx` component
+- [ ] Add Search icon (magnifying glass) to sidebar header
+- [ ] Modal opens on search icon click
+- [ ] Search input: "Search chats..." placeholder
+- [ ] Client-side filtering: filter conversations by title
+- [ ] Group results by date: "Yesterday", "Previous 7 Days", "Previous 30 Days", "Older"
+- [ ] Each result shows conversation title
+- [ ] Clicking result closes modal and switches to conversation
+- [ ] ESC key or backdrop click closes modal
+- [ ] Keyboard navigation (arrows + Enter)
+- [ ] Empty state: "No conversations found"
+
+**Acceptance Criteria:**
+- [ ] Search icon appears in sidebar header (expanded and minimized states)
+- [ ] Modal opens centered with backdrop overlay
+- [ ] Search input filters conversations in real-time
+- [ ] Results grouped by time periods
+- [ ] Clicking result switches to that conversation
+- [ ] ESC/backdrop closes modal
+- [ ] Keyboard navigation works (arrow keys, Enter)
+- [ ] Empty state shows when no matches
+
+**Tests:**
+- [ ] Search icon renders in sidebar
+- [ ] Modal opens on icon click
+- [ ] Search input filters results correctly
+- [ ] Results grouped by date correctly
+- [ ] Clicking result switches conversation
+- [ ] ESC key closes modal
+- [ ] Backdrop click closes modal
+- [ ] Keyboard navigation works
+- [ ] Empty state renders
+
+**Files Created:**
+- `apps/web/src/components/chat/ConversationSearchModal.tsx`
+- `apps/web/src/components/chat/__tests__/ConversationSearchModal.test.tsx`
+
+**Files Modified:**
+- `apps/web/src/components/chat/Sidebar.tsx` (add Search icon button, integrate modal)
+
+**Dependencies:** Story 9.12 (requires conversation list to exist)
+
+**Design Notes:**
+- ChatGPT-style search modal (not Claude's full-page approach)
+- Centered modal: max-w-2xl, rounded-lg, shadow-xl
+- Search icon position:
+  - Expanded: Header row (toggle, new chat, spacer, search)
+  - Minimized: Icon button below toggle and new chat
+- Date grouping:
+  - "Yesterday" (messages from yesterday)
+  - "Previous 7 Days" (last week)
+  - "Previous 30 Days" (last month)
+  - "Older" (everything else)
+
+---
+
 ## Sprint 4: Message Actions & Polish (Week 3)
 
 **Goal:** Add message actions and visual polish
@@ -920,7 +980,7 @@ A story is considered **DONE** when:
 
 Epic 9 is considered **DONE** when:
 
-- [ ] All 25 stories complete
+- [ ] All 26 stories complete
 - [ ] Test suite passes (0 failures)
 - [ ] Coverage >70% maintained
 - [ ] Manual testing checklist complete
@@ -1004,6 +1064,7 @@ If major issues arise:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-13 | Initial epic breakdown - 25 stories across 5 sprints |
+| 1.1 | 2025-11-13 | Added Story 9.14a: Conversation Search Modal (ChatGPT-style search) - now 26 stories |
 
 ---
 
