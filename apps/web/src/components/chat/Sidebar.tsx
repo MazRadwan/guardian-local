@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Plus, LogOut, MessageSquare, PanelLeft } from 'lucide-react';
+import { SquarePen, LogOut, MessageSquare, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
 import { Conversation } from '@/stores/chatStore';
@@ -76,7 +76,7 @@ export function Sidebar({
         aria-label="Sidebar navigation"
       >
         {/* Section 1: Toggle Button Only */}
-        <div className="p-2 border-b border-gray-200">
+        <div className="p-2">
           <button
             onClick={onToggle}
             className={`flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors ${
@@ -91,7 +91,7 @@ export function Sidebar({
         </div>
 
         {/* Section 2: New Chat Button */}
-        <div className="p-2 border-b border-gray-200">
+        <div className="p-2">
           {isMinimized ? (
             <button
               onClick={onNewChat}
@@ -99,7 +99,7 @@ export function Sidebar({
               title="New Chat"
               aria-label="New Chat"
             >
-              <Plus className="h-5 w-5 text-gray-700" />
+              <SquarePen className="h-5 w-5 text-gray-700" />
             </button>
           ) : (
             <Button
@@ -107,7 +107,7 @@ export function Sidebar({
               variant="outline"
               className="w-full flex items-center gap-2 justify-start"
             >
-              <Plus className="h-[18px] w-[18px]" />
+              <SquarePen className="h-[18px] w-[18px]" />
               <span>New chat</span>
             </Button>
           )}
@@ -156,7 +156,7 @@ export function Sidebar({
         )}
 
         {/* Footer Section - Logout */}
-        <div className="border-t border-gray-200 p-3">
+        <div className="p-3">
           {isMinimized ? (
             // Minimized: Icon only
             <button
