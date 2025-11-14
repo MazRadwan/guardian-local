@@ -58,8 +58,8 @@ export const useChatStore = create<ChatState>()(
       error: null,
       currentStreamingMessage: null,
 
-      // Sidebar state - defaults based on viewport
-      sidebarOpen: typeof window !== 'undefined' && window.innerWidth >= 1024,
+      // Sidebar state - closed by default on all devices (mobile-first)
+      sidebarOpen: false,
       sidebarMinimized: false,
 
       // Conversation management - defaults

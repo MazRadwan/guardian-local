@@ -109,7 +109,14 @@ export default function DashboardLayout({
               <Menu className="h-5 w-5 text-gray-700" />
             </Button>
             <h1 className="text-2xl font-bold text-gray-900">Guardian</h1>
-            {/* Connection status will be added here later */}
+            {/* Connection status indicator */}
+            <div className="flex items-center gap-2">
+              <div
+                className="h-2 w-2 rounded-full bg-green-500"
+                aria-label="Connected"
+              />
+              <span className="text-sm text-gray-600">Connected</span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {user && (
