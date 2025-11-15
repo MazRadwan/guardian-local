@@ -1,15 +1,51 @@
 {
   "current_bug": "BUG-001",
-  "current_state": "DECIDE",
-  "iteration": 1,
+  "current_state": "ACT",
+  "iteration": 2,
   "max_iterations": 5,
   "bugs_queue": ["BUG-001"],
   "bugs_fixed": [],
   "bugs_failed": [],
-  "failed_approaches": [],
-  "rollback_commit": null,
+  "failed_approaches": [
+    {
+      "bug_id": "BUG-001",
+      "iteration": 1,
+      "approach": "query-1-message-find-user",
+      "strategy_name": "backend-title-generation-from-first-message",
+      "reason": "VERIFY failed - UI still shows 'New Chat'. Issue: getHistory(conv.id, 1) only gets 1 message, which might be assistant message. find() for user role returns undefined.",
+      "files_changed": ["packages/backend/src/infrastructure/websocket/ChatServer.ts"],
+      "timestamp": "2025-11-15T17:45:00Z"
+    }
+  ],
+  "current_strategy": {
+    "name": "add-findFirstUserMessage-method",
+    "approach": "Add new repository method findFirstUserMessage() with targeted SQL query to get first user message, then use in ChatServer for title generation",
+    "risk_level": "low",
+    "estimated_files": 3,
+    "steps": [
+      "1. Add findFirstUserMessage() to IMessageRepository interface",
+      "2. Implement findFirstUserMessage() in DrizzleMessageRepository with SQL: WHERE role='user' ORDER BY created_at ASC LIMIT 1",
+      "3. Update ChatServer.ts get_conversations handler to use new method for title generation",
+      "4. Generate title from first 60 chars of user message, fallback to 'New Chat' if no messages",
+      "5. Write unit tests for new repository method",
+      "6. Run integration tests for websocket chat"
+    ],
+    "rationale": "Most efficient and scalable - targeted SQL query guarantees first user message without arbitrary limits. Avoids iteration 1 failure mode.",
+    "alternatives_rejected": [
+      {
+        "approach": "query-10-messages-find-user",
+        "reason": "Arbitrary limit, wasteful for simple conversations"
+      },
+      {
+        "approach": "findByConversationId-get-all",
+        "reason": "Performance degradation for large conversations"
+      }
+    ]
+  },
+  "rollback_commit": "d1bcfe92c1f0211ef14aa744389d5f22defeb1e0",
+  "rollback_tag": "before-fix-BUG-001-attempt-2",
   "started_at": "2025-11-15T17:19:12Z",
-  "last_updated": "2025-11-15T17:27:00Z",
+  "last_updated": "2025-11-15T18:15:00Z",
   "bug_details": {
     "id": "BUG-001",
     "title": "Conversation titles show IDs instead of meaningful text",
@@ -20,7 +56,7 @@
     "evidence": {
       "all_conversations_show_id_pattern": true,
       "expected": "Titles from first 50-60 chars of first user message",
-      "actual": "Titles show 'Conversation {id}'"
+      "actual": "Titles show 'Conversation {id}' OR 'New Chat' even when messages exist"
     }
   },
   "root_cause": {
@@ -35,23 +71,24 @@
     "scope": {
       "affected_files": [
         "packages/backend/src/infrastructure/websocket/ChatServer.ts",
-        "packages/backend/src/application/services/ConversationService.ts"
+        "packages/backend/src/application/interfaces/IMessageRepository.ts",
+        "packages/backend/src/infrastructure/database/repositories/DrizzleMessageRepository.ts"
       ],
       "affected_layers": ["backend"],
       "affected_components": [
-        "ConversationService",
-        "ChatServer"
+        "ChatServer",
+        "MessageRepository"
       ],
       "complexity": "medium",
-      "estimated_files_to_change": 2
+      "estimated_files_to_change": 3
     }
   },
   "circuit_breaker": {
-    "total_time_ms": 0,
+    "total_time_ms": 1680000,
     "max_time_ms": 1800000,
     "files_changed": 0,
     "max_files": 10,
-    "consecutive_failures": 0,
+    "consecutive_failures": 1,
     "max_consecutive_failures": 3
   },
   "current_workflow": "BUG-001: Conversation titles show IDs instead of meaningful text",
@@ -74,6 +111,43 @@
       "timestamp": "2025-11-15T17:26:24Z",
       "action": "Root cause identified: Backend ChatServer.ts line 422 generates ID-based title",
       "root_cause_summary": "Backend returns 'Conversation {id}' instead of generating title from first user message"
+    },
+    {
+      "from_state": "DECIDE",
+      "to_state": "ACT",
+      "timestamp": "2025-11-15T17:28:00Z",
+      "action": "Strategy selected: backend-title-generation-from-first-message"
+    },
+    {
+      "from_state": "ACT",
+      "to_state": "VERIFY",
+      "timestamp": "2025-11-15T17:31:00Z",
+      "action": "Fix implemented and committed",
+      "commit": "589f2dc"
+    },
+    {
+      "from_state": "VERIFY",
+      "to_state": "ORIENT",
+      "timestamp": "2025-11-15T17:45:00Z",
+      "action": "VERIFY FAILED - Rollback initiated. Issue: Titles still show 'New Chat' in UI. Fix logic bug: getHistory(1) might return assistant message first.",
+      "verification_failures": [
+        "UI still shows 'New Chat' instead of message content",
+        "Message count shows 0 instead of actual count",
+        "VERIFY agent failed to run Playwright UI verification"
+      ]
+    },
+    {
+      "from_state": "ORIENT",
+      "to_state": "DECIDE",
+      "timestamp": "2025-11-15T18:10:00Z",
+      "action": "ITERATION 2: Re-analyzed with iteration 1 failure context. Root cause still same, but need different approach to avoid failed strategy."
+    },
+    {
+      "from_state": "DECIDE",
+      "to_state": "ACT",
+      "timestamp": "2025-11-15T18:15:00Z",
+      "action": "ITERATION 2: New strategy selected: add-findFirstUserMessage-method (targeted SQL query for first user message)",
+      "strategy_differs_from_iteration_1": "Iteration 1 used getHistory(1) with find(). Iteration 2 adds dedicated repository method with SQL WHERE role='user' to guarantee first user message."
     }
   ]
 }
