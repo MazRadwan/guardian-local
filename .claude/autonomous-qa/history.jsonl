@@ -1,2 +1,4 @@
 {"state":"OBSERVE","bug":"BUG-001","iteration":1,"action":"starting_workflow","timestamp":"2025-11-15T17:19:12Z"}
 {"state":"ORIENT","bug":"BUG-001","iteration":1,"action":"transition_from_observe","timestamp":"2025-11-15T17:19:38Z","note":"Bug confirmed from QA report"}
+{"state":"ORIENT","bug":"BUG-001","iteration":1,"action":"root_cause_identified","timestamp":"2025-11-15T17:26:24Z","result":"success","root_cause":"Backend ChatServer.ts line 422 generates title from conversation.id instead of first user message"}
+{"state":"DECIDE","bug":"BUG-001","iteration":1,"action":"strategy_selected","timestamp":"2025-11-15T17:28:00Z","result":"success","strategy":"backend-title-generation","approach":"Add title generation to ChatServer conversations_list event, query first user message from messages table"}
