@@ -87,6 +87,26 @@ export class ChatServer {
     return { messages, systemPrompt, mode: conversation.mode };
   }
 
+  /**
+   * Validate that a conversation belongs to the requesting user
+   * @throws Error if conversation not found or doesn't belong to user
+   */
+  private async validateConversationOwnership(
+    conversationId: string,
+    userId: string
+  ): Promise<void> {
+    const conversation = await this.conversationService.getConversation(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    if (conversation.userId !== userId) {
+      console.warn(`[ChatServer] SECURITY: User ${userId} attempted to access conversation ${conversationId} owned by ${conversation.userId}`);
+      throw new Error('Unauthorized: You do not have access to this conversation');
+    }
+  }
+
   private setupNamespace(): void {
     const chatNamespace = this.io.of('/chat');
 
@@ -152,6 +172,18 @@ export class ChatServer {
           mode: 'consult',
         });
         console.log(`[ChatServer] Created new conversation ${conversation.id} for user ${socket.userId}`);
+
+        // Emit conversation_created event for new conversations
+        socket.emit('conversation_created', {
+          conversation: {
+            id: conversation.id,
+            title: `Conversation ${conversation.id.slice(0, 8)}`,
+            createdAt: conversation.startedAt,
+            updatedAt: conversation.lastActivityAt,
+            mode: conversation.mode,
+            messageCount: 0,
+          },
+        });
       }
 
       // Store conversationId in socket for this session
@@ -177,11 +209,11 @@ export class ChatServer {
             return;
           }
 
-          // Use conversationId from socket (auto-created on connection) or from payload
-          const conversationId = socket.conversationId || payload.conversationId;
+          // CRITICAL: conversationId MUST be provided by client
+          const conversationId = payload.conversationId;
           const messageText = payload.text || payload.content; // Support both formats
 
-          // Validate conversationId
+          // Validate conversationId is provided
           if (!conversationId) {
             socket.emit('error', {
               event: 'send_message',
@@ -195,6 +227,25 @@ export class ChatServer {
             socket.emit('error', {
               event: 'send_message',
               message: 'Message text required',
+            });
+            return;
+          }
+
+          // Validate conversation ownership
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'send_message',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          try {
+            await this.validateConversationOwnership(conversationId, socket.userId);
+          } catch (error) {
+            socket.emit('error', {
+              event: 'send_message',
+              message: error instanceof Error ? error.message : 'Unauthorized access',
             });
             return;
           }
@@ -311,6 +362,18 @@ export class ChatServer {
             `[ChatServer] History requested for conversation ${payload.conversationId}`
           );
 
+          // Validate conversation ownership
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'get_history',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          // Validate ownership BEFORE returning history
+          await this.validateConversationOwnership(payload.conversationId, socket.userId);
+
           const messages = await this.conversationService.getHistory(
             payload.conversationId,
             payload.limit,
@@ -334,6 +397,96 @@ export class ChatServer {
             message: error instanceof Error ? error.message : 'Failed to get history',
           });
         }
+      });
+
+      // Handle get_conversations event
+      socket.on('get_conversations', async () => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'get_conversations',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          console.log(`[ChatServer] Fetching conversations for user ${socket.userId}`);
+
+          const conversations = await this.conversationService.getUserConversations(socket.userId);
+
+          console.log(`[ChatServer] Found ${conversations.length} conversations for user ${socket.userId}`);
+
+          socket.emit('conversations_list', {
+            conversations: conversations.map((conv) => ({
+              id: conv.id,
+              title: `Conversation ${conv.id.slice(0, 8)}`, // Temp title until we get real titles
+              createdAt: conv.startedAt,
+              updatedAt: conv.lastActivityAt,
+              mode: conv.mode,
+              messageCount: 0, // TODO: Count messages
+            })),
+          });
+
+          console.log(`[ChatServer] Emitted conversations_list with ${conversations.length} conversations`);
+        } catch (error) {
+          console.error('[ChatServer] Error fetching conversations:', error);
+          socket.emit('error', {
+            event: 'get_conversations',
+            message: error instanceof Error ? error.message : 'Failed to fetch conversations',
+          });
+        }
+      });
+
+      // Start a new conversation
+      socket.on('start_new_conversation', async (payload: { mode?: 'consult' | 'assessment' }) => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'start_new_conversation',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          console.log(`[ChatServer] Starting new conversation for user ${socket.userId}`);
+
+          // Create new conversation
+          const newConversation = await this.conversationService.createConversation({
+            userId: socket.userId,
+            mode: payload.mode || 'consult',
+          });
+
+          // CRITICAL: Update socket's current conversation ID
+          socket.conversationId = newConversation.id;
+
+          // Emit conversation_created event
+          socket.emit('conversation_created', {
+            conversation: {
+              id: newConversation.id,
+              title: `New Chat`,
+              createdAt: newConversation.startedAt,
+              updatedAt: newConversation.lastActivityAt,
+              mode: newConversation.mode,
+              messageCount: 0,
+            },
+          });
+
+          console.log(`[ChatServer] New conversation ${newConversation.id} created and set as active`);
+        } catch (error) {
+          console.error('[ChatServer] Error starting new conversation:', error);
+          socket.emit('error', {
+            event: 'start_new_conversation',
+            message: error instanceof Error ? error.message : 'Failed to create conversation',
+          });
+        }
+      });
+
+      // Abort streaming
+      socket.on('abort_stream', () => {
+        console.log(`[ChatServer] Stream abort requested by user ${socket.userId}`);
+        // TODO: If Claude SDK supports aborting streams, implement here
+        // For now, just acknowledge - frontend will stop displaying chunks
+        socket.emit('stream_aborted', { conversationId: socket.conversationId });
       });
 
       // Handle disconnect

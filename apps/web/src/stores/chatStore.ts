@@ -71,10 +71,13 @@ export const useChatStore = create<ChatState>()(
           messages: [...state.messages, message],
         })),
 
-      setMessages: (messages) =>
+      setMessages: (messages) => {
+        console.log('[chatStore] setMessages called with', messages.length, 'messages');
         set({
           messages,
-        }),
+        });
+        console.log('[chatStore] State updated with new messages');
+      },
 
       updateLastMessage: (content) =>
         set((state) => {
@@ -123,7 +126,10 @@ export const useChatStore = create<ChatState>()(
 
       setError: (error) => set({ error }),
 
-      clearMessages: () => set({ messages: [], error: null }),
+      clearMessages: () => {
+        console.log('[chatStore] clearMessages called');
+        set({ messages: [], error: null });
+      },
 
       // Sidebar actions
       toggleSidebar: () =>
@@ -178,18 +184,22 @@ export const useChatStore = create<ChatState>()(
           ),
         })),
 
-      setConversations: (conversations) =>
+      setConversations: (conversations) => {
+        console.log('[chatStore] setConversations called with', conversations.length, 'conversations');
         set({
           conversations,
-        }),
+        });
+        console.log('[chatStore] State updated with new conversations');
+      },
     }),
     {
       name: 'guardian-chat-store',
-      // Persist sidebar preferences, active conversation ID, and conversations array
+      // Persist sidebar preferences and active conversation ID only
+      // Conversations are NOT persisted - always fetched from backend per user
       partialize: (state) => ({
         sidebarMinimized: state.sidebarMinimized,
         activeConversationId: state.activeConversationId,
-        conversations: state.conversations,
+        // conversations NOT persisted - prevents showing other users' conversations
       }),
     }
   )

@@ -1,9 +1,20 @@
 import { io, Socket } from 'socket.io-client';
 
+export interface Conversation {
+  id: string;
+  title: string;
+  createdAt: Date;
+  updatedAt: Date;
+  mode: 'consult' | 'assessment';
+  messageCount: number;
+}
+
 export interface WebSocketConfig {
   url: string;
   token?: string;
   conversationId?: string; // Optional - resume existing conversation
+  onConversationsList?: (conversations: Conversation[]) => void;
+  onConversationCreated?: (conversation: Conversation) => void;
 }
 
 export interface EmbeddedComponent {
@@ -26,6 +37,7 @@ export interface ChatMessage {
 
 export interface StreamEvent {
   chunk: string;
+  conversationId: string;
   messageId?: string;
 }
 
@@ -152,6 +164,34 @@ export class WebSocketClient {
           console.error('[WebSocket] Reconnection failed');
           reject(new Error('Failed to reconnect'));
         });
+
+        // Listen for conversations_list events
+        this.socket.on('conversations_list', (data: { conversations: any[] }) => {
+          console.log('[WebSocket] Received conversations list:', data.conversations.length);
+          const normalized = data.conversations.map((conv) => ({
+            id: conv.id,
+            title: conv.title,
+            createdAt: new Date(conv.createdAt),
+            updatedAt: new Date(conv.updatedAt),
+            mode: conv.mode as 'consult' | 'assessment',
+            messageCount: conv.messageCount || 0,
+          }));
+          this.config.onConversationsList?.(normalized);
+        });
+
+        // Listen for conversation_created events
+        this.socket.on('conversation_created', (data: { conversation: any }) => {
+          console.log('[WebSocket] New conversation created:', data.conversation.id);
+          const normalized = {
+            id: data.conversation.id,
+            title: data.conversation.title,
+            createdAt: new Date(data.conversation.createdAt),
+            updatedAt: new Date(data.conversation.updatedAt),
+            mode: data.conversation.mode as 'consult' | 'assessment',
+            messageCount: data.conversation.messageCount || 0,
+          };
+          this.config.onConversationCreated?.(normalized);
+        });
       } catch (error) {
         reject(error);
       }
@@ -165,11 +205,17 @@ export class WebSocketClient {
     }
   }
 
-  sendMessage(content: string): void {
+  sendMessage(content: string, conversationId: string): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
-    this.socket.emit('send_message', { content });
+    if (!conversationId) {
+      throw new Error('conversationId is required');
+    }
+    this.socket.emit('send_message', {
+      conversationId,
+      content
+    });
   }
 
   onMessage(callback: (message: ChatMessage) => void): () => void {
@@ -194,6 +240,7 @@ export class WebSocketClient {
     const tokenHandler = (data: { token: string; conversationId: string; messageId?: string }) => {
       callback({
         chunk: data.token,
+        conversationId: data.conversationId, // PASS conversationId to callback
         messageId: data.messageId,
       });
     };
@@ -233,7 +280,9 @@ export class WebSocketClient {
     if (!this.socket) throw new Error('WebSocket not initialized');
 
     const handler = (data: { conversationId: string; messages: any[] }) => {
+      console.log('[WebSocket] history event received - conversationId:', data.conversationId, 'messages:', data.messages.length);
       const normalized = data.messages.map((msg: any) => normalizeMessage(msg as BackendMessage));
+      console.log('[WebSocket] Normalized messages:', normalized.length);
       callback(normalized);
     };
 
@@ -256,10 +305,35 @@ export class WebSocketClient {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
+    console.log('[WebSocket] Emitting get_history for conversation:', conversationId, 'limit:', limit);
     this.socket.emit('get_history', { conversationId, limit });
+  }
+
+  fetchConversations(): void {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('WebSocket not connected');
+    }
+    console.log('[WebSocket] Requesting conversations list');
+    this.socket.emit('get_conversations');
+  }
+
+  startNewConversation(mode: 'consult' | 'assessment' = 'consult'): void {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('WebSocket not connected');
+    }
+    console.log('[WebSocket] Requesting new conversation');
+    this.socket.emit('start_new_conversation', { mode });
   }
 
   isConnected(): boolean {
     return this.socket?.connected ?? false;
+  }
+
+  abortStream(): void {
+    if (!this.socket) {
+      return;
+    }
+    console.log('[WebSocketClient] Aborting stream');
+    this.socket.emit('abort_stream');
   }
 }

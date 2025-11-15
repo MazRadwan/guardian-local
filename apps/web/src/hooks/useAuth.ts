@@ -82,10 +82,15 @@ export function useAuth() {
 
   const logout = useCallback(() => {
     if (typeof window !== 'undefined') {
+      // Clear auth state
       localStorage.removeItem('guardian_token');
       localStorage.removeItem('guardian_user');
-      localStorage.removeItem('guardian_conversation_id'); // Clear conversation session
+      localStorage.removeItem('guardian_conversation_id');
+
+      // Clear Zustand persisted state (chat store)
+      localStorage.removeItem('guardian-chat-store');
     }
+
     setAuthState({
       user: null,
       token: null,

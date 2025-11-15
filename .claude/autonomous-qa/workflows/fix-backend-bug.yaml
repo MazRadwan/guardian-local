@@ -1,0 +1,105 @@
+# Backend Bug Fix Workflow
+
+name: fix-backend-bug
+description: Workflow for fixing backend/API bugs
+version: 1.0.0
+
+# State flow
+entry_state: OBSERVE
+states:
+  - IDLE
+  - OBSERVE
+  - ORIENT
+  - DECIDE
+  - ACT      # Uses: 4-act-backend.md
+  - VERIFY
+  - DONE
+  - ESCALATE
+
+# State transitions (same as UI workflow)
+transitions:
+  IDLE_to_OBSERVE:
+    trigger: Bug loaded from queue
+    action: Invoke 1-observe.md
+
+  OBSERVE_to_ORIENT:
+    trigger: Bugs found
+    action: Invoke 2-orient.md
+
+  OBSERVE_to_DONE:
+    trigger: No bugs found
+    action: Report success to user
+
+  ORIENT_to_DECIDE:
+    trigger: Root cause identified
+    action: Invoke 3-decide.md
+
+  ORIENT_to_ESCALATE:
+    trigger: Cannot determine root cause
+    action: Escalate to user
+
+  DECIDE_to_ACT:
+    trigger: Strategy selected
+    action: Create rollback tag, invoke 4-act-backend.md
+
+  DECIDE_to_ESCALATE:
+    trigger: No viable strategy
+    action: Escalate to user
+
+  ACT_to_VERIFY:
+    trigger: Fix implemented and code-reviewed
+    action: Invoke 5-verify.md
+
+  ACT_to_ORIENT:
+    trigger: Code review rejected
+    action: Rollback, increment iteration, retry
+
+  VERIFY_to_DONE:
+    trigger: All quality gates pass
+    action: Mark bug fixed, move to next bug
+
+  VERIFY_to_ORIENT:
+    trigger: Quality gates fail OR regressions detected
+    action: Rollback, add to failed_approaches, retry
+    condition: iteration < max_iterations
+
+  VERIFY_to_ESCALATE:
+    trigger: Quality gates fail OR regressions detected
+    condition: iteration >= max_iterations
+    action: Escalate to user
+
+# Quality gates (from config/rules.json)
+quality_gates:
+  - all_tests_pass
+  - no_regressions
+  - code_review_pass
+  - no_data_corruption  # Backend-specific
+
+# Circuit breakers
+circuit_breakers:
+  max_iterations: 5
+  max_time_minutes: 30
+  max_files_changed: 8
+  max_consecutive_failures: 3
+
+# Specific to backend bugs
+backend_specific_checks:
+  - check_database_migrations: true
+  - check_api_contract: true
+  - check_websocket_events: true
+  - check_security_validation: true
+  - check_data_integrity: true
+
+# Files typically modified for backend bugs
+typical_files:
+  - packages/backend/src/application/services/**/*.ts
+  - packages/backend/src/infrastructure/websocket/**/*.ts
+  - packages/backend/src/infrastructure/database/**/*.ts
+  - packages/backend/src/domain/**/*.ts
+  - packages/backend/__tests__/**/*.test.ts
+
+# Tests to run
+test_commands:
+  - pnpm --filter @guardian/backend test
+  - pnpm --filter @guardian/backend test -- e2e/
+  - pnpm --filter @guardian/backend test:coverage  # Check >70%

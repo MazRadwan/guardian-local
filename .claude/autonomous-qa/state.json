@@ -1,0 +1,49 @@
+{
+  "current_bug": "BUG-001",
+  "current_state": "ORIENT",
+  "iteration": 1,
+  "max_iterations": 5,
+  "bugs_queue": ["BUG-001"],
+  "bugs_fixed": [],
+  "bugs_failed": [],
+  "failed_approaches": [],
+  "rollback_commit": null,
+  "started_at": "2025-11-15T12:00:00Z",
+  "last_updated": "2025-11-15T12:05:00Z",
+  "bug_details": {
+    "id": "BUG-001",
+    "title": "Conversation titles show IDs instead of meaningful text",
+    "severity": "critical",
+    "priority": "P0",
+    "description": "All 82 conversations in sidebar display as 'Conversation {8-char-id}' instead of generated titles from first user message",
+    "location": "Sidebar conversation list, Backend ChatServer",
+    "evidence": {
+      "all_conversations_show_id_pattern": true,
+      "expected": "Titles from first 50-60 chars of first user message",
+      "actual": "Titles show 'Conversation {id}'"
+    }
+  },
+  "circuit_breaker": {
+    "total_time_ms": 0,
+    "max_time_ms": 1800000,
+    "files_changed": 0,
+    "max_files": 10,
+    "consecutive_failures": 0,
+    "max_consecutive_failures": 3
+  },
+  "current_workflow": "BUG-001: Conversation titles show IDs instead of meaningful text",
+  "workflow_history": [
+    {
+      "from_state": "IDLE",
+      "to_state": "OBSERVE",
+      "timestamp": "2025-11-15T12:00:00Z",
+      "action": "Starting bug fix workflow for BUG-001"
+    },
+    {
+      "from_state": "OBSERVE",
+      "to_state": "ORIENT",
+      "timestamp": "2025-11-15T12:05:00Z",
+      "action": "Bug confirmed from QA report, proceeding to root cause analysis"
+    }
+  ]
+}

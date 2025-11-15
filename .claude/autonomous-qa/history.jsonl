@@ -1,0 +1,2 @@
+{"state":"OBSERVE","bug":"BUG-001","iteration":1,"action":"starting_workflow","timestamp":"2025-11-15T17:19:12Z"}
+{"state":"ORIENT","bug":"BUG-001","iteration":1,"action":"transition_from_observe","timestamp":"2025-11-15T17:19:38Z","note":"Bug confirmed from QA report"}

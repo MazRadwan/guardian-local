@@ -189,9 +189,10 @@ describe('WebSocketClient', () => {
       mockSocket.connected = true;
 
       await client.connect();
-      client.sendMessage('Hello, world!');
+      client.sendMessage('Hello, world!', 'conv-123');
 
       expect(mockSocket.emit).toHaveBeenCalledWith('send_message', {
+        conversationId: 'conv-123',
         content: 'Hello, world!',
       });
     });
@@ -201,7 +202,7 @@ describe('WebSocketClient', () => {
         url: 'http://localhost:8000',
       });
 
-      expect(() => client.sendMessage('Hello')).toThrow('WebSocket not connected');
+      expect(() => client.sendMessage('Hello', 'conv-123')).toThrow('WebSocket not connected');
     });
   });
 

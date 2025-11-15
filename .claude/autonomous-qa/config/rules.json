@@ -1,0 +1,51 @@
+{
+  "quality_gates": {
+    "all_tests_pass": {
+      "required": true,
+      "command": "pnpm test",
+      "timeout_ms": 120000,
+      "description": "All unit, integration, and e2e tests must pass"
+    },
+    "no_console_errors": {
+      "required": true,
+      "check": "console.error count == 0",
+      "description": "No console errors allowed in browser"
+    },
+    "no_regressions": {
+      "required": true,
+      "compare": "baseline vs current",
+      "description": "No new bugs introduced"
+    },
+    "code_review_pass": {
+      "required": true,
+      "invoke_agent": "code-reviewer",
+      "description": "Code must pass architectural review"
+    },
+    "ux_spec_compliance": {
+      "required": true,
+      "validate_against": "chatbot-ux-spec",
+      "description": "Changes must comply with UX specification"
+    }
+  },
+  "circuit_breakers": {
+    "max_iterations_per_bug": 5,
+    "max_total_time_minutes": 30,
+    "max_files_changed_per_fix": 10,
+    "max_consecutive_failures": 3,
+    "description": "Safety limits to prevent runaway processes"
+  },
+  "rollback": {
+    "enabled": true,
+    "create_tag": true,
+    "tag_format": "before-fix-{bug_id}-attempt-{iteration}",
+    "auto_rollback_on_failure": true,
+    "description": "Automatic rollback on verification failure"
+  },
+  "logging": {
+    "append_to_history": true,
+    "history_file": "history.jsonl",
+    "log_level": "verbose",
+    "include_timestamps": true,
+    "include_agent_outputs": true
+  }
+}

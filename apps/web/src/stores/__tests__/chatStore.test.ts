@@ -421,7 +421,7 @@ describe('chatStore', () => {
       }
     });
 
-    it('persisted state includes all required keys', () => {
+    it('persisted state includes only sidebar and active conversation ID (not conversations)', () => {
       const { result } = renderHook(() => useChatStore());
 
       const mockConversation = {
@@ -439,20 +439,19 @@ describe('chatStore', () => {
         result.current.addConversation(mockConversation);
       });
 
-      // Check localStorage contains all required persisted keys
+      // Check localStorage contains only sidebar and active conversation ID
       const stored = localStorage.getItem('guardian-chat-store');
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored!);
 
-      // Verify all three keys are persisted
+      // Verify only two keys are persisted (NOT conversations)
       expect(parsed.state).toHaveProperty('sidebarMinimized');
       expect(parsed.state).toHaveProperty('activeConversationId');
-      expect(parsed.state).toHaveProperty('conversations');
+      expect(parsed.state).not.toHaveProperty('conversations');
 
       // Verify correct values
       expect(parsed.state.sidebarMinimized).toBe(true);
       expect(parsed.state.activeConversationId).toBe('conv-123');
-      expect(parsed.state.conversations).toHaveLength(1);
     });
 
     it('persists active conversation ID to localStorage', () => {
@@ -469,7 +468,7 @@ describe('chatStore', () => {
       expect(parsed.state.activeConversationId).toBe('conv-123');
     });
 
-    it('persists conversations array with full structure', () => {
+    it('does not persist conversations array (fetched from backend)', () => {
       const { result } = renderHook(() => useChatStore());
 
       const mockConversation = {
@@ -495,23 +494,13 @@ describe('chatStore', () => {
         result.current.addConversation(mockConversation2);
       });
 
-      // Check localStorage
+      // Check localStorage - conversations should NOT be persisted
       const stored = localStorage.getItem('guardian-chat-store');
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored!);
-      expect(parsed.state.conversations).toBeDefined();
-      expect(parsed.state.conversations).toHaveLength(2);
 
-      // Verify first conversation structure
-      expect(parsed.state.conversations[0].id).toBe('conv-123');
-      expect(parsed.state.conversations[0].title).toBe('Test Conversation');
-      expect(parsed.state.conversations[0].mode).toBe('consult');
-      expect(parsed.state.conversations[0].messageCount).toBe(5);
-
-      // Verify second conversation
-      expect(parsed.state.conversations[1].id).toBe('conv-456');
-      expect(parsed.state.conversations[1].title).toBe('Another Conversation');
-      expect(parsed.state.conversations[1].mode).toBe('assessment');
+      // Conversations should NOT be in persisted state
+      expect(parsed.state.conversations).toBeUndefined();
     });
   });
 

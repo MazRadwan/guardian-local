@@ -1,0 +1,131 @@
+# Integration Bug Fix Workflow
+
+name: fix-integration-bug
+description: Workflow for fixing cross-layer integration bugs (frontend + backend + WebSocket)
+version: 1.0.0
+
+# State flow
+entry_state: OBSERVE
+states:
+  - IDLE
+  - OBSERVE
+  - ORIENT
+  - DECIDE
+  - ACT      # Uses: 4-act-integration.md
+  - VERIFY
+  - DONE
+  - ESCALATE
+
+# State transitions (same as other workflows)
+transitions:
+  IDLE_to_OBSERVE:
+    trigger: Bug loaded from queue
+    action: Invoke 1-observe.md
+
+  OBSERVE_to_ORIENT:
+    trigger: Bugs found
+    action: Invoke 2-orient.md
+
+  OBSERVE_to_DONE:
+    trigger: No bugs found
+    action: Report success to user
+
+  ORIENT_to_DECIDE:
+    trigger: Root cause identified
+    action: Invoke 3-decide.md
+
+  ORIENT_to_ESCALATE:
+    trigger: Cannot determine root cause
+    action: Escalate to user
+
+  DECIDE_to_ACT:
+    trigger: Strategy selected
+    action: Create rollback tag, invoke 4-act-integration.md
+
+  DECIDE_to_ESCALATE:
+    trigger: No viable strategy OR architectural change needed
+    action: Escalate to user
+
+  ACT_to_VERIFY:
+    trigger: Fix implemented and code-reviewed
+    action: Invoke 5-verify.md
+
+  ACT_to_ORIENT:
+    trigger: Code review rejected OR tests failed
+    action: Rollback, increment iteration, retry
+
+  VERIFY_to_DONE:
+    trigger: All quality gates pass
+    action: Mark bug fixed, move to next bug
+
+  VERIFY_to_ORIENT:
+    trigger: Quality gates fail OR regressions detected
+    action: Rollback, add to failed_approaches, retry
+    condition: iteration < max_iterations
+
+  VERIFY_to_ESCALATE:
+    trigger: Quality gates fail OR regressions detected
+    condition: iteration >= max_iterations
+    action: Escalate to user
+
+# Quality gates (strictest - integration bugs are risky)
+quality_gates:
+  - all_tests_pass           # Frontend + Backend + E2E
+  - no_console_errors        # Frontend
+  - no_regressions           # Both layers
+  - code_review_pass         # Comprehensive
+  - ux_spec_compliance       # Frontend
+  - websocket_contract_valid # Integration-specific
+  - no_data_corruption       # Backend
+
+# Circuit breakers (more conservative for integration)
+circuit_breakers:
+  max_iterations: 3          # Lower than UI/backend (higher risk)
+  max_time_minutes: 30
+  max_files_changed: 12      # Higher (touches both layers)
+  max_consecutive_failures: 2  # Stricter
+
+# Specific to integration bugs
+integration_specific_checks:
+  - check_websocket_events: true
+  - check_contract_compatibility: true
+  - check_frontend_backend_sync: true
+  - check_state_consistency: true
+  - check_error_handling_both_sides: true
+  - check_security_validation: true
+
+# Files typically modified for integration bugs
+typical_files:
+  frontend:
+    - apps/web/src/lib/websocket.ts
+    - apps/web/src/hooks/useWebSocket.ts
+    - apps/web/src/components/chat/**/*.tsx
+    - apps/web/src/hooks/__tests__/**/*.test.tsx
+  backend:
+    - packages/backend/src/infrastructure/websocket/**/*.ts
+    - packages/backend/src/application/services/**/*.ts
+    - packages/backend/__tests__/e2e/**/*.test.ts
+
+# Tests to run (comprehensive - both layers)
+test_commands:
+  - pnpm --filter @guardian/backend test
+  - pnpm --filter @guardian/web test
+  - pnpm --filter @guardian/backend test -- e2e/websocket-chat.test.ts
+  - pnpm test:coverage  # Check both packages
+
+# Special considerations
+notes:
+  - "Integration bugs require coordinated frontend + backend changes"
+  - "WebSocket contract must remain compatible during fix"
+  - "Security validation critical (cross-user data access)"
+  - "Test both layers independently AND together"
+  - "Higher risk of regressions - be thorough in VERIFY"
+  - "Consider feature flags for gradual rollout if high risk"
+
+# Escalation thresholds (stricter)
+escalate_on:
+  - architectural_change_needed
+  - breaking_change_required
+  - security_implications_unclear
+  - performance_impact_unknown
+  - no_viable_strategy_after_2_iterations

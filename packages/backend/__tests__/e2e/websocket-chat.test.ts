@@ -518,6 +518,74 @@ describe('WebSocket Chat E2E Tests', () => {
     })
   })
 
+  describe('start_new_conversation event', () => {
+    beforeEach((done) => {
+      clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
+        auth: { token: testToken },
+      })
+
+      clientSocket.on('connect', () => {
+        done()
+      })
+    })
+
+    it('should create a new conversation and emit conversation_created event', (done) => {
+      clientSocket.emit('start_new_conversation', { mode: 'consult' })
+
+      clientSocket.on('conversation_created', (data) => {
+        expect(data.conversation).toBeDefined()
+        expect(data.conversation.id).toBeDefined()
+        expect(data.conversation.title).toBe('New Chat')
+        expect(data.conversation.mode).toBe('consult')
+        expect(data.conversation.messageCount).toBe(0)
+        expect(data.conversation.createdAt).toBeDefined()
+        expect(data.conversation.updatedAt).toBeDefined()
+        done()
+      })
+    })
+
+    it('should create conversation in assessment mode when specified', (done) => {
+      clientSocket.emit('start_new_conversation', { mode: 'assessment' })
+
+      clientSocket.on('conversation_created', (data) => {
+        expect(data.conversation.mode).toBe('assessment')
+        done()
+      })
+    })
+
+    it('should default to consult mode if mode not specified', (done) => {
+      clientSocket.emit('start_new_conversation', {})
+
+      clientSocket.on('conversation_created', (data) => {
+        expect(data.conversation.mode).toBe('consult')
+        done()
+      })
+    })
+
+    it('should update socket conversationId to new conversation', (done) => {
+      let newConversationId: string
+
+      // Listen for conversation_created to capture the new conversation ID
+      clientSocket.on('conversation_created', (data) => {
+        newConversationId = data.conversation.id
+      })
+
+      // Start new conversation
+      clientSocket.emit('start_new_conversation', { mode: 'consult' })
+
+      // After new conversation is created, send a message
+      clientSocket.on('conversation_created', () => {
+        clientSocket.emit('send_message', { text: 'Test message in new conversation' })
+      })
+
+      // Verify message is sent to the new conversation
+      clientSocket.on('message_sent', (data) => {
+        expect(data.conversationId).toBe(newConversationId)
+        done()
+      })
+    })
+  })
+
   describe('error handling', () => {
     beforeEach((done) => {
       clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
@@ -550,6 +618,194 @@ describe('WebSocket Chat E2E Tests', () => {
         expect(error.event).toBe('send_message')
         expect(error.message).toBeDefined()
         done()
+      })
+    })
+  })
+
+  describe('conversation ownership validation', () => {
+    let user2Id: string
+    let user2Token: string
+    let user2ConversationId: string
+    let user2Socket: ClientSocket
+
+    beforeAll(async () => {
+      // Create second test user
+      const passwordHash = await bcrypt.hash('password123', 10)
+      const user2 = User.create({
+        email: 'websocket-test-user2@example.com',
+        name: 'WebSocket Test User 2',
+        passwordHash,
+        role: 'analyst',
+      })
+
+      const createdUser2 = await userRepository.create(user2)
+      user2Id = createdUser2.id
+
+      // Generate JWT token for user 2
+      user2Token = jwtProvider.generateToken({
+        userId: user2Id,
+        email: 'websocket-test-user2@example.com',
+        role: 'analyst',
+      })
+
+      // Create conversation for user 2
+      const user2Conversation = await conversationService.createConversation({
+        userId: user2Id,
+        mode: 'consult',
+      })
+      user2ConversationId = user2Conversation.id
+    })
+
+    afterAll(async () => {
+      // Cleanup user 2
+      if (user2Socket && user2Socket.connected) {
+        user2Socket.disconnect()
+      }
+    })
+
+    afterEach(() => {
+      if (clientSocket && clientSocket.connected) {
+        clientSocket.disconnect()
+      }
+      if (user2Socket && user2Socket.connected) {
+        user2Socket.disconnect()
+      }
+    })
+
+    it('should allow user to access their own conversation', (done) => {
+      clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
+        auth: { token: testToken },
+      })
+
+      clientSocket.on('connect', () => {
+        // User 1 should be able to send message to their own conversation
+        clientSocket.emit('send_message', {
+          conversationId: testConversationId,
+          text: 'My message to my conversation',
+        })
+
+        clientSocket.on('message_sent', (data) => {
+          expect(data.conversationId).toBe(testConversationId)
+          done()
+        })
+
+        clientSocket.on('error', (error) => {
+          done(new Error(`Unexpected error: ${error.message}`))
+        })
+      })
+    })
+
+    it('should reject user from accessing another user\'s conversation (send_message)', (done) => {
+      clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
+        auth: { token: testToken },
+      })
+
+      clientSocket.on('connect', () => {
+        // User 1 tries to send message to User 2's conversation
+        clientSocket.emit('send_message', {
+          conversationId: user2ConversationId,
+          text: 'Trying to access another user\'s conversation',
+        })
+
+        clientSocket.on('error', (error) => {
+          expect(error.event).toBe('send_message')
+          expect(error.message).toContain('Unauthorized')
+          done()
+        })
+
+        clientSocket.on('message_sent', () => {
+          done(new Error('Should not have allowed access to another user\'s conversation'))
+        })
+      })
+    })
+
+    it('should reject user from accessing another user\'s conversation (get_history)', (done) => {
+      clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
+        auth: { token: testToken },
+      })
+
+      clientSocket.on('connect', () => {
+        // User 1 tries to get history of User 2's conversation
+        clientSocket.emit('get_history', {
+          conversationId: user2ConversationId,
+        })
+
+        clientSocket.on('error', (error) => {
+          expect(error.event).toBe('get_history')
+          expect(error.message).toContain('Unauthorized')
+          done()
+        })
+
+        clientSocket.on('history', () => {
+          done(new Error('Should not have returned history for another user\'s conversation'))
+        })
+      })
+    })
+
+    it('should allow each user to access their own conversations independently', (done) => {
+      let user1Connected = false
+      let user2Connected = false
+      let user1MessageSent = false
+      let user2MessageSent = false
+
+      const checkComplete = () => {
+        if (user1MessageSent && user2MessageSent) {
+          done()
+        }
+      }
+
+      // Connect user 1
+      clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
+        auth: { token: testToken },
+      })
+
+      clientSocket.on('connect', () => {
+        user1Connected = true
+        if (user1Connected && user2Connected) {
+          // Both connected, send messages
+          clientSocket.emit('send_message', {
+            conversationId: testConversationId,
+            text: 'User 1 message',
+          })
+
+          user2Socket.emit('send_message', {
+            conversationId: user2ConversationId,
+            text: 'User 2 message',
+          })
+        }
+      })
+
+      clientSocket.on('message_sent', (data) => {
+        expect(data.conversationId).toBe(testConversationId)
+        user1MessageSent = true
+        checkComplete()
+      })
+
+      // Connect user 2
+      user2Socket = ioClient(`http://localhost:${PORT}/chat`, {
+        auth: { token: user2Token },
+      })
+
+      user2Socket.on('connect', () => {
+        user2Connected = true
+        if (user1Connected && user2Connected) {
+          // Both connected, send messages
+          clientSocket.emit('send_message', {
+            conversationId: testConversationId,
+            text: 'User 1 message',
+          })
+
+          user2Socket.emit('send_message', {
+            conversationId: user2ConversationId,
+            text: 'User 2 message',
+          })
+        }
+      })
+
+      user2Socket.on('message_sent', (data) => {
+        expect(data.conversationId).toBe(user2ConversationId)
+        user2MessageSent = true
+        checkComplete()
       })
     })
   })

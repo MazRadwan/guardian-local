@@ -317,7 +317,41 @@ describe('DashboardLayout', () => {
 
       fireEvent.click(screen.getByTestId('sidebar-new-chat'));
 
+      // Verify all new chat actions
       expect(mockChatStore.clearMessages).toHaveBeenCalledTimes(1);
+      expect(mockChatStore.setActiveConversation).toHaveBeenCalledWith(null);
+      expect(mockPush).toHaveBeenCalledWith('/chat');
+    });
+
+    it('clears active conversation when starting new chat', () => {
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        ...mockChatStore,
+        activeConversationId: 'conv-123',
+      });
+
+      render(
+        <DashboardLayout>
+          <div>Content</div>
+        </DashboardLayout>
+      );
+
+      fireEvent.click(screen.getByTestId('sidebar-new-chat'));
+
+      // Verify active conversation is set to null
+      expect(mockChatStore.setActiveConversation).toHaveBeenCalledWith(null);
+    });
+
+    it('clears URL parameter when starting new chat', () => {
+      render(
+        <DashboardLayout>
+          <div>Content</div>
+        </DashboardLayout>
+      );
+
+      fireEvent.click(screen.getByTestId('sidebar-new-chat'));
+
+      // Verify URL is cleared to /chat
+      expect(mockPush).toHaveBeenCalledWith('/chat');
     });
   });
 

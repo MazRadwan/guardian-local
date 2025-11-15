@@ -1,18 +1,20 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation } from '@/lib/websocket';
 
 export interface UseWebSocketOptions {
   url: string;
   token?: string;
   conversationId?: string;
   onMessage?: (message: ChatMessage) => void;
-  onMessageStream?: (chunk: string, messageId?: string) => void;
+  onMessageStream?: (chunk: string, conversationId: string, messageId?: string) => void;
   onError?: (error: string) => void;
   onConnected?: (data: { conversationId: string; resumed: boolean }) => void;
   onHistory?: (messages: ChatMessage[]) => void;
   onStreamComplete?: (data: { messageId: string; conversationId: string; fullText: string }) => void;
+  onConversationsList?: (conversations: Conversation[]) => void;
+  onConversationCreated?: (conversation: Conversation) => void;
   autoConnect?: boolean;
 }
 
@@ -26,6 +28,8 @@ export function useWebSocket({
   onConnected,
   onHistory,
   onStreamComplete,
+  onConversationsList,
+  onConversationCreated,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -39,7 +43,13 @@ export function useWebSocket({
 
     setIsConnecting(true);
     try {
-      const client = new WebSocketClient({ url, token, conversationId });
+      const client = new WebSocketClient({
+        url,
+        token,
+        conversationId,
+        onConversationsList,
+        onConversationCreated,
+      });
       await client.connect();
       clientRef.current = client;
       setIsConnected(true);
@@ -49,7 +59,7 @@ export function useWebSocket({
     } finally {
       setIsConnecting(false);
     }
-  }, [url, token, conversationId, isConnecting, isConnected, onError]);
+  }, [url, token, conversationId, isConnecting, isConnected, onError, onConversationsList, onConversationCreated]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -60,11 +70,11 @@ export function useWebSocket({
   }, []);
 
   const sendMessage = useCallback(
-    (content: string) => {
+    (content: string, conversationId: string) => {
       if (!clientRef.current || !isConnected) {
         throw new Error('WebSocket not connected');
       }
-      clientRef.current.sendMessage(content);
+      clientRef.current.sendMessage(content, conversationId);
     },
     [isConnected]
   );
@@ -78,6 +88,26 @@ export function useWebSocket({
     },
     [isConnected]
   );
+
+  const fetchConversations = useCallback(() => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot fetch conversations - not connected');
+      return;
+    }
+    clientRef.current.fetchConversations();
+  }, [isConnected]);
+
+  const startNewConversation = useCallback((mode: 'consult' | 'assessment' = 'consult') => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot start new conversation - not connected');
+      return;
+    }
+    clientRef.current.startNewConversation(mode);
+  }, [isConnected]);
+
+  const abortStream = useCallback(() => {
+    clientRef.current?.abortStream();
+  }, []);
 
   // Setup event listeners
   useEffect(() => {
@@ -96,7 +126,7 @@ export function useWebSocket({
 
     if (onMessageStream) {
       const unsub = client.onMessageStream((event: StreamEvent) => {
-        onMessageStream(event.chunk, event.messageId);
+        onMessageStream(event.chunk, event.conversationId, event.messageId);
       });
       unsubscribers.push(unsub);
     }
@@ -156,5 +186,8 @@ export function useWebSocket({
     disconnect,
     sendMessage,
     requestHistory,
+    fetchConversations,
+    startNewConversation,
+    abortStream,
   };
 }
