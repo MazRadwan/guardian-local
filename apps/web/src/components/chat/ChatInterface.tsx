@@ -9,6 +9,7 @@ import { useChatStore } from '@/stores/chatStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { useConversationMode } from '@/hooks/useConversationMode';
 import { useAuth } from '@/hooks/useAuth';
+import { useDelayedLoading } from '@/hooks/useDelayedLoading';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
 import { AlertCircle } from 'lucide-react';
 
@@ -40,6 +41,9 @@ export function ChatInterface() {
   const composerRef = useRef<ComposerRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const isCreatingNewConversation = useRef(false);
+
+  // Delay showing skeleton to prevent flash on quick loads (300ms threshold)
+  const showDelayedLoading = useDelayedLoading(isLoading, 300);
 
   // Load saved conversationId from localStorage on mount (client-side only)
   useEffect(() => {
@@ -343,7 +347,7 @@ export function ChatInterface() {
       )}
 
       {/* Conditional Layout: Centered vs Active State */}
-      {messages.length === 0 && !isLoading ? (
+      {messages.length === 0 && !showDelayedLoading ? (
         // Empty state: Centered composer (only when truly empty, not loading)
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center px-4">
           <div className="text-center mb-8">
@@ -365,7 +369,7 @@ export function ChatInterface() {
         // Active state: Messages + composer at bottom (includes loading state)
         <>
           <div className="flex-1 min-h-0 overflow-hidden">
-            <MessageList ref={messageListRef} messages={messages} isLoading={isLoading} />
+            <MessageList ref={messageListRef} messages={messages} isLoading={showDelayedLoading} />
           </div>
           <div className="flex-shrink-0">
             <Composer
