@@ -416,15 +416,25 @@ export class ChatServer {
 
           console.log(`[ChatServer] Found ${conversations.length} conversations for user ${socket.userId}`);
 
+          // Generate titles and counts for each conversation
+          const conversationsWithMetadata = await Promise.all(
+            conversations.map(async (conv) => {
+              const title = await this.conversationService.getConversationTitle(conv.id);
+              const messageCount = await this.conversationService.getMessageCount(conv.id);
+
+              return {
+                id: conv.id,
+                title,
+                createdAt: conv.startedAt,
+                updatedAt: conv.lastActivityAt,
+                mode: conv.mode,
+                messageCount,
+              };
+            })
+          );
+
           socket.emit('conversations_list', {
-            conversations: conversations.map((conv) => ({
-              id: conv.id,
-              title: `Conversation ${conv.id.slice(0, 8)}`, // Temp title until we get real titles
-              createdAt: conv.startedAt,
-              updatedAt: conv.lastActivityAt,
-              mode: conv.mode,
-              messageCount: 0, // TODO: Count messages
-            })),
+            conversations: conversationsWithMetadata,
           });
 
           console.log(`[ChatServer] Emitted conversations_list with ${conversations.length} conversations`);

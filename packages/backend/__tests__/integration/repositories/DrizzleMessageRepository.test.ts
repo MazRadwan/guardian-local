@@ -324,6 +324,102 @@ describe('DrizzleMessageRepository Integration Tests', () => {
     })
   })
 
+  describe('findFirstUserMessage', () => {
+    it('should find first user message in conversation', async () => {
+      // Create assistant message first
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'Welcome! How can I help?' },
+      })
+      await repository.create(message1)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Create first user message
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'I need help assessing a vendor' },
+      })
+      await repository.create(message2)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Create second user message
+      const message3 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'What about their security?' },
+      })
+      await repository.create(message3)
+
+      const firstUserMessage = await repository.findFirstUserMessage(testConversationId)
+
+      expect(firstUserMessage).not.toBeNull()
+      expect(firstUserMessage!.role).toBe('user')
+      expect(firstUserMessage!.content.text).toBe('I need help assessing a vendor')
+    })
+
+    it('should return null when no user messages exist', async () => {
+      // Create only assistant messages
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'Welcome!' },
+      })
+      await repository.create(message1)
+
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'system',
+        content: { text: 'System message' },
+      })
+      await repository.create(message2)
+
+      const firstUserMessage = await repository.findFirstUserMessage(testConversationId)
+
+      expect(firstUserMessage).toBeNull()
+    })
+
+    it('should return null for conversation with no messages', async () => {
+      const firstUserMessage = await repository.findFirstUserMessage(
+        '00000000-0000-0000-0000-000000000000'
+      )
+
+      expect(firstUserMessage).toBeNull()
+    })
+
+    it('should return first user message even when multiple user messages exist', async () => {
+      // Create multiple messages with delays to ensure chronological order
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'First user message' },
+      })
+      await repository.create(message1)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'Response' },
+      })
+      await repository.create(message2)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      const message3 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'Second user message' },
+      })
+      await repository.create(message3)
+
+      const firstUserMessage = await repository.findFirstUserMessage(testConversationId)
+
+      expect(firstUserMessage).not.toBeNull()
+      expect(firstUserMessage!.content.text).toBe('First user message')
+    })
+  })
+
   describe('delete', () => {
     it('should delete message', async () => {
       const message = Message.create({

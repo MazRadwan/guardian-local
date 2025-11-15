@@ -27,6 +27,12 @@ export interface IMessageRepository {
   count(conversationId: string): Promise<number>;
 
   /**
+   * Find the first user message in a conversation (chronologically)
+   * Used for generating conversation titles
+   */
+  findFirstUserMessage(conversationId: string): Promise<Message | null>;
+
+  /**
    * Delete message
    */
   delete(id: string): Promise<void>;
