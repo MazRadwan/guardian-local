@@ -8,7 +8,6 @@ export interface Conversation {
   createdAt: Date;
   updatedAt: Date;
   mode: 'consult' | 'assessment';
-  messageCount: number;
 }
 
 export interface ChatState {
@@ -46,7 +45,6 @@ export interface ChatState {
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
   updateConversationTitle: (id: string, title: string) => void;
-  updateConversationMessageCount: (id: string, count: number) => void;
   setConversations: (conversations: Conversation[]) => void;
 }
 
@@ -174,13 +172,6 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id === id ? { ...conv, title, updatedAt: new Date() } : conv
-          ),
-        })),
-
-      updateConversationMessageCount: (id, count) =>
-        set((state) => ({
-          conversations: state.conversations.map((conv) =>
-            conv.id === id ? { ...conv, messageCount: count, updatedAt: new Date() } : conv
           ),
         })),
 

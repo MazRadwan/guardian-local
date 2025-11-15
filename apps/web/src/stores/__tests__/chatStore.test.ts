@@ -430,7 +430,6 @@ describe('chatStore', () => {
         createdAt: new Date('2025-01-13T10:00:00Z'),
         updatedAt: new Date('2025-01-13T10:00:00Z'),
         mode: 'consult' as const,
-        messageCount: 5,
       };
 
       act(() => {
@@ -477,7 +476,6 @@ describe('chatStore', () => {
         createdAt: new Date('2025-01-13T10:00:00Z'),
         updatedAt: new Date('2025-01-13T10:00:00Z'),
         mode: 'consult' as const,
-        messageCount: 5,
       };
 
       const mockConversation2 = {
@@ -486,7 +484,6 @@ describe('chatStore', () => {
         createdAt: new Date('2025-01-13T11:00:00Z'),
         updatedAt: new Date('2025-01-13T11:00:00Z'),
         mode: 'assessment' as const,
-        messageCount: 3,
       };
 
       act(() => {
@@ -649,23 +646,6 @@ describe('chatStore', () => {
       });
 
       expect(result.current.conversations[0].title).toBe('Test Conversation');
-    });
-
-    it('updates conversation message count', () => {
-      const { result } = renderHook(() => useChatStore());
-
-      act(() => {
-        result.current.addConversation(mockConversation);
-      });
-
-      const originalUpdatedAt = result.current.conversations[0].updatedAt;
-
-      act(() => {
-        result.current.updateConversationMessageCount('conv-123', 10);
-      });
-
-      expect(result.current.conversations[0].messageCount).toBe(10);
-      expect(result.current.conversations[0].updatedAt).not.toEqual(originalUpdatedAt);
     });
 
     it('sets conversations array (replaces all)', () => {

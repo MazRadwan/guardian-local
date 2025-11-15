@@ -19,7 +19,6 @@ describe('Sidebar', () => {
       createdAt: new Date('2025-01-13T10:00:00Z'),
       updatedAt: new Date('2025-01-13T12:00:00Z'),
       mode: 'consult',
-      messageCount: 5,
     },
     {
       id: 'conv-2',
@@ -27,7 +26,6 @@ describe('Sidebar', () => {
       createdAt: new Date('2025-01-13T09:00:00Z'),
       updatedAt: new Date('2025-01-13T11:00:00Z'),
       mode: 'assessment',
-      messageCount: 3,
     },
   ];
 

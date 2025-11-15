@@ -51,7 +51,7 @@ export function ConversationListItem({
         h-12
         ${isActive ? 'bg-blue-50 border-l-2 border-blue-500' : 'hover:bg-gray-100'}
       `}
-      aria-label={`${conversation.title}, ${conversation.messageCount} messages, ${formattedTime}`}
+      aria-label={`${conversation.title}, ${formattedTime}`}
       aria-current={isActive ? 'true' : 'false'}
     >
       {/* Icon */}
@@ -63,13 +63,6 @@ export function ConversationListItem({
         <span className="text-sm font-medium text-gray-900 truncate flex-1">
           {conversation.title}
         </span>
-
-        {/* Message count badge */}
-        {conversation.messageCount > 0 && (
-          <span className="inline-flex items-center justify-center rounded-full bg-gray-200 px-2 py-0.5 text-xs text-gray-700 flex-shrink-0">
-            {conversation.messageCount}
-          </span>
-        )}
       </div>
 
       {/* Timestamp (hidden on active, shown on hover) */}

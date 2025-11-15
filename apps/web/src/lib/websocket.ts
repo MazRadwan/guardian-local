@@ -6,7 +6,6 @@ export interface Conversation {
   createdAt: Date;
   updatedAt: Date;
   mode: 'consult' | 'assessment';
-  messageCount: number;
 }
 
 export interface WebSocketConfig {
@@ -15,6 +14,7 @@ export interface WebSocketConfig {
   conversationId?: string; // Optional - resume existing conversation
   onConversationsList?: (conversations: Conversation[]) => void;
   onConversationCreated?: (conversation: Conversation) => void;
+  onConversationTitleUpdated?: (conversationId: string, title: string) => void;
 }
 
 export interface EmbeddedComponent {
@@ -174,7 +174,6 @@ export class WebSocketClient {
             createdAt: new Date(conv.createdAt),
             updatedAt: new Date(conv.updatedAt),
             mode: conv.mode as 'consult' | 'assessment',
-            messageCount: conv.messageCount || 0,
           }));
           this.config.onConversationsList?.(normalized);
         });
@@ -188,9 +187,14 @@ export class WebSocketClient {
             createdAt: new Date(data.conversation.createdAt),
             updatedAt: new Date(data.conversation.updatedAt),
             mode: data.conversation.mode as 'consult' | 'assessment',
-            messageCount: data.conversation.messageCount || 0,
           };
           this.config.onConversationCreated?.(normalized);
+        });
+
+        // Listen for conversation_title_updated events
+        this.socket.on('conversation_title_updated', (data: { conversationId: string; title: string }) => {
+          console.log('[WebSocket] Conversation title updated:', data.conversationId, data.title);
+          this.config.onConversationTitleUpdated?.(data.conversationId, data.title);
         });
       } catch (error) {
         reject(error);

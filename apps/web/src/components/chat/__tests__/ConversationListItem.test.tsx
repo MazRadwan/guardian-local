@@ -14,7 +14,6 @@ describe('ConversationListItem', () => {
     createdAt: new Date('2025-01-13T10:00:00Z'),
     updatedAt: new Date('2025-01-13T12:00:00Z'),
     mode: 'consult',
-    messageCount: 5,
   };
 
   const mockOnClick = jest.fn();
@@ -36,34 +35,6 @@ describe('ConversationListItem', () => {
       );
 
       expect(screen.getByText('Test Conversation')).toBeInTheDocument();
-    });
-
-    it('renders message count badge', () => {
-      render(
-        <ConversationListItem
-          conversation={mockConversation}
-          isActive={false}
-          onClick={mockOnClick}
-          onDelete={mockOnDelete}
-        />
-      );
-
-      expect(screen.getByText('5')).toBeInTheDocument();
-    });
-
-    it('does not render message count badge when count is 0', () => {
-      const convWithNoMessages = { ...mockConversation, messageCount: 0 };
-
-      render(
-        <ConversationListItem
-          conversation={convWithNoMessages}
-          isActive={false}
-          onClick={mockOnClick}
-          onDelete={mockOnDelete}
-        />
-      );
-
-      expect(screen.queryByText('0')).not.toBeInTheDocument();
     });
 
     it('renders timestamp', () => {
@@ -312,7 +283,7 @@ describe('ConversationListItem', () => {
       );
 
       const item = container.firstChild as HTMLElement;
-      expect(item).toHaveAttribute('aria-label', 'Test Conversation, 5 messages, 2 hours ago');
+      expect(item).toHaveAttribute('aria-label', 'Test Conversation, 2 hours ago');
     });
 
     it('delete button has proper aria-label', () => {
@@ -410,21 +381,6 @@ describe('ConversationListItem', () => {
   });
 
   describe('Edge Cases', () => {
-    it('handles conversation with very large message count', () => {
-      const highCountConv = { ...mockConversation, messageCount: 9999 };
-
-      render(
-        <ConversationListItem
-          conversation={highCountConv}
-          isActive={false}
-          onClick={mockOnClick}
-          onDelete={mockOnDelete}
-        />
-      );
-
-      expect(screen.getByText('9999')).toBeInTheDocument();
-    });
-
     it('handles conversation with special characters in title', () => {
       const specialCharConv = {
         ...mockConversation,

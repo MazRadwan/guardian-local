@@ -15,6 +15,7 @@ export interface UseWebSocketOptions {
   onStreamComplete?: (data: { messageId: string; conversationId: string; fullText: string }) => void;
   onConversationsList?: (conversations: Conversation[]) => void;
   onConversationCreated?: (conversation: Conversation) => void;
+  onConversationTitleUpdated?: (conversationId: string, title: string) => void;
   autoConnect?: boolean;
 }
 
@@ -30,6 +31,7 @@ export function useWebSocket({
   onStreamComplete,
   onConversationsList,
   onConversationCreated,
+  onConversationTitleUpdated,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -49,6 +51,7 @@ export function useWebSocket({
         conversationId,
         onConversationsList,
         onConversationCreated,
+        onConversationTitleUpdated,
       });
       await client.connect();
       clientRef.current = client;

@@ -181,7 +181,6 @@ export class ChatServer {
             createdAt: conversation.startedAt,
             updatedAt: conversation.lastActivityAt,
             mode: conversation.mode,
-            messageCount: 0,
           },
         });
       }
@@ -281,6 +280,17 @@ export class ChatServer {
             conversationId: message.conversationId,
             timestamp: message.createdAt,
           });
+
+          // Check if this is the first user message and emit title update
+          const messageCount = await this.conversationService.getMessageCount(conversationId);
+          if (messageCount === 1) {
+            // This is the first user message - generate and emit title
+            const title = await this.conversationService.getConversationTitle(conversationId);
+            socket.emit('conversation_title_updated', {
+              conversationId,
+              title,
+            });
+          }
 
           // Get conversation context and generate Claude response
           // Note: buildConversationContext loads history which already includes
@@ -416,11 +426,10 @@ export class ChatServer {
 
           console.log(`[ChatServer] Found ${conversations.length} conversations for user ${socket.userId}`);
 
-          // Generate titles and counts for each conversation
+          // Generate titles for each conversation
           const conversationsWithMetadata = await Promise.all(
             conversations.map(async (conv) => {
               const title = await this.conversationService.getConversationTitle(conv.id);
-              const messageCount = await this.conversationService.getMessageCount(conv.id);
 
               return {
                 id: conv.id,
@@ -428,7 +437,6 @@ export class ChatServer {
                 createdAt: conv.startedAt,
                 updatedAt: conv.lastActivityAt,
                 mode: conv.mode,
-                messageCount,
               };
             })
           );
@@ -477,7 +485,6 @@ export class ChatServer {
               createdAt: newConversation.startedAt,
               updatedAt: newConversation.lastActivityAt,
               mode: newConversation.mode,
-              messageCount: 0,
             },
           });
 

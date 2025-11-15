@@ -537,7 +537,6 @@ describe('WebSocket Chat E2E Tests', () => {
         expect(data.conversation.id).toBeDefined()
         expect(data.conversation.title).toBe('New Chat')
         expect(data.conversation.mode).toBe('consult')
-        expect(data.conversation.messageCount).toBe(0)
         expect(data.conversation.createdAt).toBeDefined()
         expect(data.conversation.updatedAt).toBeDefined()
         done()

@@ -104,8 +104,8 @@ export function Sidebar({
           ) : (
             <Button
               onClick={onNewChat}
-              variant="outline"
-              className="w-full flex items-center gap-2 justify-start"
+              variant="ghost"
+              className="w-full flex items-center gap-2 justify-start hover:bg-gray-100"
             >
               <SquarePen className="h-[18px] w-[18px]" />
               <span>New chat</span>

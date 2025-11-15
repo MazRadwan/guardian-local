@@ -27,7 +27,6 @@ describe('ConversationList', () => {
       createdAt: new Date('2025-01-13T10:00:00Z'),
       updatedAt: new Date('2025-01-13T12:00:00Z'),
       mode: 'consult',
-      messageCount: 5,
     },
     {
       id: 'conv-2',
@@ -35,7 +34,6 @@ describe('ConversationList', () => {
       createdAt: new Date('2025-01-13T09:00:00Z'),
       updatedAt: new Date('2025-01-13T11:00:00Z'),
       mode: 'assessment',
-      messageCount: 3,
     },
     {
       id: 'conv-3',
@@ -43,7 +41,6 @@ describe('ConversationList', () => {
       createdAt: new Date('2025-01-13T08:00:00Z'),
       updatedAt: new Date('2025-01-13T10:00:00Z'),
       mode: 'consult',
-      messageCount: 8,
     },
   ];
 
@@ -309,7 +306,6 @@ describe('ConversationList', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         mode: 'consult' as const,
-        messageCount: i,
       }));
 
       render(
@@ -359,7 +355,6 @@ describe('ConversationList', () => {
         createdAt: new Date(),
         updatedAt: new Date(),
         mode: 'consult' as const,
-        messageCount: 2,
       }];
 
       rerender(

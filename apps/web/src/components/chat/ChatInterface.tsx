@@ -32,6 +32,7 @@ export function ChatInterface() {
     setActiveConversation,
     setConversations,
     addConversation,
+    updateConversationTitle,
   } = useChatStore();
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
@@ -181,6 +182,14 @@ export function ChatInterface() {
     [addConversation, setActiveConversation]
   );
 
+  const handleConversationTitleUpdated = useCallback(
+    (conversationId: string, title: string) => {
+      console.log('[ChatInterface] Conversation title updated:', conversationId, title);
+      updateConversationTitle(conversationId, title);
+    },
+    [updateConversationTitle]
+  );
+
   const { isConnected, isConnecting, sendMessage, requestHistory, fetchConversations, startNewConversation, abortStream } = useWebSocket({
     url: WEBSOCKET_URL,
     token: token || undefined,
@@ -193,6 +202,7 @@ export function ChatInterface() {
     onStreamComplete: handleStreamComplete,
     onConversationsList: handleConversationsList,
     onConversationCreated: handleConversationCreated,
+    onConversationTitleUpdated: handleConversationTitleUpdated,
     autoConnect: Boolean(token), // Connect whenever user is authenticated
   });
 
