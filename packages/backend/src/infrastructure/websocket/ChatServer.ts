@@ -301,6 +301,9 @@ export class ChatServer {
           let fullResponse = '';
 
           try {
+            // Reset abort flag before starting stream
+            socket.data.abortRequested = false;
+
             // Emit stream start event (no partial message in DB yet)
             socket.emit('assistant_stream_start', {
               conversationId,
@@ -312,6 +315,12 @@ export class ChatServer {
               messages,
               systemPrompt
             )) {
+              // Check if stream was aborted by user
+              if (socket.data.abortRequested) {
+                console.log(`[ChatServer] Stream aborted by user, breaking loop`);
+                break;
+              }
+
               if (!chunk.isComplete && chunk.content) {
                 fullResponse += chunk.content;
 
@@ -323,19 +332,25 @@ export class ChatServer {
               }
             }
 
-            // Save complete message to database
-            const completeMessage = await this.conversationService.sendMessage({
-              conversationId,
-              role: 'assistant',
-              content: { text: fullResponse },
-            });
+            // Save message to database (even if aborted, save partial response)
+            if (fullResponse.length > 0) {
+              const completeMessage = await this.conversationService.sendMessage({
+                conversationId,
+                role: 'assistant',
+                content: { text: fullResponse },
+              });
 
-            // Emit stream complete with final message
-            socket.emit('assistant_done', {
-              messageId: completeMessage.id,
-              conversationId,
-              fullText: fullResponse,
-            });
+              // Emit stream complete with final message (only if not aborted)
+              if (!socket.data.abortRequested) {
+                socket.emit('assistant_done', {
+                  messageId: completeMessage.id,
+                  conversationId,
+                  fullText: fullResponse,
+                });
+              } else {
+                console.log(`[ChatServer] Stream aborted - partial response saved (${fullResponse.length} chars)`);
+              }
+            }
           } catch (claudeError) {
             console.error('[ChatServer] Claude API error:', claudeError);
 
@@ -501,8 +516,11 @@ export class ChatServer {
       // Abort streaming
       socket.on('abort_stream', () => {
         console.log(`[ChatServer] Stream abort requested by user ${socket.userId}`);
-        // TODO: If Claude SDK supports aborting streams, implement here
-        // For now, just acknowledge - frontend will stop displaying chunks
+
+        // Mark socket as aborted - the streaming loop will check this flag
+        socket.data.abortRequested = true;
+
+        // Emit acknowledgment - frontend will call finishStreaming()
         socket.emit('stream_aborted', { conversationId: socket.conversationId });
       });
 

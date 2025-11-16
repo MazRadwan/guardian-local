@@ -15,6 +15,7 @@ export interface WebSocketConfig {
   onConversationsList?: (conversations: Conversation[]) => void;
   onConversationCreated?: (conversation: Conversation) => void;
   onConversationTitleUpdated?: (conversationId: string, title: string) => void;
+  onStreamAborted?: (conversationId: string) => void;
 }
 
 export interface EmbeddedComponent {
@@ -196,6 +197,12 @@ export class WebSocketClient {
           console.log('[WebSocket] Conversation title updated:', data.conversationId, data.title);
           this.config.onConversationTitleUpdated?.(data.conversationId, data.title);
         });
+
+        // Listen for stream_aborted events
+        this.socket.on('stream_aborted', (data: { conversationId: string }) => {
+          console.log('[WebSocket] Stream aborted for conversation:', data.conversationId);
+          this.config.onStreamAborted?.(data.conversationId);
+        });
       } catch (error) {
         reject(error);
       }
@@ -302,6 +309,19 @@ export class WebSocketClient {
     this.socket.on('assistant_done', callback);
     return () => {
       this.socket?.off('assistant_done', callback);
+    };
+  }
+
+  onStreamAborted(callback: (conversationId: string) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId: string }) => {
+      callback(data.conversationId);
+    };
+
+    this.socket.on('stream_aborted', handler);
+    return () => {
+      this.socket?.off('stream_aborted', handler);
     };
   }
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
-import { Send, Paperclip } from 'lucide-react';
+import { Send, Paperclip, Square } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
 
 export interface ComposerProps {
@@ -12,6 +12,8 @@ export interface ComposerProps {
   currentMode?: ConversationMode;
   onModeChange?: (mode: ConversationMode) => void;
   modeChangeDisabled?: boolean;
+  isStreaming?: boolean;
+  onStopStream?: () => void;
 }
 
 export interface ComposerRef {
@@ -27,6 +29,8 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       currentMode = 'consult',
       onModeChange,
       modeChangeDisabled = false,
+      isStreaming = false,
+      onStopStream,
     },
     ref
   ) => {
@@ -127,16 +131,28 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                 </Button>
               </div>
 
-              {/* Right group: Send button */}
-              <Button
-                type="button"
-                onClick={handleSend}
-                disabled={!isSendEnabled}
-                className="h-8 w-8 rounded-full p-0 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-700 text-white"
-                aria-label="Send message"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+              {/* Right group: Send button or Stop button */}
+              {isStreaming ? (
+                <Button
+                  type="button"
+                  onClick={onStopStream}
+                  className="h-8 w-8 rounded-full p-0 bg-red-500 hover:bg-red-600 text-white"
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                >
+                  <Square className="h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!isSendEnabled}
+                  className="h-8 w-8 rounded-full p-0 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-700 text-white"
+                  aria-label="Send message"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              )}
             </div>
           </div>
         </div>

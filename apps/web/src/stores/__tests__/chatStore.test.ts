@@ -135,6 +135,7 @@ describe('chatStore', () => {
     expect(result.current.messages[0].role).toBe('assistant');
     expect(result.current.messages[0].content).toBe('');
     expect(result.current.currentStreamingMessage).toBe('');
+    expect(result.current.isStreaming).toBe(true);
   });
 
   it('finishes streaming', () => {
@@ -146,6 +147,22 @@ describe('chatStore', () => {
     });
 
     expect(result.current.currentStreamingMessage).toBeNull();
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it('isStreaming initializes to false', () => {
+    const { result } = renderHook(() => useChatStore());
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it('isStreaming set to true when startStreaming called', () => {
+    const { result } = renderHook(() => useChatStore());
+
+    act(() => {
+      result.current.startStreaming();
+    });
+
+    expect(result.current.isStreaming).toBe(true);
   });
 
   it('sets loading state', () => {

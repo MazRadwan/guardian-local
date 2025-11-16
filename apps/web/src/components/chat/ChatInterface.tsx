@@ -33,6 +33,7 @@ export function ChatInterface() {
     setConversations,
     addConversation,
     updateConversationTitle,
+    isStreaming,
   } = useChatStore();
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
@@ -190,6 +191,18 @@ export function ChatInterface() {
     [updateConversationTitle]
   );
 
+  const handleStreamAborted = useCallback(
+    (conversationId: string) => {
+      console.log('[ChatInterface] Stream aborted for conversation:', conversationId);
+      // Finish streaming and re-enable composer
+      finishStreaming();
+      setLoading(false);
+      // Auto-focus composer after abort
+      composerRef.current?.focus();
+    },
+    [finishStreaming, setLoading]
+  );
+
   const { isConnected, isConnecting, sendMessage, requestHistory, fetchConversations, startNewConversation, abortStream } = useWebSocket({
     url: WEBSOCKET_URL,
     token: token || undefined,
@@ -203,6 +216,7 @@ export function ChatInterface() {
     onConversationsList: handleConversationsList,
     onConversationCreated: handleConversationCreated,
     onConversationTitleUpdated: handleConversationTitleUpdated,
+    onStreamAborted: handleStreamAborted,
     autoConnect: Boolean(token), // Connect whenever user is authenticated
   });
 
@@ -368,10 +382,12 @@ export function ChatInterface() {
             <Composer
               ref={composerRef}
               onSendMessage={handleSendMessage}
-              disabled={!isConnected || isLoading}
+              disabled={!isConnected || isLoading || isStreaming}
               currentMode={mode}
               onModeChange={handleModeChange}
               modeChangeDisabled={isChanging || !isConnected}
+              isStreaming={isStreaming}
+              onStopStream={abortStream}
             />
           </div>
         </div>
@@ -385,10 +401,12 @@ export function ChatInterface() {
             <Composer
               ref={composerRef}
               onSendMessage={handleSendMessage}
-              disabled={!isConnected || isLoading}
+              disabled={!isConnected || isLoading || isStreaming}
               currentMode={mode}
               onModeChange={handleModeChange}
               modeChangeDisabled={isChanging || !isConnected}
+              isStreaming={isStreaming}
+              onStopStream={abortStream}
             />
           </div>
         </>

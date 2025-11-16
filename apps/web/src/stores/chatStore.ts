@@ -15,6 +15,7 @@ export interface ChatState {
   isLoading: boolean;
   error: string | null;
   currentStreamingMessage: string | null;
+  isStreaming: boolean;
 
   // Sidebar state
   sidebarOpen: boolean;
@@ -55,6 +56,7 @@ export const useChatStore = create<ChatState>()(
       isLoading: false,
       error: null,
       currentStreamingMessage: null,
+      isStreaming: false,
 
       // Sidebar state - closed by default on all devices (mobile-first)
       sidebarOpen: false,
@@ -105,6 +107,7 @@ export const useChatStore = create<ChatState>()(
       startStreaming: () =>
         set((state) => ({
           currentStreamingMessage: '',
+          isStreaming: true,
           messages: [
             ...state.messages,
             {
@@ -118,6 +121,7 @@ export const useChatStore = create<ChatState>()(
       finishStreaming: () =>
         set({
           currentStreamingMessage: null,
+          isStreaming: false,
         }),
 
       setLoading: (isLoading) => set({ isLoading }),

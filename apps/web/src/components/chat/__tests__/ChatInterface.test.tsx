@@ -88,6 +88,7 @@ describe('ChatInterface', () => {
       messages: [],
       isLoading: false,
       error: null,
+      isStreaming: false,
       addMessage: mockAddMessage,
       startStreaming: mockStartStreaming,
       appendToLastMessage: mockAppendToLastMessage,
@@ -100,6 +101,7 @@ describe('ChatInterface', () => {
       setActiveConversation: mockSetActiveConversation,
       setConversations: jest.fn(),
       addConversation: jest.fn(),
+      updateConversationTitle: jest.fn(),
     });
 
     (useWebSocket as jest.Mock).mockReturnValue({
@@ -802,6 +804,64 @@ describe('ChatInterface', () => {
         // Should append (conv2 is active)
         expect(mockAppendToLastMessage).toHaveBeenCalledWith('chunk from conv2');
       });
+    });
+  });
+
+  // Stop Stream Integration
+  describe('Stop Stream Integration', () => {
+    it('passes isStreaming prop to Composer when streaming', () => {
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        isStreaming: true, // Streaming active
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        updateConversationTitle: jest.fn(),
+      });
+
+      render(<ChatInterface />);
+
+      // Composer is rendered - Stop button should be visible (verified by Composer tests)
+      expect(screen.getByTestId('composer')).toBeInTheDocument();
+    });
+
+    it('composer disabled during streaming', () => {
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [{role: 'user', content: 'test', timestamp: new Date()}],
+        isLoading: false,
+        isStreaming: true, // Streaming active
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        updateConversationTitle: jest.fn(),
+      });
+
+      render(<ChatInterface />);
+
+      // Composer should be disabled during streaming
+      const sendButton = screen.getByRole('button', { name: 'Send' });
+      expect(sendButton).toBeDisabled();
     });
   });
 });

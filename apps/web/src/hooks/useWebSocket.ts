@@ -16,6 +16,7 @@ export interface UseWebSocketOptions {
   onConversationsList?: (conversations: Conversation[]) => void;
   onConversationCreated?: (conversation: Conversation) => void;
   onConversationTitleUpdated?: (conversationId: string, title: string) => void;
+  onStreamAborted?: (conversationId: string) => void;
   autoConnect?: boolean;
 }
 
@@ -32,6 +33,7 @@ export function useWebSocket({
   onConversationsList,
   onConversationCreated,
   onConversationTitleUpdated,
+  onStreamAborted,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -52,6 +54,7 @@ export function useWebSocket({
         onConversationsList,
         onConversationCreated,
         onConversationTitleUpdated,
+        onStreamAborted,
       });
       await client.connect();
       clientRef.current = client;
@@ -163,10 +166,17 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onStreamAborted) {
+      const unsub = client.onStreamAborted((conversationId) => {
+        onStreamAborted(conversationId);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onConnected, onHistory, onStreamComplete]);
+  }, [isConnected, onMessage, onMessageStream, onError, onConnected, onHistory, onStreamComplete, onStreamAborted]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
