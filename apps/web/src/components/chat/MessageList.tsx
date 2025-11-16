@@ -9,12 +9,13 @@ import { ChevronDown } from 'lucide-react';
 export interface MessageListProps {
   messages: ChatMessageType[];
   isLoading?: boolean;
+  isStreaming?: boolean;
   onRegenerate?: (messageIndex: number) => void;
   regeneratingMessageIndex?: number | null;
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, onRegenerate, regeneratingMessageIndex }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -28,17 +29,17 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
 
     // Continuous auto-scroll during streaming (keeps latest token visible above composer)
     useEffect(() => {
-      if (!isLoading || messages.length === 0) return;
+      if (!isStreaming || messages.length === 0) return;
 
       // During streaming, continuously scroll to bottom to keep latest tokens visible
       const scrollInterval = setInterval(() => {
         if (scrollContainerRef.current) {
           scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
         }
-      }, 100); // Scroll every 100ms during streaming
+      }, 50); // Scroll every 50ms during streaming for smooth tracking
 
       return () => clearInterval(scrollInterval);
-    }, [isLoading, messages.length]);
+    }, [isStreaming, messages.length]);
 
     // Handle scroll position to show/hide scroll-to-bottom button
     const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
