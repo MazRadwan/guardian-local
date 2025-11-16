@@ -8,10 +8,12 @@ import { ChatMessage as ChatMessageType } from '@/lib/websocket';
 export interface MessageListProps {
   messages: ChatMessageType[];
   isLoading?: boolean;
+  onRegenerate?: (messageIndex: number) => void;
+  regeneratingMessageIndex?: number | null;
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading }, ref) {
+  function MessageList({ messages, isLoading, onRegenerate, regeneratingMessageIndex }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +59,9 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
               content={message.content}
               components={message.components}
               timestamp={message.timestamp}
+              messageIndex={index}
+              onRegenerate={onRegenerate}
+              isRegenerating={regeneratingMessageIndex === index}
             />
           ))}
           {isLoading && (

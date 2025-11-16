@@ -47,6 +47,9 @@ export function ChatInterface() {
   // Delay showing skeleton to prevent flash on quick loads (300ms threshold)
   const showDelayedLoading = useDelayedLoading(isLoading, 300);
 
+  // Track which message is being regenerated
+  const [regeneratingMessageIndex, setRegeneratingMessageIndex] = useState<number | null>(null);
+
   // Load saved conversationId from localStorage on mount (client-side only)
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -103,6 +106,7 @@ export function ChatInterface() {
       setError(errorMessage);
       finishStreaming();
       setLoading(false); // Hide typing indicator on error
+      setRegeneratingMessageIndex(null); // Reset regenerating state
     },
     [setError, finishStreaming, setLoading]
   );
@@ -152,6 +156,7 @@ export function ChatInterface() {
     // Stream is complete, finish streaming and auto-focus input
     finishStreaming();
     setLoading(false);
+    setRegeneratingMessageIndex(null); // Reset regenerating state
     composerRef.current?.focus();
   }, [finishStreaming, setLoading]);
 
@@ -197,6 +202,7 @@ export function ChatInterface() {
       // Finish streaming and re-enable composer
       finishStreaming();
       setLoading(false);
+      setRegeneratingMessageIndex(null); // Reset regenerating state
       // Auto-focus composer after abort
       composerRef.current?.focus();
     },
@@ -357,6 +363,39 @@ export function ChatInterface() {
     [changeMode, addMessage, setError]
   );
 
+  const handleRegenerate = useCallback(
+    (messageIndex: number) => {
+      if (!isConnected || !activeConversationId) {
+        setError('Not connected to server');
+        return;
+      }
+
+      // Validate messageIndex
+      if (messageIndex < 0 || messageIndex >= messages.length) {
+        setError('Invalid message index');
+        return;
+      }
+
+      // Find previous user message
+      const previousMessage = messages[messageIndex - 1];
+      if (!previousMessage || previousMessage.role !== 'user') {
+        setError('Cannot regenerate: previous user message not found');
+        return;
+      }
+
+      // Mark as regenerating
+      setRegeneratingMessageIndex(messageIndex);
+
+      // Remove old assistant message
+      const updatedMessages = messages.filter((_, idx) => idx !== messageIndex);
+      setMessages(updatedMessages);
+
+      // Resend the previous user message
+      handleSendMessage(previousMessage.content);
+    },
+    [isConnected, activeConversationId, messages, setError, setMessages, handleSendMessage]
+  );
+
   return (
     <div className="flex h-full flex-col">
       {/* Error banner */}
@@ -395,7 +434,13 @@ export function ChatInterface() {
         // Active state: Messages + composer at bottom (includes loading state)
         <>
           <div className="flex-1 min-h-0 overflow-hidden">
-            <MessageList ref={messageListRef} messages={messages} isLoading={showDelayedLoading} />
+            <MessageList
+              ref={messageListRef}
+              messages={messages}
+              isLoading={showDelayedLoading}
+              onRegenerate={handleRegenerate}
+              regeneratingMessageIndex={regeneratingMessageIndex}
+            />
           </div>
           <div className="flex-shrink-0">
             <Composer
