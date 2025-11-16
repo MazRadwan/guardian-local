@@ -26,6 +26,20 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       }
     }, [messages]);
 
+    // Continuous auto-scroll during streaming (keeps latest token visible above composer)
+    useEffect(() => {
+      if (!isLoading || messages.length === 0) return;
+
+      // During streaming, continuously scroll to bottom to keep latest tokens visible
+      const scrollInterval = setInterval(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      }, 100); // Scroll every 100ms during streaming
+
+      return () => clearInterval(scrollInterval);
+    }, [isLoading, messages.length]);
+
     // Handle scroll position to show/hide scroll-to-bottom button
     const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
       const element = e.currentTarget;
