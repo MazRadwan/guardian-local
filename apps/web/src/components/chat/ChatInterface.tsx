@@ -390,10 +390,19 @@ export function ChatInterface() {
       const updatedMessages = messages.filter((_, idx) => idx !== messageIndex);
       setMessages(updatedMessages);
 
-      // Resend the previous user message
-      handleSendMessage(previousMessage.content);
+      // Resend the previous user message (use sendMessage directly, NOT handleSendMessage)
+      // User message already exists in UI at messageIndex-1, don't add it again
+      setLoading(true);
+      try {
+        sendMessage(previousMessage.content, activeConversationId);
+      } catch (err) {
+        setError('Failed to regenerate response');
+        setLoading(false);
+        setRegeneratingMessageIndex(null);
+        console.error('Regenerate error:', err);
+      }
     },
-    [isConnected, activeConversationId, messages, setError, setMessages, handleSendMessage]
+    [isConnected, activeConversationId, messages, setError, setMessages, sendMessage, setLoading]
   );
 
   return (
