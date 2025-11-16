@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { SquarePen, LogOut, Search, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
+import { ConversationSearchModal } from './ConversationSearchModal';
 import { Conversation } from '@/stores/chatStore';
 
 interface SidebarProps {
@@ -38,6 +39,9 @@ export function Sidebar({
 }: SidebarProps) {
   // Mobile: drawer overlay pattern
   // Desktop: persistent sidebar with toggle
+
+  // Search modal state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Keyboard support: Close mobile drawer with Escape key
   useEffect(() => {
@@ -118,10 +122,7 @@ export function Sidebar({
           // Minimized: Show search icon only
           <div className="p-2">
             <button
-              onClick={() => {
-                // TODO: Open search modal (Story 9.14a)
-                console.log('Search conversations - feature coming in Story 9.14a');
-              }}
+              onClick={() => setIsSearchOpen(true)}
               className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
               title="Search conversations"
               aria-label="Search conversations"
@@ -174,6 +175,17 @@ export function Sidebar({
           )}
         </div>
       </aside>
+
+      {/* Search Modal */}
+      <ConversationSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        conversations={conversations}
+        onSelectConversation={(id) => {
+          onSelectConversation(id);
+          setIsSearchOpen(false);
+        }}
+      />
     </>
   );
 }
