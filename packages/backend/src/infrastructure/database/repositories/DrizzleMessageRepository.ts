@@ -1,4 +1,4 @@
-import { eq, desc, asc, sql } from 'drizzle-orm';
+import { eq, desc, asc, sql, and } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { db } from '../client.js';
 import { messages } from '../schema/index.js';
@@ -69,6 +69,22 @@ export class DrizzleMessageRepository implements IMessageRepository {
       .where(eq(messages.conversationId, conversationId));
 
     return Number(result.count);
+  }
+
+  async findFirstUserMessage(conversationId: string): Promise<Message | null> {
+    const [row] = await this.db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.role, 'user')
+        )
+      )
+      .orderBy(asc(messages.createdAt))
+      .limit(1);
+
+    return row ? this.toDomain(row) : null;
   }
 
   async delete(id: string): Promise<void> {

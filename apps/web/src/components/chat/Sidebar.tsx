@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
-import { SquarePen, LogOut, MessageSquare, PanelLeft } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { SquarePen, LogOut, Search, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
+import { ConversationSearchModal } from './ConversationSearchModal';
 import { Conversation } from '@/stores/chatStore';
 
 interface SidebarProps {
@@ -38,6 +39,9 @@ export function Sidebar({
 }: SidebarProps) {
   // Mobile: drawer overlay pattern
   // Desktop: persistent sidebar with toggle
+
+  // Search modal state
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Keyboard support: Close mobile drawer with Escape key
   useEffect(() => {
@@ -104,8 +108,8 @@ export function Sidebar({
           ) : (
             <Button
               onClick={onNewChat}
-              variant="outline"
-              className="w-full flex items-center gap-2 justify-start"
+              variant="ghost"
+              className="w-full flex items-center gap-2 justify-start hover:bg-gray-100"
             >
               <SquarePen className="h-[18px] w-[18px]" />
               <span>New chat</span>
@@ -115,35 +119,16 @@ export function Sidebar({
 
         {/* Middle Section - Conversation List */}
         {isMinimized ? (
-          // Minimized: Show conversation icons (first letter of title)
-          <div className="flex-1 overflow-y-auto p-2">
-            <div className="flex flex-col gap-2">
-              {conversations.length === 0 ? (
-                <button
-                  className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-                  title="No conversations"
-                  aria-label="No conversations"
-                >
-                  <MessageSquare className="h-5 w-5 text-gray-500" />
-                </button>
-              ) : (
-                conversations.map((conversation) => (
-                  <button
-                    key={conversation.id}
-                    onClick={() => onSelectConversation(conversation.id)}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors text-sm font-medium ${
-                      conversation.id === activeConversationId
-                        ? 'bg-blue-50 text-blue-700'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                    title={conversation.title}
-                    aria-label={`Select ${conversation.title}`}
-                  >
-                    {conversation.title.charAt(0).toUpperCase()}
-                  </button>
-                ))
-              )}
-            </div>
+          // Minimized: Show search icon only
+          <div className="p-2">
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              title="Search conversations"
+              aria-label="Search conversations"
+            >
+              <Search className="h-5 w-5 text-gray-700" />
+            </button>
           </div>
         ) : (
           // Expanded: Show full conversation list
@@ -190,6 +175,17 @@ export function Sidebar({
           )}
         </div>
       </aside>
+
+      {/* Search Modal */}
+      <ConversationSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        conversations={conversations}
+        onSelectConversation={(id) => {
+          onSelectConversation(id);
+          setIsSearchOpen(false);
+        }}
+      />
     </>
   );
 }

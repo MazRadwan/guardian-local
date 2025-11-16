@@ -147,4 +147,36 @@ export class ConversationService {
 
     await this.conversationRepo.updateContext(conversationId, context);
   }
+
+  /**
+   * Generate title for conversation from first user message
+   * Returns 'New Chat' if no user messages exist
+   */
+  async getConversationTitle(conversationId: string): Promise<string> {
+    const firstUserMessage = await this.messageRepo.findFirstUserMessage(conversationId);
+
+    if (!firstUserMessage || !firstUserMessage.content.text) {
+      return 'New Chat';
+    }
+
+    const messageText = firstUserMessage.content.text.trim();
+    if (messageText.length === 0) {
+      return 'New Chat';
+    }
+
+    // Take first 60 characters
+    let title = messageText.slice(0, 60).trim();
+    if (messageText.length > 60) {
+      title += '...';
+    }
+
+    return title;
+  }
+
+  /**
+   * Get message count for conversation
+   */
+  async getMessageCount(conversationId: string): Promise<number> {
+    return await this.messageRepo.count(conversationId);
+  }
 }

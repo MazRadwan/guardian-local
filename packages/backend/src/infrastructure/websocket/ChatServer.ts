@@ -87,6 +87,26 @@ export class ChatServer {
     return { messages, systemPrompt, mode: conversation.mode };
   }
 
+  /**
+   * Validate that a conversation belongs to the requesting user
+   * @throws Error if conversation not found or doesn't belong to user
+   */
+  private async validateConversationOwnership(
+    conversationId: string,
+    userId: string
+  ): Promise<void> {
+    const conversation = await this.conversationService.getConversation(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    if (conversation.userId !== userId) {
+      console.warn(`[ChatServer] SECURITY: User ${userId} attempted to access conversation ${conversationId} owned by ${conversation.userId}`);
+      throw new Error('Unauthorized: You do not have access to this conversation');
+    }
+  }
+
   private setupNamespace(): void {
     const chatNamespace = this.io.of('/chat');
 
@@ -152,6 +172,17 @@ export class ChatServer {
           mode: 'consult',
         });
         console.log(`[ChatServer] Created new conversation ${conversation.id} for user ${socket.userId}`);
+
+        // Emit conversation_created event for new conversations
+        socket.emit('conversation_created', {
+          conversation: {
+            id: conversation.id,
+            title: `Conversation ${conversation.id.slice(0, 8)}`,
+            createdAt: conversation.startedAt,
+            updatedAt: conversation.lastActivityAt,
+            mode: conversation.mode,
+          },
+        });
       }
 
       // Store conversationId in socket for this session
@@ -177,11 +208,11 @@ export class ChatServer {
             return;
           }
 
-          // Use conversationId from socket (auto-created on connection) or from payload
-          const conversationId = socket.conversationId || payload.conversationId;
+          // CRITICAL: conversationId MUST be provided by client
+          const conversationId = payload.conversationId;
           const messageText = payload.text || payload.content; // Support both formats
 
-          // Validate conversationId
+          // Validate conversationId is provided
           if (!conversationId) {
             socket.emit('error', {
               event: 'send_message',
@@ -195,6 +226,25 @@ export class ChatServer {
             socket.emit('error', {
               event: 'send_message',
               message: 'Message text required',
+            });
+            return;
+          }
+
+          // Validate conversation ownership
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'send_message',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          try {
+            await this.validateConversationOwnership(conversationId, socket.userId);
+          } catch (error) {
+            socket.emit('error', {
+              event: 'send_message',
+              message: error instanceof Error ? error.message : 'Unauthorized access',
             });
             return;
           }
@@ -231,6 +281,17 @@ export class ChatServer {
             timestamp: message.createdAt,
           });
 
+          // Check if this is the first user message and emit title update
+          const messageCount = await this.conversationService.getMessageCount(conversationId);
+          if (messageCount === 1) {
+            // This is the first user message - generate and emit title
+            const title = await this.conversationService.getConversationTitle(conversationId);
+            socket.emit('conversation_title_updated', {
+              conversationId,
+              title,
+            });
+          }
+
           // Get conversation context and generate Claude response
           // Note: buildConversationContext loads history which already includes
           // the message we just saved above, so no need to add it again
@@ -240,6 +301,9 @@ export class ChatServer {
           let fullResponse = '';
 
           try {
+            // Reset abort flag before starting stream
+            socket.data.abortRequested = false;
+
             // Emit stream start event (no partial message in DB yet)
             socket.emit('assistant_stream_start', {
               conversationId,
@@ -251,6 +315,12 @@ export class ChatServer {
               messages,
               systemPrompt
             )) {
+              // Check if stream was aborted by user
+              if (socket.data.abortRequested) {
+                console.log(`[ChatServer] Stream aborted by user, breaking loop`);
+                break;
+              }
+
               if (!chunk.isComplete && chunk.content) {
                 fullResponse += chunk.content;
 
@@ -262,19 +332,25 @@ export class ChatServer {
               }
             }
 
-            // Save complete message to database
-            const completeMessage = await this.conversationService.sendMessage({
-              conversationId,
-              role: 'assistant',
-              content: { text: fullResponse },
-            });
+            // Save message to database (even if aborted, save partial response)
+            if (fullResponse.length > 0) {
+              const completeMessage = await this.conversationService.sendMessage({
+                conversationId,
+                role: 'assistant',
+                content: { text: fullResponse },
+              });
 
-            // Emit stream complete with final message
-            socket.emit('assistant_done', {
-              messageId: completeMessage.id,
-              conversationId,
-              fullText: fullResponse,
-            });
+              // Emit stream complete with final message (only if not aborted)
+              if (!socket.data.abortRequested) {
+                socket.emit('assistant_done', {
+                  messageId: completeMessage.id,
+                  conversationId,
+                  fullText: fullResponse,
+                });
+              } else {
+                console.log(`[ChatServer] Stream aborted - partial response saved (${fullResponse.length} chars)`);
+              }
+            }
           } catch (claudeError) {
             console.error('[ChatServer] Claude API error:', claudeError);
 
@@ -311,6 +387,18 @@ export class ChatServer {
             `[ChatServer] History requested for conversation ${payload.conversationId}`
           );
 
+          // Validate conversation ownership
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'get_history',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          // Validate ownership BEFORE returning history
+          await this.validateConversationOwnership(payload.conversationId, socket.userId);
+
           const messages = await this.conversationService.getHistory(
             payload.conversationId,
             payload.limit,
@@ -334,6 +422,106 @@ export class ChatServer {
             message: error instanceof Error ? error.message : 'Failed to get history',
           });
         }
+      });
+
+      // Handle get_conversations event
+      socket.on('get_conversations', async () => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'get_conversations',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          console.log(`[ChatServer] Fetching conversations for user ${socket.userId}`);
+
+          const conversations = await this.conversationService.getUserConversations(socket.userId);
+
+          console.log(`[ChatServer] Found ${conversations.length} conversations for user ${socket.userId}`);
+
+          // Generate titles for each conversation
+          const conversationsWithMetadata = await Promise.all(
+            conversations.map(async (conv) => {
+              const title = await this.conversationService.getConversationTitle(conv.id);
+
+              return {
+                id: conv.id,
+                title,
+                createdAt: conv.startedAt,
+                updatedAt: conv.lastActivityAt,
+                mode: conv.mode,
+              };
+            })
+          );
+
+          socket.emit('conversations_list', {
+            conversations: conversationsWithMetadata,
+          });
+
+          console.log(`[ChatServer] Emitted conversations_list with ${conversations.length} conversations`);
+        } catch (error) {
+          console.error('[ChatServer] Error fetching conversations:', error);
+          socket.emit('error', {
+            event: 'get_conversations',
+            message: error instanceof Error ? error.message : 'Failed to fetch conversations',
+          });
+        }
+      });
+
+      // Start a new conversation
+      socket.on('start_new_conversation', async (payload: { mode?: 'consult' | 'assessment' }) => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'start_new_conversation',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          console.log(`[ChatServer] Starting new conversation for user ${socket.userId}`);
+
+          // Create new conversation
+          const newConversation = await this.conversationService.createConversation({
+            userId: socket.userId,
+            mode: payload.mode || 'consult',
+          });
+
+          // CRITICAL: Update socket's current conversation ID
+          socket.conversationId = newConversation.id;
+
+          // Emit conversation_created event
+          socket.emit('conversation_created', {
+            conversation: {
+              id: newConversation.id,
+              title: `New Chat`,
+              createdAt: newConversation.startedAt,
+              updatedAt: newConversation.lastActivityAt,
+              mode: newConversation.mode,
+            },
+          });
+
+          console.log(`[ChatServer] New conversation ${newConversation.id} created and set as active`);
+        } catch (error) {
+          console.error('[ChatServer] Error starting new conversation:', error);
+          socket.emit('error', {
+            event: 'start_new_conversation',
+            message: error instanceof Error ? error.message : 'Failed to create conversation',
+          });
+        }
+      });
+
+      // Abort streaming
+      socket.on('abort_stream', () => {
+        console.log(`[ChatServer] Stream abort requested by user ${socket.userId}`);
+
+        // Mark socket as aborted - the streaming loop will check this flag
+        socket.data.abortRequested = true;
+
+        // Emit acknowledgment - frontend will call finishStreaming()
+        socket.emit('stream_aborted', { conversationId: socket.conversationId });
       });
 
       // Handle disconnect

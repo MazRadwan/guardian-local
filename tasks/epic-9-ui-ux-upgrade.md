@@ -114,6 +114,83 @@ Stories are sized for **1-2 days each** with incremental testing.
 
 ---
 
+## Pre-Sprint Hardening: Multi-Conversation Integrity (Week 0)
+
+**Goal:** Fix WebSocket contract and authorization issues to enable proper multi-conversation functionality.
+
+### Story 9.0: Conversation Routing & Security Hardening
+**Estimated:** 6-8 hours (broken into 4 sub-stories)
+
+**Context:** Critical architectural issues discovered during Stories 9.13-9.14 implementation. Current WebSocket implementation falls back to stale `socket.conversationId` and lacks ownership validation, causing:
+- Messages sent to wrong conversations
+- Streaming responses bleeding across conversations
+- Security vulnerability (users can access other users' conversations)
+- Conversations not persisting correctly across reload
+
+**This story retrofits the WebSocket layer to support the multi-conversation UI already built in Stories 9.1-9.14.**
+
+**Priority:** BLOCKER - Must fix before Stories 9.13-9.14 can be production-ready.
+
+### Sub-Stories:
+
+**9.0a: Client Sends conversationId (2 hours)**
+- Update WebSocketClient.sendMessage() signature
+- Update useWebSocket hook
+- Update ChatInterface to pass activeConversationId
+- Update backend to require conversationId in payload
+
+**9.0b: Server Ownership Validation (2 hours)**
+- Add validateConversationOwnership() helper
+- Validate ownership in send_message
+- Validate ownership in get_history
+- Add security tests
+
+**9.0c: Streaming Conversation Scope (1.5 hours)**
+- Pass conversationId through streaming handlers
+- Validate chunks match active conversation
+- Ignore chunks for wrong conversation
+
+**9.0d: Integration Testing & Cleanup (1.5 hours)**
+- Manual testing of all scenarios
+- Remove debug logs
+- Update implementation log
+- Code review
+
+**Tasks:**
+- [ ] Update `apps/web/src/lib/websocket.ts` and `apps/web/src/hooks/useWebSocket.ts` to require `conversationId` on all outbound events (`send_message`, `get_history`, `start_new_conversation`, streaming handlers).
+- [ ] Ensure `chatStore` tracks the active conversation ID and `ChatInterface` includes it with every send/history request.
+- [ ] Modify `packages/backend/src/infrastructure/websocket/ChatServer.ts` to:
+  - [ ] Reject payloads missing `conversationId`.
+  - [ ] Verify `conversation.userId === socket.userId` before reads or writes.
+  - [ ] Stop relying on `socket.conversationId` fallbacks; use the explicit payload ID.
+  - [ ] Abort or ignore in-flight streams when a socket switches conversations.
+- [ ] Update `ConversationService` as needed to support ownership-aware queries.
+- [ ] Normalize streaming handlers so the client drops tokens that do not match the active conversation.
+
+**Acceptance Criteria:**
+- [ ] Messages sent after switching conversations persist to the selected conversation only.
+- [ ] Requesting history for another user’s conversation returns a 403/Unauthorized error.
+- [ ] Switching conversations mid-stream does not leak tokens into the new thread.
+- [ ] Manual QA reproduces the original bug report and confirms no cross-chat bleed after fixes.
+
+**Tests:**
+- [ ] Backend integration tests cover authorized vs unauthorized `send_message` and `get_history`.
+- [ ] WebSocket contract test validates explicit `conversationId` is required and persisted correctly.
+- [ ] Frontend unit/integration tests confirm stream handlers ignore mismatched conversation IDs and composer sends the active ID.
+
+**Files Modified:**
+- `apps/web/src/lib/websocket.ts`
+- `apps/web/src/hooks/useWebSocket.ts`
+- `apps/web/src/components/chat/ChatInterface.tsx`
+- `apps/web/src/stores/chatStore.ts`
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts`
+- `packages/backend/src/application/services/ConversationService.ts`
+- `packages/backend/__tests__/integration/websocket/*` (new/updated coverage)
+
+**Dependencies:** Must be completed before Sprint 1 stories (9.1+).
+
+---
+
 ## Sprint 1: Foundation & Layout (Week 1)
 
 **Goal:** New layout structure with functional sidebar toggle
@@ -584,7 +661,59 @@ Only `sidebarMinimized` persists to localStorage. Mobile drawer state (`sidebarO
 
 ---
 
-### Story 9.14a: Add Conversation Search Modal
+### Story 9.14a: Add Stop Stream Button
+**Estimated:** 2-3 hours
+**Priority:** High (Industry Standard Feature)
+
+**Context:**
+ChatGPT and Claude both provide a visible "Stop" button during streaming responses. This is a critical UX feature that allows users to interrupt unwanted or incorrect responses. Backend support already exists (`abort_stream` event), just needs UI implementation.
+
+**Tasks:**
+- [ ] Add `isStreaming` state to chatStore
+- [ ] Update `startStreaming()` to set `isStreaming: true`
+- [ ] Update `finishStreaming()` to set `isStreaming: false`
+- [ ] Modify Composer to show Stop button when `isStreaming === true`
+- [ ] Hide Send button during streaming
+- [ ] Stop button design:
+  - Icon: Square (Lucide `Square` icon)
+  - Shape: Circular button (same size as Send button)
+  - Color: Red background (`bg-red-500`)
+  - Tooltip: "Stop generating"
+- [ ] Click handler: Call `abortStream()` from useWebSocket
+- [ ] Show brief feedback: "Response stopped" toast/message (optional)
+- [ ] Re-enable composer input after stop
+
+**Acceptance Criteria:**
+- [ ] Stop button appears when assistant is streaming response
+- [ ] Send button hidden during streaming
+- [ ] Stop button is circular, red, with square icon
+- [ ] Clicking Stop immediately aborts stream
+- [ ] Streaming message stops growing
+- [ ] Composer input re-enabled after stop
+- [ ] Works correctly on both desktop and mobile
+
+**Tests:**
+- [ ] Start streaming response → Stop button appears
+- [ ] Click Stop → Stream aborts immediately
+- [ ] Composer input becomes enabled after stop
+- [ ] Partial response remains visible (not deleted)
+- [ ] Can send new message after stopping
+
+**Files Modified:**
+- `apps/web/src/stores/chatStore.ts` (add `isStreaming` state)
+- `apps/web/src/components/chat/Composer.tsx` (Stop button UI)
+- `apps/web/src/components/chat/ChatInterface.tsx` (connect abort handler)
+
+**Dependencies:** Story 9.8 (Composer) completed
+
+**Reference:**
+- ChatGPT behavior: Square stop button appears during generation
+- Claude behavior: "Stop generating" button during streaming
+- UX Spec: `.claude/skills/chatbot-ux-spec/SKILL.md` (line 182-190)
+
+---
+
+### Story 9.14b: Add Conversation Search Modal
 **Estimated:** 1 day
 
 **Tasks:**
@@ -980,7 +1109,7 @@ A story is considered **DONE** when:
 
 Epic 9 is considered **DONE** when:
 
-- [ ] All 26 stories complete
+- [ ] All 27 stories complete
 - [ ] Test suite passes (0 failures)
 - [ ] Coverage >70% maintained
 - [ ] Manual testing checklist complete

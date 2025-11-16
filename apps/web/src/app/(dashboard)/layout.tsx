@@ -28,6 +28,11 @@ export default function DashboardLayout({
     deleteConversation,
   } = useChatStore();
 
+  // Debug: Log conversations whenever they change
+  useEffect(() => {
+    console.log('[DashboardLayout] Conversations from chatStore:', conversations.length);
+  }, [conversations]);
+
   useEffect(() => {
     // Redirect to login if not authenticated
     if (!isLoading && !isAuthenticated) {
@@ -41,8 +46,16 @@ export default function DashboardLayout({
   };
 
   const handleNewChat = () => {
+    // Clear current messages
     clearMessages();
-    // TODO: Future - create new conversation in backend
+
+    // Set active conversation to null (new chat state)
+    setActiveConversation(null);
+
+    // Clear URL parameter
+    router.push('/chat');
+
+    // Focus will be handled by ChatInterface when it detects null conversation
   };
 
   // Separate handlers for desktop vs mobile toggle behavior

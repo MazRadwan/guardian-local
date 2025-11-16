@@ -8,7 +8,6 @@ export interface Conversation {
   createdAt: Date;
   updatedAt: Date;
   mode: 'consult' | 'assessment';
-  messageCount: number;
 }
 
 export interface ChatState {
@@ -16,6 +15,7 @@ export interface ChatState {
   isLoading: boolean;
   error: string | null;
   currentStreamingMessage: string | null;
+  isStreaming: boolean;
 
   // Sidebar state
   sidebarOpen: boolean;
@@ -46,7 +46,6 @@ export interface ChatState {
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
   updateConversationTitle: (id: string, title: string) => void;
-  updateConversationMessageCount: (id: string, count: number) => void;
   setConversations: (conversations: Conversation[]) => void;
 }
 
@@ -57,6 +56,7 @@ export const useChatStore = create<ChatState>()(
       isLoading: false,
       error: null,
       currentStreamingMessage: null,
+      isStreaming: false,
 
       // Sidebar state - closed by default on all devices (mobile-first)
       sidebarOpen: false,
@@ -71,10 +71,13 @@ export const useChatStore = create<ChatState>()(
           messages: [...state.messages, message],
         })),
 
-      setMessages: (messages) =>
+      setMessages: (messages) => {
+        console.log('[chatStore] setMessages called with', messages.length, 'messages');
         set({
           messages,
-        }),
+        });
+        console.log('[chatStore] State updated with new messages');
+      },
 
       updateLastMessage: (content) =>
         set((state) => {
@@ -104,6 +107,7 @@ export const useChatStore = create<ChatState>()(
       startStreaming: () =>
         set((state) => ({
           currentStreamingMessage: '',
+          isStreaming: true,
           messages: [
             ...state.messages,
             {
@@ -117,13 +121,17 @@ export const useChatStore = create<ChatState>()(
       finishStreaming: () =>
         set({
           currentStreamingMessage: null,
+          isStreaming: false,
         }),
 
       setLoading: (isLoading) => set({ isLoading }),
 
       setError: (error) => set({ error }),
 
-      clearMessages: () => set({ messages: [], error: null }),
+      clearMessages: () => {
+        console.log('[chatStore] clearMessages called');
+        set({ messages: [], error: null });
+      },
 
       // Sidebar actions
       toggleSidebar: () =>
@@ -171,25 +179,22 @@ export const useChatStore = create<ChatState>()(
           ),
         })),
 
-      updateConversationMessageCount: (id, count) =>
-        set((state) => ({
-          conversations: state.conversations.map((conv) =>
-            conv.id === id ? { ...conv, messageCount: count, updatedAt: new Date() } : conv
-          ),
-        })),
-
-      setConversations: (conversations) =>
+      setConversations: (conversations) => {
+        console.log('[chatStore] setConversations called with', conversations.length, 'conversations');
         set({
           conversations,
-        }),
+        });
+        console.log('[chatStore] State updated with new conversations');
+      },
     }),
     {
       name: 'guardian-chat-store',
-      // Persist sidebar preferences, active conversation ID, and conversations array
+      // Persist sidebar preferences and active conversation ID only
+      // Conversations are NOT persisted - always fetched from backend per user
       partialize: (state) => ({
         sidebarMinimized: state.sidebarMinimized,
         activeConversationId: state.activeConversationId,
-        conversations: state.conversations,
+        // conversations NOT persisted - prevents showing other users' conversations
       }),
     }
   )

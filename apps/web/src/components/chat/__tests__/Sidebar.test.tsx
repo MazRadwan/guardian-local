@@ -19,7 +19,6 @@ describe('Sidebar', () => {
       createdAt: new Date('2025-01-13T10:00:00Z'),
       updatedAt: new Date('2025-01-13T12:00:00Z'),
       mode: 'consult',
-      messageCount: 5,
     },
     {
       id: 'conv-2',
@@ -27,7 +26,6 @@ describe('Sidebar', () => {
       createdAt: new Date('2025-01-13T09:00:00Z'),
       updatedAt: new Date('2025-01-13T11:00:00Z'),
       mode: 'assessment',
-      messageCount: 3,
     },
   ];
 
@@ -251,33 +249,31 @@ describe('Sidebar', () => {
     });
 
     it('toggle button in separate section from new chat button in expanded state', () => {
-      const { container } = render(<Sidebar {...mockProps} isMinimized={false} />);
+      render(<Sidebar {...mockProps} isMinimized={false} />);
 
-      // Find sections (both have border-b)
-      const sections = container.querySelectorAll('.border-b.border-gray-200');
-      expect(sections.length).toBeGreaterThanOrEqual(2);
-
-      // Toggle and new chat should be in different sections
+      // Toggle and new chat should both be present
       const toggleButton = screen.getByTitle('Minimize sidebar');
       const newChatButton = screen.getByText('New chat');
 
       expect(toggleButton).toBeInTheDocument();
       expect(newChatButton).toBeInTheDocument();
+
+      // They should be in different parent containers (separate sections)
+      expect(toggleButton.parentElement).not.toBe(newChatButton.parentElement);
     });
 
     it('toggle button in separate section from new chat button in minimized state', () => {
-      const { container } = render(<Sidebar {...mockProps} isMinimized={true} />);
+      render(<Sidebar {...mockProps} isMinimized={true} />);
 
-      // Find sections (both have border-b)
-      const sections = container.querySelectorAll('.border-b.border-gray-200');
-      expect(sections.length).toBeGreaterThanOrEqual(2);
-
-      // Toggle and new chat should be in different sections
+      // Toggle and new chat should both be present
       const toggleButton = screen.getByTitle('Expand sidebar');
       const newChatButton = screen.getByTitle('New Chat');
 
       expect(toggleButton).toBeInTheDocument();
       expect(newChatButton).toBeInTheDocument();
+
+      // They should be in different parent containers (separate sections)
+      expect(toggleButton.parentElement).not.toBe(newChatButton.parentElement);
     });
   });
 
@@ -286,7 +282,7 @@ describe('Sidebar', () => {
       render(<Sidebar {...mockProps} isMinimized={true} />);
 
       expect(screen.getByTitle('New Chat')).toBeInTheDocument();
-      expect(screen.getByTitle('Test Conversation 1')).toBeInTheDocument(); // First conversation
+      expect(screen.getByTitle('Search conversations')).toBeInTheDocument();
       expect(screen.getByTitle('Logout')).toBeInTheDocument();
     });
 
@@ -306,7 +302,7 @@ describe('Sidebar', () => {
       render(<Sidebar {...mockProps} isMinimized={true} />);
 
       expect(screen.getByLabelText('New Chat')).toBeInTheDocument();
-      expect(screen.getByLabelText('Select Test Conversation 1')).toBeInTheDocument(); // First conversation
+      expect(screen.getByLabelText('Search conversations')).toBeInTheDocument();
       expect(screen.getByLabelText('Logout')).toBeInTheDocument();
     });
 
@@ -357,9 +353,10 @@ describe('Sidebar', () => {
       const aside = container.querySelector('aside');
       expect(aside).toBeInTheDocument();
 
-      // Three sections: header, middle, footer
-      const borderDivs = container.querySelectorAll('.border-b, .border-t');
-      expect(borderDivs.length).toBeGreaterThanOrEqual(2);
+      // Verify three main sections exist (toggle, new chat/conversations, footer)
+      // Count direct children divs with p-2 or p-3 (section wrappers)
+      const sections = container.querySelectorAll('aside > div.p-2, aside > div.p-3');
+      expect(sections.length).toBeGreaterThanOrEqual(2);
     });
   });
 
@@ -464,17 +461,15 @@ describe('Sidebar', () => {
       expect(screen.queryByTestId('conversation-list')).not.toBeInTheDocument();
     });
 
-    it('renders conversation icons in minimized state', () => {
+    it('renders search icon in minimized state instead of conversation icons', () => {
       render(<Sidebar {...mockProps} isMinimized={true} />);
 
-      // Should show first letter of each conversation title
-      const iconButtons = screen.getAllByRole('button').filter(
-        (btn) => btn.textContent === 'T' // First letter of "Test Conversation"
-      );
-      expect(iconButtons.length).toBeGreaterThan(0);
+      // Should show search icon (not conversation letter icons)
+      expect(screen.getByTitle('Search conversations')).toBeInTheDocument();
+      expect(screen.getByLabelText('Search conversations')).toBeInTheDocument();
     });
 
-    it('renders empty state icon in minimized state when no conversations', () => {
+    it('renders search icon in minimized state even when no conversations', () => {
       render(
         <Sidebar
           {...mockProps}
@@ -483,23 +478,8 @@ describe('Sidebar', () => {
         />
       );
 
-      expect(screen.getByTitle('No conversations')).toBeInTheDocument();
-    });
-
-    it('highlights active conversation in minimized state', () => {
-      render(<Sidebar {...mockProps} isMinimized={true} />);
-
-      const activeButton = screen.getByTitle('Test Conversation 1');
-      expect(activeButton).toHaveClass('bg-blue-50', 'text-blue-700');
-    });
-
-    it('calls onSelectConversation when clicking conversation icon', () => {
-      render(<Sidebar {...mockProps} isMinimized={true} />);
-
-      const conversationButton = screen.getByTitle('Test Conversation 1');
-      fireEvent.click(conversationButton);
-
-      expect(mockProps.onSelectConversation).toHaveBeenCalledWith('conv-1');
+      // Search icon should still be present
+      expect(screen.getByTitle('Search conversations')).toBeInTheDocument();
     });
 
     it('passes correct props to ConversationList', () => {

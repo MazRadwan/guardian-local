@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.11.0",
+    "chrome-devtools-mcp": "^0.10.1",
     "dotenv": "^16.4.7",
     "drizzle-kit": "latest",
     "eslint": "^9.18.0",

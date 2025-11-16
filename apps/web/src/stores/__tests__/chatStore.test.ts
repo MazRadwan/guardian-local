@@ -135,6 +135,7 @@ describe('chatStore', () => {
     expect(result.current.messages[0].role).toBe('assistant');
     expect(result.current.messages[0].content).toBe('');
     expect(result.current.currentStreamingMessage).toBe('');
+    expect(result.current.isStreaming).toBe(true);
   });
 
   it('finishes streaming', () => {
@@ -146,6 +147,22 @@ describe('chatStore', () => {
     });
 
     expect(result.current.currentStreamingMessage).toBeNull();
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it('isStreaming initializes to false', () => {
+    const { result } = renderHook(() => useChatStore());
+    expect(result.current.isStreaming).toBe(false);
+  });
+
+  it('isStreaming set to true when startStreaming called', () => {
+    const { result } = renderHook(() => useChatStore());
+
+    act(() => {
+      result.current.startStreaming();
+    });
+
+    expect(result.current.isStreaming).toBe(true);
   });
 
   it('sets loading state', () => {
@@ -421,7 +438,7 @@ describe('chatStore', () => {
       }
     });
 
-    it('persisted state includes all required keys', () => {
+    it('persisted state includes only sidebar and active conversation ID (not conversations)', () => {
       const { result } = renderHook(() => useChatStore());
 
       const mockConversation = {
@@ -430,7 +447,6 @@ describe('chatStore', () => {
         createdAt: new Date('2025-01-13T10:00:00Z'),
         updatedAt: new Date('2025-01-13T10:00:00Z'),
         mode: 'consult' as const,
-        messageCount: 5,
       };
 
       act(() => {
@@ -439,20 +455,19 @@ describe('chatStore', () => {
         result.current.addConversation(mockConversation);
       });
 
-      // Check localStorage contains all required persisted keys
+      // Check localStorage contains only sidebar and active conversation ID
       const stored = localStorage.getItem('guardian-chat-store');
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored!);
 
-      // Verify all three keys are persisted
+      // Verify only two keys are persisted (NOT conversations)
       expect(parsed.state).toHaveProperty('sidebarMinimized');
       expect(parsed.state).toHaveProperty('activeConversationId');
-      expect(parsed.state).toHaveProperty('conversations');
+      expect(parsed.state).not.toHaveProperty('conversations');
 
       // Verify correct values
       expect(parsed.state.sidebarMinimized).toBe(true);
       expect(parsed.state.activeConversationId).toBe('conv-123');
-      expect(parsed.state.conversations).toHaveLength(1);
     });
 
     it('persists active conversation ID to localStorage', () => {
@@ -469,7 +484,7 @@ describe('chatStore', () => {
       expect(parsed.state.activeConversationId).toBe('conv-123');
     });
 
-    it('persists conversations array with full structure', () => {
+    it('does not persist conversations array (fetched from backend)', () => {
       const { result } = renderHook(() => useChatStore());
 
       const mockConversation = {
@@ -478,7 +493,6 @@ describe('chatStore', () => {
         createdAt: new Date('2025-01-13T10:00:00Z'),
         updatedAt: new Date('2025-01-13T10:00:00Z'),
         mode: 'consult' as const,
-        messageCount: 5,
       };
 
       const mockConversation2 = {
@@ -487,7 +501,6 @@ describe('chatStore', () => {
         createdAt: new Date('2025-01-13T11:00:00Z'),
         updatedAt: new Date('2025-01-13T11:00:00Z'),
         mode: 'assessment' as const,
-        messageCount: 3,
       };
 
       act(() => {
@@ -495,23 +508,13 @@ describe('chatStore', () => {
         result.current.addConversation(mockConversation2);
       });
 
-      // Check localStorage
+      // Check localStorage - conversations should NOT be persisted
       const stored = localStorage.getItem('guardian-chat-store');
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored!);
-      expect(parsed.state.conversations).toBeDefined();
-      expect(parsed.state.conversations).toHaveLength(2);
 
-      // Verify first conversation structure
-      expect(parsed.state.conversations[0].id).toBe('conv-123');
-      expect(parsed.state.conversations[0].title).toBe('Test Conversation');
-      expect(parsed.state.conversations[0].mode).toBe('consult');
-      expect(parsed.state.conversations[0].messageCount).toBe(5);
-
-      // Verify second conversation
-      expect(parsed.state.conversations[1].id).toBe('conv-456');
-      expect(parsed.state.conversations[1].title).toBe('Another Conversation');
-      expect(parsed.state.conversations[1].mode).toBe('assessment');
+      // Conversations should NOT be in persisted state
+      expect(parsed.state.conversations).toBeUndefined();
     });
   });
 
@@ -660,23 +663,6 @@ describe('chatStore', () => {
       });
 
       expect(result.current.conversations[0].title).toBe('Test Conversation');
-    });
-
-    it('updates conversation message count', () => {
-      const { result } = renderHook(() => useChatStore());
-
-      act(() => {
-        result.current.addConversation(mockConversation);
-      });
-
-      const originalUpdatedAt = result.current.conversations[0].updatedAt;
-
-      act(() => {
-        result.current.updateConversationMessageCount('conv-123', 10);
-      });
-
-      expect(result.current.conversations[0].messageCount).toBe(10);
-      expect(result.current.conversations[0].updatedAt).not.toEqual(originalUpdatedAt);
     });
 
     it('sets conversations array (replaces all)', () => {
