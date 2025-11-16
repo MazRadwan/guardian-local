@@ -331,6 +331,13 @@ export function ChatInterface() {
         timestamp: new Date(),
       });
 
+      // Scroll to bottom to show new question and upcoming response
+      setTimeout(() => {
+        if (messageListRef.current) {
+          messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
+        }
+      }, 50);
+
       // Set loading state (show typing indicator)
       setLoading(true);
 
