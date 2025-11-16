@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { User, Bot } from 'lucide-react';
+import { User, Bot, Copy, Check } from 'lucide-react';
 
 export interface MessageComponent {
   type: 'button' | 'link' | 'form';
@@ -28,6 +28,20 @@ export function ChatMessage({
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const isSystem = role === 'system';
+
+  // Copy to clipboard state
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setIsCopied(true);
+      // Reset after 2 seconds
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+    }
+  };
 
   return (
     <div
@@ -82,6 +96,28 @@ export function ChatMessage({
               minute: '2-digit',
             })}
           </div>
+        )}
+
+        {/* Copy Button - Assistant Messages Only */}
+        {!isUser && !isSystem && (
+          <button
+            onClick={handleCopy}
+            className="mt-2 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+            aria-label={isCopied ? 'Copied to clipboard' : 'Copy message'}
+            title={isCopied ? 'Copied!' : 'Copy to clipboard'}
+          >
+            {isCopied ? (
+              <>
+                <Check className="h-4 w-4 text-green-600" />
+                <span className="text-green-600 font-medium">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
         )}
       </div>
     </div>
