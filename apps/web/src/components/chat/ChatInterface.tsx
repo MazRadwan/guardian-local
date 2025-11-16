@@ -451,7 +451,7 @@ export function ChatInterface() {
               regeneratingMessageIndex={regeneratingMessageIndex}
             />
           </div>
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 relative z-10">
             <Composer
               ref={composerRef}
               onSendMessage={handleSendMessage}
