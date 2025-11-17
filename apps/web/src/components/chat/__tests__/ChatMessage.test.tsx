@@ -172,4 +172,122 @@ describe('ChatMessage', () => {
       consoleErrorSpy.mockRestore();
     });
   });
+
+  // Regenerate Button Tests
+  describe('Regenerate Button', () => {
+    it('renders regenerate button for assistant messages when callback provided', () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Response"
+          messageIndex={1}
+          onRegenerate={onRegenerate}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: 'Regenerate response' })).toBeInTheDocument();
+      expect(screen.getByText('Regenerate')).toBeInTheDocument();
+    });
+
+    it('does not render regenerate button for user messages', () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="user"
+          content="Question"
+          messageIndex={0}
+          onRegenerate={onRegenerate}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: 'Regenerate response' })).not.toBeInTheDocument();
+    });
+
+    it('does not render regenerate button for system messages', () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="system"
+          content="System message"
+          messageIndex={0}
+          onRegenerate={onRegenerate}
+        />
+      );
+
+      expect(screen.queryByRole('button', { name: 'Regenerate response' })).not.toBeInTheDocument();
+    });
+
+    it('does not render regenerate button when callback not provided', () => {
+      render(<ChatMessage role="assistant" content="Response" messageIndex={1} />);
+
+      expect(screen.queryByRole('button', { name: 'Regenerate response' })).not.toBeInTheDocument();
+    });
+
+    it('calls onRegenerate with messageIndex when clicked', async () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Response"
+          messageIndex={3}
+          onRegenerate={onRegenerate}
+        />
+      );
+
+      const regenerateButton = screen.getByRole('button', { name: 'Regenerate response' });
+      await userEvent.click(regenerateButton);
+
+      expect(onRegenerate).toHaveBeenCalledWith(3);
+      expect(onRegenerate).toHaveBeenCalledTimes(1);
+    });
+
+    it('disables button during regeneration', () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Response"
+          messageIndex={1}
+          onRegenerate={onRegenerate}
+          isRegenerating={true}
+        />
+      );
+
+      const regenerateButton = screen.getByRole('button', { name: 'Regenerate response' });
+      expect(regenerateButton).toBeDisabled();
+    });
+
+    it('shows spinning RefreshCw icon during regeneration', () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Response"
+          messageIndex={1}
+          onRegenerate={onRegenerate}
+          isRegenerating={true}
+        />
+      );
+
+      const regenerateButton = screen.getByRole('button', { name: 'Regenerate response' });
+      const icon = regenerateButton.querySelector('svg');
+      expect(icon).toHaveClass('animate-spin');
+    });
+
+    it('both copy and regenerate buttons appear together', () => {
+      const onRegenerate = jest.fn();
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Response"
+          messageIndex={1}
+          onRegenerate={onRegenerate}
+        />
+      );
+
+      expect(screen.getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Regenerate response' })).toBeInTheDocument();
+    });
+  });
 });

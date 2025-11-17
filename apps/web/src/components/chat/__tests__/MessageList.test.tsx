@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MessageList } from '../MessageList';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
 
@@ -180,6 +181,109 @@ describe('MessageList', () => {
       const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
       const typingIndicator = centeredContainer?.querySelector('[data-testid="typing-indicator"]');
       expect(typingIndicator).toBeInTheDocument();
+    });
+  });
+
+  // Scroll-to-bottom button
+  describe('Scroll-to-Bottom Button', () => {
+    it('button hidden by default when at bottom', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      render(<MessageList messages={messages} />);
+
+      const button = screen.queryByLabelText('Scroll to bottom');
+      expect(button).not.toBeInTheDocument();
+    });
+
+    it('button appears when scrolled up', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+        { role: 'assistant', content: 'Message 2', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll properties (scrolled up 100px from bottom)
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      const button = screen.getByLabelText('Scroll to bottom');
+      expect(button).toBeInTheDocument();
+    });
+
+    it('button has correct styling', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll to show button
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      const button = screen.getByLabelText('Scroll to bottom');
+
+      expect(button).toHaveClass('absolute', 'bottom-6', 'right-6', 'rounded-full');
+      expect(button).toHaveClass('bg-purple-600');
+      expect(button).toHaveAttribute('title', 'Scroll to latest message');
+    });
+
+    it('clicking button triggers scroll to bottom', async () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll properties
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+
+      let currentScrollTop = 300;
+      Object.defineProperty(scrollContainer, 'scrollTop', {
+        get() {
+          return currentScrollTop;
+        },
+        set(value: number) {
+          currentScrollTop = value;
+        },
+      });
+
+      // Trigger scroll to show button
+      fireEvent.scroll(scrollContainer);
+
+      const button = screen.getByLabelText('Scroll to bottom');
+      await userEvent.click(button);
+
+      // Should set scrollTop to scrollHeight
+      expect(currentScrollTop).toBe(1000);
+    });
+
+    it('scroll container has scroll-smooth class', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto');
+      expect(scrollContainer).toHaveClass('scroll-smooth');
+      expect(scrollContainer).toHaveClass('relative');
     });
   });
 });

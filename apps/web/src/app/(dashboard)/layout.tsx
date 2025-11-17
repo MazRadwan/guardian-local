@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatStore } from '@/stores/chatStore';
 import { Sidebar } from '@/components/chat/Sidebar';
-import { User, Menu } from 'lucide-react';
+import { User, PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardLayout({
@@ -21,6 +21,7 @@ export default function DashboardLayout({
     sidebarMinimized,
     toggleSidebar,
     toggleSidebarMinimized,
+    setSidebarMinimized,
     clearMessages,
     conversations,
     activeConversationId,
@@ -65,8 +66,12 @@ export default function DashboardLayout({
   };
 
   const handleMobileToggle = () => {
-    // Mobile: Toggle open/closed state
+    // Mobile: Toggle open/closed state AND ensure expanded (conversation history visible)
     toggleSidebar();
+    // When opening sidebar on mobile, always show full conversation list (not minimized)
+    if (!sidebarOpen) {
+      setSidebarMinimized(false);
+    }
   };
 
   // Show loading state while checking auth
@@ -111,7 +116,7 @@ export default function DashboardLayout({
         {/* Header */}
         <header className="flex items-center justify-between bg-white px-6 py-4">
           <div className="flex items-center gap-4">
-            {/* Mobile menu button - only visible on mobile/tablet */}
+            {/* Mobile sidebar toggle - only visible on mobile/tablet */}
             <Button
               variant="ghost"
               size="icon"
@@ -119,7 +124,7 @@ export default function DashboardLayout({
               className="md:hidden"
               aria-label="Toggle sidebar"
             >
-              <Menu className="h-5 w-5 text-gray-700" />
+              <PanelLeft className="h-5 w-5 text-gray-700" />
             </Button>
             <h1 className="text-2xl font-bold text-gray-900">Guardian</h1>
             {/* Connection status indicator */}

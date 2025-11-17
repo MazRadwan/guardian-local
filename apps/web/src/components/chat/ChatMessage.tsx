@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw } from 'lucide-react';
 
 export interface MessageComponent {
   type: 'button' | 'link' | 'form';
@@ -17,6 +17,9 @@ export interface ChatMessageProps {
   components?: MessageComponent[];
   timestamp?: Date;
   className?: string;
+  messageIndex?: number;
+  onRegenerate?: (messageIndex: number) => void;
+  isRegenerating?: boolean;
 }
 
 export function ChatMessage({
@@ -25,6 +28,9 @@ export function ChatMessage({
   components = [],
   timestamp,
   className,
+  messageIndex,
+  onRegenerate,
+  isRegenerating = false,
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const isSystem = role === 'system';
@@ -40,6 +46,12 @@ export function ChatMessage({
       setTimeout(() => setIsCopied(false), 2000);
     } catch (error) {
       console.error('Failed to copy message:', error);
+    }
+  };
+
+  const handleRegenerateClick = () => {
+    if (messageIndex !== undefined && onRegenerate) {
+      onRegenerate(messageIndex);
     }
   };
 
@@ -98,26 +110,43 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* Copy Button - Assistant Messages Only */}
+        {/* Message Actions - Assistant Messages Only */}
         {!isUser && !isSystem && (
-          <button
-            onClick={handleCopy}
-            className="mt-2 flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
-            aria-label={isCopied ? 'Copied to clipboard' : 'Copy message'}
-            title={isCopied ? 'Copied!' : 'Copy to clipboard'}
-          >
-            {isCopied ? (
-              <>
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="text-green-600 font-medium">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy className="h-4 w-4" />
-                <span>Copy</span>
-              </>
+          <div className="mt-2 flex items-center gap-2">
+            {/* Copy Button */}
+            <button
+              onClick={handleCopy}
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
+              aria-label={isCopied ? 'Copied to clipboard' : 'Copy message'}
+              title={isCopied ? 'Copied!' : 'Copy to clipboard'}
+            >
+              {isCopied ? (
+                <>
+                  <Check className="h-4 w-4 text-green-600" />
+                  <span className="text-green-600 font-medium">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+
+            {/* Regenerate Button */}
+            {onRegenerate && messageIndex !== undefined && (
+              <button
+                onClick={handleRegenerateClick}
+                disabled={isRegenerating}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Regenerate response"
+                title="Regenerate response"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRegenerating ? 'animate-spin' : ''}`} />
+                <span>Regenerate</span>
+              </button>
             )}
-          </button>
+          </div>
         )}
       </div>
     </div>

@@ -1,19 +1,24 @@
 'use client';
 
-import React, { useEffect, useRef, forwardRef } from 'react';
+import React, { useEffect, useRef, forwardRef, useState } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
+import { ChevronDown } from 'lucide-react';
 
 export interface MessageListProps {
   messages: ChatMessageType[];
   isLoading?: boolean;
+  isStreaming?: boolean;
+  onRegenerate?: (messageIndex: number) => void;
+  regeneratingMessageIndex?: number | null;
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
+    const [showScrollButton, setShowScrollButton] = useState(false);
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
@@ -21,6 +26,34 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
     }, [messages]);
+
+    // Continuous auto-scroll during streaming (keeps latest token visible above composer)
+    useEffect(() => {
+      if (!isStreaming || messages.length === 0) return;
+
+      // During streaming, continuously scroll to bottom to keep latest tokens visible
+      const scrollInterval = setInterval(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        }
+      }, 50); // Scroll every 50ms during streaming for smooth tracking
+
+      return () => clearInterval(scrollInterval);
+    }, [isStreaming, messages.length]);
+
+    // Handle scroll position to show/hide scroll-to-bottom button
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+      const element = e.currentTarget;
+      const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 50;
+      setShowScrollButton(!isAtBottom);
+    };
+
+    // Scroll to bottom when button clicked
+    const handleScrollToBottom = () => {
+      if (scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      }
+    };
 
     if (messages.length === 0 && !isLoading) {
       return (
@@ -47,7 +80,11 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     }
 
     return (
-      <div ref={ref || scrollContainerRef} className="flex h-full min-h-0 flex-col overflow-y-auto">
+      <div
+        ref={ref || scrollContainerRef}
+        className="relative flex h-full min-h-0 flex-col overflow-y-auto scroll-smooth"
+        onScroll={handleScroll}
+      >
         {/* Centered content container (max-w-3xl = 768px) */}
         <div className="max-w-3xl mx-auto w-full px-4 py-6">
           {messages.map((message, index) => (
@@ -57,6 +94,9 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
               content={message.content}
               components={message.components}
               timestamp={message.timestamp}
+              messageIndex={index}
+              onRegenerate={onRegenerate}
+              isRegenerating={regeneratingMessageIndex === index}
             />
           ))}
           {isLoading && (
@@ -84,6 +124,18 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
           )}
           <div ref={bottomRef} />
         </div>
+
+        {/* Scroll-to-bottom button */}
+        {showScrollButton && (
+          <button
+            onClick={handleScrollToBottom}
+            className="absolute bottom-6 right-6 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-lg transition-all p-2"
+            aria-label="Scroll to bottom"
+            title="Scroll to latest message"
+          >
+            <ChevronDown className="h-5 w-5" />
+          </button>
+        )}
       </div>
     );
   }
