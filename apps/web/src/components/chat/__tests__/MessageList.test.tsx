@@ -286,4 +286,145 @@ describe('MessageList', () => {
       expect(scrollContainer).toHaveClass('relative');
     });
   });
+
+  // Scroll shadows
+  describe('Scroll Shadows (Story 9.18)', () => {
+    it('top shadow hidden when at top of scroll', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll at top
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 0, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      // Top shadow should not be visible (opacity 0)
+      const topShadow = container.querySelector('.absolute.top-0');
+      expect(topShadow).not.toBeInTheDocument();
+    });
+
+    it('top shadow appears when scrolled down', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll 60px from top
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 60, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      // Top shadow should be visible
+      const topShadow = container.querySelector('.absolute.top-0');
+      expect(topShadow).toBeInTheDocument();
+    });
+
+    it('bottom shadow appears when scrollable content exists below', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll with content below (100px from bottom)
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      // Bottom shadow should be visible
+      const bottomShadow = container.querySelector('.absolute.bottom-0');
+      expect(bottomShadow).toBeInTheDocument();
+    });
+
+    it('bottom shadow hidden when at bottom', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll at exact bottom (0px from bottom)
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 400, writable: true });
+      // Distance from bottom = 1000 - 400 - 600 = 0px
+
+      fireEvent.scroll(scrollContainer);
+
+      // Bottom shadow should not be visible (opacity = 0)
+      const bottomShadow = container.querySelector('.absolute.bottom-0');
+      expect(bottomShadow).not.toBeInTheDocument();
+    });
+
+    it('shadows are hidden from accessibility tree', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll to show both shadows
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      const topShadow = container.querySelector('.absolute.top-0');
+      const bottomShadow = container.querySelector('.absolute.bottom-0');
+
+      if (topShadow) {
+        expect(topShadow).toHaveAttribute('aria-hidden', 'true');
+      }
+      if (bottomShadow) {
+        expect(bottomShadow).toHaveAttribute('aria-hidden', 'true');
+      }
+
+      // At least one shadow should be visible in this scroll position
+      expect(topShadow || bottomShadow).toBeTruthy();
+    });
+
+    it('shadows have pointer-events-none to not block interactions', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock scroll to show both shadows
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
+
+      fireEvent.scroll(scrollContainer);
+
+      const topShadow = container.querySelector('.absolute.top-0');
+      const bottomShadow = container.querySelector('.absolute.bottom-0');
+
+      expect(topShadow).toHaveClass('pointer-events-none');
+      expect(bottomShadow).toHaveClass('pointer-events-none');
+    });
+  });
 });

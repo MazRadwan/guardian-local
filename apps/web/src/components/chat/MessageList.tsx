@@ -19,6 +19,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [shadowState, setShadowState] = useState({ top: 0, bottom: 0 });
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
@@ -41,11 +42,23 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       return () => clearInterval(scrollInterval);
     }, [isStreaming, messages.length]);
 
-    // Handle scroll position to show/hide scroll-to-bottom button
+    // Handle scroll position to show/hide scroll-to-bottom button and update shadow opacities
     const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
       const element = e.currentTarget;
       const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 50;
       setShowScrollButton(!isAtBottom);
+
+      // Calculate shadow opacity values (Story 9.18)
+      // Top shadow: fade in as user scrolls down from top (max fade after 60px scroll)
+      const topScrollRatio = Math.min(element.scrollTop / 60, 1);
+      const topOpacity = topScrollRatio * 0.8; // Max opacity 0.8
+
+      // Bottom shadow: fade in when scrollable content exists below
+      const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+      const bottomScrollRatio = Math.min(distanceFromBottom / 50, 1);
+      const bottomOpacity = bottomScrollRatio * 0.8; // Max opacity 0.8
+
+      setShadowState({ top: topOpacity, bottom: bottomOpacity });
     };
 
     // Scroll to bottom when button clicked
@@ -85,6 +98,19 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
         className="relative flex h-full min-h-0 flex-col overflow-y-auto scroll-smooth"
         onScroll={handleScroll}
       >
+        {/* Top shadow gradient (Story 9.18) */}
+        {shadowState.top > 0 && (
+          <div
+            className="absolute top-0 left-0 right-0 h-8 pointer-events-none z-10"
+            style={{
+              background: 'linear-gradient(to bottom, rgba(0, 0, 0, 0.1), transparent)',
+              opacity: shadowState.top,
+              transition: 'opacity 150ms ease-in-out',
+            }}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Centered content container (max-w-3xl = 768px) */}
         <div className="max-w-3xl mx-auto w-full px-4 py-6">
           {messages.map((message, index) => (
@@ -125,11 +151,24 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
           <div ref={bottomRef} />
         </div>
 
+        {/* Bottom shadow gradient (Story 9.18) */}
+        {shadowState.bottom > 0 && (
+          <div
+            className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none z-10"
+            style={{
+              background: 'linear-gradient(to top, rgba(0, 0, 0, 0.1), transparent)',
+              opacity: shadowState.bottom,
+              transition: 'opacity 150ms ease-in-out',
+            }}
+            aria-hidden="true"
+          />
+        )}
+
         {/* Scroll-to-bottom button */}
         {showScrollButton && (
           <button
             onClick={handleScrollToBottom}
-            className="absolute bottom-6 right-6 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-lg transition-all p-2"
+            className="absolute bottom-6 right-6 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-lg transition-all p-2 z-20"
             aria-label="Scroll to bottom"
             title="Scroll to latest message"
           >
