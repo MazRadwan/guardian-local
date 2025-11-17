@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MessageList } from '../MessageList';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
@@ -10,6 +10,36 @@ jest.mock('../ChatMessage', () => ({
     <div data-testid={`chat-message-${role}`}>{content}</div>
   ),
 }));
+
+// Mock IntersectionObserver
+let mockIntersectionObserverCallback: IntersectionObserverCallback;
+const mockObserve = jest.fn();
+const mockDisconnect = jest.fn();
+
+global.IntersectionObserver = jest.fn().mockImplementation((callback) => {
+  mockIntersectionObserverCallback = callback;
+  return {
+    observe: mockObserve,
+    disconnect: mockDisconnect,
+    unobserve: jest.fn(),
+    root: null,
+    rootMargin: '',
+    thresholds: [0.1],
+    takeRecords: jest.fn(),
+  };
+}) as unknown as typeof IntersectionObserver;
+
+// Helper to trigger IntersectionObserver callback (wrapped in act)
+const triggerIntersection = async (isIntersecting: boolean) => {
+  await act(async () => {
+    if (mockIntersectionObserverCallback) {
+      mockIntersectionObserverCallback(
+        [{ isIntersecting } as IntersectionObserverEntry],
+        {} as IntersectionObserver
+      );
+    }
+  });
+};
 
 describe('MessageList', () => {
   it('renders empty state when no messages', () => {
@@ -186,18 +216,32 @@ describe('MessageList', () => {
 
   // Scroll-to-bottom button
   describe('Scroll-to-Bottom Button', () => {
-    it('button hidden by default when at bottom', () => {
+    beforeEach(() => {
+      mockObserve.mockClear();
+      mockDisconnect.mockClear();
+    });
+
+    it('button hidden by default when at bottom', async () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Message 1', timestamp: new Date() },
       ];
 
-      render(<MessageList messages={messages} />);
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock no overflow (content fits in container)
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+
+      // Trigger intersection - at bottom
+      await triggerIntersection(true);
 
       const button = screen.queryByLabelText('Scroll to bottom');
       expect(button).not.toBeInTheDocument();
     });
 
-    it('button appears when scrolled up', () => {
+    it('button appears when scrolled up with overflow', async () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Message 1', timestamp: new Date() },
         { role: 'assistant', content: 'Message 2', timestamp: new Date() },
@@ -207,18 +251,18 @@ describe('MessageList', () => {
 
       const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
 
-      // Mock scroll properties (scrolled up 100px from bottom)
+      // Mock overflow content (scrollHeight > clientHeight)
       Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
       Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
-      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
 
-      fireEvent.scroll(scrollContainer);
+      // Trigger intersection - NOT at bottom
+      await triggerIntersection(false);
 
       const button = screen.getByLabelText('Scroll to bottom');
       expect(button).toBeInTheDocument();
     });
 
-    it('button has correct styling', () => {
+    it('button hidden when no overflow even if not intersecting', async () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Message 1', timestamp: new Date() },
       ];
@@ -227,21 +271,41 @@ describe('MessageList', () => {
 
       const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
 
-      // Mock scroll to show button
+      // Mock no overflow (content fits in container)
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 600, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+
+      // Trigger intersection - NOT at bottom but no overflow
+      await triggerIntersection(false);
+
+      const button = screen.queryByLabelText('Scroll to bottom');
+      expect(button).not.toBeInTheDocument();
+    });
+
+    it('button has correct styling and z-index', async () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock overflow
       Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
       Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
-      Object.defineProperty(scrollContainer, 'scrollTop', { value: 300, writable: true });
 
-      fireEvent.scroll(scrollContainer);
+      // Trigger intersection - NOT at bottom
+      await triggerIntersection(false);
 
       const button = screen.getByLabelText('Scroll to bottom');
 
-      expect(button).toHaveClass('absolute', 'bottom-6', 'right-6', 'rounded-full');
+      expect(button).toHaveClass('absolute', 'bottom-6', 'right-6', 'z-10', 'rounded-full');
       expect(button).toHaveClass('bg-gray-700', 'text-white');
       expect(button).toHaveAttribute('title', 'Scroll to latest message');
     });
 
-    it('clicking button triggers scroll to bottom', async () => {
+    it('clicking button scrolls to bottom using scrollIntoView', async () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Message 1', timestamp: new Date() },
       ];
@@ -250,28 +314,31 @@ describe('MessageList', () => {
 
       const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
 
-      // Mock scroll properties
+      // Mock overflow
       Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
       Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
 
-      let currentScrollTop = 300;
-      Object.defineProperty(scrollContainer, 'scrollTop', {
-        get() {
-          return currentScrollTop;
-        },
-        set(value: number) {
-          currentScrollTop = value;
-        },
-      });
-
-      // Trigger scroll to show button
-      fireEvent.scroll(scrollContainer);
+      // Trigger intersection - NOT at bottom
+      await triggerIntersection(false);
 
       const button = screen.getByLabelText('Scroll to bottom');
+
+      // Mock scrollIntoView on bottomRef
+      const bottomRef = container.querySelector('.max-w-3xl > div:last-child') as HTMLElement;
+      const mockScrollIntoView = jest.fn();
+      if (bottomRef) {
+        bottomRef.scrollIntoView = mockScrollIntoView;
+      }
+
       await userEvent.click(button);
 
-      // Should set scrollTop to scrollHeight
-      expect(currentScrollTop).toBe(1000);
+      // Should call scrollIntoView with smooth behavior
+      expect(mockScrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
+
+      // Button should be immediately hidden
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Scroll to bottom')).not.toBeInTheDocument();
+      });
     });
 
     it('scroll container has scroll-smooth class', () => {
@@ -283,7 +350,64 @@ describe('MessageList', () => {
 
       const scrollContainer = container.querySelector('.overflow-y-auto');
       expect(scrollContainer).toHaveClass('scroll-smooth');
-      expect(scrollContainer).toHaveClass('relative');
+    });
+
+    it('button positioned in outer non-scrolling container', async () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(<MessageList messages={messages} />);
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock overflow
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 600, writable: true });
+
+      // Trigger intersection - NOT at bottom
+      await triggerIntersection(false);
+
+      const button = screen.getByLabelText('Scroll to bottom');
+
+      // Button's parent should be the outer container with relative positioning
+      const outerContainer = container.querySelector('.relative.flex.h-full');
+      expect(outerContainer).toBeInTheDocument();
+      expect(outerContainer).toContainElement(button);
+
+      // Button should NOT be inside the scrolling container
+      expect(scrollContainer).not.toContainElement(button);
+    });
+
+    it('IntersectionObserver is set up with correct options', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      render(<MessageList messages={messages} />);
+
+      // IntersectionObserver should be created with threshold 0.1
+      expect(global.IntersectionObserver).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({
+          threshold: 0.1,
+        })
+      );
+
+      // Should call observe
+      expect(mockObserve).toHaveBeenCalled();
+    });
+
+    it('IntersectionObserver disconnects on unmount', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { unmount } = render(<MessageList messages={messages} />);
+
+      unmount();
+
+      expect(mockDisconnect).toHaveBeenCalled();
     });
   });
 });

@@ -19,6 +19,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
+    const [isNearBottom, setIsNearBottom] = useState(true);
 
     // Merged ref callback to ensure both parent ref and local ref point to same DOM node
     const mergedRef = useCallback((node: HTMLDivElement | null) => {
@@ -30,41 +31,72 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       }
     }, [ref]);
 
-    // Auto-scroll to bottom on new messages
+    // IntersectionObserver to track if user is near bottom
     useEffect(() => {
+      const container = scrollContainerRef.current;
+      const sentinel = bottomRef.current;
+
+      if (!container || !sentinel) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[0];
+          const nearBottom = entry.isIntersecting;
+          setIsNearBottom(nearBottom);
+
+          // Show button only if: NOT near bottom AND has overflow content
+          const hasOverflow = container.scrollHeight > container.clientHeight;
+          setShowScrollButton(!nearBottom && hasOverflow);
+        },
+        {
+          root: container,  // Observe within the scroll container
+          threshold: 0.1,   // Trigger when 10% of sentinel is visible
+        }
+      );
+
+      observer.observe(sentinel);
+
+      return () => observer.disconnect();
+    }, [messages.length]); // Re-observe when messages change
+
+    // Auto-scroll to bottom on new messages (only if user is near bottom)
+    useEffect(() => {
+      if (!isNearBottom) return;  // Don't interrupt if user scrolled up
+
       if (scrollContainerRef.current) {
         scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
-    }, [messages]);
+    }, [messages, isNearBottom]);
 
     // Continuous auto-scroll during streaming (keeps latest token visible above composer)
     useEffect(() => {
       if (!isStreaming || messages.length === 0) return;
 
-      // During streaming, continuously scroll to bottom to keep latest tokens visible
+      // During streaming, continuously scroll to bottom ONLY if user is near bottom
       const scrollInterval = setInterval(() => {
-        if (scrollContainerRef.current) {
+        if (isNearBottom && scrollContainerRef.current) {
           scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
         }
       }, 50); // Scroll every 50ms during streaming for smooth tracking
 
       return () => clearInterval(scrollInterval);
-    }, [isStreaming, messages.length]);
-
-    // Handle scroll position to show/hide scroll-to-bottom button
-    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-      const element = e.currentTarget;
-      const isAtBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 50;
-      setShowScrollButton(!isAtBottom);
-    };
+    }, [isStreaming, messages.length, isNearBottom]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
-      // Use passed ref if available, otherwise use local ref
-      const container = (ref as React.RefObject<HTMLDivElement>)?.current || scrollContainerRef.current;
-      if (container) {
+      const sentinel = bottomRef.current;
+      const container = scrollContainerRef.current;
+
+      // Use scrollIntoView for smooth scroll
+      if (sentinel) {
+        sentinel.scrollIntoView({ behavior: 'smooth' });
+      } else if (container) {
         container.scrollTop = container.scrollHeight;
       }
+
+      // Immediately hide button (don't wait for scroll event)
+      setShowScrollButton(false);
+      setIsNearBottom(true);
     };
 
     if (messages.length === 0 && !isLoading) {
@@ -92,56 +124,58 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     }
 
     return (
-      <div
-        ref={mergedRef}
-        className="relative flex h-full min-h-0 flex-col overflow-y-auto scroll-smooth"
-        onScroll={handleScroll}
-      >
-        {/* Centered content container (max-w-3xl = 768px) */}
-        <div className="max-w-3xl mx-auto w-full px-4 py-6">
-          {messages.map((message, index) => (
-            <ChatMessage
-              key={message.id || `msg-${index}`}
-              role={message.role}
-              content={message.content}
-              components={message.components}
-              timestamp={message.timestamp}
-              messageIndex={index}
-              onRegenerate={onRegenerate}
-              isRegenerating={regeneratingMessageIndex === index}
-            />
-          ))}
-          {isLoading && (
-            <div data-testid="typing-indicator" className="flex gap-3 py-6">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-                </svg>
+      <div className="relative flex h-full min-h-0 flex-col">
+        {/* Inner scroll container */}
+        <div
+          ref={mergedRef}
+          className="flex-1 overflow-y-auto scroll-smooth"
+        >
+          {/* Centered content container (max-w-3xl = 768px) */}
+          <div className="max-w-3xl mx-auto w-full px-4 py-6">
+            {messages.map((message, index) => (
+              <ChatMessage
+                key={message.id || `msg-${index}`}
+                role={message.role}
+                content={message.content}
+                components={message.components}
+                timestamp={message.timestamp}
+                messageIndex={index}
+                onRegenerate={onRegenerate}
+                isRegenerating={regeneratingMessageIndex === index}
+              />
+            ))}
+            {isLoading && (
+              <div data-testid="typing-indicator" className="flex gap-3 py-6">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+                  </svg>
+                </div>
+                <div className="flex items-center gap-1 py-2">
+                  <span
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
+                    style={{ animationDelay: '0ms', animationDuration: '1s' }}
+                  ></span>
+                  <span
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
+                    style={{ animationDelay: '150ms', animationDuration: '1s' }}
+                  ></span>
+                  <span
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
+                    style={{ animationDelay: '300ms', animationDuration: '1s' }}
+                  ></span>
+                </div>
               </div>
-              <div className="flex items-center gap-1 py-2">
-                <span
-                  className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                  style={{ animationDelay: '0ms', animationDuration: '1s' }}
-                ></span>
-                <span
-                  className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                  style={{ animationDelay: '150ms', animationDuration: '1s' }}
-                ></span>
-                <span
-                  className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                  style={{ animationDelay: '300ms', animationDuration: '1s' }}
-                ></span>
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
+            )}
+            <div ref={bottomRef} />
+          </div>
         </div>
 
-        {/* Scroll-to-bottom button */}
+        {/* Scroll-to-bottom button - fixed to viewport, not scrolling content */}
         {showScrollButton && (
           <button
             onClick={handleScrollToBottom}
-            className="absolute bottom-6 right-6 rounded-full bg-gray-700 text-white hover:bg-gray-800 shadow-lg transition-all p-2"
+            className="absolute bottom-6 right-6 z-10 rounded-full bg-gray-700 text-white hover:bg-gray-800 shadow-lg transition-all p-2"
             aria-label="Scroll to bottom"
             title="Scroll to latest message"
           >
