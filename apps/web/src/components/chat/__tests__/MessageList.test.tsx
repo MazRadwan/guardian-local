@@ -236,8 +236,8 @@ describe('MessageList', () => {
 
       const button = screen.getByLabelText('Scroll to bottom');
 
-      expect(button).toHaveClass('fixed', 'bottom-24', 'right-6', 'rounded-full');
-      expect(button).toHaveClass('bg-gray-200', 'text-gray-600');
+      expect(button).toHaveClass('absolute', 'bottom-6', 'right-6', 'rounded-full');
+      expect(button).toHaveClass('bg-gray-700', 'text-white');
       expect(button).toHaveAttribute('title', 'Scroll to latest message');
     });
 
