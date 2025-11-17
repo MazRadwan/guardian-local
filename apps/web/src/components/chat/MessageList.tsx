@@ -50,8 +50,10 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      // Use passed ref if available, otherwise use local ref
+      const container = (ref as React.RefObject<HTMLDivElement>)?.current || scrollContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
       }
     };
 
@@ -129,7 +131,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
         {showScrollButton && (
           <button
             onClick={handleScrollToBottom}
-            className="absolute bottom-6 right-6 rounded-full bg-purple-600 text-white hover:bg-purple-700 shadow-lg transition-all p-2"
+            className="fixed bottom-24 right-6 rounded-full bg-gray-200 text-gray-600 hover:bg-gray-300 shadow-lg transition-all p-2"
             aria-label="Scroll to bottom"
             title="Scroll to latest message"
           >
