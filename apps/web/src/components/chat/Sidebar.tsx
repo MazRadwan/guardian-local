@@ -79,10 +79,18 @@ export function Sidebar({
         role="navigation"
         aria-label="Sidebar navigation"
       >
-        {/* Section 1: Toggle Button Only - Desktop only (mobile uses header toggle) */}
-        <div className="hidden md:block p-2">
+        {/* Section 1: Toggle Button */}
+        <div className="p-2">
+          {/* Desktop: minimize/expand button, Mobile: close drawer button */}
           <button
-            onClick={onToggle}
+            onClick={() => {
+              // Mobile: close drawer, Desktop: toggle minimize
+              if (window.innerWidth < 768) {
+                onCloseMobile?.();
+              } else {
+                onToggle();
+              }
+            }}
             className={`flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors ${
               isMinimized ? 'h-10 w-10' : 'h-8 w-8'
             }`}
