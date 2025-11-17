@@ -79,8 +79,8 @@ export function Sidebar({
         role="navigation"
         aria-label="Sidebar navigation"
       >
-        {/* Section 1: Toggle Button Only */}
-        <div className="p-2">
+        {/* Section 1: Toggle Button Only - Desktop only (mobile uses header toggle) */}
+        <div className="hidden md:block p-2">
           <button
             onClick={onToggle}
             className={`flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors ${
