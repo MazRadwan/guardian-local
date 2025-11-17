@@ -175,7 +175,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
         {showScrollButton && (
           <button
             onClick={handleScrollToBottom}
-            className="absolute bottom-6 right-6 z-10 rounded-full bg-gray-700 text-white hover:bg-gray-800 shadow-lg transition-all p-2"
+            className="absolute bottom-6 right-6 z-10 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-lg transition-all p-2"
             aria-label="Scroll to bottom"
             title="Scroll to latest message"
           >
