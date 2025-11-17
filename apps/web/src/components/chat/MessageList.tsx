@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, forwardRef, useState } from 'react';
+import React, { useEffect, useRef, forwardRef, useState, useCallback } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
@@ -19,6 +19,16 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
+
+    // Merged ref callback to ensure both parent ref and local ref point to same DOM node
+    const mergedRef = useCallback((node: HTMLDivElement | null) => {
+      scrollContainerRef.current = node;
+      if (typeof ref === 'function') {
+        ref(node);
+      } else if (ref) {
+        ref.current = node;
+      }
+    }, [ref]);
 
     // Auto-scroll to bottom on new messages
     useEffect(() => {
@@ -83,7 +93,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
 
     return (
       <div
-        ref={ref || scrollContainerRef}
+        ref={mergedRef}
         className="relative flex h-full min-h-0 flex-col overflow-y-auto scroll-smooth"
         onScroll={handleScroll}
       >

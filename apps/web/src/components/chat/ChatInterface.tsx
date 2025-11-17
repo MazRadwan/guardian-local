@@ -50,6 +50,13 @@ export function ChatInterface() {
   // Track which message is being regenerated
   const [regeneratingMessageIndex, setRegeneratingMessageIndex] = useState<number | null>(null);
 
+  // Centralized focus helper - uses requestAnimationFrame to ensure focus after React re-renders
+  const focusComposer = useCallback(() => {
+    requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }, []);
+
   // Load saved conversationId from localStorage on mount (client-side only)
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -74,9 +81,9 @@ export function ChatInterface() {
       setLoading(false); // Hide typing indicator
 
       // Auto-focus input after assistant response completes
-      composerRef.current?.focus();
+      focusComposer();
     },
-    [addMessage, finishStreaming, setLoading]
+    [addMessage, finishStreaming, setLoading, focusComposer]
   );
 
   const handleMessageStream = useCallback(
@@ -157,8 +164,8 @@ export function ChatInterface() {
     finishStreaming();
     setLoading(false);
     setRegeneratingMessageIndex(null); // Reset regenerating state
-    composerRef.current?.focus();
-  }, [finishStreaming, setLoading]);
+    focusComposer();
+  }, [finishStreaming, setLoading, focusComposer]);
 
   const handleConversationsList = useCallback(
     (conversations: any[]) => {
@@ -204,9 +211,9 @@ export function ChatInterface() {
       setLoading(false);
       setRegeneratingMessageIndex(null); // Reset regenerating state
       // Auto-focus composer after abort
-      composerRef.current?.focus();
+      focusComposer();
     },
-    [finishStreaming, setLoading]
+    [finishStreaming, setLoading, focusComposer]
   );
 
   const { isConnected, isConnecting, sendMessage, requestHistory, fetchConversations, startNewConversation, abortStream } = useWebSocket({
@@ -307,10 +314,10 @@ export function ChatInterface() {
 
       // Focus composer for new chat
       setTimeout(() => {
-        composerRef.current?.focus();
+        focusComposer();
       }, 100);
     }
-  }, [activeConversationId, isConnected, requestHistory, startNewConversation, clearMessages, setLoading, setError, router, mode, finishStreaming, abortStream]);
+  }, [activeConversationId, isConnected, requestHistory, startNewConversation, clearMessages, setLoading, setError, router, mode, finishStreaming, abortStream, focusComposer]);
 
   const handleSendMessage = useCallback(
     (content: string) => {
