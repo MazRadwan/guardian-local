@@ -12,10 +12,8 @@ export interface WebSocketConfig {
   url: string;
   token?: string;
   conversationId?: string; // Optional - resume existing conversation
-  onConversationsList?: (conversations: Conversation[]) => void;
-  onConversationCreated?: (conversation: Conversation) => void;
-  onConversationTitleUpdated?: (conversationId: string, title: string) => void;
-  onStreamAborted?: (conversationId: string) => void;
+  // Note: Event callbacks are now registered dynamically via methods (not config)
+  // to prevent stale closure issues on component re-renders
 }
 
 export interface EmbeddedComponent {
@@ -166,43 +164,8 @@ export class WebSocketClient {
           reject(new Error('Failed to reconnect'));
         });
 
-        // Listen for conversations_list events
-        this.socket.on('conversations_list', (data: { conversations: any[] }) => {
-          console.log('[WebSocket] Received conversations list:', data.conversations.length);
-          const normalized = data.conversations.map((conv) => ({
-            id: conv.id,
-            title: conv.title,
-            createdAt: new Date(conv.createdAt),
-            updatedAt: new Date(conv.updatedAt),
-            mode: conv.mode as 'consult' | 'assessment',
-          }));
-          this.config.onConversationsList?.(normalized);
-        });
-
-        // Listen for conversation_created events
-        this.socket.on('conversation_created', (data: { conversation: any }) => {
-          console.log('[WebSocket] New conversation created:', data.conversation.id);
-          const normalized = {
-            id: data.conversation.id,
-            title: data.conversation.title,
-            createdAt: new Date(data.conversation.createdAt),
-            updatedAt: new Date(data.conversation.updatedAt),
-            mode: data.conversation.mode as 'consult' | 'assessment',
-          };
-          this.config.onConversationCreated?.(normalized);
-        });
-
-        // Listen for conversation_title_updated events
-        this.socket.on('conversation_title_updated', (data: { conversationId: string; title: string }) => {
-          console.log('[WebSocket] Conversation title updated:', data.conversationId, data.title);
-          this.config.onConversationTitleUpdated?.(data.conversationId, data.title);
-        });
-
-        // Listen for stream_aborted events
-        this.socket.on('stream_aborted', (data: { conversationId: string }) => {
-          console.log('[WebSocket] Stream aborted for conversation:', data.conversationId);
-          this.config.onStreamAborted?.(data.conversationId);
-        });
+        // Note: Conversation event listeners (conversations_list, conversation_created, etc.)
+        // are now registered dynamically via methods in useWebSocket effect to prevent stale closures
       } catch (error) {
         reject(error);
       }
@@ -278,15 +241,6 @@ export class WebSocketClient {
     };
   }
 
-  onConnected(callback: (data: { conversationId: string; resumed: boolean; message: string }) => void): () => void {
-    if (!this.socket) throw new Error('WebSocket not initialized');
-
-    this.socket.on('connected', callback);
-    return () => {
-      this.socket?.off('connected', callback);
-    };
-  }
-
   onHistory(callback: (messages: ChatMessage[]) => void): () => void {
     if (!this.socket) throw new Error('WebSocket not initialized');
 
@@ -309,19 +263,6 @@ export class WebSocketClient {
     this.socket.on('assistant_done', callback);
     return () => {
       this.socket?.off('assistant_done', callback);
-    };
-  }
-
-  onStreamAborted(callback: (conversationId: string) => void): () => void {
-    if (!this.socket) throw new Error('WebSocket not initialized');
-
-    const handler = (data: { conversationId: string }) => {
-      callback(data.conversationId);
-    };
-
-    this.socket.on('stream_aborted', handler);
-    return () => {
-      this.socket?.off('stream_aborted', handler);
     };
   }
 
@@ -360,4 +301,118 @@ export class WebSocketClient {
     console.log('[WebSocketClient] Aborting stream');
     this.socket.emit('abort_stream');
   }
+
+  deleteConversation(conversationId: string): void {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('WebSocket not connected');
+    }
+    console.log('[WebSocketClient] Deleting conversation:', conversationId);
+    this.socket.emit('delete_conversation', { conversationId });
+  }
+
+  // Dynamic event subscription methods (follow onMessage/onHistory pattern)
+  // These keep callbacks fresh on component re-renders
+
+  onConversationsList(callback: (conversations: Conversation[]) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversations: any[] }) => {
+      console.log('[WebSocket] Received conversations list:', data.conversations.length);
+      const normalized = data.conversations.map((conv) => ({
+        id: conv.id,
+        title: conv.title,
+        createdAt: new Date(conv.createdAt),
+        updatedAt: new Date(conv.updatedAt),
+        mode: conv.mode as 'consult' | 'assessment',
+      }));
+      callback(normalized);
+    };
+
+    this.socket.on('conversations_list', handler);
+    return () => {
+      this.socket?.off('conversations_list', handler);
+    };
+  }
+
+  onConversationCreated(callback: (conversation: Conversation) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversation: any }) => {
+      console.log('[WebSocket] New conversation created:', data.conversation.id);
+      const normalized = {
+        id: data.conversation.id,
+        title: data.conversation.title,
+        createdAt: new Date(data.conversation.createdAt),
+        updatedAt: new Date(data.conversation.updatedAt),
+        mode: data.conversation.mode as 'consult' | 'assessment',
+      };
+      callback(normalized);
+    };
+
+    this.socket.on('conversation_created', handler);
+    return () => {
+      this.socket?.off('conversation_created', handler);
+    };
+  }
+
+  onConversationTitleUpdated(callback: (conversationId: string, title: string) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId: string; title: string }) => {
+      console.log('[WebSocket] Conversation title updated:', data.conversationId, data.title);
+      callback(data.conversationId, data.title);
+    };
+
+    this.socket.on('conversation_title_updated', handler);
+    return () => {
+      this.socket?.off('conversation_title_updated', handler);
+    };
+  }
+
+  onStreamAborted(callback: (conversationId: string) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId: string }) => {
+      console.log('[WebSocket] Stream aborted for conversation:', data.conversationId);
+      callback(data.conversationId);
+    };
+
+    this.socket.on('stream_aborted', handler);
+    return () => {
+      this.socket?.off('stream_aborted', handler);
+    };
+  }
+
+  onConversationDeleted(callback: (conversationId: string) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId: string }) => {
+      console.log('[WebSocket] Conversation deleted:', data.conversationId);
+      callback(data.conversationId);
+    };
+
+    this.socket.on('conversation_deleted', handler);
+    return () => {
+      this.socket?.off('conversation_deleted', handler);
+    };
+  }
+
+  onConnectionReady(callback: (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => {
+      console.log('[WebSocket] Connection ready:', {
+        hasActiveConversation: data.hasActiveConversation,
+        conversationId: data.conversationId,
+        resumed: data.resumed
+      });
+      callback(data);
+    };
+
+    this.socket.on('connection_ready', handler);
+    return () => {
+      this.socket?.off('connection_ready', handler);
+    };
+  }
+
 }

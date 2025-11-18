@@ -24,6 +24,8 @@ export interface ChatState {
   // Conversation management
   conversations: Conversation[];
   activeConversationId: string | null;
+  newChatRequested: boolean; // Flag to request new conversation creation
+  deleteConversationRequested: string | null; // Conversation ID to delete
 
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
@@ -45,8 +47,13 @@ export interface ChatState {
   addConversation: (conversation: Conversation) => void;
   setActiveConversation: (id: string | null) => void;
   deleteConversation: (id: string) => void;
+  removeConversationFromList: (id: string) => void;
   updateConversationTitle: (id: string, title: string) => void;
   setConversations: (conversations: Conversation[]) => void;
+  requestNewChat: () => void;
+  clearNewChatRequest: () => void;
+  requestDeleteConversation: (id: string) => void;
+  clearDeleteConversationRequest: () => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -65,6 +72,8 @@ export const useChatStore = create<ChatState>()(
       // Conversation management - defaults
       conversations: [],
       activeConversationId: null,
+      newChatRequested: false,
+      deleteConversationRequested: null,
 
       addMessage: (message) =>
         set((state) => ({
@@ -156,16 +165,34 @@ export const useChatStore = create<ChatState>()(
 
       // Conversation management actions
       addConversation: (conversation) =>
-        set((state) => ({
-          conversations: [...state.conversations, conversation],
-        })),
+        set((state) => {
+          // CRITICAL FIX: Check if conversation already exists (deduplicate)
+          const exists = state.conversations.some((c) => c.id === conversation.id);
+          if (exists) {
+            console.log('[chatStore] Conversation', conversation.id, 'already exists - skipping duplicate');
+            return state; // No change - idempotent add
+          }
+
+          console.log('[chatStore] Adding new conversation:', conversation.id);
+          return {
+            conversations: [...state.conversations, conversation],
+          };
+        }),
 
       setActiveConversation: (id) =>
         set({
           activeConversationId: id,
         }),
 
-      deleteConversation: (id) =>
+      // This is the old deleteConversation that only updates local state
+      // Now we use requestDeleteConversation to trigger WebSocket delete
+      deleteConversation: (id) => {
+        console.log('[chatStore] deleteConversation (deprecated) - use requestDeleteConversation instead');
+        set({ deleteConversationRequested: id });
+      },
+
+      // Remove conversation from list after backend confirms deletion
+      removeConversationFromList: (id) =>
         set((state) => ({
           conversations: state.conversations.filter((conv) => conv.id !== id),
           // Clear active conversation if it's the one being deleted
@@ -185,6 +212,26 @@ export const useChatStore = create<ChatState>()(
           conversations,
         });
         console.log('[chatStore] State updated with new conversations');
+      },
+
+      requestNewChat: () => {
+        console.log('[chatStore] New chat requested');
+        set({ newChatRequested: true });
+      },
+
+      clearNewChatRequest: () => {
+        console.log('[chatStore] Clearing new chat request');
+        set({ newChatRequested: false });
+      },
+
+      requestDeleteConversation: (id) => {
+        console.log('[chatStore] Delete conversation requested:', id);
+        set({ deleteConversationRequested: id });
+      },
+
+      clearDeleteConversationRequest: () => {
+        console.log('[chatStore] Clearing delete conversation request');
+        set({ deleteConversationRequested: null });
       },
     }),
     {

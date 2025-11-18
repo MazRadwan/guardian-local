@@ -40,6 +40,7 @@ export class ChatServer {
   private claudeClient: IClaudeClient;
   private rateLimiter: RateLimiter;
   private jwtSecret: string;
+  private pendingConversationCreations: Map<string, { conversationId: string; timestamp: number }>;
 
   constructor(
     io: SocketIOServer,
@@ -53,7 +54,18 @@ export class ChatServer {
     this.claudeClient = claudeClient;
     this.rateLimiter = rateLimiter;
     this.jwtSecret = jwtSecret;
+    this.pendingConversationCreations = new Map();
     this.setupNamespace();
+
+    // Clean up stale pending creations every 5 seconds
+    setInterval(() => {
+      const now = Date.now();
+      for (const [userId, { timestamp }] of this.pendingConversationCreations.entries()) {
+        if (now - timestamp > 1000) { // 1 second timeout (generous cleanup window)
+          this.pendingConversationCreations.delete(userId);
+        }
+      }
+    }, 5000);
   }
 
   /**
@@ -136,7 +148,7 @@ export class ChatServer {
 
       // Check if client wants to resume an existing conversation
       const resumeConversationId = socket.handshake.auth.conversationId;
-      let conversation;
+      let conversation = null;
       let resumed = false;
 
       if (resumeConversationId) {
@@ -150,50 +162,30 @@ export class ChatServer {
             resumed = true;
             console.log(`[ChatServer] Resumed conversation ${resumeConversationId} for user ${socket.userId}`);
           } else {
-            // Invalid or not owned - create new
-            console.log(`[ChatServer] Cannot resume conversation ${resumeConversationId} - creating new`);
-            conversation = await this.conversationService.createConversation({
-              userId: socket.userId!,
-              mode: 'consult',
-            });
+            // Invalid or not owned - do NOT auto-create
+            console.log(`[ChatServer] Cannot resume conversation ${resumeConversationId} - user must create new conversation explicitly`);
           }
         } catch (error) {
-          // Resume failed - create new
+          // Resume failed - do NOT auto-create
           console.error('[ChatServer] Error resuming conversation:', error);
-          conversation = await this.conversationService.createConversation({
-            userId: socket.userId!,
-            mode: 'consult',
-          });
+          console.log('[ChatServer] User must create new conversation explicitly');
         }
       } else {
-        // No saved conversation - create new
-        conversation = await this.conversationService.createConversation({
-          userId: socket.userId!,
-          mode: 'consult',
-        });
-        console.log(`[ChatServer] Created new conversation ${conversation.id} for user ${socket.userId}`);
-
-        // Emit conversation_created event for new conversations
-        socket.emit('conversation_created', {
-          conversation: {
-            id: conversation.id,
-            title: `Conversation ${conversation.id.slice(0, 8)}`,
-            createdAt: conversation.startedAt,
-            updatedAt: conversation.lastActivityAt,
-            mode: conversation.mode,
-          },
-        });
+        // No saved conversation - do NOT auto-create
+        // Frontend will request new conversation via start_new_conversation event
+        console.log(`[ChatServer] No saved conversation - awaiting explicit new conversation request from user ${socket.userId}`);
       }
 
-      // Store conversationId in socket for this session
-      socket.conversationId = conversation.id;
+      // Store conversationId in socket for this session (may be null)
+      socket.conversationId = conversation?.id;
 
-      // Send welcome message with conversationId
-      socket.emit('connected', {
+      // Send connection confirmation with conversationId (may be undefined)
+      socket.emit('connection_ready', {
         message: resumed ? 'Reconnected to existing conversation' : 'Connected to Guardian chat server',
         userId: socket.userId,
-        conversationId: conversation.id,
+        conversationId: conversation?.id,
         resumed,
+        hasActiveConversation: conversation !== null,
       });
 
       // Handle send_message event
@@ -396,7 +388,20 @@ export class ChatServer {
             return;
           }
 
-          // Validate ownership BEFORE returning history
+          // CRITICAL FIX: Check if conversation exists first (idempotent history)
+          const conversation = await this.conversationService.getConversation(payload.conversationId);
+
+          if (!conversation) {
+            // IDEMPOTENT: Conversation doesn't exist (likely deleted) - return empty history
+            console.log(`[ChatServer] Conversation ${payload.conversationId} not found - returning empty history`);
+            socket.emit('history', {
+              conversationId: payload.conversationId,
+              messages: [],
+            });
+            return;
+          }
+
+          // Only validate ownership if conversation exists
           await this.validateConversationOwnership(payload.conversationId, socket.userId);
 
           const messages = await this.conversationService.getHistory(
@@ -481,12 +486,39 @@ export class ChatServer {
             return;
           }
 
+          // Check for pending conversation creation (idempotency guard - 200ms prevents accidental double-clicks)
+          const pending = this.pendingConversationCreations.get(socket.userId);
+          if (pending && Date.now() - pending.timestamp < 200) {
+            console.log(`[ChatServer] Conversation creation already in progress for user ${socket.userId}, returning pending conversation`);
+
+            // Return the pending conversation info (it should have been emitted already)
+            const existingConv = await this.conversationService.getConversation(pending.conversationId);
+            if (existingConv) {
+              socket.emit('conversation_created', {
+                conversation: {
+                  id: existingConv.id,
+                  title: `New Chat`,
+                  createdAt: existingConv.startedAt,
+                  updatedAt: existingConv.lastActivityAt,
+                  mode: existingConv.mode,
+                },
+              });
+            }
+            return;
+          }
+
           console.log(`[ChatServer] Starting new conversation for user ${socket.userId}`);
 
           // Create new conversation
           const newConversation = await this.conversationService.createConversation({
             userId: socket.userId,
             mode: payload.mode || 'consult',
+          });
+
+          // Track this creation to prevent duplicates
+          this.pendingConversationCreations.set(socket.userId, {
+            conversationId: newConversation.id,
+            timestamp: Date.now(),
           });
 
           // CRITICAL: Update socket's current conversation ID
@@ -504,11 +536,78 @@ export class ChatServer {
           });
 
           console.log(`[ChatServer] New conversation ${newConversation.id} created and set as active`);
+
+          // Clear pending after a short delay (allows accidental double-clicks to use cached value)
+          setTimeout(() => {
+            this.pendingConversationCreations.delete(socket.userId!);
+          }, 200); // 200ms - only prevents true accidents, allows intentional rapid clicks
         } catch (error) {
           console.error('[ChatServer] Error starting new conversation:', error);
+
+          // Clear pending on error
+          if (socket.userId) {
+            this.pendingConversationCreations.delete(socket.userId);
+          }
+
           socket.emit('error', {
             event: 'start_new_conversation',
             message: error instanceof Error ? error.message : 'Failed to create conversation',
+          });
+        }
+      });
+
+      // Delete conversation
+      socket.on('delete_conversation', async (payload: { conversationId: string }) => {
+        if (!socket.userId) {
+          socket.emit('error', { event: 'delete_conversation', message: 'User not authenticated' });
+          return;
+        }
+
+        const { conversationId } = payload;
+
+        if (!conversationId) {
+          socket.emit('error', { event: 'delete_conversation', message: 'conversationId is required' });
+          return;
+        }
+
+        try {
+          console.log(`[ChatServer] Deleting conversation ${conversationId} for user ${socket.userId}`);
+
+          // CRITICAL FIX: Check if conversation exists first (idempotent DELETE)
+          const conversation = await this.conversationService.getConversation(conversationId);
+
+          if (!conversation) {
+            // IDEMPOTENT: Already deleted - return success
+            console.log(`[ChatServer] Conversation ${conversationId} already deleted - returning success`);
+            socket.emit('conversation_deleted', { conversationId });
+
+            // If this was the active conversation, clear it
+            if (socket.conversationId === conversationId) {
+              socket.conversationId = undefined;
+            }
+            return;
+          }
+
+          // Only validate ownership if conversation exists
+          await this.validateConversationOwnership(conversationId, socket.userId);
+
+          // Delete from database
+          await this.conversationService.deleteConversation(conversationId);
+
+          console.log(`[ChatServer] Successfully deleted conversation ${conversationId}`);
+
+          // Emit confirmation to client
+          socket.emit('conversation_deleted', { conversationId });
+
+          // If this was the active conversation, clear it
+          if (socket.conversationId === conversationId) {
+            socket.conversationId = undefined;
+          }
+        } catch (error) {
+          console.error('[ChatServer] Error deleting conversation:', error);
+          socket.emit('error', {
+            event: 'delete_conversation',
+            message: error instanceof Error ? error.message : 'Failed to delete conversation',
           });
         }
       });
