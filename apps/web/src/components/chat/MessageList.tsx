@@ -59,28 +59,16 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       return () => observer.disconnect();
     }, [messages.length]); // Re-observe when messages change
 
-    // Auto-scroll to bottom on new messages (only if user is near bottom)
-    useEffect(() => {
-      if (!isNearBottom) return;  // Don't interrupt if user scrolled up
+    // Use useLayoutEffect for synchronous scroll updates to prevent visual lag (text going behind composer)
+    React.useLayoutEffect(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
 
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      // If we are streaming OR if we were already near bottom, force scroll to bottom immediately
+      if (isStreaming || isNearBottom) {
+        container.scrollTop = container.scrollHeight;
       }
-    }, [messages, isNearBottom]);
-
-    // Continuous auto-scroll during streaming (keeps latest token visible above composer)
-    useEffect(() => {
-      if (!isStreaming || messages.length === 0) return;
-
-      // During streaming, continuously scroll to bottom ONLY if user is near bottom
-      const scrollInterval = setInterval(() => {
-        if (isNearBottom && scrollContainerRef.current) {
-          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-        }
-      }, 50); // Scroll every 50ms during streaming for smooth tracking
-
-      return () => clearInterval(scrollInterval);
-    }, [isStreaming, messages.length, isNearBottom]);
+    }, [messages, isStreaming, isNearBottom]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
@@ -128,10 +116,10 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
         {/* Inner scroll container */}
         <div
           ref={mergedRef}
-          className="flex-1 overflow-y-auto scroll-smooth"
+          className="flex-1 overflow-y-auto"
         >
           {/* Centered content container (max-w-3xl = 768px) */}
-          <div className="max-w-3xl mx-auto w-full px-4 py-6">
+          <div className="max-w-3xl mx-auto w-full px-4 py-6 pb-12">
             {messages.map((message, index) => (
               <ChatMessage
                 key={message.id || `msg-${index}`}

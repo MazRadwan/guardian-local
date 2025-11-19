@@ -96,39 +96,51 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
               placeholder={placeholder}
               disabled={disabled}
               rows={1}
-              className="w-full resize-none border-0 px-4 pt-4 pb-2 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 disabled:bg-gray-50 disabled:text-gray-500"
-              style={{ minHeight: '60px', maxHeight: '200px' }}
+              className={`w-full resize-none border-0 px-4 pt-4 pb-2 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 disabled:bg-gray-50 disabled:text-gray-500 ${
+                isStreaming ? 'hidden' : 'block'
+              }`}
+              style={{ minHeight: isStreaming ? '0px' : '60px', maxHeight: '200px' }}
               aria-label="Message input"
             />
 
             {/* Toolbar section (bottom) */}
-            <div className="flex items-center justify-between px-4 pb-3 pt-1">
+            <div className={`flex items-center justify-between px-4 pb-3 pt-1 ${isStreaming ? 'py-2' : ''}`}>
               {/* Left group: Mode selector + File upload button */}
               <div className="flex items-center gap-2">
-                {/* Mode Selector */}
-                {onModeChange && (
-                  <ModeSelector
-                    selectedMode={currentMode}
-                    onModeChange={onModeChange}
-                    disabled={disabled || modeChangeDisabled}
-                  />
-                )}
+                {/* Hide tools when streaming */}
+                {!isStreaming && (
+                  <>
+                    {/* Mode Selector */}
+                    {onModeChange && (
+                      <ModeSelector
+                        selectedMode={currentMode}
+                        onModeChange={onModeChange}
+                        disabled={disabled || modeChangeDisabled}
+                      />
+                    )}
 
-                {/* File upload button (stub for now) */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
-                  disabled={disabled}
-                  aria-label="Attach file"
-                  onClick={() => {
-                    // Stub - file upload functionality deferred
-                    console.log('File upload clicked (not yet implemented)');
-                  }}
-                >
-                  <Paperclip className="h-5 w-5" />
-                </Button>
+                    {/* File upload button (stub for now) */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
+                      disabled={disabled}
+                      aria-label="Attach file"
+                      onClick={() => {
+                        // Stub - file upload functionality deferred
+                        console.log('File upload clicked (not yet implemented)');
+                      }}
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </Button>
+                  </>
+                )}
+                
+                {/* Show status text when streaming */}
+                {isStreaming && (
+                  <span className="text-sm text-gray-500 animate-pulse">Guardian is thinking...</span>
+                )}
               </div>
 
               {/* Right group: Send button or Stop button */}

@@ -58,8 +58,8 @@ export function ChatMessage({
   return (
     <div
       className={cn(
-        'flex w-full gap-3 px-4 py-6',
-        isUser ? 'bg-gray-50' : 'bg-white',
+        'flex w-full gap-4 px-4 py-6 md:px-8 md:py-8',
+        isUser ? 'bg-white' : 'bg-gray-50',
         className
       )}
       role="article"
@@ -80,15 +80,41 @@ export function ChatMessage({
       </div>
 
       {/* Content */}
-      <div className="flex-1 space-y-3">
+      <div className="flex-1 min-w-0 space-y-3 overflow-hidden">
         {/* Role label */}
         <div className="text-sm font-semibold text-gray-900">
           {isUser ? 'You' : isSystem ? 'System' : 'Guardian'}
         </div>
 
         {/* Message content */}
-        <div className="prose prose-sm max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        <div className="prose prose-slate prose-base max-w-none break-words
+          prose-p:leading-7 prose-li:leading-7
+          prose-pre:p-0 prose-pre:bg-transparent
+          [&>table]:my-4
+          [&>th]:bg-gray-100 [&>th]:p-2 [&>th]:text-left [&>th]:border [&>th]:border-gray-300
+          [&>td]:p-2 [&>td]:border [&>td]:border-gray-300
+        ">
+          <ReactMarkdown 
+            remarkPlugins={[remarkGfm]}
+            components={{
+              table: ({node, ...props}) => (
+                <div className="overflow-x-auto w-full my-4 border rounded-lg">
+                  <table className="min-w-full border-collapse text-sm" {...props} />
+                </div>
+              ),
+              thead: ({node, ...props}) => (
+                <thead className="bg-gray-50" {...props} />
+              ),
+              th: ({node, ...props}) => (
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b" {...props} />
+              ),
+              td: ({node, ...props}) => (
+                <td className="px-4 py-3 text-sm text-gray-900 border-b last:border-0" {...props} />
+              )
+            }}
+          >
+            {content}
+          </ReactMarkdown>
         </div>
 
         {/* Embedded components */}
