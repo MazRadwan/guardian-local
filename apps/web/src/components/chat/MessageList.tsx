@@ -119,7 +119,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
           className="flex-1 overflow-y-auto"
         >
           {/* Centered content container (max-w-3xl = 768px) */}
-          <div className="max-w-3xl mx-auto w-full px-4 py-6 pb-12">
+          <div className="max-w-3xl mx-auto w-full px-4 py-6 pb-6">
             {messages.map((message, index) => (
               <ChatMessage
                 key={message.id || `msg-${index}`}

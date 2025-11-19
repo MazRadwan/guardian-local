@@ -595,6 +595,7 @@ export function ChatInterface() {
               onModeChange={handleModeChange}
               modeChangeDisabled={isChanging || !isConnected}
               isStreaming={isStreaming}
+              isLoading={isLoading}
               onStopStream={abortStream}
             />
           </div>
@@ -622,6 +623,7 @@ export function ChatInterface() {
                 onModeChange={handleModeChange}
                 modeChangeDisabled={isChanging || !isConnected}
                 isStreaming={isStreaming}
+              isLoading={isLoading}
                 onStopStream={abortStream}
               />
             </div>
