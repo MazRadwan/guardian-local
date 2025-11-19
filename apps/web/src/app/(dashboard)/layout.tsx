@@ -113,7 +113,7 @@ export default function DashboardLayout({
       >
         {/* Mobile Header (Hidden on Desktop) */}
         <header className="md:hidden flex shrink-0 items-center justify-between bg-white px-4 py-2 border-b">
-           <Button variant="ghost" onClick={handleMobileToggle}>
+           <Button variant="ghost" onClick={handleMobileToggle} aria-label="Toggle sidebar">
              <PanelLeft className="h-5 w-5" />
            </Button>
            <span className="font-semibold">Guardian</span>

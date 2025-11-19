@@ -184,12 +184,14 @@ export const useChatStore = create<ChatState>()(
           activeConversationId: id,
         }),
 
-      // This is the old deleteConversation that only updates local state
-      // Now we use requestDeleteConversation to trigger WebSocket delete
-      deleteConversation: (id) => {
-        console.log('[chatStore] deleteConversation (deprecated) - use requestDeleteConversation instead');
-        set({ deleteConversationRequested: id });
-      },
+      // Delete conversation immediately (used by tests and direct local operations)
+      // For WebSocket-triggered deletes, use requestDeleteConversation instead
+      deleteConversation: (id) =>
+        set((state) => ({
+          conversations: state.conversations.filter((conv) => conv.id !== id),
+          // Clear active conversation if it's the one being deleted
+          activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
+        })),
 
       // Remove conversation from list after backend confirms deletion
       removeConversationFromList: (id) =>
