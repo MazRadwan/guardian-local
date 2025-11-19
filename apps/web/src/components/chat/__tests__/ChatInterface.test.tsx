@@ -63,6 +63,7 @@ describe('ChatInterface', () => {
   const mockClearMessages = jest.fn();
   const mockSetActiveConversation = jest.fn();
   const mockPush = jest.fn();
+  const mockReplace = jest.fn();
   const mockGet = jest.fn();
 
   beforeEach(() => {
@@ -72,6 +73,7 @@ describe('ChatInterface', () => {
     const { useRouter, useSearchParams } = require('next/navigation');
     (useRouter as jest.Mock).mockReturnValue({
       push: mockPush,
+      replace: mockReplace,
     });
     (useSearchParams as jest.Mock).mockReturnValue({
       get: mockGet,
@@ -102,6 +104,12 @@ describe('ChatInterface', () => {
       setConversations: jest.fn(),
       addConversation: jest.fn(),
       updateConversationTitle: jest.fn(),
+      newChatRequested: false,
+      clearNewChatRequest: jest.fn(),
+      requestNewChat: jest.fn(),
+      deleteConversationRequested: null,
+      clearDeleteConversationRequest: jest.fn(),
+      removeConversationFromList: jest.fn(),
     });
 
     (useWebSocket as jest.Mock).mockReturnValue({
@@ -376,7 +384,7 @@ describe('ChatInterface', () => {
       expect(mockClearMessages).toHaveBeenCalled();
       expect(mockSetLoading).toHaveBeenCalledWith(true);
       expect(mockRequestHistory).toHaveBeenCalledWith('conv-456');
-      expect(mockPush).toHaveBeenCalledWith('/chat?conversation=conv-456');
+      expect(mockReplace).toHaveBeenCalledWith('/chat?conversation=conv-456', { scroll: false });
     });
 
     it('updates URL when conversation switches', () => {
@@ -398,7 +406,7 @@ describe('ChatInterface', () => {
 
       render(<ChatInterface />);
 
-      expect(mockPush).toHaveBeenCalledWith('/chat?conversation=new-conv');
+      expect(mockReplace).toHaveBeenCalledWith('/chat?conversation=new-conv', { scroll: false });
     });
 
     it('clears messages before loading new conversation', () => {
@@ -488,7 +496,7 @@ describe('ChatInterface', () => {
       Object.defineProperty(window, 'localStorage', { value: localStorageMock });
     });
 
-    it('clears localStorage when activeConversationId is set to null', () => {
+    it('clears localStorage when new chat is requested', () => {
       (useChatStore as unknown as jest.Mock).mockReturnValue({
         messages: [],
         isLoading: false,
@@ -501,8 +509,11 @@ describe('ChatInterface', () => {
         setLoading: jest.fn(),
         setMessages: jest.fn(),
         clearMessages: mockClearMessages,
-        activeConversationId: null, // New chat state
+        activeConversationId: null,
         setActiveConversation: mockSetActiveConversation,
+        newChatRequested: true, // Trigger new chat
+        clearNewChatRequest: jest.fn(),
+        startNewConversation: jest.fn(),
       });
 
       render(<ChatInterface />);
@@ -526,6 +537,7 @@ describe('ChatInterface', () => {
         clearMessages: mockClearMessages,
         activeConversationId: null, // New chat state
         setActiveConversation: mockSetActiveConversation,
+        newChatRequested: false,
       });
 
       render(<ChatInterface />);
@@ -549,6 +561,7 @@ describe('ChatInterface', () => {
         clearMessages: mockClearMessages,
         activeConversationId: null, // New chat state
         setActiveConversation: mockSetActiveConversation,
+        newChatRequested: false,
       });
 
       render(<ChatInterface />);
@@ -561,7 +574,7 @@ describe('ChatInterface', () => {
       // Start with active conversation
       const { rerender } = render(<ChatInterface />);
 
-      // Switch to new chat (activeConversationId becomes null)
+      // Switch to new chat (activeConversationId becomes null, newChatRequested true)
       (useChatStore as unknown as jest.Mock).mockReturnValue({
         messages: [],
         isLoading: false,
@@ -574,8 +587,11 @@ describe('ChatInterface', () => {
         setLoading: jest.fn(),
         setMessages: jest.fn(),
         clearMessages: mockClearMessages,
-        activeConversationId: null, // Switched to new chat
+        activeConversationId: null,
         setActiveConversation: mockSetActiveConversation,
+        newChatRequested: true, // Trigger new chat
+        clearNewChatRequest: jest.fn(),
+        startNewConversation: jest.fn(),
       });
 
       rerender(<ChatInterface />);

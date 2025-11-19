@@ -60,6 +60,7 @@ describe('DashboardLayout', () => {
     activeConversationId: null,
     setActiveConversation: jest.fn(),
     deleteConversation: jest.fn(),
+    requestNewChat: jest.fn(),
   };
 
   beforeEach(() => {
@@ -317,28 +318,9 @@ describe('DashboardLayout', () => {
 
       fireEvent.click(screen.getByTestId('sidebar-new-chat'));
 
-      // Verify all new chat actions
-      expect(mockChatStore.clearMessages).toHaveBeenCalledTimes(1);
-      expect(mockChatStore.setActiveConversation).toHaveBeenCalledWith(null);
+      // Verify requestNewChat is called and navigation happens
+      expect(mockChatStore.requestNewChat).toHaveBeenCalledTimes(1);
       expect(mockPush).toHaveBeenCalledWith('/chat');
-    });
-
-    it('clears active conversation when starting new chat', () => {
-      (useChatStore as unknown as jest.Mock).mockReturnValue({
-        ...mockChatStore,
-        activeConversationId: 'conv-123',
-      });
-
-      render(
-        <DashboardLayout>
-          <div>Content</div>
-        </DashboardLayout>
-      );
-
-      fireEvent.click(screen.getByTestId('sidebar-new-chat'));
-
-      // Verify active conversation is set to null
-      expect(mockChatStore.setActiveConversation).toHaveBeenCalledWith(null);
     });
 
     it('clears URL parameter when starting new chat', () => {
