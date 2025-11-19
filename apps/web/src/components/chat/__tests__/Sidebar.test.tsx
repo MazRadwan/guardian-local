@@ -64,11 +64,10 @@ describe('Sidebar', () => {
       expect(screen.queryByText('New chat')).not.toBeInTheDocument();
       expect(screen.queryByText('Logout')).not.toBeInTheDocument();
 
-      // Should show icons with title attributes
+      // Should show icons with title attributes (except logout which is hidden)
       const newChatButton = screen.getByTitle('New Chat');
-      const logoutButton = screen.getByTitle('Logout');
       expect(newChatButton).toBeInTheDocument();
-      expect(logoutButton).toBeInTheDocument();
+      expect(screen.queryByTitle('Logout')).not.toBeInTheDocument();
     });
 
     it('renders user information when provided', () => {
@@ -113,15 +112,6 @@ describe('Sidebar', () => {
       render(<Sidebar {...mockProps} />);
 
       const logoutButton = screen.getByText('Logout');
-      fireEvent.click(logoutButton);
-
-      expect(mockProps.onLogout).toHaveBeenCalledTimes(1);
-    });
-
-    it('calls onLogout when Logout icon clicked in minimized state', () => {
-      render(<Sidebar {...mockProps} isMinimized={true} />);
-
-      const logoutButton = screen.getByTitle('Logout');
       fireEvent.click(logoutButton);
 
       expect(mockProps.onLogout).toHaveBeenCalledTimes(1);
@@ -283,7 +273,6 @@ describe('Sidebar', () => {
 
       expect(screen.getByTitle('New Chat')).toBeInTheDocument();
       expect(screen.getByTitle('Search conversations')).toBeInTheDocument();
-      expect(screen.getByTitle('Logout')).toBeInTheDocument();
     });
 
     it('provides title attribute for toggle button in expanded state', () => {
@@ -303,7 +292,6 @@ describe('Sidebar', () => {
 
       expect(screen.getByLabelText('New Chat')).toBeInTheDocument();
       expect(screen.getByLabelText('Search conversations')).toBeInTheDocument();
-      expect(screen.getByLabelText('Logout')).toBeInTheDocument();
     });
 
     it('provides aria-label for toggle button', () => {
