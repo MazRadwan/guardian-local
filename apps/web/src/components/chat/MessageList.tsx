@@ -159,16 +159,18 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
           </div>
         </div>
 
-        {/* Scroll-to-bottom button - fixed to viewport, not scrolling content */}
+        {/* Scroll-to-bottom button - ChatGPT Style (Centered, Floating) */}
         {showScrollButton && (
-          <button
-            onClick={handleScrollToBottom}
-            className="absolute bottom-6 right-6 z-10 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-lg transition-all p-2"
-            aria-label="Scroll to bottom"
-            title="Scroll to latest message"
-          >
-            <ChevronDown className="h-5 w-5" />
-          </button>
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20 pointer-events-none">
+            <button
+              onClick={handleScrollToBottom}
+              className="h-8 w-8 flex items-center justify-center rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:bg-gray-50 transition-all cursor-pointer pointer-events-auto"
+              aria-label="Scroll to bottom"
+              title="Scroll to latest message"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </div>
     );
