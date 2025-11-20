@@ -19,6 +19,7 @@ export interface UseWebSocketOptions {
   onConversationTitleUpdated?: (conversationId: string, title: string) => void;
   onStreamAborted?: (conversationId: string) => void;
   onConversationDeleted?: (conversationId: string) => void;
+  onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
   autoConnect?: boolean;
 }
 
@@ -38,6 +39,7 @@ export function useWebSocket({
   onConversationTitleUpdated,
   onStreamAborted,
   onConversationDeleted,
+  onConversationModeUpdated,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -124,6 +126,14 @@ export function useWebSocket({
     clientRef.current.deleteConversation(conversationId);
   }, [isConnected]);
 
+  const updateConversationMode = useCallback((conversationId: string, mode: 'consult' | 'assessment') => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot switch mode - not connected');
+      return;
+    }
+    clientRef.current.switchMode(conversationId, mode);
+  }, [isConnected]);
+
   // Setup event listeners
   useEffect(() => {
     if (!clientRef.current || !isConnected) return;
@@ -204,6 +214,13 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onConversationModeUpdated) {
+      const unsub = client.onConversationModeUpdated((data) => {
+        onConversationModeUpdated(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     if (onConnectionReady) {
       const unsub = client.onConnectionReady((data) => {
         onConnectionReady(data);
@@ -214,7 +231,7 @@ export function useWebSocket({
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConnectionReady]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onConnectionReady]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -241,6 +258,7 @@ export function useWebSocket({
     startNewConversation,
     abortStream,
     deleteConversation,
+    updateConversationMode,
   }), [
     isConnected,
     isConnecting,
@@ -252,5 +270,6 @@ export function useWebSocket({
     startNewConversation,
     abortStream,
     deleteConversation,
+    updateConversationMode,
   ]);
 }

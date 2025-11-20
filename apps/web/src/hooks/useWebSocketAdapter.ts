@@ -23,6 +23,7 @@ export interface WebSocketEventHandlers {
   onConversationTitleUpdated?: (conversationId: string, title: string) => void;
   onStreamAborted?: (conversationId: string) => void;
   onConversationDeleted?: (conversationId: string) => void;
+  onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
 }
 
 /**
@@ -57,6 +58,7 @@ export interface WebSocketAdapterInterface {
   fetchConversations: () => void;
   startNewConversation: (mode: ConversationMode) => void;
   deleteConversation: (conversationId: string) => void;
+  updateConversationMode: (conversationId: string, mode: ConversationMode) => void;
 
   // Stream control
   abortStream: () => void;
@@ -122,6 +124,7 @@ export function useWebSocketAdapter({
     onConversationTitleUpdated: handlers.onConversationTitleUpdated,
     onStreamAborted: handlers.onStreamAborted,
     onConversationDeleted: handlers.onConversationDeleted,
+    onConversationModeUpdated: handlers.onConversationModeUpdated,
     autoConnect,
   });
 
@@ -157,6 +160,10 @@ export function useWebSocketAdapter({
       wsHook.deleteConversation(conversationId);
     },
 
+    updateConversationMode: (conversationId: string, mode: ConversationMode) => {
+      wsHook.updateConversationMode(conversationId, mode);
+    },
+
     // Stream control
     abortStream: () => {
       wsHook.abortStream();
@@ -169,6 +176,7 @@ export function useWebSocketAdapter({
     wsHook.fetchConversations,
     wsHook.startNewConversation,
     wsHook.deleteConversation,
+    wsHook.updateConversationMode,
     wsHook.abortStream,
     wsHook.connect,
     wsHook.disconnect,

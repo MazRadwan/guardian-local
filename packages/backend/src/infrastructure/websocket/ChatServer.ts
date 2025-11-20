@@ -612,6 +612,86 @@ export class ChatServer {
         }
       });
 
+      // Switch conversation mode (consult ⟺ assessment)
+      socket.on('switch_mode', async (payload: { conversationId?: string; mode?: 'consult' | 'assessment' }) => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'switch_mode',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          const { conversationId, mode } = payload;
+
+          if (!conversationId || !mode) {
+            socket.emit('error', {
+              event: 'switch_mode',
+              message: 'conversationId and mode are required',
+            });
+            return;
+          }
+
+          await this.validateConversationOwnership(conversationId, socket.userId);
+
+          const conversation = await this.conversationService.getConversation(conversationId);
+          if (!conversation) {
+            socket.emit('error', {
+              event: 'switch_mode',
+              message: `Conversation ${conversationId} not found`,
+            });
+            return;
+          }
+
+          // Idempotent: already in requested mode
+          if (conversation.mode === mode) {
+            socket.emit('conversation_mode_updated', {
+              conversationId,
+              mode,
+            });
+            return;
+          }
+
+          await this.conversationService.switchMode(conversationId, mode);
+
+          socket.emit('conversation_mode_updated', {
+            conversationId,
+            mode,
+          });
+
+          // Provide guidance when entering assessment mode
+          if (mode === 'assessment') {
+            const guidanceText =
+              `Let's start assessment mode. Pick one path:\n` +
+              `- Quick Assessment: 30-40 targeted questions to surface red flags fast.\n` +
+              `- Custom Assessment: Full 85-95 question set across all risk dimensions.\n` +
+              `- Category-Based Set: Curated questions for a category (e.g., clinical decision support, administrative automation, patient-facing, analytics, chatbot/triage, radiology AI, predictive risk).\n` +
+              `Tell me which path you want and any key context (solution type, data handling, deployment).`;
+
+            const guidanceMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'assistant',
+              content: { text: guidanceText },
+            });
+
+            socket.emit('message', {
+              id: guidanceMessage.id,
+              conversationId: guidanceMessage.conversationId,
+              role: guidanceMessage.role,
+              content: guidanceMessage.content,
+              createdAt: guidanceMessage.createdAt,
+            });
+          }
+        } catch (error) {
+          console.error('[ChatServer] Error switching mode:', error);
+          socket.emit('error', {
+            event: 'switch_mode',
+            message: error instanceof Error ? error.message : 'Failed to switch mode',
+          });
+        }
+      });
+
       // Abort streaming
       socket.on('abort_stream', () => {
         console.log(`[ChatServer] Stream abort requested by user ${socket.userId}`);

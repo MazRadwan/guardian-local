@@ -20,6 +20,7 @@ describe('useWebSocketAdapter', () => {
     startNewConversation: jest.fn(),
     abortStream: jest.fn(),
     deleteConversation: jest.fn(),
+    updateConversationMode: jest.fn(),
   });
 
   beforeEach(() => {
@@ -61,6 +62,7 @@ describe('useWebSocketAdapter', () => {
         onConversationTitleUpdated: undefined,
         onStreamAborted: undefined,
         onConversationDeleted: undefined,
+        onConversationModeUpdated: undefined,
         autoConnect: true,
       });
     });
@@ -334,6 +336,22 @@ describe('useWebSocketAdapter', () => {
       result.current.deleteConversation('conv-123');
 
       expect(mockWs.deleteConversation).toHaveBeenCalledWith('conv-123');
+    });
+
+    it('should update conversation mode', () => {
+      const mockWs = createMockWebSocket();
+      mockUseWebSocket.mockReturnValue(mockWs);
+
+      const { result } = renderHook(() =>
+        useWebSocketAdapter({
+          url: '/api/ws',
+          handlers: {},
+        })
+      );
+
+      result.current.updateConversationMode('conv-123', 'assessment');
+
+      expect(mockWs.updateConversationMode).toHaveBeenCalledWith('conv-123', 'assessment');
     });
   });
 

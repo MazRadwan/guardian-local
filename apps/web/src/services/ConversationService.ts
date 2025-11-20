@@ -120,6 +120,28 @@ export class ConversationService {
   }
 
   /**
+   * Update conversation mode (consult/assessment)
+   */
+  updateMode(conversationId: string, mode: ConversationMode): void {
+    if (!this.adapter.isConnected) {
+      this.store.setError('Not connected to server');
+      return;
+    }
+
+    if (!conversationId) {
+      this.store.setError('No active conversation');
+      return;
+    }
+
+    try {
+      this.adapter.updateConversationMode(conversationId, mode);
+    } catch (error) {
+      console.error('[ConversationService] Error updating mode:', error);
+      this.store.setError('Failed to switch mode');
+    }
+  }
+
+  /**
    * Switch to a different conversation
    *
    * Flow:
