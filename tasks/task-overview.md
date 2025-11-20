@@ -57,6 +57,12 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 - Epic 6 can now proceed
 - Epic 6 and Epic 7 can run in parallel after Epic 5
 
+### Active Sidequests
+
+| Sidequest | Status | Notes |
+|-----------|--------|-------|
+| Chat Architecture Refactor | 🆕 Planning | See `tasks/epic-chat-architecture-refactor.md` (sidequest for modularizing `ChatInterface.tsx` without behavior changes). |
+
 ---
 
 ## Phase 2: Analysis & Reports

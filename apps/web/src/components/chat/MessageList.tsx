@@ -59,28 +59,16 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       return () => observer.disconnect();
     }, [messages.length]); // Re-observe when messages change
 
-    // Auto-scroll to bottom on new messages (only if user is near bottom)
-    useEffect(() => {
-      if (!isNearBottom) return;  // Don't interrupt if user scrolled up
+    // Use useLayoutEffect for synchronous scroll updates to prevent visual lag (text going behind composer)
+    React.useLayoutEffect(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
 
-      if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      // If we are streaming OR if we were already near bottom, force scroll to bottom immediately
+      if (isStreaming || isNearBottom) {
+        container.scrollTop = container.scrollHeight;
       }
-    }, [messages, isNearBottom]);
-
-    // Continuous auto-scroll during streaming (keeps latest token visible above composer)
-    useEffect(() => {
-      if (!isStreaming || messages.length === 0) return;
-
-      // During streaming, continuously scroll to bottom ONLY if user is near bottom
-      const scrollInterval = setInterval(() => {
-        if (isNearBottom && scrollContainerRef.current) {
-          scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-        }
-      }, 50); // Scroll every 50ms during streaming for smooth tracking
-
-      return () => clearInterval(scrollInterval);
-    }, [isStreaming, messages.length, isNearBottom]);
+    }, [messages, isStreaming, isNearBottom]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
@@ -128,10 +116,10 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
         {/* Inner scroll container */}
         <div
           ref={mergedRef}
-          className="flex-1 overflow-y-auto scroll-smooth"
+          className="flex-1 overflow-y-auto"
         >
           {/* Centered content container (max-w-3xl = 768px) */}
-          <div className="max-w-3xl mx-auto w-full px-4 py-6">
+          <div className="max-w-3xl mx-auto w-full px-4 py-6 pb-6">
             {messages.map((message, index) => (
               <ChatMessage
                 key={message.id || `msg-${index}`}
@@ -171,16 +159,18 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
           </div>
         </div>
 
-        {/* Scroll-to-bottom button - fixed to viewport, not scrolling content */}
+        {/* Scroll-to-bottom button - ChatGPT Style (Centered, Floating) */}
         {showScrollButton && (
-          <button
-            onClick={handleScrollToBottom}
-            className="absolute bottom-6 right-6 z-10 rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-lg transition-all p-2"
-            aria-label="Scroll to bottom"
-            title="Scroll to latest message"
-          >
-            <ChevronDown className="h-5 w-5" />
-          </button>
+          <div className="absolute bottom-4 left-0 right-0 flex justify-center z-20 pointer-events-none">
+            <button
+              onClick={handleScrollToBottom}
+              className="h-8 w-8 flex items-center justify-center rounded-full bg-white border border-gray-200 shadow-md text-gray-600 hover:bg-gray-50 transition-all cursor-pointer pointer-events-auto"
+              aria-label="Scroll to bottom"
+              title="Scroll to latest message"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </div>
     );

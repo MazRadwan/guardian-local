@@ -13,6 +13,7 @@ export interface ComposerProps {
   onModeChange?: (mode: ConversationMode) => void;
   modeChangeDisabled?: boolean;
   isStreaming?: boolean;
+  isLoading?: boolean;
   onStopStream?: () => void;
 }
 
@@ -30,6 +31,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       onModeChange,
       modeChangeDisabled = false,
       isStreaming = false,
+      isLoading = false,
       onStopStream,
     },
     ref
@@ -80,9 +82,11 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     };
 
     const isSendEnabled = message.trim().length > 0 && !disabled;
+    const isBusy = isStreaming || isLoading;
+    const showThinking = isLoading && !isStreaming;
 
     return (
-      <div className="bg-white p-4">
+      <div className="bg-white p-2">
         {/* Centered composer container */}
         <div className="max-w-3xl mx-auto">
           {/* Elevated composer box */}
@@ -94,45 +98,71 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
-              disabled={disabled}
+              disabled={disabled || isBusy}
               rows={1}
-              className="w-full resize-none border-0 px-4 pt-4 pb-2 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 disabled:bg-gray-50 disabled:text-gray-500"
-              style={{ minHeight: '60px', maxHeight: '200px' }}
+              className={`w-full resize-none border-0 px-4 pt-4 pb-2 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 disabled:bg-gray-50 disabled:text-gray-500 ${
+                isBusy ? 'hidden' : 'block'
+              }`}
+              style={{ minHeight: isBusy ? '0px' : '60px', maxHeight: '200px' }}
               aria-label="Message input"
             />
 
             {/* Toolbar section (bottom) */}
-            <div className="flex items-center justify-between px-4 pb-3 pt-1">
+            <div className={`flex items-center justify-between px-4 ${isBusy ? 'py-3' : 'pb-3 pt-1'}`}>
               {/* Left group: Mode selector + File upload button */}
               <div className="flex items-center gap-2">
-                {/* Mode Selector */}
-                {onModeChange && (
-                  <ModeSelector
-                    selectedMode={currentMode}
-                    onModeChange={onModeChange}
-                    disabled={disabled || modeChangeDisabled}
-                  />
-                )}
+                {/* Hide tools when streaming */}
+                {!isBusy && (
+                  <>
+                    {/* Mode Selector */}
+                    {onModeChange && (
+                      <ModeSelector
+                        selectedMode={currentMode}
+                        onModeChange={onModeChange}
+                        disabled={disabled || modeChangeDisabled}
+                      />
+                    )}
 
-                {/* File upload button (stub for now) */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
-                  disabled={disabled}
-                  aria-label="Attach file"
-                  onClick={() => {
-                    // Stub - file upload functionality deferred
-                    console.log('File upload clicked (not yet implemented)');
-                  }}
-                >
-                  <Paperclip className="h-5 w-5" />
-                </Button>
+                    {/* File upload button (stub for now) */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
+                      disabled={disabled}
+                      aria-label="Attach file"
+                      onClick={() => {
+                        // Stub - file upload functionality deferred
+                        console.log('File upload clicked (not yet implemented)');
+                      }}
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </Button>
+                  </>
+                )}
+                
+                {/* Show status text only during pre-stream loading */}
+                {showThinking && (
+                  <div className="flex items-center gap-2 text-gray-500">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-medium">Guardian is thinking</span>
+                      <span className="flex gap-0.5">
+                        <span className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right group: Send button or Stop button */}
-              {isStreaming ? (
+              {isStreaming && onStopStream ? (
                 <Button
                   type="button"
                   onClick={onStopStream}

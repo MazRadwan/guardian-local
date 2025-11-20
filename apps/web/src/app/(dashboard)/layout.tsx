@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatStore } from '@/stores/chatStore';
 import { Sidebar } from '@/components/chat/Sidebar';
-import { User, PanelLeft } from 'lucide-react';
+import { PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardLayout({
@@ -107,46 +107,23 @@ export default function DashboardLayout({
       {/* Main Content Area */}
       <div
         className={`
-          flex flex-1 flex-col transition-all duration-300 ease-in-out
+          flex flex-1 flex-col h-full min-w-0 transition-all duration-300 ease-in-out
           ${sidebarMinimized ? 'md:ml-12' : 'md:ml-64'}
         `}
       >
-        {/* Header */}
-        <header className="flex items-center justify-between bg-white px-6 py-4">
-          <div className="flex items-center gap-4">
-            {/* Mobile sidebar toggle - only visible on mobile/tablet */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleMobileToggle}
-              className="md:hidden"
-              aria-label="Toggle sidebar"
-            >
-              <PanelLeft className="h-5 w-5 text-gray-700" />
-            </Button>
-            <h1 className="text-2xl font-bold text-gray-900">Guardian</h1>
-            {/* Connection status indicator */}
-            <div className="flex items-center gap-2">
-              <div
-                className="h-2 w-2 rounded-full bg-green-500"
-                aria-label="Connected"
-              />
-              <span className="text-sm text-gray-600">Connected</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            {user && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <User className="h-4 w-4" />
-                <span>{user.name}</span>
-                <span className="text-xs text-gray-400">({user.role})</span>
-              </div>
-            )}
-          </div>
+        {/* Mobile Header (Hidden on Desktop) */}
+        <header className="md:hidden flex shrink-0 items-center justify-between bg-white px-4 py-2 border-b">
+           <Button variant="ghost" onClick={handleMobileToggle} aria-label="Toggle sidebar">
+             <PanelLeft className="h-5 w-5" />
+           </Button>
+           <span className="font-semibold">Guardian</span>
+           <div className="w-8" /> {/* Spacer */}
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 min-h-0 overflow-hidden">{children}</main>
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+          {children}
+        </main>
       </div>
     </div>
   );

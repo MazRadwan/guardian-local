@@ -300,9 +300,14 @@ describe('MessageList', () => {
 
       const button = screen.getByLabelText('Scroll to bottom');
 
-      expect(button).toHaveClass('absolute', 'bottom-6', 'right-6', 'z-10', 'rounded-full');
-      expect(button).toHaveClass('bg-gray-700', 'text-white');
+      // ChatGPT-style button: centered, white background, not absolutely positioned (wrapper div handles positioning)
+      expect(button).toHaveClass('rounded-full', 'bg-white', 'text-gray-600');
+      expect(button).toHaveClass('h-8', 'w-8');
       expect(button).toHaveAttribute('title', 'Scroll to latest message');
+
+      // Button is inside centered wrapper with z-20
+      const wrapper = button.parentElement;
+      expect(wrapper).toHaveClass('z-20');
     });
 
     it('clicking button scrolls to bottom using scrollIntoView', async () => {
@@ -341,7 +346,7 @@ describe('MessageList', () => {
       });
     });
 
-    it('scroll container has scroll-smooth class', () => {
+    it('scroll container has overflow-y-auto for scrolling', () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Message 1', timestamp: new Date() },
       ];
@@ -349,7 +354,9 @@ describe('MessageList', () => {
       const { container } = render(<MessageList messages={messages} />);
 
       const scrollContainer = container.querySelector('.overflow-y-auto');
-      expect(scrollContainer).toHaveClass('scroll-smooth');
+      expect(scrollContainer).toBeInTheDocument();
+      expect(scrollContainer).toHaveClass('overflow-y-auto');
+      // Note: smooth scrolling is handled via JS scrollIntoView({ behavior: 'smooth' }), not CSS
     });
 
     it('button positioned in outer non-scrolling container', async () => {

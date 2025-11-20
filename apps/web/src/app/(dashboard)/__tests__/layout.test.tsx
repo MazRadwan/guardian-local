@@ -155,18 +155,17 @@ describe('DashboardLayout', () => {
       expect(screen.getByText('Guardian')).toBeInTheDocument();
     });
 
-    it('displays user information in header', () => {
+    it('displays Guardian branding in mobile header', () => {
       const { container } = render(
         <DashboardLayout>
           <div>Content</div>
         </DashboardLayout>
       );
 
-      // User info appears in both sidebar and header, so check header specifically
+      // Mobile header shows Guardian branding (user info is in Sidebar)
       const header = container.querySelector('header');
       expect(header).toBeInTheDocument();
-      expect(header?.textContent).toContain('Test User');
-      expect(header?.textContent).toContain('(analyst)');
+      expect(header?.textContent).toContain('Guardian');
     });
 
     it('passes correct props to Sidebar component', () => {

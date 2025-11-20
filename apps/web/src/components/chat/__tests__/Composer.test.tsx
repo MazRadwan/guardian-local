@@ -476,28 +476,28 @@ describe('Composer', () => {
     });
 
     it('renders stop button when streaming', () => {
-      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} />);
+      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} onStopStream={jest.fn()} />);
 
       expect(screen.getByLabelText('Stop generating')).toBeInTheDocument();
       expect(screen.queryByLabelText('Send message')).not.toBeInTheDocument();
     });
 
     it('stop button has red background', () => {
-      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} />);
+      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} onStopStream={jest.fn()} />);
 
       const stopButton = screen.getByLabelText('Stop generating');
       expect(stopButton).toHaveClass('bg-red-500');
     });
 
     it('stop button is circular with correct size', () => {
-      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} />);
+      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} onStopStream={jest.fn()} />);
 
       const stopButton = screen.getByLabelText('Stop generating');
       expect(stopButton).toHaveClass('h-8', 'w-8', 'rounded-full');
     });
 
     it('stop button shows square icon', () => {
-      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} />);
+      render(<Composer onSendMessage={mockOnSendMessage} isStreaming={true} onStopStream={jest.fn()} />);
 
       const stopButton = screen.getByLabelText('Stop generating');
       const icon = stopButton.querySelector('svg');

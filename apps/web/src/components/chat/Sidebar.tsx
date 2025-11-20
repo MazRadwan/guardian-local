@@ -79,8 +79,11 @@ export function Sidebar({
         role="navigation"
         aria-label="Sidebar navigation"
       >
-        {/* Section 1: Toggle Button */}
-        <div className="p-2">
+        {/* Section 1: Header & Toggle */}
+        <div className={`flex items-center h-14 ${isMinimized ? 'justify-center p-2' : 'justify-between p-3'}`}>
+          {!isMinimized && (
+            <span className="font-semibold text-lg text-gray-900 pl-2">Guardian</span>
+          )}
           {/* Desktop: minimize/expand button, Mobile: close drawer button */}
           <button
             onClick={() => {
@@ -92,7 +95,7 @@ export function Sidebar({
               }
             }}
             className={`flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors ${
-              isMinimized ? 'h-10 w-10' : 'h-8 w-8'
+              isMinimized ? 'h-10 w-10 mx-auto' : 'h-8 w-8'
             }`}
             title={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
             aria-label={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
@@ -150,17 +153,7 @@ export function Sidebar({
 
         {/* Footer Section - Logout */}
         <div className="p-3">
-          {isMinimized ? (
-            // Minimized: Icon only
-            <button
-              onClick={onLogout}
-              className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
-              title="Logout"
-              aria-label="Logout"
-            >
-              <LogOut className="h-5 w-5 text-gray-700" />
-            </button>
-          ) : (
+          {!isMinimized && (
             // Expanded: Full button with user info
             <div className="space-y-2">
               {userName && (

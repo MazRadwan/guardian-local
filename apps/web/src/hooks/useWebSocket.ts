@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { WebSocketClient, ChatMessage, StreamEvent, Conversation } from '@/lib/websocket';
 
 export interface UseWebSocketOptions {
@@ -230,7 +230,7 @@ export function useWebSocket({
     };
   }, []); // Empty deps = only runs on mount/unmount
 
-  return {
+  return useMemo(() => ({
     isConnected,
     isConnecting,
     connect,
@@ -241,5 +241,16 @@ export function useWebSocket({
     startNewConversation,
     abortStream,
     deleteConversation,
-  };
+  }), [
+    isConnected,
+    isConnecting,
+    connect,
+    disconnect,
+    sendMessage,
+    requestHistory,
+    fetchConversations,
+    startNewConversation,
+    abortStream,
+    deleteConversation,
+  ]);
 }
