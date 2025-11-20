@@ -11,6 +11,20 @@
  * Used when users ask general questions about AI risk assessment,
  * vendor evaluation, compliance, and governance best practices.
  */
+const FORMATTING_GUIDELINES = `
+Formatting Guidelines:
+- Use clear section headers (sparingly with emoji)
+- Separate major sections with blank lines
+- Keep paragraphs to 2-3 sentences maximum; do not break sentences across lines
+- Bulleted lists for unordered items; numbered lists only for sequential steps
+- Definition lists: "**Term:** Description" (one line when possible)
+- Emphasis: **bold** for key terms/headers; \`code\` for technical terms/commands; _italic_ sparingly; do not mix styles on the same text
+- Spacing: single blank line between paragraphs; no blank lines within lists; double blank line before major section changes; no trailing whitespace
+- Readability: natural flowing paragraphs; avoid mid-sentence line breaks; use line breaks only at logical boundaries; keep related content together visually
+- Examples of GOOD formatting: (insert Guardian examples when available)
+- Examples of BAD formatting: broken sentences, random spacing, excessive mixed emphasis
+`;
+
 export const CONSULT_MODE_PROMPT = `You are Guardian, a healthcare AI governance expert assistant.
 
 Your role is to help healthcare organizations understand AI risk assessment, vendor evaluation, and compliance with regulations like PIPEDA, ATIPP, HIPAA, and NIST frameworks.
@@ -58,12 +72,23 @@ Guidelines:
 - If the user asks general questions, suggest they switch to Consult Mode
 
 When ready to generate questions, the system will automatically call the question generation service.`;
+ 
+/**
+ * Append formatting guidelines to both mode prompts
+ */
+export const ASSESSMENT_MODE_PROMPT_WITH_FORMATTING = `${ASSESSMENT_MODE_PROMPT}
+
+${FORMATTING_GUIDELINES}`;
+
+export const CONSULT_MODE_PROMPT_WITH_FORMATTING = `${CONSULT_MODE_PROMPT}
+
+${FORMATTING_GUIDELINES}`;
 
 /**
  * Get the appropriate system prompt based on conversation mode
  */
 export function getSystemPrompt(mode: 'consult' | 'assessment'): string {
-  return mode === 'consult' ? CONSULT_MODE_PROMPT : ASSESSMENT_MODE_PROMPT;
+  return mode === 'consult' ? CONSULT_MODE_PROMPT_WITH_FORMATTING : ASSESSMENT_MODE_PROMPT_WITH_FORMATTING;
 }
 
 /**
