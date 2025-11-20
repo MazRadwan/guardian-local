@@ -663,11 +663,18 @@ export class ChatServer {
           // Provide guidance when entering assessment mode
           if (mode === 'assessment') {
             const guidanceText =
-              `Let's start assessment mode. Pick one path:\n` +
-              `- Quick Assessment: 30-40 targeted questions to surface red flags fast.\n` +
-              `- Custom Assessment: Full 85-95 question set across all risk dimensions.\n` +
-              `- Category-Based Set: Curated questions for a category (e.g., clinical decision support, administrative automation, patient-facing, analytics, chatbot/triage, radiology AI, predictive risk).\n` +
-              `Tell me which path you want and any key context (solution type, data handling, deployment).`;
+              `Let's start assessment mode. Choose one option below (reply with 1, 2, or 3):\n` +
+              `1) Quick Assessment — 30-40 targeted questions to surface red flags fast.\n` +
+              `2) Custom Assessment — Full 85-95 question set across all 11 risk dimensions.\n` +
+              `3) Category-Based Set — Curated questions for a category (reply with A-F):\n` +
+              `   A) Clinical Decision Support — Diagnosis assistance, treatment recommendations, clinical alerts\n` +
+              `   B) Administrative Automation — Scheduling, billing, coding, prior authorization\n` +
+              `   C) Patient-Facing — Portals, appointment booking, health tracking apps\n` +
+              `   D) Analytics & Research — Population health, predictive analytics, research tools\n` +
+              `   E) Chatbot/Triage — Symptom checkers, virtual assistants, intake routing\n` +
+              `   F) Radiology AI — Imaging analysis, imaging decision support\n` +
+              `   G) Predictive Risk — Readmission/sepsis prediction, early warning systems\n` +
+              `Tell me the number (1-3). If you choose 3, include the letter (A-G). Add any key context (solution type, data handling, deployment).`;
 
             const guidanceMessage = await this.conversationService.sendMessage({
               conversationId,
