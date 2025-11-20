@@ -27,6 +27,7 @@ export default function DashboardLayout({
     activeConversationId,
     setActiveConversation,
     deleteConversation,
+    requestNewChat,
   } = useChatStore();
 
   // Debug: Log conversations whenever they change
@@ -47,16 +48,13 @@ export default function DashboardLayout({
   };
 
   const handleNewChat = () => {
-    // Clear current messages
-    clearMessages();
+    console.log('[DashboardLayout] New Chat button clicked');
 
-    // Set active conversation to null (new chat state)
-    setActiveConversation(null);
+    // Request new chat creation (ChatInterface will handle it)
+    requestNewChat();
 
-    // Clear URL parameter
+    // Navigate to chat page
     router.push('/chat');
-
-    // Focus will be handled by ChatInterface when it detects null conversation
   };
 
   // Separate handlers for desktop vs mobile toggle behavior

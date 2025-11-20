@@ -133,6 +133,30 @@ export class ConversationService {
   }
 
   /**
+   * Delete a conversation and all its messages
+   * Idempotent: If conversation doesn't exist, deletion is considered successful
+   */
+  async deleteConversation(conversationId: string): Promise<void> {
+    const conversation = await this.conversationRepo.findById(conversationId);
+
+    // CRITICAL FIX: Idempotent DELETE - already deleted = success
+    if (!conversation) {
+      console.log(`[ConversationService] Conversation ${conversationId} already deleted - returning success`);
+      return; // Silent success - conversation is already gone, deletion goal achieved
+    }
+
+    // Delete all messages first (due to foreign key constraint)
+    const messages = await this.messageRepo.getHistory(conversationId, 1000);
+    for (const message of messages) {
+      await this.messageRepo.delete(message.id);
+    }
+
+    // Delete the conversation
+    await this.conversationRepo.delete(conversationId);
+    console.log(`[ConversationService] Successfully deleted conversation ${conversationId}`);
+  }
+
+  /**
    * Update conversation context
    */
   async updateContext(

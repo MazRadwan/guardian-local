@@ -11,12 +11,14 @@ export interface UseWebSocketOptions {
   onMessageStream?: (chunk: string, conversationId: string, messageId?: string) => void;
   onError?: (error: string) => void;
   onConnected?: (data: { conversationId: string; resumed: boolean }) => void;
+  onConnectionReady?: (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => void;
   onHistory?: (messages: ChatMessage[]) => void;
   onStreamComplete?: (data: { messageId: string; conversationId: string; fullText: string }) => void;
   onConversationsList?: (conversations: Conversation[]) => void;
   onConversationCreated?: (conversation: Conversation) => void;
   onConversationTitleUpdated?: (conversationId: string, title: string) => void;
   onStreamAborted?: (conversationId: string) => void;
+  onConversationDeleted?: (conversationId: string) => void;
   autoConnect?: boolean;
 }
 
@@ -28,12 +30,14 @@ export function useWebSocket({
   onMessageStream,
   onError,
   onConnected,
+  onConnectionReady,
   onHistory,
   onStreamComplete,
   onConversationsList,
   onConversationCreated,
   onConversationTitleUpdated,
   onStreamAborted,
+  onConversationDeleted,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -51,10 +55,7 @@ export function useWebSocket({
         url,
         token,
         conversationId,
-        onConversationsList,
-        onConversationCreated,
-        onConversationTitleUpdated,
-        onStreamAborted,
+        // Note: Event callbacks registered dynamically in effect, not via config
       });
       await client.connect();
       clientRef.current = client;
@@ -65,7 +66,7 @@ export function useWebSocket({
     } finally {
       setIsConnecting(false);
     }
-  }, [url, token, conversationId, isConnecting, isConnected, onError, onConversationsList, onConversationCreated]);
+  }, [url, token, conversationId, isConnecting, isConnected, onError]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -115,6 +116,14 @@ export function useWebSocket({
     clientRef.current?.abortStream();
   }, []);
 
+  const deleteConversation = useCallback((conversationId: string) => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot delete conversation - not connected');
+      return;
+    }
+    clientRef.current.deleteConversation(conversationId);
+  }, [isConnected]);
+
   // Setup event listeners
   useEffect(() => {
     if (!clientRef.current || !isConnected) return;
@@ -145,13 +154,6 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
-    if (onConnected) {
-      const unsub = client.onConnected((data) => {
-        onConnected(data);
-      });
-      unsubscribers.push(unsub);
-    }
-
     if (onHistory) {
       const unsub = client.onHistory((messages) => {
         onHistory(messages);
@@ -166,6 +168,28 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // CRITICAL FIX: Register conversation callbacks dynamically to prevent stale closures
+    if (onConversationsList) {
+      const unsub = client.onConversationsList((conversations) => {
+        onConversationsList(conversations);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onConversationCreated) {
+      const unsub = client.onConversationCreated((conversation) => {
+        onConversationCreated(conversation);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onConversationTitleUpdated) {
+      const unsub = client.onConversationTitleUpdated((conversationId, title) => {
+        onConversationTitleUpdated(conversationId, title);
+      });
+      unsubscribers.push(unsub);
+    }
+
     if (onStreamAborted) {
       const unsub = client.onStreamAborted((conversationId) => {
         onStreamAborted(conversationId);
@@ -173,10 +197,24 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onConversationDeleted) {
+      const unsub = client.onConversationDeleted((conversationId) => {
+        onConversationDeleted(conversationId);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onConnectionReady) {
+      const unsub = client.onConnectionReady((data) => {
+        onConnectionReady(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onConnected, onHistory, onStreamComplete, onStreamAborted]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConnectionReady]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -202,5 +240,6 @@ export function useWebSocket({
     fetchConversations,
     startNewConversation,
     abortStream,
+    deleteConversation,
   };
 }

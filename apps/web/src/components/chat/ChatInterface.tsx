@@ -34,6 +34,13 @@ export function ChatInterface() {
     addConversation,
     updateConversationTitle,
     isStreaming,
+    conversations,
+    newChatRequested,
+    clearNewChatRequest,
+    requestNewChat,
+    deleteConversationRequested,
+    clearDeleteConversationRequest,
+    removeConversationFromList,
   } = useChatStore();
   const { mode, changeMode, isChanging } = useConversationMode('consult');
   const { token } = useAuth();
@@ -43,6 +50,11 @@ export function ChatInterface() {
   const composerRef = useRef<ComposerRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const isCreatingNewConversation = useRef(false);
+  const justCreatedConversationId = useRef<string | null>(null);
+  const lastCreationTime = useRef<number>(0);
+  const hasInitialized = useRef(false);
+  const explicitNewChatRequest = useRef(false);
+  const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Delay showing skeleton to prevent flash on quick loads (300ms threshold)
   const showDelayedLoading = useDelayedLoading(isLoading, 300);
@@ -120,30 +132,18 @@ export function ChatInterface() {
 
   const [shouldLoadHistory, setShouldLoadHistory] = useState(false);
 
-  const handleConnected = useCallback(
-    (data: { conversationId: string; resumed: boolean }) => {
-      console.log('[ChatInterface] Connected to WebSocket, conversationId:', data.conversationId, 'resumed:', data.resumed);
-
-      // Save conversationId to localStorage for session persistence
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('guardian_conversation_id', data.conversationId);
-      }
-
-      // Mark that we should load history if resumed
-      if (data.resumed) {
-        setShouldLoadHistory(true);
-      }
-
-      // Note: fetchConversations is called by separate useEffect (lines 188-194)
-      // when isConnected becomes true
-    },
-    []
-  );
-
   const handleHistory = useCallback(
     (loadedMessages: ChatMessageType[]) => {
       console.log('[ChatInterface] handleHistory called with:', loadedMessages.length, 'messages');
       console.log('[ChatInterface] Messages:', loadedMessages);
+
+      // CRITICAL FIX: Clear history timeout to prevent error showing after successful load
+      if (historyTimeoutRef.current) {
+        console.log('[ChatInterface] Clearing history timeout');
+        clearTimeout(historyTimeoutRef.current);
+        historyTimeoutRef.current = null;
+      }
+
       setMessages(loadedMessages);
       console.log('[ChatInterface] setMessages called');
       setLoading(false); // Hide skeleton loaders
@@ -182,6 +182,9 @@ export function ChatInterface() {
       console.log('[ChatInterface] New conversation created:', conversation.id);
       addConversation(conversation);
 
+      // Mark this conversation as just created (to prevent loading history for it)
+      justCreatedConversationId.current = conversation.id;
+
       // Set as active AND update localStorage
       setActiveConversation(conversation.id);
 
@@ -189,10 +192,18 @@ export function ChatInterface() {
         localStorage.setItem('guardian_conversation_id', conversation.id);
       }
 
+      // Update URL immediately (don't let the effect do it)
+      router.replace(`/chat?conversation=${conversation.id}`, { scroll: false });
+
       // Reset guard flag now that conversation is created
       isCreatingNewConversation.current = false;
+
+      // Clear the flag after a short delay (to allow effect to skip history loading)
+      setTimeout(() => {
+        justCreatedConversationId.current = null;
+      }, 100);
     },
-    [addConversation, setActiveConversation]
+    [addConversation, setActiveConversation, router]
   );
 
   const handleConversationTitleUpdated = useCallback(
@@ -216,20 +227,93 @@ export function ChatInterface() {
     [finishStreaming, setLoading, focusComposer]
   );
 
-  const { isConnected, isConnecting, sendMessage, requestHistory, fetchConversations, startNewConversation, abortStream } = useWebSocket({
+  const handleConversationDeleted = useCallback(
+    (conversationId: string) => {
+      console.log('[ChatInterface] Conversation deleted:', conversationId);
+      // Remove from local store
+      removeConversationFromList(conversationId);
+      // Clear the request flag
+      clearDeleteConversationRequest();
+
+      // CRITICAL FIX: Clear localStorage if deleted conversation was the saved one
+      if (typeof window !== 'undefined') {
+        const savedId = localStorage.getItem('guardian_conversation_id');
+        if (savedId === conversationId) {
+          console.log('[ChatInterface] Clearing localStorage for deleted conversation');
+          localStorage.removeItem('guardian_conversation_id');
+          setSavedConversationId(undefined);
+        }
+      }
+
+      // CRITICAL FIX: Also clear Zustand persisted activeConversationId if it matches
+      if (activeConversationId === conversationId) {
+        console.log('[ChatInterface] Clearing active conversation ID for deleted conversation');
+        setActiveConversation(null);
+      }
+
+      // CRITICAL FIX: If no conversations left after deletion, auto-create new one
+      // conversations.length will be the count before removal, so check if it will be 0
+      const remainingCount = conversations.filter(c => c.id !== conversationId).length;
+      if (remainingCount === 0) {
+        console.log('[ChatInterface] Last conversation deleted - auto-creating new chat');
+        requestNewChat();
+      }
+    },
+    [removeConversationFromList, clearDeleteConversationRequest, activeConversationId, setActiveConversation, conversations, requestNewChat]
+  );
+
+  const handleConnectionReady = useCallback(
+    (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => {
+      console.log('[ChatInterface] Connection ready:', data);
+
+      if (data.hasActiveConversation && data.conversationId) {
+        // SCENARIO 1: Backend successfully resumed existing conversation
+        console.log('[ChatInterface] Resuming conversation:', data.conversationId);
+
+        // Set flag to load history for this conversation
+        setShouldLoadHistory(true);
+
+        // Sync all conversation state
+        setSavedConversationId(data.conversationId);
+        setActiveConversation(data.conversationId);
+
+        // Save to localStorage for session persistence
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('guardian_conversation_id', data.conversationId);
+        }
+      } else {
+        // SCENARIO 2: No active conversation (deleted/missing) - auto-create new chat
+        // Use sessionStorage guard to survive React Strict Mode double-mount
+        const hasAutoCreated = sessionStorage.getItem('guardian_auto_created_chat');
+
+        if (!hasAutoCreated && !newChatRequested) {
+          console.log('[ChatInterface] No active conversation - auto-creating new chat');
+          sessionStorage.setItem('guardian_auto_created_chat', 'true');
+          requestNewChat();
+        }
+      }
+
+      // CRITICAL: Always clear loading state to prevent skeleton hang
+      setLoading(false);
+    },
+    [requestNewChat, newChatRequested, setShouldLoadHistory, setSavedConversationId, setActiveConversation, setLoading]
+  );
+
+  const { isConnected, isConnecting, sendMessage, requestHistory, fetchConversations, startNewConversation, abortStream, deleteConversation: wsDeleteConversation } = useWebSocket({
     url: WEBSOCKET_URL,
     token: token || undefined,
     conversationId: savedConversationId || undefined, // Pass saved conversationId to resume
     onMessage: handleMessage,
     onMessageStream: handleMessageStream,
     onError: handleError,
-    onConnected: handleConnected,
+    onConnectionReady: handleConnectionReady,
     onHistory: handleHistory,
     onStreamComplete: handleStreamComplete,
     onConversationsList: handleConversationsList,
     onConversationCreated: handleConversationCreated,
     onConversationTitleUpdated: handleConversationTitleUpdated,
     onStreamAborted: handleStreamAborted,
+    onConversationDeleted: handleConversationDeleted,
     autoConnect: Boolean(token), // Connect whenever user is authenticated
   });
 
@@ -238,6 +322,8 @@ export function ChatInterface() {
     console.log('[ChatInterface] Fetch conversations effect triggered - isConnected:', isConnected, 'fetchConversations:', !!fetchConversations);
     if (isConnected && fetchConversations) {
       console.log('[ChatInterface] Calling fetchConversations NOW');
+      // Mark that we're fetching conversations
+      hasInitialized.current = false;
       // Small delay to ensure WebSocket is fully ready
       setTimeout(() => {
         fetchConversations();
@@ -248,15 +334,55 @@ export function ChatInterface() {
   // Request history after connection when needed
   useEffect(() => {
     if (shouldLoadHistory && isConnected && savedConversationId && requestHistory) {
+      console.log('[ChatInterface] Requesting history for conversation:', savedConversationId);
       requestHistory(savedConversationId);
-    }
-  }, [shouldLoadHistory, isConnected, savedConversationId, requestHistory]);
 
-  // Handle conversation switching
+      // CRITICAL FIX: Store timeout in ref so handleHistory can clear it
+      historyTimeoutRef.current = setTimeout(() => {
+        if (isLoading && messages.length === 0) {
+          console.warn('[ChatInterface] History request timeout - clearing loading state');
+          setLoading(false);
+          setError('Failed to load conversation. Please try again.');
+          historyTimeoutRef.current = null;
+        }
+      }, 5000); // 5 second timeout
+
+      // CRITICAL: Clean up timeout on unmount or when dependencies change
+      return () => {
+        console.log('[ChatInterface] Cleaning up history timeout');
+        if (historyTimeoutRef.current) {
+          clearTimeout(historyTimeoutRef.current);
+          historyTimeoutRef.current = null;
+        }
+      };
+    }
+  }, [shouldLoadHistory, isConnected, savedConversationId, requestHistory, isLoading, messages.length, setLoading, setError]);
+
+  // Handle conversation switching (load history when switching between existing conversations)
   useEffect(() => {
     console.log('[ChatInterface] Conversation switching effect - activeConversationId:', activeConversationId, 'isConnected:', isConnected);
+
+    // Only handle switching to EXISTING conversations (not null)
     if (activeConversationId && isConnected && requestHistory) {
+      // Skip history loading if this is a newly created conversation
+      if (justCreatedConversationId.current === activeConversationId) {
+        console.log('[ChatInterface] Skipping history load for newly created conversation:', activeConversationId);
+        // Just update localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('guardian_conversation_id', activeConversationId);
+        }
+        return;
+      }
+
       console.log('[ChatInterface] Switching to conversation:', activeConversationId);
+
+      // Only update URL if it's different from current URL (prevent navigation loop)
+      const currentConversationId = searchParams.get('conversation');
+      if (currentConversationId !== activeConversationId) {
+        console.log('[ChatInterface] Updating URL to conversation:', activeConversationId);
+        router.replace(`/chat?conversation=${activeConversationId}`, { scroll: false });
+      }
+
       // Clear current messages
       clearMessages();
       console.log('[ChatInterface] Messages cleared');
@@ -274,19 +400,25 @@ export function ChatInterface() {
         setLoading(false);
       }
 
-      // Update URL with conversation ID
-      router.push(`/chat?conversation=${activeConversationId}`);
-
       // Update localStorage for session persistence
       if (typeof window !== 'undefined') {
         localStorage.setItem('guardian_conversation_id', activeConversationId);
       }
-    } else if (activeConversationId === null && isConnected && startNewConversation && !isCreatingNewConversation.current) {
-      // Guard: Prevent infinite loop by tracking if we're already creating a conversation
+    }
+    // REMOVED: Auto-create logic when activeConversationId === null
+    // New conversations are now created ONLY via explicit user action (New Chat button)
+  }, [activeConversationId, isConnected, requestHistory, clearMessages, setLoading, setError, router, searchParams]);
+
+  // Handle explicit new chat requests (from "New Chat" button)
+  useEffect(() => {
+    if (newChatRequested && isConnected && startNewConversation && !isCreatingNewConversation.current) {
+      console.log('[ChatInterface] Processing new chat request');
+
+      // Guard: Prevent creating multiple conversations if already creating one
       isCreatingNewConversation.current = true;
 
-      // New chat state - abort any active streaming first
-      if (messages.length > 0 && messages[messages.length - 1].role === 'assistant' && messages[messages.length - 1].content === '') {
+      // Abort any active streaming first
+      if (isStreaming) {
         console.log('[ChatInterface] Aborting active stream for new chat');
         finishStreaming();
         if (abortStream) {
@@ -294,14 +426,13 @@ export function ChatInterface() {
         }
       }
 
-      // Clear messages, localStorage
+      // Clear messages and localStorage
       clearMessages();
-
       if (typeof window !== 'undefined') {
         localStorage.removeItem('guardian_conversation_id');
       }
 
-      // Request backend to create new conversation and update socket state
+      // Request backend to create new conversation
       try {
         console.log('[ChatInterface] Requesting new conversation from backend');
         startNewConversation(mode);
@@ -312,12 +443,34 @@ export function ChatInterface() {
         isCreatingNewConversation.current = false; // Reset on error
       }
 
+      // Clear the request flag
+      clearNewChatRequest();
+
       // Focus composer for new chat
       setTimeout(() => {
         focusComposer();
       }, 100);
     }
-  }, [activeConversationId, isConnected, requestHistory, startNewConversation, clearMessages, setLoading, setError, router, mode, finishStreaming, abortStream, focusComposer]);
+  }, [newChatRequested, isConnected, startNewConversation, isStreaming, finishStreaming, abortStream, clearMessages, setError, mode, clearNewChatRequest, focusComposer]);
+
+  // Handle explicit conversation delete requests (from delete button)
+  useEffect(() => {
+    if (deleteConversationRequested && isConnected && wsDeleteConversation) {
+      console.log('[ChatInterface] Processing delete conversation request:', deleteConversationRequested);
+
+      try {
+        // Call WebSocket to delete from backend
+        wsDeleteConversation(deleteConversationRequested);
+
+        // Note: actual removal from store happens in handleConversationDeleted callback
+        // which is triggered when backend confirms deletion via conversation_deleted event
+      } catch (error) {
+        console.error('[ChatInterface] Error deleting conversation:', error);
+        setError('Failed to delete conversation');
+        clearDeleteConversationRequest();
+      }
+    }
+  }, [deleteConversationRequested, isConnected, wsDeleteConversation, setError, clearDeleteConversationRequest]);
 
   const handleSendMessage = useCallback(
     (content: string) => {
