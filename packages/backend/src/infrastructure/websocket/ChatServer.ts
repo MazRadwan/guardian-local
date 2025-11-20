@@ -664,21 +664,14 @@ export class ChatServer {
           if (mode === 'assessment') {
             const guidanceText =
               `**🔍 Assessment Mode Activated**\n\n` +
-              `Please select your assessment approach (reply with 1, 2, or 3):\n\n` +
-              `1️⃣ Quick Assessment (30-40 questions) — Fast red-flag screening\n` +
-              `2️⃣ Comprehensive Assessment (85-95 questions) — Full coverage across 11 risk dimensions\n` +
-              `3️⃣ Category-Focused Assessment — Tailored to your AI solution type (reply with A-G)\n\n` +
+              `Please select your assessment approach (reply with 1, 2, or 3):\n` +
+              `1) **Quick Assessment (30-40 questions)** — Fast red-flag screening\n` +
+              `2) **Comprehensive Assessment (85-95 questions)** — Full coverage across 11 risk dimensions\n` +
+              `3) **Category-Focused Assessment** — Tailored to your AI solution type (reply with A-G)\n\n` +
               `If choosing 3, pick a category:\n` +
-              `🏥 Clinical\n` +
-              `   A) Clinical Decision Support\n` +
-              `   B) Radiology AI\n` +
-              `   C) Predictive Risk Models\n` +
-              `⚙️ Administrative\n` +
-              `   D) Administrative Automation\n` +
-              `   E) Analytics & Research\n` +
-              `👤 Patient-Facing\n` +
-              `   F) Patient Portals & Apps\n` +
-              `   G) Chatbots & Triage\n\n` +
+              `- 🏥 **Clinical:** A) Clinical Decision Support · B) Radiology AI · C) Predictive Risk Models\n` +
+              `- ⚙️ **Administrative:** D) Administrative Automation · E) Analytics & Research\n` +
+              `- 👤 **Patient-Facing:** F) Patient Portals & Apps · G) Chatbots & Triage\n\n` +
               `Reply with the number (1-3). If you choose 3, include the letter (A-G) plus a brief description of your solution and data handling.`;
 
             const guidanceMessage = await this.conversationService.sendMessage({
