@@ -55,7 +55,7 @@ export class QuestionService {
     // 3. Call Claude API
     const response = await this.claudeClient.sendMessage(
       [{ role: 'user', content: prompt }],
-      GUARDIAN_SYSTEM_CONTEXT
+      { systemPrompt: GUARDIAN_SYSTEM_CONTEXT }
     );
 
     // 4. Parse and validate response

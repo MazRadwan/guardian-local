@@ -305,7 +305,7 @@ export class ChatServer {
             // Use messages directly - current message already in history
             for await (const chunk of this.claudeClient.streamMessage(
               messages,
-              systemPrompt
+              { systemPrompt }
             )) {
               // Check if stream was aborted by user
               if (socket.data.abortRequested) {

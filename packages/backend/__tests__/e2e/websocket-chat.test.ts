@@ -21,7 +21,7 @@ import { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter'
 
 // Mock Claude client for deterministic test responses
 class MockClaudeClient implements IClaudeClient {
-  async sendMessage(messages: ClaudeMessage[], systemPrompt?: string): Promise<any> {
+  async sendMessage(messages: ClaudeMessage[], _options?: { systemPrompt?: string }): Promise<any> {
     return {
       content: 'This is a mocked Claude response for testing',
       stop_reason: 'end_turn',
@@ -29,7 +29,7 @@ class MockClaudeClient implements IClaudeClient {
     }
   }
 
-  async *streamMessage(messages: ClaudeMessage[], systemPrompt?: string): AsyncGenerator<StreamChunk> {
+  async *streamMessage(messages: ClaudeMessage[], _options?: { systemPrompt?: string }): AsyncGenerator<StreamChunk> {
     // Emit test chunks
     yield { content: 'This ', isComplete: false }
     yield { content: 'is ', isComplete: false }
