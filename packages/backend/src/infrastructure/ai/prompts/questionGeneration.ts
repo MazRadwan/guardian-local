@@ -10,24 +10,39 @@ export interface QuestionGenerationContext {
   solutionType: string; // "clinical AI", "administrative automation", etc.
   assessmentFocus?: string; // Optional specific focus areas
   industry?: string; // Optional industry context
+  assessmentType?: 'quick' | 'comprehensive' | 'renewal';
+  category?: string; // Optional category for category-based sets
 }
 
 export function buildQuestionGenerationPrompt(
   context: QuestionGenerationContext
 ): string {
-  return `You are Guardian, an AI governance assessment system for healthcare organizations.
+  const type: 'quick' | 'comprehensive' | 'renewal' = context.assessmentType || 'comprehensive';
+  const categoryLine = context.category ? `- Category: ${context.category}\n` : '';
 
-Your task is to generate a comprehensive assessment questionnaire for evaluating an AI vendor/solution.
+  const questionCountInstruction =
+    type === 'quick'
+      ? 'Generate 30-40 targeted questions to surface red flags fast.'
+      : type === 'renewal'
+        ? 'Generate 60-70 questions focused on changes since last assessment, remediation status, and new risks.'
+        : 'Generate 85-95 questions across all 11 risk dimensions.';
 
-**Vendor Context:**
-- Vendor Type: ${context.vendorType}
-- Solution Type: ${context.solutionType}
-${context.industry ? `- Industry: ${context.industry}` : ''}
-${context.assessmentFocus ? `- Assessment Focus: ${context.assessmentFocus}` : ''}
-
-**Requirements:**
-1. Generate 85-95 questions across 11 risk dimensions
-2. Questions must be organized into these sections (in order):
+  const sectionInstruction =
+    type === 'quick'
+      ? `Focus the bulk of questions on critical sections (Clinical Validation, Privacy, Security, Implementation/Integration, Governance).
+   - Clinical Validation: 6-8
+   - Privacy Compliance: 6-8
+   - Security Architecture: 6-8
+   - Implementation & Integration: 4-6
+   - Governance & Risk Management: 3-5
+   - AI Transparency & Explainability: 3-5
+   - Ethics & Fairness: 3-4
+   - Vendor Capability: 3-4
+   - Operational Excellence: 3-5
+   - Keep remaining sections minimal but present (Company Overview, AI Architecture).`
+      : type === 'renewal'
+        ? `Use the standard 11 sections but frame questions around deltas: what changed, what was fixed, new features, new evidence, and SLA/incident performance. Avoid re-asking full baseline questions when not needed.`
+        : `Organize questions into these sections (in order):
    - Section 1: Company Overview (8-10 questions)
    - Section 2: AI Architecture (12-15 questions)
    - Section 3: Clinical Validation (10-12 questions, adjust for non-clinical AI)
@@ -38,7 +53,23 @@ ${context.assessmentFocus ? `- Assessment Focus: ${context.assessmentFocus}` : '
    - Section 8: AI Transparency & Explainability (8-10 questions)
    - Section 9: Ethics & Fairness (8-10 questions)
    - Section 10: Vendor Capability (6-8 questions)
-   - Section 11: Operational Excellence (12-15 questions)
+   - Section 11: Operational Excellence (12-15 questions)`;
+
+  return `You are Guardian, an AI governance assessment system for healthcare organizations.
+
+Your task is to generate a comprehensive assessment questionnaire for evaluating an AI vendor/solution.
+
+**Vendor Context:**
+- Vendor Type: ${context.vendorType}
+- Solution Type: ${context.solutionType}
+${context.industry ? `- Industry: ${context.industry}` : ''}
+${context.assessmentFocus ? `- Assessment Focus: ${context.assessmentFocus}` : ''}
+${categoryLine}${context.assessmentType ? `- Assessment Type: ${context.assessmentType}\n` : ''}
+
+**Requirements:**
+1. ${questionCountInstruction}
+2. Questions must be organized into risk dimensions/sections appropriate to the assessment type:
+${sectionInstruction}
 
 3. Each question must be:
    - Clear and specific
@@ -89,6 +120,8 @@ Return a JSON object with the following structure:
 - Include questions about FTE requirements, total cost of ownership, and sustainability
 - For clinical AI: Emphasize clinical validation, regulatory approval, patient safety
 - For administrative AI: Emphasize operational efficiency, security, privacy
+- For renewal assessments: Ask about deltas since last review, remediation status for prior findings, new features/risks, and evidence updates
+- For category-based sets: Tailor to the specified category while keeping core privacy/security/clinical safeguards intact
 
 Generate the questionnaire now. Return ONLY valid JSON, no additional text.`;
 }
