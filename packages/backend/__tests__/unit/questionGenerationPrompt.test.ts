@@ -1,4 +1,4 @@
-import { buildQuestionGenerationPrompt } from '../prompts/questionGeneration';
+import { buildQuestionGenerationPrompt } from '../../src/infrastructure/ai/prompts/questionGeneration.js';
 
 describe('buildQuestionGenerationPrompt', () => {
   const baseContext = {
