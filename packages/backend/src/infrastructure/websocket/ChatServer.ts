@@ -663,19 +663,23 @@ export class ChatServer {
           // Provide guidance when entering assessment mode
           if (mode === 'assessment') {
             const guidanceText =
-              `Let's start assessment mode. Pick one option (reply with 1, 2, or 3):\n\n` +
-              `1) Quick Assessment — 30-40 targeted questions to surface red flags fast.\n` +
-              `2) Custom Assessment — Full 85-95 question set across all 11 risk dimensions.\n` +
-              `3) Category-Based Set — Curated questions for a category (reply with A-G):\n` +
-              `   A) Clinical Decision Support — Diagnosis assistance, treatment recommendations, clinical alerts\n` +
-              `   B) Administrative Automation — Scheduling, billing, coding, prior authorization\n` +
-              `   C) Patient-Facing — Portals, appointment booking, health tracking apps\n` +
-              `   D) Analytics & Research — Population health, predictive analytics, research tools\n` +
-              `   E) Chatbot/Triage — Symptom checkers, virtual assistants, intake routing\n` +
-              `   F) Radiology AI — Imaging analysis, imaging decision support\n` +
-              `   G) Predictive Risk — Readmission/sepsis prediction, early warning systems\n\n` +
-              `Reply with the number (1-3). If you choose 3, include the letter (A-G).\n` +
-              `Add any key context (solution type, data handling, deployment).`;
+              `**🔍 Assessment Mode Activated**\n\n` +
+              `Please select your assessment approach (reply with 1, 2, or 3):\n\n` +
+              `1️⃣ Quick Assessment (30-40 questions) — Fast red-flag screening\n` +
+              `2️⃣ Comprehensive Assessment (85-95 questions) — Full coverage across 11 risk dimensions\n` +
+              `3️⃣ Category-Focused Assessment — Tailored to your AI solution type (reply with A-G)\n\n` +
+              `If choosing 3, pick a category:\n` +
+              `🏥 Clinical\n` +
+              `   A) Clinical Decision Support\n` +
+              `   B) Radiology AI\n` +
+              `   C) Predictive Risk Models\n` +
+              `⚙️ Administrative\n` +
+              `   D) Administrative Automation\n` +
+              `   E) Analytics & Research\n` +
+              `👤 Patient-Facing\n` +
+              `   F) Patient Portals & Apps\n` +
+              `   G) Chatbots & Triage\n\n` +
+              `Reply with the number (1-3). If you choose 3, include the letter (A-G) plus a brief description of your solution and data handling.`;
 
             const guidanceMessage = await this.conversationService.sendMessage({
               conversationId,
