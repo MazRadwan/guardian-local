@@ -38,10 +38,14 @@ import { createVendorRoutes } from './infrastructure/http/routes/vendor.routes.j
 import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.routes.js';
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
 import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
+import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
+import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-here';
+const PROMPT_CACHE_ENABLED = process.env.CLAUDE_PROMPT_CACHE === 'true';
+const PROMPT_CACHE_PREFIX = process.env.CLAUDE_PROMPT_CACHE_PREFIX || 'guardian';
 
 // Validate ANTHROPIC_API_KEY (required for Claude integration)
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
@@ -67,6 +71,10 @@ const jwtProvider = new JWTProvider(JWT_SECRET);
 
 // Initialize Claude client
 const claudeClient = new ClaudeClient(ANTHROPIC_API_KEY);
+const promptCacheManager = new PromptCacheManager(
+  { enabled: PROMPT_CACHE_ENABLED, prefix: PROMPT_CACHE_PREFIX },
+  getSystemPrompt
+);
 
 // Initialize exporters
 const pdfExporter = new PDFExporter();
@@ -117,7 +125,14 @@ const rateLimiter = new RateLimiter(
 );
 
 // Initialize ChatServer with WebSocket
-const chatServer = new ChatServer(server.getIO(), conversationService, claudeClient, rateLimiter, JWT_SECRET);
+const chatServer = new ChatServer(
+  server.getIO(),
+  conversationService,
+  claudeClient,
+  rateLimiter,
+  JWT_SECRET,
+  promptCacheManager
+);
 
 console.log('[App] ChatServer initialized');
 console.log('[App] Vendor, Assessment, and Question routes registered');

@@ -70,7 +70,7 @@ export function useChatController(): UseChatControllerReturn {
     clearDeleteConversationRequest,
     removeConversationFromList,
   } = useChatStore();
-  const { mode, changeMode, isChanging } = useConversationMode('consult');
+  const { mode, changeMode, isChanging, setModeFromConversation } = useConversationMode('consult');
   const { token } = useAuth();
   const composerRef = useRef<ComposerRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -145,6 +145,7 @@ export function useChatController(): UseChatControllerReturn {
     handleConversationTitleUpdated,
     handleStreamAborted,
     handleConversationDeleted,
+    handleConversationModeUpdated,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
@@ -169,6 +170,7 @@ export function useChatController(): UseChatControllerReturn {
     setShouldLoadHistory,
     markConversationAsJustCreated,
     setActiveConversation,
+    setModeFromConversation,
     setRegeneratingMessageIndex,
     focusComposer,
   });
@@ -186,6 +188,7 @@ export function useChatController(): UseChatControllerReturn {
     onConversationTitleUpdated: handleConversationTitleUpdated,
     onStreamAborted: handleStreamAborted,
     onConversationDeleted: handleConversationDeleted,
+    onConversationModeUpdated: handleConversationModeUpdated,
   }), [
     handleMessage,
     handleMessageStream,
@@ -198,6 +201,7 @@ export function useChatController(): UseChatControllerReturn {
     handleConversationTitleUpdated,
     handleStreamAborted,
     handleConversationDeleted,
+    handleConversationModeUpdated,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket
@@ -248,6 +252,20 @@ export function useChatController(): UseChatControllerReturn {
   useEffect(() => {
     setWsIsConnected(isConnected);
   }, [isConnected]);
+
+  // Hydrate mode from active conversation whenever selection or list updates
+  useEffect(() => {
+    if (!activeConversationId) {
+      // No active conversation selected; default to consult locally
+      setModeFromConversation('consult');
+      return;
+    }
+
+    const activeConv = conversations.find((conv) => conv.id === activeConversationId);
+    if (activeConv && activeConv.mode) {
+      setModeFromConversation(activeConv.mode);
+    }
+  }, [activeConversationId, conversations, setModeFromConversation]);
 
   // Fetch conversations list on connect
   useEffect(() => {

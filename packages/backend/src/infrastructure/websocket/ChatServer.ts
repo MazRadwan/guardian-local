@@ -1,7 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ConversationService } from '../../application/services/ConversationService.js';
 import type { IClaudeClient, ClaudeMessage } from '../../application/interfaces/IClaudeClient.js';
-import { getSystemPrompt } from '../ai/prompts.js';
+import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
 
@@ -40,6 +40,7 @@ export class ChatServer {
   private claudeClient: IClaudeClient;
   private rateLimiter: RateLimiter;
   private jwtSecret: string;
+  private promptCacheManager: PromptCacheManager;
   private pendingConversationCreations: Map<string, { conversationId: string; timestamp: number }>;
 
   constructor(
@@ -47,13 +48,15 @@ export class ChatServer {
     conversationService: ConversationService,
     claudeClient: IClaudeClient,
     rateLimiter: RateLimiter,
-    jwtSecret: string
+    jwtSecret: string,
+    promptCacheManager: PromptCacheManager
   ) {
     this.io = io;
     this.conversationService = conversationService;
     this.claudeClient = claudeClient;
     this.rateLimiter = rateLimiter;
     this.jwtSecret = jwtSecret;
+    this.promptCacheManager = promptCacheManager;
     this.pendingConversationCreations = new Map();
     this.setupNamespace();
 
@@ -74,7 +77,12 @@ export class ChatServer {
    */
   private async buildConversationContext(
     conversationId: string
-  ): Promise<{ messages: ClaudeMessage[]; systemPrompt: string; mode: 'consult' | 'assessment' }> {
+  ): Promise<{
+    messages: ClaudeMessage[];
+    systemPrompt: string;
+    mode: 'consult' | 'assessment';
+    promptCache: { usePromptCache: boolean; cachedPromptId?: string };
+  }> {
     // Get conversation to determine mode
     const conversation = await this.conversationService.getConversation(conversationId);
 
@@ -93,10 +101,18 @@ export class ChatServer {
         content: typeof msg.content === 'string' ? msg.content : msg.content.text || '',
       }));
 
-    // Get system prompt based on conversation mode
-    const systemPrompt = getSystemPrompt(conversation.mode);
+    // Get system prompt (and cache metadata) based on conversation mode
+    const promptCache = this.promptCacheManager.ensureCached(conversation.mode);
 
-    return { messages, systemPrompt, mode: conversation.mode };
+    return {
+      messages,
+      systemPrompt: promptCache.systemPrompt,
+      mode: conversation.mode,
+      promptCache: {
+        usePromptCache: promptCache.usePromptCache,
+        cachedPromptId: promptCache.cachedPromptId,
+      },
+    };
   }
 
   /**
@@ -287,7 +303,7 @@ export class ChatServer {
           // Get conversation context and generate Claude response
           // Note: buildConversationContext loads history which already includes
           // the message we just saved above, so no need to add it again
-          const { messages, systemPrompt } = await this.buildConversationContext(conversationId);
+          const { messages, systemPrompt, promptCache } = await this.buildConversationContext(conversationId);
 
           // Stream Claude response
           let fullResponse = '';
@@ -303,10 +319,11 @@ export class ChatServer {
 
             // Stream response chunks from Claude
             // Use messages directly - current message already in history
-            for await (const chunk of this.claudeClient.streamMessage(
-              messages,
-              { systemPrompt }
-            )) {
+            const claudeOptions = promptCache?.usePromptCache
+              ? { systemPrompt, cachedPromptId: promptCache.cachedPromptId, usePromptCache: true }
+              : { systemPrompt };
+
+            for await (const chunk of this.claudeClient.streamMessage(messages, claudeOptions)) {
               // Check if stream was aborted by user
               if (socket.data.abortRequested) {
                 console.log(`[ChatServer] Stream aborted by user, breaking loop`);
@@ -509,10 +526,10 @@ export class ChatServer {
 
           console.log(`[ChatServer] Starting new conversation for user ${socket.userId}`);
 
-          // Create new conversation
+          // Create new conversation (always default to consult to avoid carrying over prior mode)
           const newConversation = await this.conversationService.createConversation({
             userId: socket.userId,
-            mode: payload.mode || 'consult',
+            mode: 'consult',
           });
 
           // Track this creation to prevent duplicates
@@ -660,19 +677,24 @@ export class ChatServer {
             mode,
           });
 
-          // Provide guidance when entering assessment mode
+          // Provide guidance when entering assessment mode (initial 1-3 only; categories flow later)
           if (mode === 'assessment') {
-            const guidanceText =
-              `**🔍 Assessment Mode Activated**\n\n` +
-              `Please select your assessment approach (reply with 1, 2, or 3):\n` +
-              `1) **Quick Assessment (30-40 questions)** — Fast red-flag screening\n` +
-              `2) **Comprehensive Assessment (85-95 questions)** — Full coverage across 11 risk dimensions\n` +
-              `3) **Category-Focused Assessment** — Tailored to your AI solution type (reply with A-G)\n\n` +
-              `If choosing 3, pick a category:\n` +
-              `- 🏥 **Clinical:** A) Clinical Decision Support · B) Radiology AI · C) Predictive Risk Models\n` +
-              `- ⚙️ **Administrative:** D) Administrative Automation · E) Analytics & Research\n` +
-              `- 👤 **Patient-Facing:** F) Patient Portals & Apps · G) Chatbots & Triage\n\n` +
-              `Reply with the number (1-3). If you choose 3, include the letter (A-G) plus a brief description of your solution and data handling.`;
+            const guidanceText = `
+🔍 **Assessment Mode Activated**
+
+Please select your assessment approach (reply with 1, 2, or 3):
+
+1️⃣ **Quick Assessment** (30-40 questions)  
+   ↳ Fast red-flag screening, ~15 minutes
+
+2️⃣ **Comprehensive Assessment** (85-95 questions)  
+   ↳ Full coverage across all 11 risk dimensions
+
+3️⃣ **Category-Focused Assessment**  
+   ↳ Tailored to your AI solution type
+
+Reply with: **1**, **2**, or **3**
+`.trim();
 
             const guidanceMessage = await this.conversationService.sendMessage({
               conversationId,

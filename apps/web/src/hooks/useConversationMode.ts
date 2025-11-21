@@ -31,9 +31,17 @@ export function useConversationMode(initialMode: ConversationMode = 'consult') {
     }
   }, [mode]);
 
+  /**
+   * Hydrate mode from active conversation without toggling isChanging/side-effects.
+   */
+  const setModeFromConversation = useCallback((newMode: ConversationMode) => {
+    setMode((prev) => (prev === newMode ? prev : newMode));
+  }, []);
+
   return {
     mode,
     changeMode,
     isChanging,
+    setModeFromConversation,
   };
 }

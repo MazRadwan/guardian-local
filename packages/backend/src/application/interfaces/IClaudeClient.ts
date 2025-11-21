@@ -24,6 +24,7 @@ export interface StreamChunk {
 export interface ClaudeRequestOptions {
   systemPrompt?: string;
   cachedPromptId?: string; // Optional prompt caching handle (future use)
+  usePromptCache?: boolean; // Flag to send system prompt with cache_control (Anthropic prompt caching)
 }
 
 export interface IClaudeClient {
