@@ -363,7 +363,23 @@ export function useChatController(): UseChatControllerReturn {
   const handleModeChange = useCallback(
     async (newMode: ConversationMode) => {
       try {
+        if (!activeConversationId) {
+          setError('No active conversation');
+          return;
+        }
+
+        // Notify backend of mode change
+        conversationService.updateMode(activeConversationId, newMode);
+
+        // Update local mode state
         await changeMode(newMode);
+
+        // Update conversation list to reflect new mode
+        const updatedConversations = conversations.map((conv) =>
+          conv.id === activeConversationId ? { ...conv, mode: newMode } : conv
+        );
+        setConversations(updatedConversations);
+
         // Optionally add a system message about mode change
         addMessage({
           role: 'system',
@@ -374,7 +390,7 @@ export function useChatController(): UseChatControllerReturn {
         setError('Failed to change mode');
       }
     },
-    [changeMode, addMessage, setError]
+    [activeConversationId, conversationService, changeMode, addMessage, setError, conversations, setConversations]
   );
 
   const handleRegenerate = useCallback(

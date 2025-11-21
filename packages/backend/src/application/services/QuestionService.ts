@@ -49,13 +49,16 @@ export class QuestionService {
       );
     }
 
-    // 2. Build prompt
-    const prompt = buildQuestionGenerationPrompt(context);
+    // 2. Build prompt (include assessment type when available)
+    const prompt = buildQuestionGenerationPrompt({
+      ...context,
+      assessmentType: assessment.assessmentType,
+    });
 
     // 3. Call Claude API
     const response = await this.claudeClient.sendMessage(
       [{ role: 'user', content: prompt }],
-      GUARDIAN_SYSTEM_CONTEXT
+      { systemPrompt: GUARDIAN_SYSTEM_CONTEXT }
     );
 
     // 4. Parse and validate response

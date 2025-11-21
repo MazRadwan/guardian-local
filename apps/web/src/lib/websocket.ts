@@ -310,6 +310,14 @@ export class WebSocketClient {
     this.socket.emit('delete_conversation', { conversationId });
   }
 
+  switchMode(conversationId: string, mode: 'consult' | 'assessment'): void {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('WebSocket not connected');
+    }
+    console.log('[WebSocketClient] Switching mode for conversation:', conversationId, '→', mode);
+    this.socket.emit('switch_mode', { conversationId, mode });
+  }
+
   // Dynamic event subscription methods (follow onMessage/onHistory pattern)
   // These keep callbacks fresh on component re-renders
 
@@ -412,6 +420,20 @@ export class WebSocketClient {
     this.socket.on('connection_ready', handler);
     return () => {
       this.socket?.off('connection_ready', handler);
+    };
+  }
+
+  onConversationModeUpdated(callback: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: { conversationId: string; mode: 'consult' | 'assessment' }) => {
+      console.log('[WebSocket] Conversation mode updated:', data.conversationId, data.mode);
+      callback(data);
+    };
+
+    this.socket.on('conversation_mode_updated', handler);
+    return () => {
+      this.socket?.off('conversation_mode_updated', handler);
     };
   }
 

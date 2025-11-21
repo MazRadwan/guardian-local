@@ -13,6 +13,7 @@ describe('ConversationService', () => {
     fetchConversations: jest.fn(),
     startNewConversation: jest.fn(),
     deleteConversation: jest.fn(),
+    updateConversationMode: jest.fn(),
     abortStream: jest.fn(),
     ...overrides,
   });
@@ -256,6 +257,59 @@ describe('ConversationService', () => {
       expect(adapter.deleteConversation).toHaveBeenCalledTimes(2);
       expect(adapter.deleteConversation).toHaveBeenCalledWith('conv-1');
       expect(adapter.deleteConversation).toHaveBeenCalledWith('conv-2');
+    });
+  });
+
+  describe('updateMode', () => {
+    it('should update mode when connected', () => {
+      const adapter = createMockAdapter();
+      const store = createMockStore();
+      const service = new ConversationService(adapter, store);
+
+      service.updateMode('conv-123', 'assessment');
+
+      expect(adapter.updateConversationMode).toHaveBeenCalledWith('conv-123', 'assessment');
+      expect(store.setError).not.toHaveBeenCalled();
+    });
+
+    it('should set error when disconnected', () => {
+      const adapter = createMockAdapter({ isConnected: false });
+      const store = createMockStore();
+      const service = new ConversationService(adapter, store);
+
+      service.updateMode('conv-123', 'consult');
+
+      expect(store.setError).toHaveBeenCalledWith('Not connected to server');
+      expect(adapter.updateConversationMode).not.toHaveBeenCalled();
+    });
+
+    it('should set error when no conversation id provided', () => {
+      const adapter = createMockAdapter();
+      const store = createMockStore();
+      const service = new ConversationService(adapter, store);
+
+      service.updateMode('', 'consult');
+
+      expect(store.setError).toHaveBeenCalledWith('No active conversation');
+      expect(adapter.updateConversationMode).not.toHaveBeenCalled();
+    });
+
+    it('should handle adapter errors gracefully', () => {
+      const adapter = createMockAdapter({
+        updateConversationMode: jest.fn(() => {
+          throw new Error('fail');
+        }),
+      });
+      const store = createMockStore();
+      const service = new ConversationService(adapter, store);
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      service.updateMode('conv-123', 'assessment');
+
+      expect(store.setError).toHaveBeenCalledWith('Failed to switch mode');
+      expect(consoleSpy).toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
     });
   });
 

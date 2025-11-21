@@ -49,6 +49,7 @@ describe('useChatController', () => {
   const mockAdapterStartNewConversation = jest.fn();
   const mockAdapterAbortStream = jest.fn();
   const mockAdapterDeleteConversation = jest.fn();
+  const mockAdapterUpdateConversationMode = jest.fn();
 
   // Mock functions - Service operations
   const mockChatServiceSendMessage = jest.fn();
@@ -58,6 +59,7 @@ describe('useChatController', () => {
   const mockConversationServiceCreateConversation = jest.fn();
   const mockConversationServiceDeleteConversation = jest.fn();
   const mockConversationServiceFetchConversations = jest.fn();
+  const mockConversationServiceUpdateMode = jest.fn();
 
   const mockChangeMode = jest.fn();
   const mockReplace = jest.fn();
@@ -78,6 +80,7 @@ describe('useChatController', () => {
     mockAdapterStartNewConversation.mockReset();
     mockAdapterAbortStream.mockReset();
     mockAdapterDeleteConversation.mockReset();
+    mockAdapterUpdateConversationMode.mockReset();
 
     mockChatServiceSendMessage.mockReset();
     mockChatServiceRegenerateMessage.mockReset();
@@ -86,6 +89,7 @@ describe('useChatController', () => {
     mockConversationServiceCreateConversation.mockReset();
     mockConversationServiceDeleteConversation.mockReset();
     mockConversationServiceFetchConversations.mockReset();
+    mockConversationServiceUpdateMode.mockReset();
 
     mockChangeMode.mockReset();
 
@@ -184,6 +188,7 @@ describe('useChatController', () => {
       startNewConversation: mockAdapterStartNewConversation,
       abortStream: mockAdapterAbortStream,
       deleteConversation: mockAdapterDeleteConversation,
+      updateConversationMode: mockAdapterUpdateConversationMode,
       connect: jest.fn(),
       disconnect: jest.fn(),
     });
@@ -201,6 +206,7 @@ describe('useChatController', () => {
       deleteConversation: mockConversationServiceDeleteConversation,
       fetchConversations: mockConversationServiceFetchConversations,
       switchConversation: jest.fn(),
+      updateMode: mockConversationServiceUpdateMode,
     }));
 
     // Default useConversationMode mock
@@ -386,13 +392,44 @@ describe('useChatController', () => {
 
   describe('Handler: handleModeChange', () => {
     it('changes mode and adds system message', async () => {
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        isStreaming: false,
+        addMessage: mockAddMessage,
+        setMessages: mockSetMessages,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setLoading: mockSetLoading,
+        setError: mockSetError,
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: mockSetConversations,
+        addConversation: mockAddConversation,
+        updateConversationTitle: mockUpdateConversationTitle,
+        conversations: [
+          { id: 'conv-123', title: 'Test', createdAt: new Date(), updatedAt: new Date(), mode: 'consult' },
+        ],
+        newChatRequested: false,
+        clearNewChatRequest: mockClearNewChatRequest,
+        requestNewChat: mockRequestNewChat,
+        deleteConversationRequested: null,
+        clearDeleteConversationRequest: mockClearDeleteConversationRequest,
+        removeConversationFromList: mockRemoveConversationFromList,
+      });
+
       const { result } = renderHook(() => useChatController());
 
       await act(async () => {
         await result.current.handleModeChange('assessment');
       });
 
+      expect(mockConversationServiceUpdateMode).toHaveBeenCalledWith('conv-123', 'assessment');
       expect(mockChangeMode).toHaveBeenCalledWith('assessment');
+      expect(mockSetConversations).toHaveBeenCalledTimes(1);
       expect(mockAddMessage).toHaveBeenCalledWith({
         role: 'system',
         content: 'Switched to assessment mode',
@@ -402,6 +439,35 @@ describe('useChatController', () => {
 
     it('handles mode change error', async () => {
       mockChangeMode.mockRejectedValue(new Error('Mode change failed'));
+
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        isStreaming: false,
+        addMessage: mockAddMessage,
+        setMessages: mockSetMessages,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setLoading: mockSetLoading,
+        setError: mockSetError,
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: mockSetConversations,
+        addConversation: mockAddConversation,
+        updateConversationTitle: mockUpdateConversationTitle,
+        conversations: [
+          { id: 'conv-123', title: 'Test', createdAt: new Date(), updatedAt: new Date(), mode: 'consult' },
+        ],
+        newChatRequested: false,
+        clearNewChatRequest: mockClearNewChatRequest,
+        requestNewChat: mockRequestNewChat,
+        deleteConversationRequested: null,
+        clearDeleteConversationRequest: mockClearDeleteConversationRequest,
+        removeConversationFromList: mockRemoveConversationFromList,
+      });
 
       const { result } = renderHook(() => useChatController());
 

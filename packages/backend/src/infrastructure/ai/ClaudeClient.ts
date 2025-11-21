@@ -11,6 +11,7 @@ import type {
   ClaudeMessage,
   ClaudeResponse,
   StreamChunk,
+  ClaudeRequestOptions,
 } from '../../application/interfaces/IClaudeClient.js';
 
 export class ClaudeClient implements IClaudeClient {
@@ -35,8 +36,10 @@ export class ClaudeClient implements IClaudeClient {
    */
   async sendMessage(
     messages: ClaudeMessage[],
-    systemPrompt?: string
+    options: ClaudeRequestOptions = {}
   ): Promise<ClaudeResponse> {
+    const { systemPrompt } = options;
+
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
@@ -84,8 +87,10 @@ export class ClaudeClient implements IClaudeClient {
    */
   async *streamMessage(
     messages: ClaudeMessage[],
-    systemPrompt?: string
+    options: ClaudeRequestOptions = {}
   ): AsyncGenerator<StreamChunk> {
+    const { systemPrompt } = options;
+
     try {
       const stream = await this.client.messages.stream({
         model: this.model,

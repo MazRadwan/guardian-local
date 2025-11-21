@@ -21,26 +21,31 @@ export interface StreamChunk {
   isComplete: boolean;
 }
 
+export interface ClaudeRequestOptions {
+  systemPrompt?: string;
+  cachedPromptId?: string; // Optional prompt caching handle (future use)
+}
+
 export interface IClaudeClient {
   /**
    * Send a message to Claude and get a complete response
    * @param messages - Conversation history
-   * @param systemPrompt - System prompt for context
+   * @param options - Optional request settings (system prompt, cached prompt id)
    * @returns Claude's response
    */
   sendMessage(
     messages: ClaudeMessage[],
-    systemPrompt?: string
+    options?: ClaudeRequestOptions
   ): Promise<ClaudeResponse>;
 
   /**
    * Stream a message from Claude (for real-time responses)
    * @param messages - Conversation history
-   * @param systemPrompt - System prompt for context
+   * @param options - Optional request settings (system prompt, cached prompt id)
    * @yields Chunks of the response as they arrive
    */
   streamMessage(
     messages: ClaudeMessage[],
-    systemPrompt?: string
+    options?: ClaudeRequestOptions
   ): AsyncGenerator<StreamChunk>;
 }

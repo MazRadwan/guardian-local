@@ -305,7 +305,7 @@ export class ChatServer {
             // Use messages directly - current message already in history
             for await (const chunk of this.claudeClient.streamMessage(
               messages,
-              systemPrompt
+              { systemPrompt }
             )) {
               // Check if stream was aborted by user
               if (socket.data.abortRequested) {
@@ -608,6 +608,91 @@ export class ChatServer {
           socket.emit('error', {
             event: 'delete_conversation',
             message: error instanceof Error ? error.message : 'Failed to delete conversation',
+          });
+        }
+      });
+
+      // Switch conversation mode (consult ⟺ assessment)
+      socket.on('switch_mode', async (payload: { conversationId?: string; mode?: 'consult' | 'assessment' }) => {
+        try {
+          if (!socket.userId) {
+            socket.emit('error', {
+              event: 'switch_mode',
+              message: 'User not authenticated',
+            });
+            return;
+          }
+
+          const { conversationId, mode } = payload;
+
+          if (!conversationId || !mode) {
+            socket.emit('error', {
+              event: 'switch_mode',
+              message: 'conversationId and mode are required',
+            });
+            return;
+          }
+
+          await this.validateConversationOwnership(conversationId, socket.userId);
+
+          const conversation = await this.conversationService.getConversation(conversationId);
+          if (!conversation) {
+            socket.emit('error', {
+              event: 'switch_mode',
+              message: `Conversation ${conversationId} not found`,
+            });
+            return;
+          }
+
+          // Idempotent: already in requested mode
+          if (conversation.mode === mode) {
+            socket.emit('conversation_mode_updated', {
+              conversationId,
+              mode,
+            });
+            return;
+          }
+
+          await this.conversationService.switchMode(conversationId, mode);
+
+          socket.emit('conversation_mode_updated', {
+            conversationId,
+            mode,
+          });
+
+          // Provide guidance when entering assessment mode
+          if (mode === 'assessment') {
+            const guidanceText =
+              `**🔍 Assessment Mode Activated**\n\n` +
+              `Please select your assessment approach (reply with 1, 2, or 3):\n` +
+              `1) **Quick Assessment (30-40 questions)** — Fast red-flag screening\n` +
+              `2) **Comprehensive Assessment (85-95 questions)** — Full coverage across 11 risk dimensions\n` +
+              `3) **Category-Focused Assessment** — Tailored to your AI solution type (reply with A-G)\n\n` +
+              `If choosing 3, pick a category:\n` +
+              `- 🏥 **Clinical:** A) Clinical Decision Support · B) Radiology AI · C) Predictive Risk Models\n` +
+              `- ⚙️ **Administrative:** D) Administrative Automation · E) Analytics & Research\n` +
+              `- 👤 **Patient-Facing:** F) Patient Portals & Apps · G) Chatbots & Triage\n\n` +
+              `Reply with the number (1-3). If you choose 3, include the letter (A-G) plus a brief description of your solution and data handling.`;
+
+            const guidanceMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'assistant',
+              content: { text: guidanceText },
+            });
+
+            socket.emit('message', {
+              id: guidanceMessage.id,
+              conversationId: guidanceMessage.conversationId,
+              role: guidanceMessage.role,
+              content: guidanceMessage.content,
+              createdAt: guidanceMessage.createdAt,
+            });
+          }
+        } catch (error) {
+          console.error('[ChatServer] Error switching mode:', error);
+          socket.emit('error', {
+            event: 'switch_mode',
+            message: error instanceof Error ? error.message : 'Failed to switch mode',
           });
         }
       });

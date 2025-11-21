@@ -20,11 +20,11 @@ const client = new ClaudeClient(process.env.ANTHROPIC_API_KEY);
 // Send message
 const response = await client.sendMessage(
   [{ role: 'user', content: 'Hello' }],
-  'System prompt here'
+  { systemPrompt: 'System prompt here' }
 );
 
 // Stream message
-for await (const chunk of client.streamMessage(messages, systemPrompt)) {
+for await (const chunk of client.streamMessage(messages, { systemPrompt })) {
   console.log(chunk.content);
 }
 ```
@@ -57,7 +57,7 @@ const prompt = buildQuestionGenerationPrompt({
 
 const response = await claudeClient.sendMessage(
   [{ role: 'user', content: prompt }],
-  GUARDIAN_SYSTEM_CONTEXT
+  { systemPrompt: GUARDIAN_SYSTEM_CONTEXT }
 );
 ```
 
