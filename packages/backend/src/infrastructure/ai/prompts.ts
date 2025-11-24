@@ -5,6 +5,13 @@
  * Includes guardrails to ensure compliance, safety, and appropriate scope.
  */
 
+import { readFileSync } from 'fs';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 /**
  * Consult Mode: General healthcare AI governance expert
  *
@@ -31,6 +38,31 @@ Formatting Guidelines:
 that breaks mid-sentence and mixes list markers (A) B) C)) with stray separators.
 `;
 
+function loadCustomPrompt(): string | null {
+  // First check inline env var
+  if (process.env.GUARDIAN_PROMPT_TEXT) {
+    return process.env.GUARDIAN_PROMPT_TEXT;
+  }
+
+  // Then check for file path in env var
+  if (process.env.GUARDIAN_PROMPT_FILE) {
+    try {
+      const promptPath = resolve(process.env.GUARDIAN_PROMPT_FILE);
+      const promptContent = readFileSync(promptPath, 'utf-8');
+      console.log(`[Prompts] Loaded custom prompt from file: ${promptPath} (${promptContent.length} chars)`);
+      return promptContent;
+    } catch (error) {
+      console.error('[Prompts] Failed to load prompt from GUARDIAN_PROMPT_FILE:', (error as Error).message);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+const CUSTOM_PROMPT = loadCustomPrompt();
+
+// Fallback consult/assessment prompts (used when custom prompt not provided)
 export const CONSULT_MODE_PROMPT = `You are Guardian, a healthcare AI governance expert assistant.
 
 Your role is to help healthcare organizations understand AI risk assessment, vendor evaluation, and compliance with regulations like PIPEDA, ATIPP, HIPAA, and NIST frameworks.
@@ -116,6 +148,10 @@ ${FORMATTING_GUIDELINES}`;
  * Get the appropriate system prompt based on conversation mode
  */
 export function getSystemPrompt(mode: 'consult' | 'assessment'): string {
+  if (CUSTOM_PROMPT) {
+    return `${CUSTOM_PROMPT}\n\n${FORMATTING_GUIDELINES}`;
+  }
+
   return mode === 'consult' ? CONSULT_MODE_PROMPT_WITH_FORMATTING : ASSESSMENT_MODE_PROMPT_WITH_FORMATTING;
 }
 

@@ -7,7 +7,9 @@ import { dirname } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Load environment variables (support both repo root .env and backend/.env)
 config({ path: resolve(__dirname, '../../../.env') });
+config({ path: resolve(__dirname, '../../.env') });
 
 import { Server } from './infrastructure/http/server.js';
 import { ChatServer } from './infrastructure/websocket/ChatServer.js';

@@ -1,9 +1,10 @@
 # Sidequest: Prompt Cache Manager (Claude Prompt Caching)
 
-**Version:** 0.1  
-**Created:** 2025-11-21  
-**Status:** Planning  
-**Priority:** High (reduces token cost; stabilizes system prompt delivery)  
+**Version:** 1.0
+**Created:** 2025-11-21
+**Completed:** 2025-11-21
+**Status:** ✅ Complete
+**Priority:** High (reduces token cost; stabilizes system prompt delivery)
 **Scope:** Integrate Anthropic prompt caching for consult/assessment system prompts, with clean-architecture boundaries and safe fallbacks.
 
 ---
@@ -84,8 +85,78 @@
 - Feature flag allows safe disable; logging shows cache hits/misses.
 
 ## QA Checklist
-- **Caching On/Off Parity**: Chats function identically with flag toggled; only token cost differs.  
-- **Cache Hit Path**: Requests include `cachedPromptId`, omit prompt text.  
-- **Fallback Path**: Upload failure results in raw prompt sent, with warning logged.  
-- **Mode Coverage**: Both consult and assessment resolve to correct cache IDs/version.  
-- **Tests**: New unit tests for cache manager and client selection logic are passing.  
+- **Caching On/Off Parity**: ✅ Chats function identically with flag toggled; only token cost differs.
+- **Cache Hit Path**: ✅ Requests include cache_control headers when enabled.
+- **Fallback Path**: ✅ When disabled, sends raw prompt without caching.
+- **Mode Coverage**: ✅ Both consult and assessment resolve to correct cache IDs/version.
+- **Tests**: ✅ Unit tests for cache manager created and passing (8 test cases).
+
+---
+
+## Implementation Summary
+
+### Architecture Implemented (2025-11-21)
+
+**Components:**
+- `PromptCacheManager` - Orchestrates caching with hash-based deduplication
+- `ClaudeClient.buildSystemPrompt()` - Adds `cache_control: {type: 'ephemeral'}` headers
+- `ChatServer.buildConversationContext()` - Calls `ensureCached()` per request
+- Config via `CLAUDE_PROMPT_CACHE=true` in `.env`
+
+**Design Deviation from Original Plan:**
+- **Original**: Upload prompts to Anthropic server-side cache API
+- **Implemented**: Use Anthropic's client-side ephemeral caching via `cache_control` headers
+- **Rationale**: Simpler implementation, no separate upload step, Anthropic handles cache lifecycle
+
+**Files Changed:**
+- `src/infrastructure/ai/PromptCacheManager.ts` - Core cache manager
+- `src/infrastructure/ai/ClaudeClient.ts` - Cache control header integration
+- `src/infrastructure/ai/prompts.ts` - Prompt loading with file support
+- `src/infrastructure/websocket/ChatServer.ts` - Integration point
+- `src/index.ts` - Config wiring
+- `__tests__/unit/PromptCacheManager.test.ts` - Unit tests
+
+**Observability:**
+```
+[Prompts] Loaded custom prompt from file: ./guardian-prompt.md (45786 chars)
+```
+
+### Bonus Work (Not in Original Sidequest)
+
+**Prompt Loading Fix:**
+- **Issue**: `.env` multi-line variable truncated prompt to ~1.5KB (97% data loss)
+- **Fix**: Load from `guardian-prompt.md` file (gitignored for privacy)
+- **Config**: `GUARDIAN_PROMPT_FILE=./guardian-prompt.md`
+- **Result**: Full 46KB Guardian system prompt now loads correctly
+
+### Test Coverage
+
+**Unit Tests** (`__tests__/unit/PromptCacheManager.test.ts`):
+1. Returns cache metadata when enabled
+2. Does not return cache ID when disabled
+3. Recomputes when prompt content changes
+4. Deduplicates by hash for same mode/content
+5. Generates different cache IDs for different modes
+6. Uses custom prefix in cache ID
+7. Defaults to "guardian" prefix when not specified
+8. Hashes produce consistent 16-character strings
+
+**Integration Validation:**
+- Verified via development server logs (prompt loading + caching enabled)
+- Backend successfully sends cache_control headers to Anthropic API
+- Both consult and assessment modes working correctly
+
+### Token Cost Reduction (Expected)
+
+With prompt caching enabled:
+- **Cached prompt**: ~46KB system prompt billed as cached tokens (~90% discount)
+- **Uncached**: First request per cache miss pays full price
+- **TTL**: 5 minutes (Anthropic's default for ephemeral caching)
+- **ROI**: Significant for multi-turn conversations and concurrent users
+
+### Future Enhancements (Out of Scope)
+
+- Persist cache metadata across server restarts (in-memory only currently)
+- Add Prometheus metrics for cache hits/misses
+- Support for multi-instance deployments with shared cache state
+- Automatic cache warming on startup  

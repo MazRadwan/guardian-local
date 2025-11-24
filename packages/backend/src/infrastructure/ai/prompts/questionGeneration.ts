@@ -22,42 +22,42 @@ export function buildQuestionGenerationPrompt(
 
   const questionCountInstruction =
     type === 'quick'
-      ? 'Generate 30-40 targeted questions to surface red flags fast.'
+      ? 'Generate 30-40 red-flag screener questions (fast triage).'
       : type === 'renewal'
-        ? 'Generate 60-70 questions focused on changes since last assessment, remediation status, and new risks.'
-        : 'Generate 85-95 questions across all 11 risk dimensions.';
+        ? 'Generate 60-70 questions focused on deltas since last assessment: remediation status, new features/risks, incidents, SLA/uptime, new evidence.'
+        : 'Generate 85-95 questions across all 11 sections/risk dimensions.';
 
   const sectionInstruction =
     type === 'quick'
-      ? `Focus the bulk of questions on critical sections (Clinical Validation, Privacy, Security, Implementation/Integration, Governance).
-   - Clinical Validation: 6-8
-   - Privacy Compliance: 6-8
+      ? `Focus on the most critical dimensions first; keep other sections minimal but present.
+   - Clinical Validation / Safety: 6-8
+   - Privacy & PHI Compliance (PIPEDA/ATIPP/PHIA): 6-8
    - Security Architecture: 6-8
    - Implementation & Integration: 4-6
    - Governance & Risk Management: 3-5
    - AI Transparency & Explainability: 3-5
    - Ethics & Fairness: 3-4
    - Vendor Capability: 3-4
-   - Operational Excellence: 3-5
-   - Keep remaining sections minimal but present (Company Overview, AI Architecture).`
+   - Operational Excellence & Sustainability: 3-5
+   - Keep Company Overview and AI Architecture minimal but present.`
       : type === 'renewal'
         ? `Use the standard 11 sections but frame questions around deltas: what changed, what was fixed, new features, new evidence, and SLA/incident performance. Avoid re-asking full baseline questions when not needed.`
         : `Organize questions into these sections (in order):
    - Section 1: Company Overview (8-10 questions)
    - Section 2: AI Architecture (12-15 questions)
-   - Section 3: Clinical Validation (10-12 questions, adjust for non-clinical AI)
-   - Section 4: Privacy Compliance (10-12 questions)
+   - Section 3: Clinical Validation / Safety (10-12 questions; adjust if non-clinical)
+   - Section 4: Privacy & PHI Compliance (10-12 questions; PIPEDA/ATIPP/PHIA)
    - Section 5: Security Architecture (8-10 questions)
    - Section 6: Implementation & Integration (6-8 questions)
    - Section 7: Governance & Risk Management (6-8 questions)
    - Section 8: AI Transparency & Explainability (8-10 questions)
    - Section 9: Ethics & Fairness (8-10 questions)
    - Section 10: Vendor Capability (6-8 questions)
-   - Section 11: Operational Excellence (12-15 questions)`;
+   - Section 11: Operational Excellence & Sustainability (12-15 questions)`;
 
   return `You are Guardian, an AI governance assessment system for healthcare organizations.
 
-Your task is to generate a comprehensive assessment questionnaire for evaluating an AI vendor/solution.
+Your task is to generate an assessment questionnaire aligned to Guardian's healthcare governance rubric (Greg's prompt). Do not score or analyze; only generate questions.
 
 **Vendor Context:**
 - Vendor Type: ${context.vendorType}
@@ -71,11 +71,12 @@ ${categoryLine}${context.assessmentType ? `- Assessment Type: ${context.assessme
 2. Questions must be organized into risk dimensions/sections appropriate to the assessment type:
 ${sectionInstruction}
 
-3. Each question must be:
-   - Clear and specific
-   - Evidence-focused (ask for validation, not claims)
-   - Appropriate for the solution type
-   - Professional and respectful
+3. Question design:
+   - Be clear, specific, evidence-seeking (request docs, validation, logs, audit trails)
+   - Tailor to solution type and category; keep privacy/security/clinical safeguards in scope no matter the category
+   - If category is provided, include category-specific depth (e.g., CDS, Radiology, Predictive Risk, Admin Automation, Analytics/Research, Patient Portals & Apps, Chatbots/Triage)
+   - Keep Canadian healthcare context: PIPEDA, ATIPP, PHIA; Health Canada/FDA if clinical; NIST CSF/ITIL4 for ops; data residency; PHI handling
+   - Do NOT perform scoring; no recommendations—just questions
 
 4. Question types:
    - "text" - Open-ended text response
@@ -113,15 +114,12 @@ Return a JSON object with the following structure:
 }
 
 **Important Guidelines:**
-- Tailor questions to the solution type (e.g., clinical questions for clinical AI, less emphasis for administrative tools)
-- Focus on PIPEDA, ATIPP, and PHIA compliance for privacy questions (Canadian healthcare context)
-- Ask about NIST CSF maturity and ITIL4 service management for operational excellence
-- Request evidence of claims (peer-reviewed studies, certifications, test results)
-- Include questions about FTE requirements, total cost of ownership, and sustainability
-- For clinical AI: Emphasize clinical validation, regulatory approval, patient safety
-- For administrative AI: Emphasize operational efficiency, security, privacy
-- For renewal assessments: Ask about deltas since last review, remediation status for prior findings, new features/risks, and evidence updates
-- For category-based sets: Tailor to the specified category while keeping core privacy/security/clinical safeguards intact
+- Map to Guardian risk areas: clinical safety/validation, privacy/PHI, security, technical credibility/architecture, transparency, ethics/fairness, governance, operational excellence/sustainability, vendor capability.
+- Requests for evidence: clinical validation, regulatory status, PHI safeguards, audit/logging, supply chain, incident/SLA history, change management, FTE/operating model, cost/sustainability.
+- For clinical AI: emphasize safety, override controls, bias/generalizability, Health Canada/FDA status.
+- For administrative/analytics: emphasize data governance, access scope, integration paths, drift/quality controls, auditability.
+- For renewal: focus on changes, fixes, regressions, new risks, and proof of remediation.
+- For category-based sets: align depth to the category while keeping core privacy/security/clinical checkpoints.
 
 Generate the questionnaire now. Return ONLY valid JSON, no additional text.`;
 }

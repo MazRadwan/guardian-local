@@ -36,4 +36,69 @@ describe('PromptCacheManager', () => {
     expect(first.hash).not.toEqual(updated.hash)
     expect(first.cachedPromptId).not.toEqual(updated.cachedPromptId)
   })
+
+  it('deduplicates by hash for same mode and content', () => {
+    const manager = new PromptCacheManager(
+      { enabled: true, prefix: 'test' },
+      mockPromptProvider('v1')
+    )
+
+    const first = manager.ensureCached('consult')
+    const second = manager.ensureCached('consult')
+
+    expect(first).toBe(second) // Same object reference (cached)
+    expect(first.hash).toEqual(second.hash)
+    expect(first.cachedPromptId).toEqual(second.cachedPromptId)
+  })
+
+  it('generates different cache IDs for different modes', () => {
+    const manager = new PromptCacheManager(
+      { enabled: true, prefix: 'test' },
+      mockPromptProvider('v1')
+    )
+
+    const consult = manager.ensureCached('consult')
+    const assessment = manager.ensureCached('assessment')
+
+    expect(consult.cachedPromptId).not.toEqual(assessment.cachedPromptId)
+    expect(consult.hash).not.toEqual(assessment.hash)
+    expect(consult.mode).toBe('consult')
+    expect(assessment.mode).toBe('assessment')
+  })
+
+  it('uses custom prefix in cache ID', () => {
+    const manager = new PromptCacheManager(
+      { enabled: true, prefix: 'custom-prefix' },
+      mockPromptProvider('v1')
+    )
+
+    const entry = manager.ensureCached('consult')
+
+    expect(entry.cachedPromptId).toContain('custom-prefix-consult')
+  })
+
+  it('defaults to "guardian" prefix when not specified', () => {
+    const manager = new PromptCacheManager(
+      { enabled: true },
+      mockPromptProvider('v1')
+    )
+
+    const entry = manager.ensureCached('consult')
+
+    expect(entry.cachedPromptId).toContain('guardian-consult')
+  })
+
+  it('hashes produce consistent 16-character strings', () => {
+    const manager = new PromptCacheManager(
+      { enabled: true, prefix: 'test' },
+      mockPromptProvider('v1')
+    )
+
+    const entry1 = manager.ensureCached('consult')
+    const entry2 = manager.ensureCached('consult')
+
+    expect(entry1.hash).toHaveLength(16)
+    expect(entry1.hash).toEqual(entry2.hash)
+    expect(entry1.hash).toMatch(/^[0-9a-f]{16}$/) // Hex string
+  })
 })
