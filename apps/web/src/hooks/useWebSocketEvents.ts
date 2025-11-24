@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ChatMessage } from '@/lib/websocket';
 import type { Conversation } from '@/stores/chatStore';
 import type { ComposerRef } from '@/components/chat/Composer';
+import type { ConversationMode } from '@/components/chat/ModeSelector';
 
 export interface UseWebSocketEventsParams {
   // Store actions
@@ -37,6 +38,7 @@ export interface UseWebSocketEventsParams {
   setShouldLoadHistory: (should: boolean) => void;
   markConversationAsJustCreated: (id: string) => void;
   setActiveConversation: (id: string | null) => void;
+  setModeFromConversation: (mode: ConversationMode) => void;
 
   // Flags
   setRegeneratingMessageIndex: (index: number | null) => void;
@@ -55,6 +57,7 @@ export interface UseWebSocketEventsReturn {
   handleConversationTitleUpdated: (conversationId: string, title: string) => void;
   handleStreamAborted: (conversationId: string) => void;
   handleConversationDeleted: (conversationId: string) => void;
+  handleConversationModeUpdated: (data: { conversationId: string; mode: ConversationMode }) => void;
 }
 
 /**
@@ -104,6 +107,7 @@ export function useWebSocketEvents({
   setShouldLoadHistory,
   markConversationAsJustCreated,
   setActiveConversation,
+  setModeFromConversation,
   setRegeneratingMessageIndex,
   focusComposer,
 }: UseWebSocketEventsParams): UseWebSocketEventsReturn {
@@ -219,8 +223,10 @@ export function useWebSocketEvents({
 
       // Set as active (URL + localStorage updates handled by useConversationSync)
       setActiveConversation(conversation.id);
+      // Hydrate mode from server payload
+      setModeFromConversation(conversation.mode);
     },
-    [addConversation, setActiveConversation, markConversationAsJustCreated]
+    [addConversation, setActiveConversation, markConversationAsJustCreated, setModeFromConversation]
   );
 
   // Handler 8: Update conversation title
@@ -282,6 +288,23 @@ export function useWebSocketEvents({
     [removeConversationFromList, clearDeleteConversationRequest, activeConversationId, setActiveConversation, conversations, requestNewChat]
   );
 
+  // Handler 11: Conversation mode updated (server→client)
+  const handleConversationModeUpdated = useCallback(
+    (data: { conversationId: string; mode: ConversationMode }) => {
+      // Update conversations list entry
+      const updatedConversations = conversations.map((conv) =>
+        conv.id === data.conversationId ? { ...conv, mode: data.mode } : conv
+      );
+      setConversations(updatedConversations);
+
+      // If this is the active conversation, hydrate local mode
+      if (activeConversationId === data.conversationId) {
+        setModeFromConversation(data.mode);
+      }
+    },
+    [conversations, setConversations, activeConversationId, setModeFromConversation]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -293,5 +316,6 @@ export function useWebSocketEvents({
     handleConversationTitleUpdated,
     handleStreamAborted,
     handleConversationDeleted,
+    handleConversationModeUpdated,
   };
 }

@@ -38,7 +38,11 @@ export class ClaudeClient implements IClaudeClient {
     messages: ClaudeMessage[],
     options: ClaudeRequestOptions = {}
   ): Promise<ClaudeResponse> {
-    const { systemPrompt } = options;
+    const { systemPrompt, usePromptCache } = options;
+    const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
+    const requestOptions = usePromptCache
+      ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
+      : undefined;
 
     let lastError: Error | null = null;
 
@@ -47,12 +51,12 @@ export class ClaudeClient implements IClaudeClient {
         const response = await this.client.messages.create({
           model: this.model,
           max_tokens: this.maxTokens,
-          system: systemPrompt,
+          system,
           messages: messages.map((msg) => ({
             role: msg.role,
             content: msg.content,
           })),
-        });
+        }, requestOptions);
 
         // Extract text content from response
         const content =
@@ -89,18 +93,22 @@ export class ClaudeClient implements IClaudeClient {
     messages: ClaudeMessage[],
     options: ClaudeRequestOptions = {}
   ): AsyncGenerator<StreamChunk> {
-    const { systemPrompt } = options;
+    const { systemPrompt, usePromptCache } = options;
+    const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
+    const requestOptions = usePromptCache
+      ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
+      : undefined;
 
     try {
       const stream = await this.client.messages.stream({
         model: this.model,
         max_tokens: this.maxTokens,
-        system: systemPrompt,
+        system,
         messages: messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
         })),
-      });
+      }, requestOptions);
 
       for await (const chunk of stream) {
         if (
@@ -132,6 +140,24 @@ export class ClaudeClient implements IClaudeClient {
    */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private buildSystemPrompt(systemPrompt?: string, usePromptCache?: boolean) {
+    if (!systemPrompt) {
+      return undefined;
+    }
+
+    if (usePromptCache) {
+      return [
+        {
+          type: 'text',
+          text: systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ];
+    }
+
+    return systemPrompt;
   }
 }
 

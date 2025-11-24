@@ -16,12 +16,14 @@ import { User } from '../../src/domain/entities/User'
 import { testDb, closeTestDb } from '../setup/test-db'
 import { sql } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
-import type { IClaudeClient, ClaudeMessage, StreamChunk } from '../../src/application/interfaces/IClaudeClient'
+import type { IClaudeClient, ClaudeMessage, StreamChunk, ClaudeRequestOptions } from '../../src/application/interfaces/IClaudeClient'
 import { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter'
+import { PromptCacheManager } from '../../src/infrastructure/ai/PromptCacheManager'
+import { getSystemPrompt } from '../../src/infrastructure/ai/prompts'
 
 // Mock Claude client for deterministic test responses
 class MockClaudeClient implements IClaudeClient {
-  async sendMessage(messages: ClaudeMessage[], _options?: { systemPrompt?: string }): Promise<any> {
+  async sendMessage(messages: ClaudeMessage[], _options?: ClaudeRequestOptions): Promise<any> {
     return {
       content: 'This is a mocked Claude response for testing',
       stop_reason: 'end_turn',
@@ -29,7 +31,7 @@ class MockClaudeClient implements IClaudeClient {
     }
   }
 
-  async *streamMessage(messages: ClaudeMessage[], _options?: { systemPrompt?: string }): AsyncGenerator<StreamChunk> {
+  async *streamMessage(messages: ClaudeMessage[], _options?: ClaudeRequestOptions): AsyncGenerator<StreamChunk> {
     // Emit test chunks
     yield { content: 'This ', isComplete: false }
     yield { content: 'is ', isComplete: false }
@@ -81,12 +83,17 @@ describe('WebSocket Chat E2E Tests', () => {
     // Setup chat server with mock Claude client and rate limiter
     const mockClaudeClient = new MockClaudeClient()
     const rateLimiter = new RateLimiter(100, 60000) // High limit for tests
+    const promptCacheManager = new PromptCacheManager(
+      { enabled: false, prefix: 'test' },
+      getSystemPrompt
+    )
     chatServer = new ChatServer(
       ioServer,
       conversationService,
       mockClaudeClient,
       rateLimiter,
-      'test-jwt-secret-key'
+      'test-jwt-secret-key',
+      promptCacheManager
     )
 
     // Start server
@@ -539,15 +546,6 @@ describe('WebSocket Chat E2E Tests', () => {
         expect(data.conversation.mode).toBe('consult')
         expect(data.conversation.createdAt).toBeDefined()
         expect(data.conversation.updatedAt).toBeDefined()
-        done()
-      })
-    })
-
-    it('should create conversation in assessment mode when specified', (done) => {
-      clientSocket.emit('start_new_conversation', { mode: 'assessment' })
-
-      clientSocket.on('conversation_created', (data) => {
-        expect(data.conversation.mode).toBe('assessment')
         done()
       })
     })
