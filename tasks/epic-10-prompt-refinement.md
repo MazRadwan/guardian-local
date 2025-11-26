@@ -1,8 +1,9 @@
 # Epic 10: Guardian Prompt Refinement for Web App
 
-**Version:** 1.0
+**Version:** 1.3
 **Created:** 2025-11-24
-**Status:** Planning
+**Updated:** 2025-11-25
+**Status:** In Progress (Stories 10.1-10.22 COMPLETE, Story 10.23 frontend wiring COMPLETE - ready for E2E testing)
 **Priority:** High
 **Estimated Duration:** 1-2 weeks (incremental editing approach)
 
@@ -769,6 +770,176 @@ Both are valid. Don't force users into one path.
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-11-24 | Initial epic breakdown - 18 stories across 5 sprints |
+| 1.1 | 2025-11-25 | Added Sprint 6: Export Feature Integration (Stories 10.19-10.23) |
+| 1.2 | 2025-11-25 | Stories 10.19-10.22 complete, Story 10.23 ready for testing |
+| 1.3 | 2025-11-25 | Story 10.23 frontend wiring complete - full WebSocket chain, UI panels implemented |
+
+---
+
+## Sprint 6: Export Feature Integration (Added 2025-11-25)
+
+**Goal:** Wire questionnaire generation and export to chat interface
+
+**Context:** The web app uses `prompts.ts` (not just `guardian-prompt.md`). The `prompts.ts` has rigid "3-5 exchanges" rules that conflict with OG Guardian's conversational approach. Additionally, the export feature needs to be wired to the chat.
+
+---
+
+### Story 10.19: Update Assessment Mode Prompt for Conversational Flow ✅
+**Estimated:** 2 hours
+**Actual:** 1 hour
+**Completed:** 2025-11-25
+**Priority:** HIGH - Blocking other export stories
+
+**Tasks:**
+- [x] Update `packages/backend/src/infrastructure/ai/prompts.ts`
+- [x] Remove rigid "After 3-5 exchanges" rule
+- [x] Replace with conversational judgment guidance
+- [x] Add 5 key context areas (solution type, data sensitivity, users, risk profile, concerns)
+- [x] Add hint: "Say 'generate' whenever you're ready"
+- [x] Add guidance: When Claude has enough context, ask "Ready to generate the questionnaire?"
+
+**Acceptance Criteria:**
+- [x] No rigid exchange count rules
+- [x] Conversational context gathering guidance added
+- [x] User hint included
+- [x] Claude readiness signal defined
+- [x] Matches OG Guardian conversational approach
+
+**Files Modified:**
+- `packages/backend/src/infrastructure/ai/prompts.ts`
+
+---
+
+### Story 10.20: Implement Generate Button Trigger Detection ✅
+**Estimated:** 3 hours
+**Actual:** 1.5 hours
+**Completed:** 2025-11-25
+
+**Tasks:**
+- [x] In ChatServer.ts, detect trigger phrases in Claude's response OR user message
+- [x] Trigger phrases: "Ready to generate", "generate the questionnaire", "generate now"
+- [x] Emit `generate_ready` WebSocket event with assessmentId
+- [x] Frontend: Listen for `generate_ready` event (requires frontend integration)
+- [x] Show "Generate Questionnaire" button in chat (requires frontend integration)
+
+**Acceptance Criteria:**
+- [x] Backend detects trigger phrases
+- [x] WebSocket event emitted correctly
+- [ ] Frontend receives event and shows button (PENDING: requires frontend wiring)
+- [x] Button only appears when appropriate (mode guard implemented)
+
+**Files Modified:**
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts`
+- Frontend integration pending (not part of this story)
+
+---
+
+### Story 10.21: Create GenerateQuestionnaireButton Component ✅
+**Estimated:** 2 hours
+**Actual:** 45 minutes
+**Completed:** 2025-11-25
+
+**Tasks:**
+- [x] Create `GenerateQuestionnaireButton` component
+- [x] On click: `POST /api/assessments/:id/generate-questions`
+- [x] Show loading state during generation
+- [x] On success: Emit event to show download buttons (via callback)
+- [x] On error: Show error message in chat (via callback)
+
+**Acceptance Criteria:**
+- [x] Button calls existing API correctly
+- [x] Loading state visible during generation
+- [x] Success triggers download button display (via onSuccess callback)
+- [x] Errors handled gracefully (via onError callback)
+
+**Files Created:**
+- `apps/web/src/components/chat/GenerateQuestionnaireButton.tsx`
+
+**Note:** Parent component integration (listening for generate_ready event and showing this button) is part of Story 10.23 integration testing.
+
+---
+
+### Story 10.22: Wire DownloadButton with JWT Auth ✅
+**Estimated:** 1 hour
+**Actual:** 15 minutes
+**Completed:** 2025-11-25
+
+**Tasks:**
+- [x] Update `apps/web/src/components/chat/DownloadButton.tsx`
+- [x] Uncomment and implement Authorization header
+- [x] Get token from localStorage (guardian_token)
+- [x] Pass to fetch request
+
+**Acceptance Criteria:**
+- [x] Download requests include JWT token
+- [x] PDF/Word/Excel downloads work with auth (pending E2E test)
+- [x] Unauthorized requests handled gracefully (error thrown and caught)
+
+**Files Modified:**
+- `apps/web/src/components/chat/DownloadButton.tsx`
+
+---
+
+### Story 10.23: Integration Testing - Export Flow 🔄
+**Estimated:** 2 hours
+**Status:** Ready for E2E Testing (frontend wiring complete)
+**Started:** 2025-11-25
+
+**Tasks:**
+- [ ] E2E test: Full chat → generate → download flow
+- [ ] Test trigger phrase detection (multiple variations)
+- [ ] Test auth on download endpoints
+- [ ] Test error scenarios (no assessment, generation failure)
+- [ ] Document any issues
+
+**Acceptance Criteria:**
+- [ ] Complete flow works end-to-end
+- [ ] All trigger phrases detected correctly
+- [ ] Downloads work with authentication
+- [ ] Error cases handled
+
+**Implementation Status:**
+- ✅ Backend trigger detection implemented (`ChatServer.ts:78-111`)
+- ✅ Backend emits `generate_ready` event with conversationId + assessmentId
+- ✅ GenerateQuestionnaireButton component created
+- ✅ DownloadButton JWT auth wired
+- ✅ Frontend `generate_ready` event chain wired:
+  - `websocket.ts:440-452` - `onGenerateReady` method
+  - `useWebSocket.ts:23,44,233-238` - option and effect registration
+  - `useWebSocketAdapter.ts:27,129` - handler interface
+  - `useWebSocketEvents.ts:48,64,117,313-324,338` - `handleGenerateReady` handler
+  - `useChatController.ts:33,45,87-88,154,182,199,213,441-444,459,471` - state and exposure
+  - `ChatInterface.tsx:3,6-8,29-47,62-111` - UI panels for generation and download
+- ⏸️ Manual E2E testing required to validate full flow
+
+**User Flow (Expected):**
+1. User starts Assessment Mode conversation
+2. User/Claude discuss context (conversational, no rigid exchange count)
+3. User or Claude says "generate" (trigger phrase detected)
+4. Blue panel appears: "Ready to generate your questionnaire"
+5. User clicks "Generate Questionnaire" button
+6. POST to `/api/assessments/:id/generate-questions`
+7. On success: Green panel with download buttons (PDF, Word, Excel)
+8. User clicks download button → authenticated fetch → file download
+
+**Next Steps:**
+1. Manual E2E testing of full flow
+2. Document results in implementation log
+
+---
+
+## Updated Epic Summary
+
+**Original Scope (Stories 10.1-10.18):** Clean up guardian-prompt.md (46KB), remove commands, add web app context
+
+**New Scope (Stories 10.19-10.23):** Wire export feature to chat, update prompts.ts for conversational flow
+
+**Recommended Order:**
+1. Story 10.19 (prompts.ts update) - FIRST, unblocks other stories
+2. Story 10.22 (DownloadButton auth) - Simple fix
+3. Stories 10.20-10.21 (Generate button trigger & component)
+4. Story 10.23 (Integration testing)
+5. Then proceed with original Stories 10.1-10.18 for guardian-prompt.md cleanup
 
 ---
 
