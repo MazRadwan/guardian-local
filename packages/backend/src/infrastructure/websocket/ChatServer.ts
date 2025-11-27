@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ConversationService } from '../../application/services/ConversationService.js';
+import { AssessmentService } from '../../application/services/AssessmentService.js';
 import type { IClaudeClient, ClaudeMessage } from '../../application/interfaces/IClaudeClient.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
@@ -43,13 +44,23 @@ export class ChatServer {
   private promptCacheManager: PromptCacheManager;
   private pendingConversationCreations: Map<string, { conversationId: string; timestamp: number }>;
 
+  private readonly GENERATE_TRIGGERS = [
+    'generate questionnaire',
+    'generate the questionnaire',
+    'create questionnaire',
+    'generate it',
+    'go ahead',
+    'yes generate',
+  ];
+
   constructor(
     io: SocketIOServer,
     conversationService: ConversationService,
     claudeClient: IClaudeClient,
     rateLimiter: RateLimiter,
     jwtSecret: string,
-    promptCacheManager: PromptCacheManager
+    promptCacheManager: PromptCacheManager,
+    private readonly assessmentService: AssessmentService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -69,6 +80,14 @@ export class ChatServer {
         }
       }
     }, 5000);
+  }
+
+  /**
+   * Detect if user message contains a questionnaire generation trigger
+   */
+  private detectGenerateTrigger(message: string): boolean {
+    const normalized = message.toLowerCase().trim();
+    return this.GENERATE_TRIGGERS.some(trigger => normalized.includes(trigger));
   }
 
   /**
@@ -202,6 +221,7 @@ export class ChatServer {
         conversationId: conversation?.id,
         resumed,
         hasActiveConversation: conversation !== null,
+        assessmentId: conversation?.assessmentId || null,
       });
 
       // Handle send_message event
@@ -272,6 +292,9 @@ export class ChatServer {
             `[ChatServer] Message received from ${socket.userId} for conversation ${conversationId}`
           );
 
+          // Detect if this is a questionnaire generation request
+          const isGenerateRequest = this.detectGenerateTrigger(messageText);
+
           // Save user message
           const message = await this.conversationService.sendMessage({
             conversationId,
@@ -281,6 +304,40 @@ export class ChatServer {
               components: payload.components,
             },
           });
+
+          // Create assessment if trigger detected and in assessment mode without existing link
+          let assessmentId: string | null = null;
+
+          if (isGenerateRequest) {
+            const conversation = await this.conversationService.getConversation(conversationId);
+
+            if (conversation && conversation.mode === 'assessment' && !conversation.assessmentId) {
+              try {
+                // Create default vendor
+                const vendor = await this.assessmentService.findOrCreateDefaultVendor(socket.userId!);
+
+                // Create assessment in draft status
+                const assessmentResponse = await this.assessmentService.createAssessment({
+                  vendorName: vendor.name,
+                  assessmentType: 'comprehensive',
+                  solutionName: 'Assessment from Chat',
+                  createdBy: socket.userId!,
+                });
+
+                assessmentId = assessmentResponse.assessmentId;
+
+                // Link assessment to conversation
+                await this.conversationService.linkAssessment(conversationId, assessmentId);
+
+                console.log(`[ChatServer] Created assessment ${assessmentId} for conversation ${conversationId}`);
+              } catch (error) {
+                console.error('[ChatServer] Failed to create assessment:', error);
+                // Continue without assessment - extraction will be skipped
+              }
+            } else if (conversation?.assessmentId) {
+              assessmentId = conversation.assessmentId;
+            }
+          }
 
           // Emit confirmation only (frontend already added user message to UI)
           socket.emit('message_sent', {

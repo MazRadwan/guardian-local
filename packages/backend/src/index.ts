@@ -133,7 +133,8 @@ const chatServer = new ChatServer(
   claudeClient,
   rateLimiter,
   JWT_SECRET,
-  promptCacheManager
+  promptCacheManager,
+  assessmentService
 );
 
 console.log('[App] ChatServer initialized');
