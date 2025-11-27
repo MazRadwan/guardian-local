@@ -47,9 +47,10 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | Epic 6: Question Generation (Core Feature) | 6 stories | ✅ Complete | 2025-11-08 | 53 tests, 92% coverage, Claude integration working |
 | Epic 7: Export Functionality | 5 stories | ✅ Complete | 2025-11-09 | 24 tests passing, architecture fix applied |
 | Epic 8: Integration & Polish | 5 stories | ⬜ Pending | - | After all epics |
-| Epic 9: UI/UX Upgrade | 8 stories | 🔄 In Progress | Started 2025-11-13 | See `epic-9-ui-ux-upgrade.md` |
+| Epic 9: UI/UX Upgrade | 26 stories | 🔄 In Progress | Started 2025-11-13 | See `epic-9-ui-ux-upgrade.md` - 18 of 26 stories complete |
+| Epic 10: Prompt Refinement | 18 stories | ⏭️ Next | - | Align guardian-prompt.md with web app UX, remove command syntax |
 
-**Progress:** 7 of 8 MVP epics complete (87.5%), Epic 9 (UI/UX) in planning
+**Progress:** 7 of 10 MVP epics complete (70%), Epic 9 (UI/UX) 70% complete, Epic 10 (Prompt) next
 
 **Critical Path:** Epic 1 ✅ → Epic 2 ✅ → Epic 3 ✅ → Epic 4 ✅ → Epic 5 ✅ → Epic 6 → Epic 7 → Epic 8
 
@@ -61,6 +62,7 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 
 | Sidequest | Status | Notes |
 |-----------|--------|-------|
+| Prompt Cache Manager | ✅ Complete | See `tasks/sidequest-prompt-cache-manager.md` - 46KB Guardian prompt caching with 90% token reduction |
 | Chat Architecture Refactor | 🆕 Planning | See `tasks/epic-chat-architecture-refactor.md` (sidequest for modularizing `ChatInterface.tsx` without behavior changes). |
 
 ---
