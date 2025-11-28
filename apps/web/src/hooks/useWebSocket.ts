@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload } from '@/lib/websocket';
 
 export interface UseWebSocketOptions {
   url: string;
@@ -20,6 +20,8 @@ export interface UseWebSocketOptions {
   onStreamAborted?: (conversationId: string) => void;
   onConversationDeleted?: (conversationId: string) => void;
   onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
+  onExportReady?: (data: ExportReadyPayload) => void;
+  onExtractionFailed?: (data: ExtractionFailedPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -40,6 +42,8 @@ export function useWebSocket({
   onStreamAborted,
   onConversationDeleted,
   onConversationModeUpdated,
+  onExportReady,
+  onExtractionFailed,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -221,6 +225,20 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onExportReady) {
+      const unsub = client.onExportReady((data) => {
+        onExportReady(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onExtractionFailed) {
+      const unsub = client.onExtractionFailed((data) => {
+        onExtractionFailed(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     if (onConnectionReady) {
       const unsub = client.onConnectionReady((data) => {
         onConnectionReady(data);
@@ -231,7 +249,7 @@ export function useWebSocket({
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onConnectionReady]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onConnectionReady]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {

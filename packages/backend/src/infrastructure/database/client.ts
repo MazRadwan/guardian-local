@@ -1,9 +1,12 @@
 import { config } from 'dotenv'
 config() // Load .env before reading DATABASE_URL
 
-import { drizzle } from 'drizzle-orm/postgres-js'
+import { drizzle, type PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import postgres from 'postgres'
 import * as schema from './schema/index'
+
+// Export transaction type for repositories
+export type DbTransaction = PostgresJsDatabase<typeof schema>
 
 // Database connection URL
 const DATABASE_URL = process.env.DATABASE_URL

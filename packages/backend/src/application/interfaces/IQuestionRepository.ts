@@ -33,4 +33,12 @@ export interface IQuestionRepository {
    * @param assessmentId - Assessment UUID
    */
   deleteByAssessmentId(assessmentId: string): Promise<void>;
+
+  /**
+   * Atomically replace all questions for an assessment (delete + insert in transaction)
+   * @param assessmentId - Assessment UUID
+   * @param questions - New questions to insert (can be empty array)
+   * @returns Array of created Questions with IDs
+   */
+  replaceAllForAssessment(assessmentId: string, questions: Question[]): Promise<Question[]>;
 }

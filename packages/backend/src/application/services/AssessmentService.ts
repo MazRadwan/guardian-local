@@ -20,30 +20,6 @@ export class AssessmentService {
   ) {}
 
   /**
-   * Find existing default vendor or create one
-   * Used when creating assessments from chat without explicit vendor selection
-   */
-  async findOrCreateDefaultVendor(userId: string): Promise<Vendor> {
-    const defaultVendorName = 'Chat Assessment Vendor';
-
-    // Try to find existing default vendor
-    const existing = await this.vendorRepository.findByName(defaultVendorName);
-    if (existing) {
-      return existing;
-    }
-
-    // Create default vendor
-    const vendor = Vendor.create({
-      name: defaultVendorName,
-      industry: 'Healthcare Technology',
-      website: null,
-      contactInfo: null,
-    });
-
-    return await this.vendorRepository.create(vendor);
-  }
-
-  /**
    * Creates a new assessment, creating or reusing vendor as needed
    */
   async createAssessment(

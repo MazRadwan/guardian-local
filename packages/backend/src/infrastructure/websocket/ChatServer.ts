@@ -1,9 +1,12 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ConversationService } from '../../application/services/ConversationService.js';
 import { AssessmentService } from '../../application/services/AssessmentService.js';
+import { VendorService } from '../../application/services/VendorService.js';
+import { QuestionExtractionService } from '../../application/services/QuestionExtractionService.js';
 import type { IClaudeClient, ClaudeMessage } from '../../application/interfaces/IClaudeClient.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
+import { detectGenerateTrigger } from './TriggerDetection.js';
 import jwt from 'jsonwebtoken';
 
 interface AuthenticatedSocket extends Socket {
@@ -44,15 +47,6 @@ export class ChatServer {
   private promptCacheManager: PromptCacheManager;
   private pendingConversationCreations: Map<string, { conversationId: string; timestamp: number }>;
 
-  private readonly GENERATE_TRIGGERS = [
-    'generate questionnaire',
-    'generate the questionnaire',
-    'create questionnaire',
-    'generate it',
-    'go ahead',
-    'yes generate',
-  ];
-
   constructor(
     io: SocketIOServer,
     conversationService: ConversationService,
@@ -60,7 +54,9 @@ export class ChatServer {
     rateLimiter: RateLimiter,
     jwtSecret: string,
     promptCacheManager: PromptCacheManager,
-    private readonly assessmentService: AssessmentService
+    private readonly assessmentService: AssessmentService,
+    private readonly vendorService: VendorService,
+    private readonly questionExtractionService: QuestionExtractionService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -80,14 +76,6 @@ export class ChatServer {
         }
       }
     }, 5000);
-  }
-
-  /**
-   * Detect if user message contains a questionnaire generation trigger
-   */
-  private detectGenerateTrigger(message: string): boolean {
-    const normalized = message.toLowerCase().trim();
-    return this.GENERATE_TRIGGERS.some(trigger => normalized.includes(trigger));
   }
 
   /**
@@ -293,7 +281,7 @@ export class ChatServer {
           );
 
           // Detect if this is a questionnaire generation request
-          const isGenerateRequest = this.detectGenerateTrigger(messageText);
+          const isGenerateRequest = detectGenerateTrigger(messageText);
 
           // Save user message
           const message = await this.conversationService.sendMessage({
@@ -313,8 +301,8 @@ export class ChatServer {
 
             if (conversation && conversation.mode === 'assessment' && !conversation.assessmentId) {
               try {
-                // Create default vendor
-                const vendor = await this.assessmentService.findOrCreateDefaultVendor(socket.userId!);
+                // Create default vendor using VendorService
+                const vendor = await this.vendorService.findOrCreateDefault(socket.userId!);
 
                 // Create assessment in draft status
                 const assessmentResponse = await this.assessmentService.createAssessment({
@@ -412,7 +400,16 @@ export class ChatServer {
                   messageId: completeMessage.id,
                   conversationId,
                   fullText: fullResponse,
+                  assessmentId: assessmentId || null,
                 });
+
+                // Fire-and-forget extraction with fallback (non-blocking)
+                // Do NOT await this - extraction runs in background after socket event completes
+                // NOTE: Frontend reads assessmentId from export_ready, not assistant_done
+                if (socket.userId) {
+                  this.performExtractionWithFallback(socket, conversationId, fullResponse, socket.userId)
+                    .catch(err => console.error('[ChatServer] Extraction error:', err));
+                }
               } else {
                 console.log(`[ChatServer] Stream aborted - partial response saved (${fullResponse.length} chars)`);
               }
@@ -794,6 +791,158 @@ Reply with: **1**, **2**, or **3**
     });
 
     console.log('[ChatServer] WebSocket /chat namespace configured');
+  }
+
+  /**
+   * Attempt questionnaire extraction in background (fire-and-forget)
+   * Emits export_ready event on success, logs errors on failure
+   * Does NOT block the socket event handler
+   */
+  private attemptQuestionnaireExtraction(
+    socket: Socket,
+    conversationId: string,
+    assessmentId: string,
+    fullResponse: string
+  ): void {
+    // Intentionally not awaited - runs in background
+    this.questionExtractionService
+      .handleAssistantCompletion(conversationId, assessmentId, fullResponse)
+      .then((extractionResult) => {
+        if (extractionResult?.success) {
+          console.log(`[ChatServer] Extracted ${extractionResult.questionCount} questions for assessment ${assessmentId}`);
+
+          // Validate payload before emitting
+          const formats = ['pdf', 'word', 'excel'] as const;
+          const questionCount = extractionResult.questionCount;
+
+          if (!assessmentId || !formats || questionCount === undefined) {
+            console.error('[ChatServer] Invalid export_ready payload:', { assessmentId, formats, questionCount });
+            return;
+          }
+
+          console.log('[ChatServer] Emitting export_ready:', {
+            conversationId,
+            assessmentId,
+            formats,
+            questionCount
+          });
+
+          // Emit export_ready to THIS socket only (not broadcast)
+          socket.emit('export_ready', {
+            conversationId,
+            assessmentId,
+            formats,
+            questionCount,
+          });
+        } else if (extractionResult) {
+          console.warn(`[ChatServer] Extraction failed: ${extractionResult.error}`);
+
+          // Emit extraction_failed for UI to show error
+          socket.emit('extraction_failed', {
+            conversationId,
+            assessmentId,
+            error: extractionResult.error,
+          });
+        }
+        // extractionResult === null means no markers found, which is normal
+      })
+      .catch((error) => {
+        console.error('[ChatServer] Extraction service error:', error);
+        // Don't fail the socket connection for extraction errors
+      });
+  }
+
+  /**
+   * Create fallback assessment when markers detected but no assessment linked.
+   * Includes race condition guard via re-fetch check.
+   */
+  private async createFallbackAssessment(
+    conversationId: string,
+    userId: string
+  ): Promise<string | null> {
+    try {
+      // Create "Unknown Vendor" placeholder (can be updated later by user)
+      const vendor = await this.vendorService.findOrCreateVendor('Unknown Vendor');
+
+      // Create assessment linked to conversation
+      const assessmentResponse = await this.assessmentService.createAssessment({
+        vendorName: vendor.name,
+        assessmentType: 'comprehensive',
+        solutionName: 'Assessment from Chat',
+        createdBy: userId,
+      });
+
+      // Link assessment to conversation
+      await this.conversationService.linkAssessment(conversationId, assessmentResponse.assessmentId);
+
+      // RACE CONDITION GUARD: Re-fetch to verify we won the race
+      const updatedConversation = await this.conversationService.getConversation(conversationId);
+      if (updatedConversation?.assessmentId !== assessmentResponse.assessmentId) {
+        // Another request won the race - use their assessment instead
+        console.log('[ChatServer] Race condition detected - using existing assessment');
+        return updatedConversation?.assessmentId || null;
+      }
+
+      console.log(`[ChatServer] Fallback assessment created: ${assessmentResponse.assessmentId}`);
+      return assessmentResponse.assessmentId;
+    } catch (error) {
+      console.error('[ChatServer] Failed to create fallback assessment:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Process completed assistant response for questionnaire extraction.
+   * Called after streaming completes.
+   */
+  private async performExtractionWithFallback(
+    socket: AuthenticatedSocket,
+    conversationId: string,
+    fullResponse: string,
+    userId: string
+  ): Promise<void> {
+    // STEP 1: Check for markers (DRY - extract content once)
+    const extractedContent = this.questionExtractionService.extractMarkedContent(fullResponse);
+
+    if (!extractedContent) {
+      // No markers found - nothing to extract
+      return;
+    }
+
+    console.log('[ChatServer] Questionnaire markers detected in response');
+
+    // STEP 2: Get current assessment (if any)
+    const conversation = await this.conversationService.getConversation(conversationId);
+    let assessmentId = conversation?.assessmentId || null;
+
+    // STEP 3: Check if existing assessment is usable (must be in 'draft' status)
+    // If assessment exists but isn't draft, create new one for repeat generation
+    if (assessmentId) {
+      const existingAssessment = await this.assessmentService.getAssessment(assessmentId);
+      if (existingAssessment && existingAssessment.status !== 'draft') {
+        console.log(`[ChatServer] Existing assessment is '${existingAssessment.status}' - creating new for repeat generation`);
+        assessmentId = null; // Force fallback creation
+      }
+    }
+
+    // STEP 4: Create fallback assessment if needed (no assessment or existing not in draft)
+    if (!assessmentId) {
+      console.log('[ChatServer] No usable assessment linked - creating fallback');
+      assessmentId = await this.createFallbackAssessment(conversationId, userId);
+
+      if (!assessmentId) {
+        // Fallback creation failed - emit error and abort
+        socket.emit('extraction_failed', {
+          conversationId,
+          assessmentId: null,
+          error: 'Failed to create assessment for questionnaire export',
+        });
+        return;
+      }
+    }
+
+    // STEP 5: Extract questions (pass full response - service will re-extract marked content)
+    this.attemptQuestionnaireExtraction(socket, conversationId, assessmentId, fullResponse);
   }
 
   /**

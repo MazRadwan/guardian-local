@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChatMessage } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload } from '@/lib/websocket';
 
 export interface UseHistoryManagerParams {
   conversationId: string | null | undefined;
@@ -13,6 +13,9 @@ export interface UseHistoryManagerParams {
   setError: (error: string | null) => void;
   messages: ChatMessage[];
   isLoading: boolean;
+  // Export state rehydration
+  getExportReady: (conversationId: string) => ExportReadyPayload | undefined;
+  appendComponentToLastAssistantMessage: (component: EmbeddedComponent) => void;
 }
 
 export interface UseHistoryManagerReturn {
@@ -31,6 +34,8 @@ export function useHistoryManager({
   setError,
   messages,
   isLoading,
+  getExportReady,
+  appendComponentToLastAssistantMessage,
 }: UseHistoryManagerParams): UseHistoryManagerReturn {
   const [shouldLoadHistory, setShouldLoadHistory] = useState(false);
   const historyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -51,6 +56,37 @@ export function useHistoryManager({
     console.log('[useHistoryManager] setMessages called');
     setLoading(false); // Hide skeleton loaders
     setShouldLoadHistory(false);
+
+    // REHYDRATION: Check if we have cached export data for this conversation
+    // If messages don't contain a download component but cache has export data, re-inject
+    if (conversationId) {
+      const cachedExport = getExportReady(conversationId);
+      if (cachedExport) {
+        // Check if any loaded message already has a download component
+        const hasDownloadComponent = loadedMessages.some(
+          (msg) => msg.components?.some((c) => c.type === 'download')
+        );
+
+        if (!hasDownloadComponent) {
+          console.log('[useHistoryManager] Rehydrating download component from cache:', cachedExport.assessmentId);
+          // Re-inject download component into last assistant message
+          // Use setTimeout to ensure setMessages has completed
+          setTimeout(() => {
+            const downloadComponent: EmbeddedComponent = {
+              type: 'download',
+              data: {
+                assessmentId: cachedExport.assessmentId,
+                formats: cachedExport.formats,
+                questionCount: cachedExport.questionCount,
+              },
+            };
+            appendComponentToLastAssistantMessage(downloadComponent);
+          }, 0);
+        } else {
+          console.log('[useHistoryManager] Download component already in history, skipping rehydration');
+        }
+      }
+    }
 
     // Scroll to bottom after history loads
     setTimeout(() => {

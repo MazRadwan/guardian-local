@@ -17,11 +17,14 @@ export interface WebSocketConfig {
 }
 
 export interface EmbeddedComponent {
-  type: 'button' | 'link' | 'form';
+  type: 'button' | 'link' | 'form' | 'download' | 'error';
   data: {
     label?: string;
     action?: string;
     url?: string;
+    assessmentId?: string;
+    formats?: Array<'pdf' | 'word' | 'excel'>;
+    questionCount?: number;
     [key: string]: any;  // Allow additional properties for flexibility
   };
 }
@@ -43,6 +46,19 @@ export interface StreamEvent {
 export interface ErrorEvent {
   error: string;
   code?: string;
+}
+
+export interface ExportReadyPayload {
+  conversationId: string;
+  assessmentId: string;
+  formats: Array<'pdf' | 'word' | 'excel'>;
+  questionCount: number;
+}
+
+export interface ExtractionFailedPayload {
+  conversationId: string;
+  assessmentId: string;
+  error: string;
 }
 
 // Backend message format (what server sends)
@@ -67,9 +83,9 @@ function normalizeComponents(components?: any[]): EmbeddedComponent[] | undefine
   if (!components || !Array.isArray(components)) return undefined;
 
   return components
-    .filter((c) => c && ['button', 'link', 'form'].includes(c.type))
+    .filter((c) => c && ['button', 'link', 'form', 'download', 'error'].includes(c.type))
     .map((c) => ({
-      type: c.type as 'button' | 'link' | 'form',
+      type: c.type as 'button' | 'link' | 'form' | 'download' | 'error',
       data: c.data && typeof c.data === 'object' ? c.data : {}, // Safe default
     }));
 }
@@ -434,6 +450,34 @@ export class WebSocketClient {
     this.socket.on('conversation_mode_updated', handler);
     return () => {
       this.socket?.off('conversation_mode_updated', handler);
+    };
+  }
+
+  onExportReady(callback: (data: ExportReadyPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ExportReadyPayload) => {
+      console.log('[WebSocket] Export ready:', data.assessmentId, data.questionCount, 'questions');
+      callback(data);
+    };
+
+    this.socket.on('export_ready', handler);
+    return () => {
+      this.socket?.off('export_ready', handler);
+    };
+  }
+
+  onExtractionFailed(callback: (data: ExtractionFailedPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ExtractionFailedPayload) => {
+      console.log('[WebSocket] Extraction failed:', data.assessmentId, data.error);
+      callback(data);
+    };
+
+    this.socket.on('extraction_failed', handler);
+    return () => {
+      this.socket?.off('extraction_failed', handler);
     };
   }
 

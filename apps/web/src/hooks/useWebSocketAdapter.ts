@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload } from '@/lib/websocket';
 import type { Conversation } from '@/stores/chatStore';
 
 export type ConversationMode = 'consult' | 'assessment';
@@ -24,6 +24,8 @@ export interface WebSocketEventHandlers {
   onStreamAborted?: (conversationId: string) => void;
   onConversationDeleted?: (conversationId: string) => void;
   onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
+  onExportReady?: (data: ExportReadyPayload) => void;
+  onExtractionFailed?: (data: ExtractionFailedPayload) => void;
 }
 
 /**
@@ -125,6 +127,8 @@ export function useWebSocketAdapter({
     onStreamAborted: handlers.onStreamAborted,
     onConversationDeleted: handlers.onConversationDeleted,
     onConversationModeUpdated: handlers.onConversationModeUpdated,
+    onExportReady: handlers.onExportReady,
+    onExtractionFailed: handlers.onExtractionFailed,
     autoConnect,
   });
 

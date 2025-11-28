@@ -2702,11 +2702,564 @@ const startNewConversation = useCallback(() => {
 
 ---
 
+## Sprint 8: Extraction Reliability
+
+**Goal:** Make questionnaire extraction/export resilient regardless of user wording or assessment status.
+
+### Story 11.8.1: Expand Trigger Detection
+
+**File:** `packages/backend/src/infrastructure/websocket/TriggerDetection.ts`
+
+**Task:** Expand trigger phrase list and add regex pattern matching for broader coverage.
+
+**Update GENERATE_TRIGGERS array:**
+
+```typescript
+export const GENERATE_TRIGGERS = [
+  // Existing triggers
+  'generate questionnaire',
+  'generate the questionnaire',
+  'create questionnaire',
+  'generate it',
+  'go ahead',
+  'yes generate',
+  // New triggers for reliability
+  'short questionnaire',
+  'quick questionnaire',
+  'brief questionnaire',
+  'generate assessment',
+  'create assessment',
+  'make questionnaire',
+  'build questionnaire',
+  'produce questionnaire',
+] as const;
+
+/**
+ * Regex patterns for flexible matching
+ * Catches variations like "generate a short questionnaire" or "questionnaire please generate"
+ */
+const GENERATE_PATTERNS = [
+  /generate\s+.*questionnaire/i,
+  /questionnaire\s+.*generate/i,
+  /create\s+.*questionnaire/i,
+  /questionnaire\s+.*create/i,
+];
+```
+
+**Update detectGenerateTrigger function:**
+
+```typescript
+export function detectGenerateTrigger(message: string): boolean {
+  const normalized = message.toLowerCase().trim();
+
+  // Check exact phrase triggers first (faster)
+  if (GENERATE_TRIGGERS.some((trigger) => normalized.includes(trigger))) {
+    return true;
+  }
+
+  // Check regex patterns for flexible matching
+  return GENERATE_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+```
+
+**Test File:** `packages/backend/__tests__/unit/TriggerDetection.test.ts`
+
+```typescript
+import { detectGenerateTrigger, GENERATE_TRIGGERS } from '../../src/infrastructure/websocket/TriggerDetection';
+
+describe('TriggerDetection', () => {
+  describe('detectGenerateTrigger', () => {
+    // Existing triggers
+    it.each([
+      'generate questionnaire',
+      'Generate the Questionnaire please',
+      'yes, go ahead',
+      'generate it now',
+    ])('returns true for existing trigger: "%s"', (message) => {
+      expect(detectGenerateTrigger(message)).toBe(true);
+    });
+
+    // New reliability triggers
+    it.each([
+      'short questionnaire',
+      'quick questionnaire please',
+      'give me a brief questionnaire',
+      'generate assessment',
+      'create assessment for me',
+      'make questionnaire',
+    ])('returns true for new trigger: "%s"', (message) => {
+      expect(detectGenerateTrigger(message)).toBe(true);
+    });
+
+    // Regex pattern matches
+    it.each([
+      'generate a comprehensive questionnaire',
+      'please generate the full questionnaire',
+      'questionnaire - generate now',
+      'create the security questionnaire',
+    ])('returns true for pattern match: "%s"', (message) => {
+      expect(detectGenerateTrigger(message)).toBe(true);
+    });
+
+    // Non-triggers (should return false)
+    it.each([
+      'tell me about questionnaires',
+      'what is HIPAA compliance?',
+      'hello',
+      'how many questions are there?',
+    ])('returns false for non-trigger: "%s"', (message) => {
+      expect(detectGenerateTrigger(message)).toBe(false);
+    });
+  });
+});
+```
+
+**Acceptance Criteria:**
+- [ ] `GENERATE_TRIGGERS` array expanded with new phrases
+- [ ] Regex patterns added for flexible matching
+- [ ] `detectGenerateTrigger()` checks both triggers and patterns
+- [ ] Unit tests cover all new triggers and patterns
+- [ ] Existing trigger tests still pass
+
+---
+
+### Story 11.8.2: Response-Side Assessment Fallback
+
+**Files:**
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts`
+- `packages/backend/src/application/services/QuestionExtractionService.ts`
+
+**Task:** Detect questionnaire markers in response regardless of trigger detection. Create assessment on-the-fly if needed.
+
+**Update ChatServer.ts `attemptQuestionnaireExtraction` method:**
+
+Replace the existing fire-and-forget extraction with a smarter version that handles missing assessments:
+
+```typescript
+/**
+ * Attempt questionnaire extraction in background (fire-and-forget)
+ *
+ * KEY RELIABILITY FIX (Sprint 8):
+ * - Detects markers in response even if user message didn't match a trigger
+ * - Creates assessment on-the-fly if markers found but no assessment linked
+ * - Creates NEW assessment if existing one is not in 'draft' status
+ */
+private attemptQuestionnaireExtraction(
+  socket: AuthenticatedSocket,
+  conversationId: string,
+  assessmentId: string | null,
+  fullResponse: string
+): void {
+  // Intentionally not awaited - runs in background
+  this.performExtractionWithFallback(socket, conversationId, assessmentId, fullResponse)
+    .catch((error) => {
+      console.error('[ChatServer] Extraction service error:', error);
+    });
+}
+
+/**
+ * Perform extraction with assessment fallback logic
+ */
+private async performExtractionWithFallback(
+  socket: AuthenticatedSocket,
+  conversationId: string,
+  assessmentId: string | null,
+  fullResponse: string
+): Promise<void> {
+  // Step 1: Check if response contains questionnaire markers
+  if (!this.questionExtractionService.hasQuestionnaireMarkers(fullResponse)) {
+    // No markers - nothing to extract
+    return;
+  }
+
+  console.log(`[ChatServer] Questionnaire markers detected in conversation ${conversationId}`);
+
+  // Step 2: Ensure we have a valid assessment in 'draft' status
+  let effectiveAssessmentId = assessmentId;
+
+  if (!effectiveAssessmentId) {
+    // No assessment linked - create one now
+    console.log(`[ChatServer] No assessment linked - creating fallback assessment`);
+    effectiveAssessmentId = await this.createFallbackAssessment(socket, conversationId);
+
+    if (!effectiveAssessmentId) {
+      console.error('[ChatServer] Failed to create fallback assessment');
+      socket.emit('extraction_failed', {
+        conversationId,
+        assessmentId: '',
+        error: 'Unable to create assessment for questionnaire export',
+      });
+      return;
+    }
+  } else {
+    // Assessment exists - verify it's in draft status
+    const assessment = await this.assessmentService.getAssessment(effectiveAssessmentId);
+
+    if (assessment && assessment.status !== 'draft') {
+      console.log(`[ChatServer] Existing assessment ${effectiveAssessmentId} not in draft status (${assessment.status}) - creating new one`);
+      effectiveAssessmentId = await this.createFallbackAssessment(socket, conversationId);
+
+      if (!effectiveAssessmentId) {
+        console.error('[ChatServer] Failed to create replacement assessment');
+        socket.emit('extraction_failed', {
+          conversationId,
+          assessmentId: assessmentId || '',
+          error: 'Unable to create new assessment - previous assessment already completed',
+        });
+        return;
+      }
+    }
+  }
+
+  // Step 3: Perform extraction
+  const extractionResult = await this.questionExtractionService.handleAssistantCompletion(
+    conversationId,
+    effectiveAssessmentId,
+    fullResponse
+  );
+
+  if (extractionResult?.success) {
+    console.log(`[ChatServer] Extracted ${extractionResult.questionCount} questions for assessment ${effectiveAssessmentId}`);
+
+    socket.emit('export_ready', {
+      conversationId,
+      assessmentId: effectiveAssessmentId,
+      formats: ['pdf', 'word', 'excel'] as const,
+      questionCount: extractionResult.questionCount,
+    });
+  } else if (extractionResult) {
+    console.warn(`[ChatServer] Extraction failed: ${extractionResult.error}`);
+
+    socket.emit('extraction_failed', {
+      conversationId,
+      assessmentId: effectiveAssessmentId,
+      error: extractionResult.error,
+    });
+  }
+}
+
+/**
+ * Create a fallback assessment when markers detected but no assessment linked
+ */
+private async createFallbackAssessment(
+  socket: AuthenticatedSocket,
+  conversationId: string
+): Promise<string | null> {
+  try {
+    if (!socket.userId) {
+      return null;
+    }
+
+    // Create default vendor
+    const vendor = await this.vendorService.findOrCreateDefault(socket.userId);
+
+    // Create assessment in draft status
+    const assessmentResponse = await this.assessmentService.createAssessment({
+      vendorName: vendor.name,
+      assessmentType: 'comprehensive',
+      solutionName: 'Assessment from Chat (Auto-created)',
+      createdBy: socket.userId,
+    });
+
+    const assessmentId = assessmentResponse.assessmentId;
+
+    // Link assessment to conversation
+    await this.conversationService.linkAssessment(conversationId, assessmentId);
+
+    console.log(`[ChatServer] Created fallback assessment ${assessmentId} for conversation ${conversationId}`);
+
+    return assessmentId;
+  } catch (error) {
+    console.error('[ChatServer] Failed to create fallback assessment:', error);
+    return null;
+  }
+}
+```
+
+**Update send_message handler to always attempt extraction:**
+
+In the `send_message` handler, after `assistant_done` emission, change the extraction call:
+
+```typescript
+// Fire-and-forget extraction (non-blocking)
+// RELIABILITY FIX: Always attempt extraction - it will check for markers
+// and create assessment if needed (Story 11.8.2)
+if (!socket.data.abortRequested) {
+  this.attemptQuestionnaireExtraction(socket, conversationId, assessmentId, fullResponse);
+}
+```
+
+**Test File:** `packages/backend/__tests__/unit/ChatServer.extraction.test.ts` (NEW)
+
+```typescript
+describe('ChatServer Extraction Fallback', () => {
+  describe('performExtractionWithFallback', () => {
+    it('creates assessment when markers found but no assessmentId', async () => {
+      // Setup: response with markers, no assessmentId
+      const fullResponse = `<!-- QUESTIONNAIRE_START -->
+## Section 1: Privacy
+1. Does the vendor have a privacy policy?
+<!-- QUESTIONNAIRE_END -->`;
+
+      mockQuestionExtractionService.hasQuestionnaireMarkers.mockReturnValue(true);
+      mockVendorService.findOrCreateDefault.mockResolvedValue({ id: 'vendor-1', name: 'Default' });
+      mockAssessmentService.createAssessment.mockResolvedValue({ assessmentId: 'new-assess-1' });
+      mockConversationService.linkAssessment.mockResolvedValue(undefined);
+      mockQuestionExtractionService.handleAssistantCompletion.mockResolvedValue({
+        success: true,
+        assessmentId: 'new-assess-1',
+        questionCount: 1,
+      });
+
+      // Call with null assessmentId
+      await chatServer['performExtractionWithFallback'](mockSocket, 'conv-1', null, fullResponse);
+
+      // Verify assessment created and linked
+      expect(mockVendorService.findOrCreateDefault).toHaveBeenCalled();
+      expect(mockAssessmentService.createAssessment).toHaveBeenCalled();
+      expect(mockConversationService.linkAssessment).toHaveBeenCalledWith('conv-1', 'new-assess-1');
+      expect(mockSocket.emit).toHaveBeenCalledWith('export_ready', expect.objectContaining({
+        assessmentId: 'new-assess-1',
+      }));
+    });
+
+    it('creates new assessment when existing is not in draft status', async () => {
+      const fullResponse = `<!-- QUESTIONNAIRE_START -->
+## Section 1: Test
+1. Test question?
+<!-- QUESTIONNAIRE_END -->`;
+
+      mockQuestionExtractionService.hasQuestionnaireMarkers.mockReturnValue(true);
+      // Existing assessment is 'questions_generated' (not draft)
+      mockAssessmentService.getAssessment.mockResolvedValue({
+        id: 'old-assess',
+        status: 'questions_generated'
+      });
+      mockVendorService.findOrCreateDefault.mockResolvedValue({ id: 'vendor-1', name: 'Default' });
+      mockAssessmentService.createAssessment.mockResolvedValue({ assessmentId: 'new-assess-2' });
+      mockConversationService.linkAssessment.mockResolvedValue(undefined);
+      mockQuestionExtractionService.handleAssistantCompletion.mockResolvedValue({
+        success: true,
+        assessmentId: 'new-assess-2',
+        questionCount: 1,
+      });
+
+      await chatServer['performExtractionWithFallback'](mockSocket, 'conv-1', 'old-assess', fullResponse);
+
+      // Verify NEW assessment created (not using old one)
+      expect(mockAssessmentService.createAssessment).toHaveBeenCalled();
+      expect(mockSocket.emit).toHaveBeenCalledWith('export_ready', expect.objectContaining({
+        assessmentId: 'new-assess-2',
+      }));
+    });
+
+    it('uses existing assessment when in draft status', async () => {
+      const fullResponse = `<!-- QUESTIONNAIRE_START -->
+## Section 1: Test
+1. Test question?
+<!-- QUESTIONNAIRE_END -->`;
+
+      mockQuestionExtractionService.hasQuestionnaireMarkers.mockReturnValue(true);
+      mockAssessmentService.getAssessment.mockResolvedValue({
+        id: 'existing-assess',
+        status: 'draft'
+      });
+      mockQuestionExtractionService.handleAssistantCompletion.mockResolvedValue({
+        success: true,
+        assessmentId: 'existing-assess',
+        questionCount: 1,
+      });
+
+      await chatServer['performExtractionWithFallback'](mockSocket, 'conv-1', 'existing-assess', fullResponse);
+
+      // Should NOT create new assessment
+      expect(mockAssessmentService.createAssessment).not.toHaveBeenCalled();
+      expect(mockSocket.emit).toHaveBeenCalledWith('export_ready', expect.objectContaining({
+        assessmentId: 'existing-assess',
+      }));
+    });
+
+    it('does nothing when no markers in response', async () => {
+      mockQuestionExtractionService.hasQuestionnaireMarkers.mockReturnValue(false);
+
+      await chatServer['performExtractionWithFallback'](mockSocket, 'conv-1', null, 'Just regular text');
+
+      expect(mockQuestionExtractionService.handleAssistantCompletion).not.toHaveBeenCalled();
+      expect(mockSocket.emit).not.toHaveBeenCalled();
+    });
+  });
+});
+```
+
+**Acceptance Criteria:**
+- [ ] `performExtractionWithFallback` method added to ChatServer
+- [ ] Creates assessment when markers found but no assessmentId
+- [ ] Creates NEW assessment when existing assessment not in 'draft' status
+- [ ] Uses existing assessment when in 'draft' status
+- [ ] Does nothing when no markers present
+- [ ] Emits `export_ready` on successful extraction
+- [ ] Emits `extraction_failed` on errors
+- [ ] Unit tests cover all fallback scenarios
+- [ ] Normal trigger path still works
+
+---
+
+### Story 11.8.3: Download Flow Validation
+
+**Files:**
+- `packages/backend/__tests__/integration/export-flow.integration.test.ts` (NEW)
+- `apps/web/src/components/chat/DownloadButton.tsx`
+
+**Task:** Validate that export_ready always emits after Story 8.2 fallback runs and downloads work.
+
+**Backend Integration Test:**
+
+```typescript
+import request from 'supertest';
+import { app } from '../../src/index';
+// ... setup imports
+
+describe('Export Flow Integration', () => {
+  let testAssessmentId: string;
+  let authToken: string;
+
+  beforeAll(async () => {
+    // Create test user and get auth token
+    authToken = await createTestUserAndGetToken();
+  });
+
+  describe('Fallback Assessment Export', () => {
+    it('export endpoint works for auto-created assessment', async () => {
+      // Simulate the fallback assessment creation flow
+      const vendor = await vendorService.findOrCreateDefault('test-user');
+      const assessment = await assessmentService.createAssessment({
+        vendorName: vendor.name,
+        assessmentType: 'comprehensive',
+        solutionName: 'Auto-created Assessment',
+        createdBy: 'test-user',
+      });
+      testAssessmentId = assessment.assessmentId;
+
+      // Add some questions
+      await questionRepository.bulkCreate([
+        Question.create({
+          assessmentId: testAssessmentId,
+          sectionName: 'Privacy',
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Test question?',
+          questionType: 'text',
+        }),
+      ]);
+
+      // Update status to questions_generated
+      await assessmentRepository.updateStatus(testAssessmentId, 'questions_generated');
+
+      // Test PDF export
+      const pdfResponse = await request(app)
+        .get(`/api/assessments/${testAssessmentId}/export/pdf`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(pdfResponse.headers['content-type']).toContain('application/pdf');
+      expect(pdfResponse.body).toBeTruthy();
+
+      // Test Word export
+      const wordResponse = await request(app)
+        .get(`/api/assessments/${testAssessmentId}/export/word`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(wordResponse.headers['content-type']).toContain('application/vnd.openxmlformats');
+
+      // Test Excel export
+      const excelResponse = await request(app)
+        .get(`/api/assessments/${testAssessmentId}/export/excel`)
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(200);
+
+      expect(excelResponse.headers['content-type']).toContain('spreadsheet');
+    });
+
+    it('returns 404 for non-existent assessment', async () => {
+      await request(app)
+        .get('/api/assessments/non-existent-id/export/pdf')
+        .set('Authorization', `Bearer ${authToken}`)
+        .expect(404);
+    });
+
+    it('returns 401 without auth token', async () => {
+      await request(app)
+        .get(`/api/assessments/${testAssessmentId}/export/pdf`)
+        .expect(401);
+    });
+  });
+});
+```
+
+**Add data-testid attributes to DownloadButton:**
+
+```typescript
+// In DownloadButton.tsx, update the Button component:
+<Button
+  onClick={handleDownload}
+  disabled={isDisabled}
+  variant="outline"
+  size="sm"
+  className="gap-2"
+  data-testid={`download-${format}`}  // ADD THIS
+>
+```
+
+**Frontend Smoke Test (Manual Checklist):**
+
+```markdown
+## Download Flow Validation Checklist
+
+### Prerequisites
+- [ ] Backend running on port 8000
+- [ ] Frontend running on port 3000
+- [ ] Logged in as test user
+
+### Test: Fallback Assessment Flow
+1. [ ] Start new conversation in Consult mode
+2. [ ] Switch to Assessment mode via dropdown
+3. [ ] Ask Claude to generate a questionnaire using non-trigger phrase:
+   - Try: "I need a short questionnaire for a diagnostic AI tool"
+4. [ ] Wait for Claude response with questionnaire markers
+5. [ ] Verify download buttons appear in chat
+6. [ ] Click PDF download - verify file downloads (not 404)
+7. [ ] Click Word download - verify file downloads
+8. [ ] Click Excel download - verify file downloads
+
+### Test: Repeat Generation (New Assessment)
+1. [ ] In same conversation, ask for another questionnaire
+2. [ ] Verify new download buttons appear
+3. [ ] Verify downloads work (new assessment created)
+
+### Test: History Reload
+1. [ ] Refresh page
+2. [ ] Verify download buttons rehydrate from cache
+3. [ ] Verify downloads still work
+```
+
+**Acceptance Criteria:**
+- [ ] Backend integration tests pass for all export formats
+- [ ] `data-testid="download-pdf"`, `download-word`, `download-excel` added to buttons
+- [ ] Downloads no longer 404 after fallback assessment creation
+- [ ] Manual checklist completed successfully
+- [ ] export_ready event emitted for fallback-created assessments
+
+---
+
 ## Tests Checklist
 
 ### New Tests to Create
 - [ ] `packages/backend/__tests__/unit/ChatServer.test.ts` - trigger detection tests
 - [ ] `packages/backend/__tests__/unit/VendorService.test.ts` - findOrCreateDefault tests
+- [ ] `packages/backend/__tests__/unit/TriggerDetection.test.ts` - expanded trigger detection (Sprint 8)
+- [ ] `packages/backend/__tests__/unit/ChatServer.extraction.test.ts` - fallback extraction logic (Sprint 8)
+- [ ] `packages/backend/__tests__/integration/export-flow.integration.test.ts` - export endpoint validation (Sprint 8)
 - [ ] `packages/backend/__tests__/integration/assessment-lifecycle.test.ts`
 - [ ] `packages/backend/__tests__/unit/MarkdownQuestionnaireConverter.test.ts`
 - [ ] `packages/backend/__tests__/unit/QuestionExtractionService.test.ts`
@@ -2769,6 +3322,7 @@ Execute sprints in order. Within each sprint, stories can be parallelized where 
 6. **Sprint 5** - Frontend Event Plumbing (can start after Sprint 4.2)
 7. **Sprint 6** - Download Component (requires Sprint 5)
 8. **Sprint 7** - E2E & Polish (requires all above)
+9. **Sprint 8** - Extraction Reliability (run 8.1 → 8.2 → 8.3 sequentially)
 
 ---
 

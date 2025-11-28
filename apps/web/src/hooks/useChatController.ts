@@ -52,6 +52,7 @@ export function useChatController(): UseChatControllerReturn {
     setMessages,
     startStreaming,
     appendToLastMessage,
+    appendComponentToLastAssistantMessage,
     finishStreaming,
     setLoading,
     setError,
@@ -69,6 +70,9 @@ export function useChatController(): UseChatControllerReturn {
     deleteConversationRequested,
     clearDeleteConversationRequest,
     removeConversationFromList,
+    setExportReady,
+    clearExportReady,
+    getExportReady,
   } = useChatStore();
   const { mode, changeMode, isChanging, setModeFromConversation } = useConversationMode('consult');
   const { token } = useAuth();
@@ -131,6 +135,8 @@ export function useChatController(): UseChatControllerReturn {
     setError,
     messages,
     isLoading,
+    getExportReady,
+    appendComponentToLastAssistantMessage,
   });
 
   // WebSocket events - all event handlers with stable references
@@ -146,12 +152,15 @@ export function useChatController(): UseChatControllerReturn {
     handleStreamAborted,
     handleConversationDeleted,
     handleConversationModeUpdated,
+    handleExportReady,
+    handleExtractionFailed,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
     finishStreaming,
     startStreaming,
     appendToLastMessage,
+    appendComponentToLastAssistantMessage,
     setLoading,
     setError,
     setConversations,
@@ -160,6 +169,8 @@ export function useChatController(): UseChatControllerReturn {
     removeConversationFromList,
     clearDeleteConversationRequest,
     requestNewChat,
+    setExportReady,
+    clearExportReady,
     messages,
     isLoading,
     activeConversationId,
@@ -189,6 +200,8 @@ export function useChatController(): UseChatControllerReturn {
     onStreamAborted: handleStreamAborted,
     onConversationDeleted: handleConversationDeleted,
     onConversationModeUpdated: handleConversationModeUpdated,
+    onExportReady: handleExportReady,
+    onExtractionFailed: handleExtractionFailed,
   }), [
     handleMessage,
     handleMessageStream,
@@ -202,6 +215,8 @@ export function useChatController(): UseChatControllerReturn {
     handleStreamAborted,
     handleConversationDeleted,
     handleConversationModeUpdated,
+    handleExportReady,
+    handleExtractionFailed,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket

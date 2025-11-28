@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ChatMessage } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload } from '@/lib/websocket';
 
 export interface Conversation {
   id: string;
@@ -27,10 +27,14 @@ export interface ChatState {
   newChatRequested: boolean; // Flag to request new conversation creation
   deleteConversationRequested: string | null; // Conversation ID to delete
 
+  // Export readiness cache (per-conversation)
+  exportReadyByConversation: Record<string, ExportReadyPayload>;
+
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
   appendToLastMessage: (chunk: string) => void;
+  appendComponentToLastAssistantMessage: (component: EmbeddedComponent) => void;
   startStreaming: () => void;
   finishStreaming: () => void;
   setLoading: (isLoading: boolean) => void;
@@ -54,11 +58,16 @@ export interface ChatState {
   clearNewChatRequest: () => void;
   requestDeleteConversation: (id: string) => void;
   clearDeleteConversationRequest: () => void;
+
+  // Export readiness actions
+  setExportReady: (conversationId: string, payload: ExportReadyPayload) => void;
+  clearExportReady: (conversationId: string) => void;
+  getExportReady: (conversationId: string) => ExportReadyPayload | undefined;
 }
 
 export const useChatStore = create<ChatState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       messages: [],
       isLoading: false,
       error: null,
@@ -74,6 +83,9 @@ export const useChatStore = create<ChatState>()(
       activeConversationId: null,
       newChatRequested: false,
       deleteConversationRequested: null,
+
+      // Export readiness cache - defaults
+      exportReadyByConversation: {},
 
       addMessage: (message) =>
         set((state) => ({
@@ -109,6 +121,33 @@ export const useChatStore = create<ChatState>()(
               ...lastMessage,
               content: lastMessage.content + chunk,
             };
+          }
+          return { messages };
+        }),
+
+      appendComponentToLastAssistantMessage: (component) =>
+        set((state) => {
+          const messages = [...state.messages];
+          // Find last assistant message
+          for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'assistant') {
+              const existingComponents = messages[i].components || [];
+              // Deduplicate: check if this component already exists
+              const isDuplicate = existingComponents.some(
+                (c) =>
+                  c.type === component.type &&
+                  c.data?.assessmentId === component.data?.assessmentId
+              );
+              if (isDuplicate) {
+                console.log('[chatStore] Component already exists, skipping duplicate');
+                return state; // No change
+              }
+              messages[i] = {
+                ...messages[i],
+                components: [...existingComponents, component],
+              };
+              break;
+            }
           }
           return { messages };
         }),
@@ -234,6 +273,29 @@ export const useChatStore = create<ChatState>()(
       clearDeleteConversationRequest: () => {
         console.log('[chatStore] Clearing delete conversation request');
         set({ deleteConversationRequested: null });
+      },
+
+      // Export readiness actions
+      setExportReady: (conversationId, payload) => {
+        console.log('[chatStore] Setting export ready for conversation:', conversationId);
+        set((state) => ({
+          exportReadyByConversation: {
+            ...state.exportReadyByConversation,
+            [conversationId]: payload,
+          },
+        }));
+      },
+
+      clearExportReady: (conversationId) => {
+        console.log('[chatStore] Clearing export ready for conversation:', conversationId);
+        set((state) => {
+          const { [conversationId]: _, ...rest } = state.exportReadyByConversation;
+          return { exportReadyByConversation: rest };
+        });
+      },
+
+      getExportReady: (conversationId) => {
+        return get().exportReadyByConversation[conversationId];
       },
     }),
     {

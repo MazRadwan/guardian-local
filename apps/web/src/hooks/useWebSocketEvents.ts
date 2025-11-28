@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload } from '@/lib/websocket';
 import type { Conversation } from '@/stores/chatStore';
 import type { ComposerRef } from '@/components/chat/Composer';
 import type { ConversationMode } from '@/components/chat/ModeSelector';
@@ -14,6 +14,7 @@ export interface UseWebSocketEventsParams {
   finishStreaming: () => void;
   startStreaming: () => void;
   appendToLastMessage: (chunk: string) => void;
+  appendComponentToLastAssistantMessage: (component: EmbeddedComponent) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setConversations: (conversations: Conversation[]) => void;
@@ -22,6 +23,8 @@ export interface UseWebSocketEventsParams {
   removeConversationFromList: (id: string) => void;
   clearDeleteConversationRequest: () => void;
   requestNewChat: () => void;
+  setExportReady: (conversationId: string, payload: ExportReadyPayload) => void;
+  clearExportReady: (conversationId: string) => void;
 
   // State
   messages: ChatMessage[];
@@ -58,6 +61,8 @@ export interface UseWebSocketEventsReturn {
   handleStreamAborted: (conversationId: string) => void;
   handleConversationDeleted: (conversationId: string) => void;
   handleConversationModeUpdated: (data: { conversationId: string; mode: ConversationMode }) => void;
+  handleExportReady: (data: ExportReadyPayload) => void;
+  handleExtractionFailed: (data: ExtractionFailedPayload) => void;
 }
 
 /**
@@ -89,6 +94,7 @@ export function useWebSocketEvents({
   finishStreaming,
   startStreaming,
   appendToLastMessage,
+  appendComponentToLastAssistantMessage,
   setLoading,
   setError,
   setConversations,
@@ -97,6 +103,8 @@ export function useWebSocketEvents({
   removeConversationFromList,
   clearDeleteConversationRequest,
   requestNewChat,
+  setExportReady,
+  clearExportReady,
   messages,
   isLoading,
   activeConversationId,
@@ -256,6 +264,8 @@ export function useWebSocketEvents({
   const handleConversationDeleted = useCallback(
     (conversationId: string) => {
       console.log('[useWebSocketEvents] Conversation deleted:', conversationId);
+      // Clear export cache for this conversation before removal
+      clearExportReady(conversationId);
       // Remove from local store
       removeConversationFromList(conversationId);
       // Clear the request flag
@@ -285,7 +295,7 @@ export function useWebSocketEvents({
         requestNewChat();
       }
     },
-    [removeConversationFromList, clearDeleteConversationRequest, activeConversationId, setActiveConversation, conversations, requestNewChat]
+    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat]
   );
 
   // Handler 11: Conversation mode updated (server→client)
@@ -305,6 +315,62 @@ export function useWebSocketEvents({
     [conversations, setConversations, activeConversationId, setModeFromConversation]
   );
 
+  // Handler 12: Export ready (questionnaire extracted)
+  const handleExportReady = useCallback(
+    (data: ExportReadyPayload) => {
+      // Ignore if for different conversation
+      if (data.conversationId !== activeConversationId) {
+        console.warn('[useWebSocketEvents] Ignoring export_ready for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Export ready:', data);
+
+      // Cache the export ready payload for this conversation
+      setExportReady(data.conversationId, data);
+
+      // Inject download component into last assistant message using safe store action
+      const downloadComponent: EmbeddedComponent = {
+        type: 'download',
+        data: {
+          assessmentId: data.assessmentId,
+          formats: data.formats,
+          questionCount: data.questionCount,
+        },
+      };
+      appendComponentToLastAssistantMessage(downloadComponent);
+    },
+    [activeConversationId, setExportReady, appendComponentToLastAssistantMessage]
+  );
+
+  // Handler 13: Extraction failed (questionnaire extraction error)
+  const handleExtractionFailed = useCallback(
+    (data: ExtractionFailedPayload) => {
+      // Ignore if for different conversation
+      if (data.conversationId !== activeConversationId) {
+        console.warn('[useWebSocketEvents] Ignoring extraction_failed for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Extraction failed:', data);
+
+      // Clear any previous export state for this conversation (in case of retry)
+      clearExportReady(data.conversationId);
+
+      // Inject error component into last assistant message using safe store action
+      const errorComponent: EmbeddedComponent = {
+        type: 'error',
+        data: {
+          assessmentId: data.assessmentId,
+          error: data.error,
+          label: 'Questionnaire extraction failed',
+        },
+      };
+      appendComponentToLastAssistantMessage(errorComponent);
+    },
+    [activeConversationId, clearExportReady, appendComponentToLastAssistantMessage]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -317,5 +383,7 @@ export function useWebSocketEvents({
     handleStreamAborted,
     handleConversationDeleted,
     handleConversationModeUpdated,
+    handleExportReady,
+    handleExtractionFailed,
   };
 }

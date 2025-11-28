@@ -4,8 +4,8 @@
  * Drizzle ORM implementation of IQuestionRepository
  */
 
-import { eq, and } from 'drizzle-orm';
-import { db } from '../client.js';
+import { eq } from 'drizzle-orm';
+import { db, type DbTransaction } from '../client.js';
 import { questions } from '../schema/questions.js';
 import type { IQuestionRepository } from '../../../application/interfaces/IQuestionRepository.js';
 import { Question } from '../../../domain/entities/Question.js';
@@ -58,5 +58,27 @@ export class DrizzleQuestionRepository implements IQuestionRepository {
    */
   async deleteByAssessmentId(assessmentId: string): Promise<void> {
     await db.delete(questions).where(eq(questions.assessmentId, assessmentId));
+  }
+
+  /**
+   * Atomically replace all questions for an assessment (delete + insert in transaction)
+   * This ensures no partial state if insert fails after delete
+   */
+  async replaceAllForAssessment(assessmentId: string, questionEntities: Question[]): Promise<Question[]> {
+    return await db.transaction(async (tx: DbTransaction) => {
+      // Delete existing questions within transaction
+      await tx.delete(questions).where(eq(questions.assessmentId, assessmentId));
+
+      // If no new questions, return empty array
+      if (questionEntities.length === 0) {
+        return [];
+      }
+
+      // Insert new questions within same transaction
+      const values = questionEntities.map((q) => q.toPersistence());
+      const created = await tx.insert(questions).values(values).returning();
+
+      return created.map((row) => Question.fromPersistence(row));
+    });
   }
 }

@@ -17,7 +17,9 @@ import { RateLimiter } from './infrastructure/websocket/RateLimiter.js';
 import { AuthService } from './application/services/AuthService.js';
 import { ConversationService } from './application/services/ConversationService.js';
 import { AssessmentService } from './application/services/AssessmentService.js';
+import { VendorService } from './application/services/VendorService.js';
 import { QuestionService } from './application/services/QuestionService.js';
+import { QuestionExtractionService } from './application/services/QuestionExtractionService.js';
 import { ExportService } from './application/services/ExportService.js';
 import { PDFExporter } from './infrastructure/export/PDFExporter.js';
 import { WordExporter } from './infrastructure/export/WordExporter.js';
@@ -86,8 +88,10 @@ const excelExporter = new ExcelExporter();
 // Initialize services
 const authService = new AuthService(userRepo, jwtProvider);
 const conversationService = new ConversationService(conversationRepo, messageRepo);
+const vendorService = new VendorService(vendorRepo);
 const assessmentService = new AssessmentService(vendorRepo, assessmentRepo);
 const questionService = new QuestionService(claudeClient, questionRepo, assessmentRepo);
+const questionExtractionService = new QuestionExtractionService(questionRepo, assessmentRepo);
 const exportService = new ExportService(
   assessmentRepo,
   questionRepo,
@@ -134,7 +138,9 @@ const chatServer = new ChatServer(
   rateLimiter,
   JWT_SECRET,
   promptCacheManager,
-  assessmentService
+  assessmentService,
+  vendorService,
+  questionExtractionService
 );
 
 console.log('[App] ChatServer initialized');
