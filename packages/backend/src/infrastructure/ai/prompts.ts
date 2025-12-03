@@ -180,7 +180,10 @@ The user can:
 - Provide more context ("actually, one more thing...")
 - Skip your question and say "generate" anytime
 
-When user confirms, generate the customized questionnaire directly in chat.
+When user confirms, call the \`questionnaire_ready\` tool with the gathered context.
+Announce it with: "Great! I'm ready to create your questionnaire. Click the 'Generate Questionnaire' button when you'd like me to proceed."
+A "Generate Questionnaire" button will appear for the user to click.
+Only after the user clicks that button should you render the questionnaire with markers.
 
 QUESTIONNAIRE OUTPUT FORMAT:
 When generating the questionnaire, you MUST wrap it in these exact markers:
@@ -252,6 +255,92 @@ FIRST MESSAGE: If user says "hi" or "how does this work":
 
 `;
 
+/**
+ * Tool usage instructions for assessment mode
+ * Added for Epic 12: Tool-Based Questionnaire Generation
+ */
+const TOOL_USAGE_INSTRUCTIONS = `
+
+## Questionnaire Generation Tool
+
+**CRITICAL RULE: You must NEVER generate a questionnaire directly. You must call the \`questionnaire_ready\` tool first, then WAIT for the user to click the "Generate Questionnaire" button before producing any questionnaire content.**
+
+You have access to a tool called \`questionnaire_ready\`. Use this tool to signal that you're ready to generate a questionnaire.
+
+### When to Call This Tool
+
+Call \`questionnaire_ready\` when ALL of these conditions are met:
+1. User has explicitly asked to generate a questionnaire, assessment, or survey
+2. You have gathered enough context (vendor type, solution, use case)
+3. User has confirmed they want to proceed
+
+### Examples of When to Call
+
+User: "Yes, let's generate the questionnaire"
+→ Call questionnaire_ready with assessment_type based on conversation
+
+User: "Go ahead and create the assessment"
+→ Call questionnaire_ready
+
+User: "Sure, make it comprehensive"
+→ Call questionnaire_ready with assessment_type: "comprehensive"
+
+### Examples of When NOT to Call
+
+User: "What does a questionnaire include?"
+→ Don't call - they're asking a question, not requesting generation
+
+User: "Can you generate questionnaires?"
+→ Don't call - they're asking about capabilities
+
+User: "I'm thinking about an assessment"
+→ Don't call - they haven't confirmed they want to proceed
+
+### Tool Parameters
+
+- \`assessment_type\` (required): "quick", "comprehensive", or "category_focused"
+  - quick: ~30-40 questions, high-level assessment
+  - comprehensive: ~85-95 questions, thorough assessment
+  - category_focused: 50-70 questions focused on specific risk areas
+
+- \`vendor_name\` (optional): Name of the vendor if mentioned
+- \`solution_name\` (optional): Name of the specific AI solution
+- \`context_summary\` (optional): Brief 1-2 sentence summary
+- \`estimated_questions\` (optional): Your estimate of question count
+
+### Example Tool Call
+
+When the user confirms they want a comprehensive assessment for Acme AI's diagnostic tool:
+
+\`\`\`json
+{
+  "assessment_type": "comprehensive",
+  "vendor_name": "Acme AI",
+  "solution_name": "DiagnoBot",
+  "context_summary": "Healthcare diagnostic AI for radiology analysis",
+  "estimated_questions": 90
+}
+\`\`\`
+
+For a quick assessment with minimal context:
+
+\`\`\`json
+{
+  "assessment_type": "quick"
+}
+\`\`\`
+
+### What Happens After
+
+When you call this tool:
+1. A "Generate Questionnaire" button appears for the user
+2. User can review the summary and click to confirm
+3. Only then should you generate the actual questionnaire with markers
+
+Do NOT generate the questionnaire immediately after calling this tool.
+Wait for the user to confirm by clicking the button.
+`;
+
 const ASSESSMENT_MODE_PREAMBLE = `═══════════════════════════════════════════════════════════════
 CURRENT MODE: ASSESSMENT
 MODE_LOCK: ACTIVE
@@ -274,10 +363,12 @@ WHAT TO DO:
 - Gather vendor/solution context conversationally (use judgment, not rigid exchange counts)
 - Focus on 5 key areas: solution type, data sensitivity, users, risk profile, known concerns
 - When you have enough context, proactively ask if user is ready to generate
-- Hint to user early: "Say 'generate' whenever you're ready"
+- When user confirms, call the \`questionnaire_ready\` tool (do NOT generate directly)
+- Announce: "Great! I'm ready to create your questionnaire. Click the 'Generate Questionnaire' button when you'd like me to proceed."
+- Wait for user to click the "Generate Questionnaire" button before rendering content
 
 QUESTIONNAIRE OUTPUT REQUIREMENT:
-When you generate a questionnaire, ALWAYS wrap it in markers:
+When you generate a questionnaire (ONLY after user clicks the Generate button), wrap it in markers:
 <!-- QUESTIONNAIRE_START -->
 [content]
 <!-- QUESTIONNAIRE_END -->
@@ -308,15 +399,22 @@ Reply with: **1**, **2**, or **3**
  * Get the appropriate system prompt based on conversation mode
  * Mode preamble is ALWAYS prepended to ensure deterministic mode awareness
  */
-export function getSystemPrompt(mode: 'consult' | 'assessment'): string {
+export function getSystemPrompt(mode: 'consult' | 'assessment', options?: {
+  includeToolInstructions?: boolean;
+}): string {
   const modePreamble = mode === 'consult' ? CONSULT_MODE_PREAMBLE : ASSESSMENT_MODE_PREAMBLE;
 
+  // Tool instructions only apply to assessment mode and only when enabled
+  const toolSection = (mode === 'assessment' && options?.includeToolInstructions !== false)
+    ? TOOL_USAGE_INSTRUCTIONS
+    : '';
+
   if (CUSTOM_PROMPT) {
-    return `${modePreamble}${CUSTOM_PROMPT}\n\n${FORMATTING_GUIDELINES}`;
+    return `${modePreamble}${CUSTOM_PROMPT}${toolSection}\n\n${FORMATTING_GUIDELINES}`;
   }
 
   const fallbackPrompt = mode === 'consult' ? CONSULT_MODE_PROMPT_WITH_FORMATTING : ASSESSMENT_MODE_PROMPT_WITH_FORMATTING;
-  return `${modePreamble}${fallbackPrompt}`;
+  return `${modePreamble}${fallbackPrompt}${toolSection}`;
 }
 
 /**

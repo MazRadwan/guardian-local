@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
 
 export interface Conversation {
   id: string;
@@ -29,6 +29,20 @@ export interface ChatState {
 
   // Export readiness cache (per-conversation)
   exportReadyByConversation: Record<string, ExportReadyPayload>;
+
+  /**
+   * Pending questionnaire ready to be generated
+   * Set when Claude calls questionnaire_ready tool
+   * Cleared when user clicks Generate or changes conversation
+   */
+  pendingQuestionnaire: QuestionnaireReadyPayload | null;
+
+  /**
+   * Whether questionnaire generation is in progress
+   * Used to show loading state on Generate button
+   * Cleared on assistant_done or error event
+   */
+  isGeneratingQuestionnaire: boolean;
 
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
@@ -63,6 +77,21 @@ export interface ChatState {
   setExportReady: (conversationId: string, payload: ExportReadyPayload) => void;
   clearExportReady: (conversationId: string) => void;
   getExportReady: (conversationId: string) => ExportReadyPayload | undefined;
+
+  /**
+   * Set pending questionnaire (from questionnaire_ready event)
+   */
+  setPendingQuestionnaire: (payload: QuestionnaireReadyPayload) => void;
+
+  /**
+   * Clear pending questionnaire (after generation or conversation change)
+   */
+  clearPendingQuestionnaire: () => void;
+
+  /**
+   * Set generation state (true when generating, false on completion/error)
+   */
+  setGenerating: (value: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -86,6 +115,10 @@ export const useChatStore = create<ChatState>()(
 
       // Export readiness cache - defaults
       exportReadyByConversation: {},
+
+      // Questionnaire generation - defaults
+      pendingQuestionnaire: null,
+      isGeneratingQuestionnaire: false,
 
       addMessage: (message) =>
         set((state) => ({
@@ -218,10 +251,13 @@ export const useChatStore = create<ChatState>()(
           };
         }),
 
-      setActiveConversation: (id) =>
-        set({
-          activeConversationId: id,
-        }),
+      setActiveConversation: (id) => {
+        set({ activeConversationId: id });
+        // Clear via action (DRY - uses same logic, enables future analytics)
+        get().clearPendingQuestionnaire();
+        // Also reset generation state
+        get().setGenerating(false);
+      },
 
       // Delete conversation immediately (used by tests and direct local operations)
       // For WebSocket-triggered deletes, use requestDeleteConversation instead
@@ -296,6 +332,22 @@ export const useChatStore = create<ChatState>()(
 
       getExportReady: (conversationId) => {
         return get().exportReadyByConversation[conversationId];
+      },
+
+      // Questionnaire generation actions
+      setPendingQuestionnaire: (payload) => {
+        console.log('[chatStore] Setting pending questionnaire:', payload.conversationId);
+        set({ pendingQuestionnaire: payload });
+      },
+
+      clearPendingQuestionnaire: () => {
+        console.log('[chatStore] Clearing pending questionnaire');
+        set({ pendingQuestionnaire: null });
+      },
+
+      setGenerating: (value) => {
+        console.log('[chatStore] Setting isGeneratingQuestionnaire:', value);
+        set({ isGeneratingQuestionnaire: value });
       },
     }),
     {

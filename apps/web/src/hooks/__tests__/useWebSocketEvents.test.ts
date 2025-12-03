@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react';
 import { useWebSocketEvents } from '../useWebSocketEvents';
-import type { ChatMessage } from '@/lib/websocket';
+import type { ChatMessage, QuestionnaireReadyPayload } from '@/lib/websocket';
 import type { Conversation } from '@/stores/chatStore';
+import { useChatStore } from '@/stores/chatStore';
 
 // Mock refs
 const createMockComposerRef = () => ({
@@ -25,12 +26,16 @@ describe('useWebSocketEvents', () => {
   const mockRemoveConversationFromList = jest.fn();
   const mockClearDeleteConversationRequest = jest.fn();
   const mockRequestNewChat = jest.fn();
+  const mockSetExportReady = jest.fn();
+  const mockClearExportReady = jest.fn();
+  const mockAppendComponentToLastAssistantMessage = jest.fn();
 
   // Mock other hooks
   const mockHandleHistory = jest.fn();
   const mockSetShouldLoadHistory = jest.fn();
   const mockMarkConversationAsJustCreated = jest.fn();
   const mockSetActiveConversation = jest.fn();
+  const mockSetModeFromConversation = jest.fn();
 
   // Mock flags
   const mockSetRegeneratingMessageIndex = jest.fn();
@@ -42,6 +47,7 @@ describe('useWebSocketEvents', () => {
     finishStreaming: mockFinishStreaming,
     startStreaming: mockStartStreaming,
     appendToLastMessage: mockAppendToLastMessage,
+    appendComponentToLastAssistantMessage: mockAppendComponentToLastAssistantMessage,
     setLoading: mockSetLoading,
     setError: mockSetError,
     setConversations: mockSetConversations,
@@ -50,6 +56,8 @@ describe('useWebSocketEvents', () => {
     removeConversationFromList: mockRemoveConversationFromList,
     clearDeleteConversationRequest: mockClearDeleteConversationRequest,
     requestNewChat: mockRequestNewChat,
+    setExportReady: mockSetExportReady,
+    clearExportReady: mockClearExportReady,
     messages: [] as ChatMessage[],
     isLoading: false,
     activeConversationId: 'conv-1',
@@ -60,6 +68,7 @@ describe('useWebSocketEvents', () => {
     setShouldLoadHistory: mockSetShouldLoadHistory,
     markConversationAsJustCreated: mockMarkConversationAsJustCreated,
     setActiveConversation: mockSetActiveConversation,
+    setModeFromConversation: mockSetModeFromConversation,
     setRegeneratingMessageIndex: mockSetRegeneratingMessageIndex,
     focusComposer: mockFocusComposer,
   };
@@ -70,7 +79,7 @@ describe('useWebSocketEvents', () => {
   });
 
   describe('Initialization', () => {
-    it('should return all 10 event handlers', () => {
+    it('should return all 14 event handlers', () => {
       const { result } = renderHook(() => useWebSocketEvents(defaultParams));
 
       expect(result.current.handleMessage).toBeInstanceOf(Function);
@@ -83,6 +92,10 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleConversationTitleUpdated).toBeInstanceOf(Function);
       expect(result.current.handleStreamAborted).toBeInstanceOf(Function);
       expect(result.current.handleConversationDeleted).toBeInstanceOf(Function);
+      expect(result.current.handleConversationModeUpdated).toBeInstanceOf(Function);
+      expect(result.current.handleExportReady).toBeInstanceOf(Function);
+      expect(result.current.handleExtractionFailed).toBeInstanceOf(Function);
+      expect(result.current.handleQuestionnaireReady).toBeInstanceOf(Function);
     });
 
     it('should return stable handler references across re-renders', () => {
@@ -101,6 +114,10 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleConversationTitleUpdated).toBe(handlers.handleConversationTitleUpdated);
       expect(result.current.handleStreamAborted).toBe(handlers.handleStreamAborted);
       expect(result.current.handleConversationDeleted).toBe(handlers.handleConversationDeleted);
+      expect(result.current.handleConversationModeUpdated).toBe(handlers.handleConversationModeUpdated);
+      expect(result.current.handleExportReady).toBe(handlers.handleExportReady);
+      expect(result.current.handleExtractionFailed).toBe(handlers.handleExtractionFailed);
+      expect(result.current.handleQuestionnaireReady).toBe(handlers.handleQuestionnaireReady);
     });
   });
 
@@ -600,6 +617,87 @@ describe('useWebSocketEvents', () => {
     });
   });
 
+  describe('handleQuestionnaireReady', () => {
+    beforeEach(() => {
+      // Reset store state before each test
+      useChatStore.setState({
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+      });
+    });
+
+    it('should set pending questionnaire for active conversation', () => {
+      const { result } = renderHook(() => useWebSocketEvents({
+        ...defaultParams,
+        activeConversationId: 'conv-1',
+      }));
+
+      const payload: QuestionnaireReadyPayload = {
+        conversationId: 'conv-1',
+        assessmentType: 'comprehensive',
+        vendorName: 'Test Vendor',
+        solutionName: 'Test Solution',
+        contextSummary: 'Test summary',
+        estimatedQuestions: 100,
+        selectedCategories: ['security', 'privacy'],
+      };
+
+      result.current.handleQuestionnaireReady(payload);
+
+      // Should update store
+      expect(useChatStore.getState().pendingQuestionnaire).toEqual(payload);
+    });
+
+    it('should ignore events for different conversation', () => {
+      const { result } = renderHook(() => useWebSocketEvents({
+        ...defaultParams,
+        activeConversationId: 'conv-1',
+      }));
+
+      const payload: QuestionnaireReadyPayload = {
+        conversationId: 'conv-2', // Different conversation
+        assessmentType: 'quick',
+        vendorName: 'Other Vendor',
+        solutionName: null,
+        contextSummary: null,
+        estimatedQuestions: 50,
+        selectedCategories: null,
+      };
+
+      result.current.handleQuestionnaireReady(payload);
+
+      // Should NOT update store
+      expect(useChatStore.getState().pendingQuestionnaire).toBeNull();
+    });
+
+    it('should ignore events while generation is in progress', () => {
+      // Set generation in progress
+      useChatStore.setState({
+        isGeneratingQuestionnaire: true,
+      });
+
+      const { result } = renderHook(() => useWebSocketEvents({
+        ...defaultParams,
+        activeConversationId: 'conv-1',
+      }));
+
+      const payload: QuestionnaireReadyPayload = {
+        conversationId: 'conv-1',
+        assessmentType: 'comprehensive',
+        vendorName: 'Test Vendor',
+        solutionName: null,
+        contextSummary: null,
+        estimatedQuestions: 100,
+        selectedCategories: null,
+      };
+
+      result.current.handleQuestionnaireReady(payload);
+
+      // Should NOT update store (blocked by guard)
+      expect(useChatStore.getState().pendingQuestionnaire).toBeNull();
+    });
+  });
+
   describe('Callback Stability', () => {
     it('should maintain stable references when unrelated state changes', () => {
       const { result, rerender } = renderHook(
@@ -623,6 +721,10 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleConversationTitleUpdated).toBe(handlersBeforeRerender.handleConversationTitleUpdated);
       expect(result.current.handleStreamAborted).toBe(handlersBeforeRerender.handleStreamAborted);
       expect(result.current.handleConversationDeleted).toBe(handlersBeforeRerender.handleConversationDeleted);
+      expect(result.current.handleConversationModeUpdated).toBe(handlersBeforeRerender.handleConversationModeUpdated);
+      expect(result.current.handleExportReady).toBe(handlersBeforeRerender.handleExportReady);
+      expect(result.current.handleExtractionFailed).toBe(handlersBeforeRerender.handleExtractionFailed);
+      expect(result.current.handleQuestionnaireReady).toBe(handlersBeforeRerender.handleQuestionnaireReady);
     });
 
     it('should update handlers when dependencies change', () => {

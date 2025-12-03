@@ -2,7 +2,8 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
+import { useChatStore } from '@/stores/chatStore';
 import type { Conversation } from '@/stores/chatStore';
 import type { ComposerRef } from '@/components/chat/Composer';
 import type { ConversationMode } from '@/components/chat/ModeSelector';
@@ -63,6 +64,7 @@ export interface UseWebSocketEventsReturn {
   handleConversationModeUpdated: (data: { conversationId: string; mode: ConversationMode }) => void;
   handleExportReady: (data: ExportReadyPayload) => void;
   handleExtractionFailed: (data: ExtractionFailedPayload) => void;
+  handleQuestionnaireReady: (data: QuestionnaireReadyPayload) => void;
 }
 
 /**
@@ -164,6 +166,9 @@ export function useWebSocketEvents({
       finishStreaming();
       setLoading(false); // Hide typing indicator on error
       setRegeneratingMessageIndex(null); // Reset regenerating state
+
+      // Reset generating state on error (allows retry - don't clear pendingQuestionnaire)
+      useChatStore.getState().setGenerating(false);
     },
     [setError, finishStreaming, setLoading, setRegeneratingMessageIndex]
   );
@@ -207,6 +212,10 @@ export function useWebSocketEvents({
     setLoading(false);
     setRegeneratingMessageIndex(null); // Reset regenerating state
     focusComposer();
+
+    // Clear pending questionnaire generation state (success case)
+    useChatStore.getState().clearPendingQuestionnaire();
+    useChatStore.getState().setGenerating(false);
   }, [finishStreaming, setLoading, setRegeneratingMessageIndex, focusComposer]);
 
   // Handler 6: Update conversations list
@@ -371,6 +380,35 @@ export function useWebSocketEvents({
     [activeConversationId, clearExportReady, appendComponentToLastAssistantMessage]
   );
 
+  // Handler 14: Questionnaire ready (Claude indicates readiness to generate)
+  const handleQuestionnaireReady = useCallback(
+    (data: QuestionnaireReadyPayload) => {
+      // Guard: Skip if generation already in progress (prevents replay issues)
+      if (useChatStore.getState().isGeneratingQuestionnaire) {
+        console.log('[useWebSocketEvents] Ignoring questionnaire_ready - generation in progress');
+        return;
+      }
+
+      // Only process if for the active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.warn(
+          `[useWebSocketEvents] Ignoring questionnaire_ready for inactive conversation. ` +
+          `Event belongs to: ${data.conversationId}, active conversation: ${activeConversationId}`
+        );
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Questionnaire ready:', {
+        conversationId: data.conversationId,
+        assessmentType: data.assessmentType,
+      });
+
+      // Update store with pending questionnaire
+      useChatStore.getState().setPendingQuestionnaire(data);
+    },
+    [activeConversationId]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -385,5 +423,6 @@ export function useWebSocketEvents({
     handleConversationModeUpdated,
     handleExportReady,
     handleExtractionFailed,
+    handleQuestionnaireReady,
   };
 }

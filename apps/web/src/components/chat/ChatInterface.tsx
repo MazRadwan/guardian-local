@@ -1,10 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
+import { GenerateQuestionnaireButton } from './GenerateQuestionnaireButton';
 import { AlertCircle } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
+import { useChatStore } from '@/stores/chatStore';
 
 export function ChatInterface() {
   const {
@@ -24,7 +26,35 @@ export function ChatInterface() {
     handleRegenerate,
     abortStream,
     setError,
+    activeConversationId,
+    adapter,
   } = useChatController();
+
+  // Questionnaire generation state from store
+  const pendingQuestionnaire = useChatStore((state) => state.pendingQuestionnaire);
+  const isGeneratingQuestionnaire = useChatStore((state) => state.isGeneratingQuestionnaire);
+  const setGenerating = useChatStore((state) => state.setGenerating);
+  const clearPendingQuestionnaire = useChatStore((state) => state.clearPendingQuestionnaire);
+
+  const handleGenerateQuestionnaire = useCallback(() => {
+    if (!pendingQuestionnaire || !adapter) return;
+
+    // Set generating flag in store - DON'T clear pendingQuestionnaire yet!
+    // Keep card visible with spinner in case emit fails (user can retry)
+    setGenerating(true);
+    adapter.generateQuestionnaire({
+      conversationId: pendingQuestionnaire.conversationId,
+      assessmentType: pendingQuestionnaire.assessmentType,
+      vendorName: pendingQuestionnaire.vendorName,
+      solutionName: pendingQuestionnaire.solutionName,
+      contextSummary: pendingQuestionnaire.contextSummary,
+      selectedCategories: pendingQuestionnaire.selectedCategories,
+    });
+
+    // IMPORTANT: Clear happens when:
+    // - assistant_done event is received (success)
+    // - This allows retry if WebSocket emit fails
+  }, [pendingQuestionnaire, adapter, setGenerating]);
 
   return (
     <div className="flex h-full flex-col relative">
@@ -75,6 +105,17 @@ export function ChatInterface() {
             />
           </div>
           <div className="flex-shrink-0 bg-white z-10">
+            {/* Generate Questionnaire Button - Card stays visible during generation */}
+            {pendingQuestionnaire &&
+              pendingQuestionnaire.conversationId === activeConversationId && (
+                <div className="max-w-3xl mx-auto w-full px-4 pt-4">
+                  <GenerateQuestionnaireButton
+                    payload={pendingQuestionnaire}
+                    onGenerate={handleGenerateQuestionnaire}
+                    isGenerating={isGeneratingQuestionnaire}
+                  />
+                </div>
+              )}
              <div className="max-w-3xl mx-auto w-full">
               <Composer
                 ref={composerRef}

@@ -39,8 +39,8 @@ export function DownloadButton({
 
     setIsDownloading(true);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
-      const response = await fetch(`${apiUrl}/assessments/${assessmentId}/export/${format}`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/assessments/${assessmentId}/export/${format}`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,

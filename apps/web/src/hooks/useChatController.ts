@@ -41,6 +41,9 @@ export interface UseChatControllerReturn {
   handleRegenerate: (messageIndex: number) => void;
   abortStream: () => void;
   setError: (error: string | null) => void;
+
+  // Adapter (for direct WebSocket operations)
+  adapter: WebSocketAdapterInterface;
 }
 
 export function useChatController(): UseChatControllerReturn {
@@ -154,6 +157,7 @@ export function useChatController(): UseChatControllerReturn {
     handleConversationModeUpdated,
     handleExportReady,
     handleExtractionFailed,
+    handleQuestionnaireReady,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
@@ -202,6 +206,7 @@ export function useChatController(): UseChatControllerReturn {
     onConversationModeUpdated: handleConversationModeUpdated,
     onExportReady: handleExportReady,
     onExtractionFailed: handleExtractionFailed,
+    onQuestionnaireReady: handleQuestionnaireReady,
   }), [
     handleMessage,
     handleMessageStream,
@@ -217,6 +222,7 @@ export function useChatController(): UseChatControllerReturn {
     handleConversationModeUpdated,
     handleExportReady,
     handleExtractionFailed,
+    handleQuestionnaireReady,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket
@@ -468,5 +474,8 @@ export function useChatController(): UseChatControllerReturn {
     handleRegenerate,
     abortStream,
     setError,
+
+    // Adapter (for direct WebSocket operations)
+    adapter,
   };
 }

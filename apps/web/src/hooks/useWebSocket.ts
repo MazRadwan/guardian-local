@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload } from '@/lib/websocket';
 
 export interface UseWebSocketOptions {
   url: string;
@@ -22,6 +22,7 @@ export interface UseWebSocketOptions {
   onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
   onExportReady?: (data: ExportReadyPayload) => void;
   onExtractionFailed?: (data: ExtractionFailedPayload) => void;
+  onQuestionnaireReady?: (data: QuestionnaireReadyPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -44,6 +45,7 @@ export function useWebSocket({
   onConversationModeUpdated,
   onExportReady,
   onExtractionFailed,
+  onQuestionnaireReady,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -136,6 +138,14 @@ export function useWebSocket({
       return;
     }
     clientRef.current.switchMode(conversationId, mode);
+  }, [isConnected]);
+
+  const generateQuestionnaire = useCallback((payload: GenerateQuestionnairePayload) => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot generate questionnaire - not connected');
+      return;
+    }
+    clientRef.current.generateQuestionnaire(payload);
   }, [isConnected]);
 
   // Setup event listeners
@@ -239,6 +249,13 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onQuestionnaireReady) {
+      const unsub = client.onQuestionnaireReady((data) => {
+        onQuestionnaireReady(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     if (onConnectionReady) {
       const unsub = client.onConnectionReady((data) => {
         onConnectionReady(data);
@@ -249,7 +266,7 @@ export function useWebSocket({
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onConnectionReady]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onConnectionReady]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -277,6 +294,7 @@ export function useWebSocket({
     abortStream,
     deleteConversation,
     updateConversationMode,
+    generateQuestionnaire,
   }), [
     isConnected,
     isConnecting,
@@ -289,5 +307,6 @@ export function useWebSocket({
     abortStream,
     deleteConversation,
     updateConversationMode,
+    generateQuestionnaire,
   ]);
 }

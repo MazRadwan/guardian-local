@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload } from '@/lib/websocket';
 import type { Conversation } from '@/stores/chatStore';
 
 export type ConversationMode = 'consult' | 'assessment';
@@ -26,6 +26,7 @@ export interface WebSocketEventHandlers {
   onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
   onExportReady?: (data: ExportReadyPayload) => void;
   onExtractionFailed?: (data: ExtractionFailedPayload) => void;
+  onQuestionnaireReady?: (data: QuestionnaireReadyPayload) => void;
 }
 
 /**
@@ -64,6 +65,9 @@ export interface WebSocketAdapterInterface {
 
   // Stream control
   abortStream: () => void;
+
+  // Questionnaire generation
+  generateQuestionnaire: (payload: GenerateQuestionnairePayload) => void;
 }
 
 /**
@@ -129,6 +133,7 @@ export function useWebSocketAdapter({
     onConversationModeUpdated: handlers.onConversationModeUpdated,
     onExportReady: handlers.onExportReady,
     onExtractionFailed: handlers.onExtractionFailed,
+    onQuestionnaireReady: handlers.onQuestionnaireReady,
     autoConnect,
   });
 
@@ -172,6 +177,11 @@ export function useWebSocketAdapter({
     abortStream: () => {
       wsHook.abortStream();
     },
+
+    // Questionnaire generation
+    generateQuestionnaire: (payload: GenerateQuestionnairePayload) => {
+      wsHook.generateQuestionnaire(payload);
+    },
   }), [
     wsHook.isConnected,
     wsHook.isConnecting,
@@ -182,6 +192,7 @@ export function useWebSocketAdapter({
     wsHook.deleteConversation,
     wsHook.updateConversationMode,
     wsHook.abortStream,
+    wsHook.generateQuestionnaire,
     wsHook.connect,
     wsHook.disconnect,
   ]);
