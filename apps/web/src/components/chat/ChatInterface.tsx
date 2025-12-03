@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { QuestionnairePromptCard } from './QuestionnairePromptCard';
@@ -60,9 +60,25 @@ export function ChatInterface() {
   // Track card visibility for sticky indicator
   const isCardVisible = useQuestionnaireCardVisibility(questionnaireCardRef, messageListRef);
 
+  // Track previous conversation ID to detect actual changes
+  const prevConversationIdRef = useRef<string | null>(null);
+
   // Rehydrate questionnaire state from localStorage on conversation switch
   useEffect(() => {
     if (!activeConversationId || !user?.id) return;
+
+    // GUARD 1: Only rehydrate if conversation actually changed
+    if (prevConversationIdRef.current === activeConversationId) {
+      return;
+    }
+    prevConversationIdRef.current = activeConversationId;
+
+    // GUARD 2: Don't clear if generation is in progress
+    const { isGeneratingQuestionnaire } = useChatStore.getState();
+    if (isGeneratingQuestionnaire) {
+      console.log('[ChatInterface] Skipping rehydration - generation in progress');
+      return;
+    }
 
     // Always clear previous conversation's state first
     useChatStore.getState().clearPendingQuestionnaire();
@@ -79,7 +95,7 @@ export function ChatInterface() {
       useChatStore.getState().setPendingQuestionnaire(savedPayload);
       useChatStore.getState().setQuestionnaireUIState('ready');
     }
-  }, [activeConversationId, user?.id, persistence]);
+  }, [activeConversationId, user?.id]); // Remove persistence from deps - it's stable (memoized by userId)
 
   const handleGenerateQuestionnaire = useCallback(() => {
     if (!pendingQuestionnaire || !adapter) return;

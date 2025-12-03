@@ -862,20 +862,30 @@ Reply with: **1**, **2**, or **3**
           console.warn(`[ChatServer] Invalid assessmentType '${rawAssessmentType}', defaulting to 'comprehensive'`);
         }
 
+        // GUARD: Check userId before proceeding
+        const userId = socket.userId;
+        if (!userId) {
+          console.error('[ChatServer] generate_questionnaire called without authenticated user');
+          socket.emit('error', { event: 'generate_questionnaire', message: 'Not authenticated' });
+          return;
+        }
+
+        console.log(`[ChatServer] Received generate_questionnaire from user ${userId} for conversation ${conversationId}`);
+
         try {
           // Validate ownership
-          await this.validateConversationOwnership(conversationId, socket.userId!);
+          await this.validateConversationOwnership(conversationId, userId);
 
           const conversation = await this.conversationService.getConversation(conversationId);
           if (!conversation) {
-            socket.emit('error', { message: 'Conversation not found' });
+            socket.emit('error', { event: 'generate_questionnaire', message: 'Conversation not found' });
             return;
           }
 
           // Create assessment if not exists
           let assessmentId = conversation.assessmentId;
           if (!assessmentId) {
-            const vendor = await this.vendorService.findOrCreateDefault(socket.userId!);
+            const vendor = await this.vendorService.findOrCreateDefault(userId);
             // Map client types to domain types (category_focused → comprehensive)
             const mappedAssessmentType: 'quick' | 'comprehensive' | 'renewal' =
               assessmentType === 'category_focused' ? 'comprehensive' : assessmentType;
@@ -883,7 +893,7 @@ Reply with: **1**, **2**, or **3**
               vendorName: vendorName || vendor.name,
               assessmentType: mappedAssessmentType,
               solutionName: solutionName || 'Assessment from Chat',
-              createdBy: socket.userId!,
+              createdBy: userId,
             });
             assessmentId = assessment.assessmentId;
             await this.conversationService.linkAssessment(conversationId, assessmentId);
@@ -954,12 +964,13 @@ Generate the complete questionnaire now.`;
             socket,
             conversationId,
             fullResponse,
-            socket.userId!
+            userId
           );
 
         } catch (error) {
           console.error('[ChatServer] Error in generate_questionnaire:', error);
           socket.emit('error', {
+            event: 'generate_questionnaire',
             message: error instanceof Error ? error.message : 'Failed to generate questionnaire',
           });
         }

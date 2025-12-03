@@ -171,6 +171,7 @@ export function useWebSocketEvents({
   // Handler 3: Handle WebSocket errors
   const handleError = useCallback(
     (errorMessage: string) => {
+      console.error('[useWebSocketEvents] Error received:', errorMessage);
       setError(errorMessage);
       finishStreaming();
       setLoading(false); // Hide typing indicator on error
@@ -178,6 +179,9 @@ export function useWebSocketEvents({
 
       // Reset generating state on error (allows retry - don't clear pendingQuestionnaire)
       useChatStore.getState().setGenerating(false);
+      // Transition to error state for questionnaire card to show retry
+      useChatStore.getState().setQuestionnaireUIState('error');
+      useChatStore.getState().setQuestionnaireError(errorMessage);
     },
     [setError, finishStreaming, setLoading, setRegeneratingMessageIndex]
   );
@@ -350,22 +354,12 @@ export function useWebSocketEvents({
       // Cache the export ready payload for this conversation
       setExportReady(data.conversationId, data);
 
-      // Inject download component into last assistant message using safe store action
-      const downloadComponent: EmbeddedComponent = {
-        type: 'download',
-        data: {
-          assessmentId: data.assessmentId,
-          formats: data.formats,
-          questionCount: data.questionCount,
-        },
-      };
-      appendComponentToLastAssistantMessage(downloadComponent);
-
       // Story 4.3.5: Transition questionnaire UI to 'download' state
+      // NOTE: Legacy injection removed - QuestionnairePromptCard handles download UI
       useChatStore.getState().setQuestionnaireUIState('download');
       useChatStore.getState().setGenerating(false);
     },
-    [activeConversationId, setExportReady, appendComponentToLastAssistantMessage]
+    [activeConversationId, setExportReady]
   );
 
   // Handler 13: Extraction failed (questionnaire extraction error)
@@ -382,23 +376,13 @@ export function useWebSocketEvents({
       // Clear any previous export state for this conversation (in case of retry)
       clearExportReady(data.conversationId);
 
-      // Inject error component into last assistant message using safe store action
-      const errorComponent: EmbeddedComponent = {
-        type: 'error',
-        data: {
-          assessmentId: data.assessmentId,
-          error: data.error,
-          label: 'Questionnaire extraction failed',
-        },
-      };
-      appendComponentToLastAssistantMessage(errorComponent);
-
       // Story 4.3.5: Transition questionnaire UI to 'error' state
+      // NOTE: Legacy injection removed - QuestionnairePromptCard handles error UI
       useChatStore.getState().setQuestionnaireUIState('error');
       useChatStore.getState().setQuestionnaireError(data.error);
       useChatStore.getState().setGenerating(false);
     },
-    [activeConversationId, clearExportReady, appendComponentToLastAssistantMessage]
+    [activeConversationId, clearExportReady]
   );
 
   // Handler 14: Questionnaire ready (Claude indicates readiness to generate)
