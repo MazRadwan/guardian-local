@@ -417,4 +417,84 @@ describe('MessageList', () => {
       expect(mockDisconnect).toHaveBeenCalled();
     });
   });
+
+  // Story 4.3.4: Questionnaire slot tests
+  describe('questionnaireSlot', () => {
+    it('renders questionnaireSlot content when provided', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test message', timestamp: new Date() },
+      ];
+
+      render(
+        <MessageList
+          messages={messages}
+          questionnaireSlot={<div data-testid="test-slot">Slot Content</div>}
+        />
+      );
+
+      expect(screen.getByTestId('test-slot')).toBeInTheDocument();
+      expect(screen.getByText('Slot Content')).toBeInTheDocument();
+    });
+
+    it('does not render anything when questionnaireSlot is not provided', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test message', timestamp: new Date() },
+      ];
+
+      render(<MessageList messages={messages} />);
+
+      expect(screen.queryByTestId('test-slot')).not.toBeInTheDocument();
+    });
+
+    it('renders slot after messages but before typing indicator', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+        { role: 'assistant', content: 'Message 2', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          isLoading={true}
+          questionnaireSlot={<div data-testid="test-slot">Slot Content</div>}
+        />
+      );
+
+      const centeredContainer = container.querySelector('.max-w-3xl');
+      const children = centeredContainer?.children;
+
+      if (children) {
+        // Find indices
+        const slotIndex = Array.from(children).findIndex(
+          (child) => child.getAttribute('data-testid') === 'test-slot'
+        );
+        const typingIndicatorIndex = Array.from(children).findIndex(
+          (child) => child.getAttribute('data-testid') === 'typing-indicator'
+        );
+
+        // Slot should come before typing indicator
+        expect(slotIndex).toBeGreaterThan(-1);
+        expect(typingIndicatorIndex).toBeGreaterThan(-1);
+        expect(slotIndex).toBeLessThan(typingIndicatorIndex);
+      }
+    });
+
+    it('slot is inside centered container (max-w-3xl)', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test message', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaireSlot={<div data-testid="test-slot">Slot Content</div>}
+        />
+      );
+
+      const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
+      const slot = screen.getByTestId('test-slot');
+
+      expect(centeredContainer).toContainElement(slot);
+    });
+  });
 });

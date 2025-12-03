@@ -47,6 +47,13 @@ export interface UseWebSocketEventsParams {
   // Flags
   setRegeneratingMessageIndex: (index: number | null) => void;
   focusComposer: () => void;
+
+  // Persistence (Story 4.3.5)
+  userId?: string;
+  persistence?: {
+    clearDismiss: (conversationId: string) => void;
+    savePayload: (conversationId: string, payload: QuestionnaireReadyPayload) => void;
+  };
 }
 
 export interface UseWebSocketEventsReturn {
@@ -120,6 +127,8 @@ export function useWebSocketEvents({
   setModeFromConversation,
   setRegeneratingMessageIndex,
   focusComposer,
+  userId,
+  persistence,
 }: UseWebSocketEventsParams): UseWebSocketEventsReturn {
 
   // Handler 1: Process complete assistant messages
@@ -213,8 +222,11 @@ export function useWebSocketEvents({
     setRegeneratingMessageIndex(null); // Reset regenerating state
     focusComposer();
 
-    // Clear pending questionnaire generation state (success case)
-    useChatStore.getState().clearPendingQuestionnaire();
+    // CRITICAL FIX (Story 4.3.5): DO NOT clear pendingQuestionnaire here!
+    // Only clear generation flag. Payload clears on:
+    // - User clicks Dismiss
+    // - User downloads successfully
+    // - New questionnaire_ready event received
     useChatStore.getState().setGenerating(false);
   }, [finishStreaming, setLoading, setRegeneratingMessageIndex, focusComposer]);
 
@@ -348,6 +360,10 @@ export function useWebSocketEvents({
         },
       };
       appendComponentToLastAssistantMessage(downloadComponent);
+
+      // Story 4.3.5: Transition questionnaire UI to 'download' state
+      useChatStore.getState().setQuestionnaireUIState('download');
+      useChatStore.getState().setGenerating(false);
     },
     [activeConversationId, setExportReady, appendComponentToLastAssistantMessage]
   );
@@ -376,6 +392,11 @@ export function useWebSocketEvents({
         },
       };
       appendComponentToLastAssistantMessage(errorComponent);
+
+      // Story 4.3.5: Transition questionnaire UI to 'error' state
+      useChatStore.getState().setQuestionnaireUIState('error');
+      useChatStore.getState().setQuestionnaireError(data.error);
+      useChatStore.getState().setGenerating(false);
     },
     [activeConversationId, clearExportReady, appendComponentToLastAssistantMessage]
   );
@@ -403,10 +424,18 @@ export function useWebSocketEvents({
         assessmentType: data.assessmentType,
       });
 
-      // Update store with pending questionnaire
+      // Story 4.3.5: Clear dismiss flag and save to localStorage
+      if (persistence) {
+        persistence.clearDismiss(data.conversationId);
+        persistence.savePayload(data.conversationId, data);
+      }
+
+      // Update store with pending questionnaire and set to 'ready' state
       useChatStore.getState().setPendingQuestionnaire(data);
+      useChatStore.getState().setQuestionnaireUIState('ready');
+      useChatStore.getState().setQuestionnaireError(null); // Clear any previous error
     },
-    [activeConversationId]
+    [activeConversationId, persistence]
   );
 
   return {

@@ -46,6 +46,8 @@ jest.mock('@/stores/chatStore');
 jest.mock('@/hooks/useWebSocket');
 jest.mock('@/hooks/useConversationMode');
 jest.mock('@/hooks/useAuth');
+jest.mock('@/hooks/useQuestionnairePersistence');
+jest.mock('@/hooks/useChatController');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
   useSearchParams: jest.fn(),
@@ -86,6 +88,34 @@ describe('ChatInterface', () => {
       user: { id: 'user-123', email: 'test@example.com' },
     });
 
+    // Mock useChatController (used by ChatInterface)
+    const { useChatController } = require('@/hooks/useChatController');
+    (useChatController as jest.Mock).mockReturnValue({
+      messages: [],
+      isLoading: false,
+      error: null,
+      isStreaming: false,
+      isConnected: true,
+      isConnecting: false,
+      mode: 'consult',
+      isChanging: false,
+      showDelayedLoading: false,
+      regeneratingMessageIndex: null,
+      composerRef: { current: null },
+      messageListRef: { current: null },
+      handleSendMessage: mockSendMessage,
+      handleModeChange: mockChangeMode,
+      handleRegenerate: jest.fn(),
+      abortStream: jest.fn(),
+      setError: mockSetError,
+      activeConversationId: null,
+      adapter: {
+        sendMessage: mockSendMessage,
+        requestHistory: mockRequestHistory,
+        generateQuestionnaire: jest.fn(),
+      },
+    });
+
     (useChatStore as unknown as jest.Mock).mockReturnValue({
       messages: [],
       isLoading: false,
@@ -110,6 +140,10 @@ describe('ChatInterface', () => {
       deleteConversationRequested: null,
       clearDeleteConversationRequest: jest.fn(),
       removeConversationFromList: jest.fn(),
+      pendingQuestionnaire: null,
+      isGeneratingQuestionnaire: false,
+      setGenerating: jest.fn(),
+      clearPendingQuestionnaire: jest.fn(),
     });
 
     (useWebSocket as jest.Mock).mockReturnValue({
@@ -878,6 +912,348 @@ describe('ChatInterface', () => {
       // Composer should be disabled during streaming
       const sendButton = screen.getByRole('button', { name: 'Send' });
       expect(sendButton).toBeDisabled();
+    });
+  });
+
+  // Questionnaire Rehydration (Story 4.3.2)
+  describe('Questionnaire Rehydration', () => {
+    let mockPersistence: any;
+    let mockSetPendingQuestionnaire: jest.Mock;
+    let mockSetQuestionnaireUIState: jest.Mock;
+    let mockClearPendingQuestionnaire: jest.Mock;
+
+    beforeEach(() => {
+      const { useQuestionnairePersistence } = require('@/hooks/useQuestionnairePersistence');
+
+      mockPersistence = {
+        isDismissed: jest.fn().mockReturnValue(false),
+        loadPayload: jest.fn().mockReturnValue(null),
+        savePayload: jest.fn(),
+        clearPayload: jest.fn(),
+        dismiss: jest.fn(),
+        clearDismiss: jest.fn(),
+        clearAllForUser: jest.fn(),
+      };
+
+      (useQuestionnairePersistence as jest.Mock).mockReturnValue(mockPersistence);
+
+      mockSetPendingQuestionnaire = jest.fn();
+      mockSetQuestionnaireUIState = jest.fn();
+      mockClearPendingQuestionnaire = jest.fn();
+
+      // Mock useChatStore.getState() for the rehydration effect
+      (useChatStore as any).getState = jest.fn().mockReturnValue({
+        setPendingQuestionnaire: mockSetPendingQuestionnaire,
+        setQuestionnaireUIState: mockSetQuestionnaireUIState,
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+    });
+
+    it('restores persisted payload on conversation switch', () => {
+      const savedPayload = {
+        conversationId: 'conv-123',
+        assessmentType: 'full',
+        vendorName: 'TestVendor',
+      };
+
+      mockPersistence.loadPayload.mockReturnValue(savedPayload);
+
+      // Mock useChatController to return active conversation
+      const { useChatController } = require('@/hooks/useChatController');
+      (useChatController as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        isStreaming: false,
+        isConnected: true,
+        isConnecting: false,
+        mode: 'consult',
+        isChanging: false,
+        showDelayedLoading: false,
+        regeneratingMessageIndex: null,
+        composerRef: { current: null },
+        messageListRef: { current: null },
+        handleSendMessage: jest.fn(),
+        handleModeChange: jest.fn(),
+        handleRegenerate: jest.fn(),
+        abortStream: jest.fn(),
+        setError: jest.fn(),
+        activeConversationId: 'conv-123', // Active conversation
+        adapter: { generateQuestionnaire: jest.fn() },
+      });
+
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+        setGenerating: jest.fn(),
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+
+      render(<ChatInterface />);
+
+      expect(mockClearPendingQuestionnaire).toHaveBeenCalled();
+      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('hidden');
+      expect(mockPersistence.loadPayload).toHaveBeenCalledWith('conv-123');
+      expect(mockSetPendingQuestionnaire).toHaveBeenCalledWith(savedPayload);
+      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('ready');
+    });
+
+    it('does not restore if conversation was dismissed', () => {
+      mockPersistence.isDismissed.mockReturnValue(true);
+
+      // Mock useChatController to return active conversation
+      const { useChatController } = require('@/hooks/useChatController');
+      (useChatController as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        isStreaming: false,
+        isConnected: true,
+        isConnecting: false,
+        mode: 'consult',
+        isChanging: false,
+        showDelayedLoading: false,
+        regeneratingMessageIndex: null,
+        composerRef: { current: null },
+        messageListRef: { current: null },
+        handleSendMessage: jest.fn(),
+        handleModeChange: jest.fn(),
+        handleRegenerate: jest.fn(),
+        abortStream: jest.fn(),
+        setError: jest.fn(),
+        activeConversationId: 'conv-dismissed', // Active conversation
+        adapter: { generateQuestionnaire: jest.fn() },
+      });
+
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-dismissed',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+        setGenerating: jest.fn(),
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+
+      render(<ChatInterface />);
+
+      expect(mockClearPendingQuestionnaire).toHaveBeenCalled();
+      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('hidden');
+      expect(mockPersistence.isDismissed).toHaveBeenCalledWith('conv-dismissed');
+      expect(mockPersistence.loadPayload).not.toHaveBeenCalled();
+      expect(mockSetPendingQuestionnaire).not.toHaveBeenCalled();
+    });
+
+    it('does not restore if no payload exists', () => {
+      mockPersistence.loadPayload.mockReturnValue(null);
+
+      // Mock useChatController to return active conversation
+      const { useChatController } = require('@/hooks/useChatController');
+      (useChatController as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        isStreaming: false,
+        isConnected: true,
+        isConnecting: false,
+        mode: 'consult',
+        isChanging: false,
+        showDelayedLoading: false,
+        regeneratingMessageIndex: null,
+        composerRef: { current: null },
+        messageListRef: { current: null },
+        handleSendMessage: jest.fn(),
+        handleModeChange: jest.fn(),
+        handleRegenerate: jest.fn(),
+        abortStream: jest.fn(),
+        setError: jest.fn(),
+        activeConversationId: 'conv-empty', // Active conversation
+        adapter: { generateQuestionnaire: jest.fn() },
+      });
+
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-empty',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+        setGenerating: jest.fn(),
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+
+      render(<ChatInterface />);
+
+      expect(mockClearPendingQuestionnaire).toHaveBeenCalled();
+      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('hidden');
+      expect(mockPersistence.loadPayload).toHaveBeenCalledWith('conv-empty');
+      expect(mockSetPendingQuestionnaire).not.toHaveBeenCalled();
+    });
+
+    it('clears previous state before loading new conversation', () => {
+      const savedPayload = {
+        conversationId: 'conv-new',
+        assessmentType: 'full',
+        vendorName: 'NewVendor',
+      };
+
+      mockPersistence.loadPayload.mockReturnValue(savedPayload);
+
+      // Mock useChatController to return active conversation
+      const { useChatController } = require('@/hooks/useChatController');
+      (useChatController as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        isStreaming: false,
+        isConnected: true,
+        isConnecting: false,
+        mode: 'consult',
+        isChanging: false,
+        showDelayedLoading: false,
+        regeneratingMessageIndex: null,
+        composerRef: { current: null },
+        messageListRef: { current: null },
+        handleSendMessage: jest.fn(),
+        handleModeChange: jest.fn(),
+        handleRegenerate: jest.fn(),
+        abortStream: jest.fn(),
+        setError: jest.fn(),
+        activeConversationId: 'conv-new', // Active conversation
+        adapter: { generateQuestionnaire: jest.fn() },
+      });
+
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-new',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+        setGenerating: jest.fn(),
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+
+      render(<ChatInterface />);
+
+      // Verify clear happens before load
+      expect(mockClearPendingQuestionnaire).toHaveBeenCalled();
+      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('hidden');
+      expect(mockSetPendingQuestionnaire).toHaveBeenCalledWith(savedPayload);
+      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('ready');
+    });
+
+    it('does not rehydrate when no active conversation', () => {
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: null,
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+        setGenerating: jest.fn(),
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+
+      render(<ChatInterface />);
+
+      expect(mockPersistence.loadPayload).not.toHaveBeenCalled();
+      expect(mockSetPendingQuestionnaire).not.toHaveBeenCalled();
+    });
+
+    it('does not rehydrate when no user', () => {
+      const { useAuth } = require('@/hooks/useAuth');
+      (useAuth as jest.Mock).mockReturnValue({
+        token: null,
+        user: null,
+      });
+
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages: [],
+        isLoading: false,
+        error: null,
+        addMessage: mockAddMessage,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setError: mockSetError,
+        setLoading: jest.fn(),
+        setMessages: jest.fn(),
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: jest.fn(),
+        addConversation: jest.fn(),
+        pendingQuestionnaire: null,
+        isGeneratingQuestionnaire: false,
+        setGenerating: jest.fn(),
+        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
+      });
+
+      render(<ChatInterface />);
+
+      expect(mockPersistence.loadPayload).not.toHaveBeenCalled();
+      expect(mockSetPendingQuestionnaire).not.toHaveBeenCalled();
     });
   });
 });

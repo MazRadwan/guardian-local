@@ -12,10 +12,12 @@ export interface MessageListProps {
   isStreaming?: boolean;
   onRegenerate?: (messageIndex: number) => void;
   regeneratingMessageIndex?: number | null;
+  /** Optional slot for rendering the questionnaire card inline */
+  questionnaireSlot?: React.ReactNode;
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, questionnaireSlot }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -132,6 +134,10 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                 isRegenerating={regeneratingMessageIndex === index}
               />
             ))}
+
+            {/* Questionnaire card slot - renders inline after messages */}
+            {questionnaireSlot}
+
             {isLoading && (
               <div data-testid="typing-indicator" className="flex gap-3 py-6">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
