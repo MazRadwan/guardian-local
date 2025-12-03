@@ -17,11 +17,14 @@ export interface WebSocketConfig {
 }
 
 export interface EmbeddedComponent {
-  type: 'button' | 'link' | 'form';
+  type: 'button' | 'link' | 'form' | 'download' | 'error';
   data: {
     label?: string;
     action?: string;
     url?: string;
+    assessmentId?: string;
+    formats?: Array<'pdf' | 'word' | 'excel'>;
+    questionCount?: number;
     [key: string]: any;  // Allow additional properties for flexibility
   };
 }
@@ -43,6 +46,44 @@ export interface StreamEvent {
 export interface ErrorEvent {
   error: string;
   code?: string;
+}
+
+export interface ExportReadyPayload {
+  conversationId: string;
+  assessmentId: string;
+  formats: Array<'pdf' | 'word' | 'excel'>;
+  questionCount: number;
+}
+
+export interface ExtractionFailedPayload {
+  conversationId: string;
+  assessmentId: string;
+  error: string;
+}
+
+/**
+ * Payload for questionnaire_ready event from backend
+ */
+export interface QuestionnaireReadyPayload {
+  conversationId: string;
+  assessmentType: 'quick' | 'comprehensive' | 'category_focused';
+  vendorName: string | null;
+  solutionName: string | null;
+  contextSummary: string | null;
+  estimatedQuestions: number | null;
+  selectedCategories: string[] | null;
+}
+
+/**
+ * Payload for generate_questionnaire event to backend
+ */
+export interface GenerateQuestionnairePayload {
+  conversationId: string;
+  assessmentType?: 'quick' | 'comprehensive' | 'category_focused';
+  vendorName?: string | null;
+  solutionName?: string | null;
+  contextSummary?: string | null;
+  selectedCategories?: string[] | null;
 }
 
 // Backend message format (what server sends)
@@ -67,9 +108,9 @@ function normalizeComponents(components?: any[]): EmbeddedComponent[] | undefine
   if (!components || !Array.isArray(components)) return undefined;
 
   return components
-    .filter((c) => c && ['button', 'link', 'form'].includes(c.type))
+    .filter((c) => c && ['button', 'link', 'form', 'download', 'error'].includes(c.type))
     .map((c) => ({
-      type: c.type as 'button' | 'link' | 'form',
+      type: c.type as 'button' | 'link' | 'form' | 'download' | 'error',
       data: c.data && typeof c.data === 'object' ? c.data : {}, // Safe default
     }));
 }
@@ -435,6 +476,77 @@ export class WebSocketClient {
     return () => {
       this.socket?.off('conversation_mode_updated', handler);
     };
+  }
+
+  onExportReady(callback: (data: ExportReadyPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ExportReadyPayload) => {
+      console.log('[WebSocket] Export ready:', data.assessmentId, data.questionCount, 'questions');
+      callback(data);
+    };
+
+    this.socket.on('export_ready', handler);
+    return () => {
+      this.socket?.off('export_ready', handler);
+    };
+  }
+
+  onExtractionFailed(callback: (data: ExtractionFailedPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ExtractionFailedPayload) => {
+      console.log('[WebSocket] Extraction failed:', data.assessmentId, data.error);
+      callback(data);
+    };
+
+    this.socket.on('extraction_failed', handler);
+    return () => {
+      this.socket?.off('extraction_failed', handler);
+    };
+  }
+
+  /**
+   * Listen for questionnaire_ready event
+   * Called when Claude determines it's ready to generate
+   *
+   * @param callback - Function to call with payload
+   * @returns Unsubscribe function
+   */
+  onQuestionnaireReady(
+    callback: (data: QuestionnaireReadyPayload) => void
+  ): () => void {
+    if (!this.socket) {
+      throw new Error('WebSocket not initialized');
+    }
+
+    const handler = (data: QuestionnaireReadyPayload) => {
+      console.log('[WebSocket] Questionnaire ready:', data.conversationId);
+      callback(data);
+    };
+
+    this.socket.on('questionnaire_ready', handler);
+
+    // Return unsubscribe function
+    return () => {
+      this.socket?.off('questionnaire_ready', handler);
+    };
+  }
+
+  /**
+   * Emit generate_questionnaire event to trigger generation
+   * Called when user clicks the "Generate" button
+   *
+   * @param payload - Full questionnaire generation payload with context
+   */
+  generateQuestionnaire(payload: GenerateQuestionnairePayload): void {
+    if (!this.socket || !this.socket.connected) {
+      throw new Error('WebSocket not connected');
+    }
+
+    console.log('[WebSocket] Requesting questionnaire generation:', payload.conversationId);
+
+    this.socket.emit('generate_questionnaire', payload);
   }
 
 }

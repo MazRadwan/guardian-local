@@ -1,0 +1,172 @@
+import { test, expect } from '@playwright/test';
+
+/**
+ * Epic 12 E2E Tests - Tool-Based Questionnaire Generation
+ *
+ * These tests verify the complete flow from conversation to questionnaire generation
+ * using the tool-based trigger approach.
+ *
+ * Prerequisites:
+ * - Backend running with USE_TOOL_BASED_TRIGGER=true
+ * - Frontend running
+ * - Test user account available
+ *
+ * Run with: npx playwright test questionnaire-generation.spec.ts
+ */
+
+test.describe('Questionnaire Generation (Tool Flow)', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to app
+    await page.goto('/');
+
+    // TODO: Add login steps once auth is implemented
+    // For now, assuming direct access to chat interface
+    // await page.fill('[data-testid="email-input"]', 'test@example.com');
+    // await page.fill('[data-testid="password-input"]', 'password123');
+    // await page.click('[data-testid="login-button"]');
+  });
+
+  test('Scenario 1: tool flow shows generate button', async ({ page }) => {
+    // Start conversation in assessment mode
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+
+    // Send message that triggers tool
+    await page.fill('[data-testid="chat-input"]', 'Yes, generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for and verify button appears (tool was called)
+    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+      timeout: 15000
+    });
+    await expect(page.locator('text=Comprehensive Assessment')).toBeVisible();
+    await expect(page.locator('[data-testid="generate-questionnaire-btn"]')).toBeEnabled();
+  });
+
+  test('Scenario 1 continued: clicking button triggers generation', async ({ page }) => {
+    // Setup: Navigate to state where button is showing
+    // (In real test, might need to repeat previous test steps or use fixtures)
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Yes, generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for button to appear
+    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+      timeout: 15000
+    });
+
+    // Click the generate button
+    await page.click('[data-testid="generate-questionnaire-btn"]');
+
+    // Verify loading state
+    await expect(page.locator('text=Generating')).toBeVisible();
+
+    // Wait for completion (questionnaire streams in)
+    // Look for the questionnaire start marker
+    await expect(page.locator('text=QUESTIONNAIRE_START')).toBeVisible({
+      timeout: 60000
+    });
+
+    // Verify download buttons appear
+    await expect(page.locator('[data-testid="download-pdf"]')).toBeVisible({
+      timeout: 10000
+    });
+  });
+
+  test('Scenario 4: no tool call for questions about questionnaires', async ({ page }) => {
+    // Start conversation in assessment mode
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+
+    // Ask a question (should NOT trigger tool)
+    await page.fill('[data-testid="chat-input"]', 'What questions are in a typical assessment?');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for response
+    await page.waitForSelector('[data-testid="assistant-message"]', {
+      timeout: 15000
+    });
+
+    // Verify NO generate button appeared
+    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).not.toBeVisible();
+  });
+
+  test('Scenario 5: conversation switch clears button', async ({ page }) => {
+    // Trigger questionnaire_ready (button appears)
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate the questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for button to appear
+    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+      timeout: 15000
+    });
+
+    // Switch to new conversation
+    await page.click('[data-testid="new-conversation-btn"]');
+
+    // Verify button disappears
+    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).not.toBeVisible();
+
+    // Switch back to original conversation (if conversation list exists)
+    // await page.click('[data-testid="conversation-list-item-0"]');
+
+    // Verify button is still gone
+    // await expect(page.locator('[data-testid="questionnaire-ready-card"]')).not.toBeVisible();
+  });
+
+  test('Edge case: rapid button clicking', async ({ page }) => {
+    // Setup: get to state with button showing
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+      timeout: 15000
+    });
+
+    // Rapid click the button multiple times
+    const button = page.locator('[data-testid="generate-questionnaire-btn"]');
+    await button.click();
+    await button.click(); // Should be disabled by now
+    await button.click();
+
+    // Verify only ONE questionnaire is generated
+    // (Check that button is disabled and loading state is active)
+    await expect(button).toBeDisabled();
+    await expect(page.locator('text=Generating')).toBeVisible();
+
+    // Wait for generation to complete
+    await expect(page.locator('text=QUESTIONNAIRE_START')).toBeVisible({
+      timeout: 60000
+    });
+
+    // Verify only one questionnaire marker appears (not multiple)
+    const markers = await page.locator('text=QUESTIONNAIRE_START').count();
+    expect(markers).toBe(1);
+  });
+});
+
+/**
+ * CI Configuration Notes:
+ *
+ * Add to playwright.config.ts:
+ * {
+ *   testDir: './e2e',
+ *   timeout: 120000, // 2 minutes for long-running tests
+ *   retries: 1,      // Retry once on flaky Claude responses
+ *   use: {
+ *     baseURL: 'http://localhost:3000',
+ *     screenshot: 'only-on-failure',
+ *     video: 'retain-on-failure'
+ *   }
+ * }
+ *
+ * Environment setup for CI:
+ * - Set USE_TOOL_BASED_TRIGGER=true in backend .env
+ * - Ensure backend and frontend are running before tests
+ * - Use test database to avoid polluting production data
+ */

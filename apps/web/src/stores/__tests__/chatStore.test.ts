@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { useChatStore } from '../chatStore';
-import { ChatMessage } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload } from '@/lib/websocket';
 
 describe('chatStore', () => {
   beforeEach(() => {
@@ -14,6 +14,10 @@ describe('chatStore', () => {
       result.current.setConversations([]);
       result.current.setActiveConversation(null);
       result.current.setSidebarMinimized(false);
+      // Clear export ready state for all conversations
+      Object.keys(result.current.exportReadyByConversation).forEach((convId) => {
+        result.current.clearExportReady(convId);
+      });
     });
   });
 
@@ -682,6 +686,251 @@ describe('chatStore', () => {
 
       expect(result.current.conversations).toHaveLength(1);
       expect(result.current.conversations[0]).toEqual(mockConversation2);
+    });
+  });
+
+  describe('appendComponentToLastAssistantMessage', () => {
+    it('appends component to last assistant message', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Here is a questionnaire',
+        timestamp: new Date(),
+      };
+
+      const component: EmbeddedComponent = {
+        type: 'download',
+        data: {
+          assessmentId: 'assess-123',
+          formats: ['pdf', 'word'],
+          questionCount: 10,
+        },
+      };
+
+      act(() => {
+        result.current.addMessage(assistantMessage);
+        result.current.appendComponentToLastAssistantMessage(component);
+      });
+
+      expect(result.current.messages[0].components).toHaveLength(1);
+      expect(result.current.messages[0].components![0]).toEqual(component);
+    });
+
+    it('finds the last assistant message when user message is last', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Here is a questionnaire',
+        timestamp: new Date(),
+      };
+
+      const userMessage: ChatMessage = {
+        role: 'user',
+        content: 'Thanks!',
+        timestamp: new Date(),
+      };
+
+      const component: EmbeddedComponent = {
+        type: 'download',
+        data: {
+          assessmentId: 'assess-123',
+          formats: ['pdf'],
+          questionCount: 5,
+        },
+      };
+
+      act(() => {
+        result.current.addMessage(assistantMessage);
+        result.current.addMessage(userMessage);
+        result.current.appendComponentToLastAssistantMessage(component);
+      });
+
+      // Component should be added to the assistant message, not user message
+      expect(result.current.messages[0].components).toHaveLength(1);
+      expect(result.current.messages[1].components).toBeUndefined();
+    });
+
+    it('deduplicates components with same type and assessmentId', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const assistantMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Here is a questionnaire',
+        timestamp: new Date(),
+      };
+
+      const component: EmbeddedComponent = {
+        type: 'download',
+        data: {
+          assessmentId: 'assess-123',
+          formats: ['pdf', 'word'],
+          questionCount: 10,
+        },
+      };
+
+      act(() => {
+        result.current.addMessage(assistantMessage);
+        result.current.appendComponentToLastAssistantMessage(component);
+        // Try to add the same component again
+        result.current.appendComponentToLastAssistantMessage(component);
+      });
+
+      // Should only have one component (duplicate rejected)
+      expect(result.current.messages[0].components).toHaveLength(1);
+    });
+
+    it('handles empty messages array gracefully', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const component: EmbeddedComponent = {
+        type: 'download',
+        data: {
+          assessmentId: 'assess-123',
+          formats: ['pdf'],
+          questionCount: 5,
+        },
+      };
+
+      // Should not crash
+      act(() => {
+        result.current.appendComponentToLastAssistantMessage(component);
+      });
+
+      expect(result.current.messages).toEqual([]);
+    });
+
+    it('handles messages with no assistant messages gracefully', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const userMessage: ChatMessage = {
+        role: 'user',
+        content: 'Hello',
+        timestamp: new Date(),
+      };
+
+      const component: EmbeddedComponent = {
+        type: 'download',
+        data: {
+          assessmentId: 'assess-123',
+          formats: ['pdf'],
+          questionCount: 5,
+        },
+      };
+
+      act(() => {
+        result.current.addMessage(userMessage);
+        result.current.appendComponentToLastAssistantMessage(component);
+      });
+
+      // User message should not have components added
+      expect(result.current.messages[0].components).toBeUndefined();
+    });
+  });
+
+  describe('Export Ready State Management', () => {
+    const mockExportPayload: ExportReadyPayload = {
+      conversationId: 'conv-123',
+      assessmentId: 'assess-456',
+      formats: ['pdf', 'word', 'excel'],
+      questionCount: 25,
+    };
+
+    it('initializes with empty exportReadyByConversation', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      expect(result.current.exportReadyByConversation).toEqual({});
+    });
+
+    it('sets export ready for a conversation', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setExportReady('conv-123', mockExportPayload);
+      });
+
+      expect(result.current.exportReadyByConversation['conv-123']).toEqual(mockExportPayload);
+    });
+
+    it('sets export ready for multiple conversations', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const mockExportPayload2: ExportReadyPayload = {
+        conversationId: 'conv-456',
+        assessmentId: 'assess-789',
+        formats: ['pdf'],
+        questionCount: 10,
+      };
+
+      act(() => {
+        result.current.setExportReady('conv-123', mockExportPayload);
+        result.current.setExportReady('conv-456', mockExportPayload2);
+      });
+
+      expect(Object.keys(result.current.exportReadyByConversation)).toHaveLength(2);
+      expect(result.current.exportReadyByConversation['conv-123']).toEqual(mockExportPayload);
+      expect(result.current.exportReadyByConversation['conv-456']).toEqual(mockExportPayload2);
+    });
+
+    it('clears export ready for a conversation', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setExportReady('conv-123', mockExportPayload);
+        result.current.clearExportReady('conv-123');
+      });
+
+      expect(result.current.exportReadyByConversation['conv-123']).toBeUndefined();
+    });
+
+    it('clears export ready for one conversation without affecting others', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const mockExportPayload2: ExportReadyPayload = {
+        conversationId: 'conv-456',
+        assessmentId: 'assess-789',
+        formats: ['pdf'],
+        questionCount: 10,
+      };
+
+      act(() => {
+        result.current.setExportReady('conv-123', mockExportPayload);
+        result.current.setExportReady('conv-456', mockExportPayload2);
+        result.current.clearExportReady('conv-123');
+      });
+
+      expect(result.current.exportReadyByConversation['conv-123']).toBeUndefined();
+      expect(result.current.exportReadyByConversation['conv-456']).toEqual(mockExportPayload2);
+    });
+
+    it('getExportReady returns payload for existing conversation', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setExportReady('conv-123', mockExportPayload);
+      });
+
+      const payload = result.current.getExportReady('conv-123');
+      expect(payload).toEqual(mockExportPayload);
+    });
+
+    it('getExportReady returns undefined for non-existent conversation', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const payload = result.current.getExportReady('non-existent');
+      expect(payload).toBeUndefined();
+    });
+
+    it('clearing non-existent conversation does not throw', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Should not throw
+      act(() => {
+        result.current.clearExportReady('non-existent');
+      });
+
+      expect(result.current.exportReadyByConversation).toEqual({});
     });
   });
 });

@@ -4,10 +4,11 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check, RefreshCw } from 'lucide-react';
+import { User, Bot, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
+import { DownloadButton } from './DownloadButton';
 
 export interface MessageComponent {
-  type: 'button' | 'link' | 'form';
+  type: 'button' | 'link' | 'form' | 'download' | 'error';
   data: Record<string, any>;
 }
 
@@ -187,6 +188,10 @@ function EmbeddedComponent({ component }: { component: MessageComponent }) {
       return <EmbeddedLink data={component.data} />;
     case 'form':
       return <EmbeddedForm data={component.data} />;
+    case 'download':
+      return <EmbeddedDownload data={component.data} />;
+    case 'error':
+      return <EmbeddedError data={component.data} />;
     default:
       return null;
   }
@@ -230,6 +235,79 @@ function EmbeddedForm({ data }: { data: Record<string, any> }) {
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <p className="text-sm text-gray-700">{data.description}</p>
       {/* Form fields would go here - placeholder for now */}
+    </div>
+  );
+}
+
+const VALID_FORMATS = ['pdf', 'word', 'excel'] as const;
+type ValidFormat = typeof VALID_FORMATS[number];
+
+function isValidFormat(format: unknown): format is ValidFormat {
+  return typeof format === 'string' && VALID_FORMATS.includes(format as ValidFormat);
+}
+
+function EmbeddedDownload({ data }: { data: Record<string, any> }) {
+  // Validate required data
+  if (!data.assessmentId || typeof data.assessmentId !== 'string') {
+    console.warn('[EmbeddedDownload] Missing or invalid assessmentId:', data);
+    return null;
+  }
+
+  if (!data.formats || !Array.isArray(data.formats) || data.formats.length === 0) {
+    console.warn('[EmbeddedDownload] Missing or invalid formats:', data);
+    return null;
+  }
+
+  // Filter to valid formats only
+  const validFormats = data.formats.filter(isValidFormat);
+  if (validFormats.length === 0) {
+    console.warn('[EmbeddedDownload] No valid formats found:', data.formats);
+    return null;
+  }
+
+  // Validate questionCount is a positive number
+  const questionCount = typeof data.questionCount === 'number' && data.questionCount > 0
+    ? data.questionCount
+    : 0;
+
+  return (
+    <div
+      className="rounded-lg border border-green-200 bg-green-50 p-4"
+      data-testid="download-component"
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-green-700 font-medium">
+          Questionnaire ready ({questionCount} questions)
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {validFormats.map((format) => (
+          <DownloadButton
+            key={format}
+            assessmentId={data.assessmentId}
+            format={format}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmbeddedError({ data }: { data: Record<string, any> }) {
+  return (
+    <div
+      className="rounded-lg border border-red-200 bg-red-50 p-4"
+      data-testid="extraction-error"
+    >
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-5 w-5 text-red-600" />
+        <span className="text-red-700 font-medium">
+          {data.label || 'Error'}
+        </span>
+      </div>
+      {data.error && (
+        <p className="mt-2 text-sm text-red-600">{data.error}</p>
+      )}
     </div>
   );
 }

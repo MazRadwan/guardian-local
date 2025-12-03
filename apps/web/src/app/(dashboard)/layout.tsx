@@ -26,7 +26,7 @@ export default function DashboardLayout({
     conversations,
     activeConversationId,
     setActiveConversation,
-    deleteConversation,
+    requestDeleteConversation,
     requestNewChat,
   } = useChatStore();
 
@@ -101,7 +101,7 @@ export default function DashboardLayout({
         conversations={conversations}
         activeConversationId={activeConversationId}
         onSelectConversation={setActiveConversation}
-        onDeleteConversation={deleteConversation}
+        onDeleteConversation={requestDeleteConversation}
       />
 
       {/* Main Content Area */}

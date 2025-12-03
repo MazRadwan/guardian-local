@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 import type { ConversationMode } from '../../domain/entities/Conversation.js';
 
-type SystemPromptProvider = (mode: ConversationMode) => string;
+type SystemPromptProvider = (mode: ConversationMode, options?: { includeToolInstructions?: boolean }) => string;
 
 export interface PromptCacheConfig {
   enabled: boolean;
@@ -25,7 +25,7 @@ export interface PromptCacheEntry {
  * - Allows callers to decide whether to enable `cache_control` on requests
  */
 export class PromptCacheManager {
-  private cache = new Map<ConversationMode, PromptCacheEntry>();
+  private cache = new Map<string, PromptCacheEntry>(); // Changed key to string for mode+options combo
   private readonly enabled: boolean;
   private readonly prefix: string;
   private readonly getPrompt: SystemPromptProvider;
@@ -36,10 +36,13 @@ export class PromptCacheManager {
     this.getPrompt = promptProvider;
   }
 
-  ensureCached(mode: ConversationMode): PromptCacheEntry {
-    const systemPrompt = this.getPrompt(mode);
+  ensureCached(mode: ConversationMode, options?: { includeToolInstructions?: boolean }): PromptCacheEntry {
+    const systemPrompt = this.getPrompt(mode, options);
     const hash = this.hashPrompt(systemPrompt);
-    const existing = this.cache.get(mode);
+
+    // Create cache key that includes options to differentiate tool-enabled vs tool-disabled prompts
+    const cacheKey = `${mode}-${options?.includeToolInstructions !== false ? 'with-tools' : 'no-tools'}`;
+    const existing = this.cache.get(cacheKey);
 
     if (existing && existing.hash === hash) {
       return existing;
@@ -55,7 +58,7 @@ export class PromptCacheManager {
       usePromptCache: this.enabled,
     };
 
-    this.cache.set(mode, entry);
+    this.cache.set(cacheKey, entry);
     return entry;
   }
 

@@ -17,7 +17,10 @@ import { RateLimiter } from './infrastructure/websocket/RateLimiter.js';
 import { AuthService } from './application/services/AuthService.js';
 import { ConversationService } from './application/services/ConversationService.js';
 import { AssessmentService } from './application/services/AssessmentService.js';
+import { VendorService } from './application/services/VendorService.js';
 import { QuestionService } from './application/services/QuestionService.js';
+import { QuestionExtractionService } from './application/services/QuestionExtractionService.js';
+import { QuestionnaireReadyService } from './application/services/QuestionnaireReadyService.js';
 import { ExportService } from './application/services/ExportService.js';
 import { PDFExporter } from './infrastructure/export/PDFExporter.js';
 import { WordExporter } from './infrastructure/export/WordExporter.js';
@@ -86,8 +89,13 @@ const excelExporter = new ExcelExporter();
 // Initialize services
 const authService = new AuthService(userRepo, jwtProvider);
 const conversationService = new ConversationService(conversationRepo, messageRepo);
+const vendorService = new VendorService(vendorRepo);
 const assessmentService = new AssessmentService(vendorRepo, assessmentRepo);
 const questionService = new QuestionService(claudeClient, questionRepo, assessmentRepo);
+const questionExtractionService = new QuestionExtractionService(questionRepo, assessmentRepo);
+const questionnaireReadyService = new QuestionnaireReadyService(
+  conversationService
+);
 const exportService = new ExportService(
   assessmentRepo,
   questionRepo,
@@ -133,8 +141,16 @@ const chatServer = new ChatServer(
   claudeClient,
   rateLimiter,
   JWT_SECRET,
-  promptCacheManager
+  promptCacheManager,
+  assessmentService,
+  vendorService,
+  questionExtractionService,
+  questionnaireReadyService
 );
+
+// Feature flag logging
+const useToolBasedTrigger = process.env.USE_TOOL_BASED_TRIGGER === 'true';
+console.log(`[Server] Tool-based questionnaire trigger: ${useToolBasedTrigger ? 'ENABLED' : 'DISABLED (using pattern matching)'}`);
 
 console.log('[App] ChatServer initialized');
 console.log('[App] Vendor, Assessment, and Question routes registered');

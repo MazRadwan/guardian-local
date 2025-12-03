@@ -1,6 +1,6 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useHistoryManager } from '../useHistoryManager';
-import { ChatMessage } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload } from '@/lib/websocket';
 
 // Mock timer functions
 jest.useFakeTimers();
@@ -10,6 +10,8 @@ describe('useHistoryManager', () => {
   const mockSetMessages = jest.fn();
   const mockSetLoading = jest.fn();
   const mockSetError = jest.fn();
+  const mockGetExportReady = jest.fn();
+  const mockAppendComponentToLastAssistantMessage = jest.fn();
   const mockMessageListRef = { current: null as HTMLDivElement | null };
 
   const defaultParams = {
@@ -22,6 +24,8 @@ describe('useHistoryManager', () => {
     setError: mockSetError,
     messages: [] as ChatMessage[],
     isLoading: false,
+    getExportReady: mockGetExportReady,
+    appendComponentToLastAssistantMessage: mockAppendComponentToLastAssistantMessage,
   };
 
   beforeEach(() => {
@@ -633,6 +637,194 @@ describe('useHistoryManager', () => {
 
       // Should have error from new request, not old one
       expect(mockSetError).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Export State Rehydration', () => {
+    it('should rehydrate download component from cache when history lacks it', () => {
+      const cachedExport: ExportReadyPayload = {
+        conversationId: 'conv-123',
+        assessmentId: 'assessment-456',
+        formats: ['pdf', 'word'],
+        questionCount: 25,
+      };
+      mockGetExportReady.mockReturnValue(cachedExport);
+
+      const { result } = renderHook(() => useHistoryManager(defaultParams));
+
+      // History loads without download component
+      const loadedMessages: ChatMessage[] = [
+        { role: 'user', content: 'Hello', timestamp: new Date() },
+        { role: 'assistant', content: 'Here is your questionnaire.', timestamp: new Date() },
+      ];
+
+      act(() => {
+        result.current.handleHistory(loadedMessages);
+      });
+
+      // Run setTimeout(0) for rehydration
+      act(() => {
+        jest.advanceTimersByTime(0);
+      });
+
+      expect(mockGetExportReady).toHaveBeenCalledWith('conv-123');
+      expect(mockAppendComponentToLastAssistantMessage).toHaveBeenCalledWith({
+        type: 'download',
+        data: {
+          assessmentId: 'assessment-456',
+          formats: ['pdf', 'word'],
+          questionCount: 25,
+        },
+      });
+    });
+
+    it('should NOT rehydrate if history already has download component', () => {
+      const cachedExport: ExportReadyPayload = {
+        conversationId: 'conv-123',
+        assessmentId: 'assessment-456',
+        formats: ['pdf'],
+        questionCount: 10,
+      };
+      mockGetExportReady.mockReturnValue(cachedExport);
+
+      const { result } = renderHook(() => useHistoryManager(defaultParams));
+
+      // History already has download component
+      const loadedMessages: ChatMessage[] = [
+        { role: 'user', content: 'Hello', timestamp: new Date() },
+        {
+          role: 'assistant',
+          content: 'Here is your questionnaire.',
+          timestamp: new Date(),
+          components: [
+            {
+              type: 'download',
+              data: { assessmentId: 'existing-assessment', formats: ['pdf'] },
+            },
+          ],
+        },
+      ];
+
+      act(() => {
+        result.current.handleHistory(loadedMessages);
+      });
+
+      // Run all timers
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+
+      // Should NOT have called append because component already exists
+      expect(mockAppendComponentToLastAssistantMessage).not.toHaveBeenCalled();
+    });
+
+    it('should NOT rehydrate if no cached export exists', () => {
+      mockGetExportReady.mockReturnValue(undefined);
+
+      const { result } = renderHook(() => useHistoryManager(defaultParams));
+
+      const loadedMessages: ChatMessage[] = [
+        { role: 'user', content: 'Hello', timestamp: new Date() },
+        { role: 'assistant', content: 'Response', timestamp: new Date() },
+      ];
+
+      act(() => {
+        result.current.handleHistory(loadedMessages);
+      });
+
+      // Run all timers
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+
+      expect(mockGetExportReady).toHaveBeenCalledWith('conv-123');
+      expect(mockAppendComponentToLastAssistantMessage).not.toHaveBeenCalled();
+    });
+
+    it('should NOT rehydrate if conversationId is null', () => {
+      const cachedExport: ExportReadyPayload = {
+        conversationId: 'conv-123',
+        assessmentId: 'assessment-456',
+        formats: ['pdf'],
+        questionCount: 10,
+      };
+      mockGetExportReady.mockReturnValue(cachedExport);
+
+      const { result } = renderHook(() =>
+        useHistoryManager({
+          ...defaultParams,
+          conversationId: null,
+        })
+      );
+
+      act(() => {
+        result.current.handleHistory([]);
+      });
+
+      // Run all timers
+      act(() => {
+        jest.advanceTimersByTime(100);
+      });
+
+      // getExportReady should never be called if conversationId is null
+      expect(mockGetExportReady).not.toHaveBeenCalled();
+      expect(mockAppendComponentToLastAssistantMessage).not.toHaveBeenCalled();
+    });
+
+    it('should log rehydration when it occurs', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const cachedExport: ExportReadyPayload = {
+        conversationId: 'conv-123',
+        assessmentId: 'assessment-789',
+        formats: ['excel'],
+        questionCount: 50,
+      };
+      mockGetExportReady.mockReturnValue(cachedExport);
+
+      const { result } = renderHook(() => useHistoryManager(defaultParams));
+
+      act(() => {
+        result.current.handleHistory([
+          { role: 'assistant', content: 'Done', timestamp: new Date() },
+        ]);
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[useHistoryManager] Rehydrating download component from cache:',
+        'assessment-789'
+      );
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should log skip message when download component already in history', () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const cachedExport: ExportReadyPayload = {
+        conversationId: 'conv-123',
+        assessmentId: 'assessment-456',
+        formats: ['pdf'],
+        questionCount: 10,
+      };
+      mockGetExportReady.mockReturnValue(cachedExport);
+
+      const { result } = renderHook(() => useHistoryManager(defaultParams));
+
+      act(() => {
+        result.current.handleHistory([
+          {
+            role: 'assistant',
+            content: 'Done',
+            timestamp: new Date(),
+            components: [{ type: 'download', data: { assessmentId: 'x' } }],
+          },
+        ]);
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[useHistoryManager] Download component already in history, skipping rehydration'
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });
