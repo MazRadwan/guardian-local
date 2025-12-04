@@ -9,6 +9,6 @@ export interface QuestionGenerationContextDTO {
   solutionType: string;
   assessmentFocus?: string;
   industry?: string;
-  assessmentType?: 'quick' | 'comprehensive' | 'renewal';
+  assessmentType?: 'quick' | 'comprehensive' | 'category_focused';
   category?: string;
 }

@@ -335,7 +335,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       await repository.create(
         Assessment.create({
           vendorId: testVendorId,
-          assessmentType: 'renewal',
+          assessmentType: 'category_focused',
           createdBy: testUserId,
         })
       )
@@ -365,7 +365,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       await repository.create(
         Assessment.create({
           vendorId: testVendorId,
-          assessmentType: 'renewal',
+          assessmentType: 'category_focused',
           createdBy: testUserId,
         })
       )

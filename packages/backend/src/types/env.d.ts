@@ -22,9 +22,9 @@ declare namespace NodeJS {
     RATE_LIMIT_WINDOW_MS?: string;
 
     /**
-     * Feature flag: Use Claude tool calls for questionnaire trigger
-     * Must be exactly 'true' or 'false' (or undefined)
+     * Dev testing: Skip Claude API and return fixture questionnaire
+     * Only works in non-production, non-test environments
      */
-    USE_TOOL_BASED_TRIGGER?: 'true' | 'false';
+    GUARDIAN_FAST_GENERATION?: 'true' | 'false';
   }
 }

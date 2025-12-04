@@ -233,7 +233,7 @@ describe('ExportService', () => {
     it('should call ExcelExporter when all data is valid', async () => {
       const mockAssessment = Assessment.create({
         vendorId: 'vendor-1',
-        assessmentType: 'renewal',
+        assessmentType: 'category_focused',
         solutionName: 'Test Solution',
         solutionType: 'Cloud Platform',
         createdBy: 'user-1',

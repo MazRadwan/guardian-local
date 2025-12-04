@@ -32,7 +32,7 @@ for await (const chunk of client.streamMessage(messages, { systemPrompt })) {
 ### Question Generation Prompt (`prompts/questionGeneration.ts`)
 - **Purpose:** Generate assessment questionnaires based on vendor context
 - **Input:** Vendor type, solution type, industry, assessment focus
-- **Output:** 85-95 questions across 11 risk dimensions (JSON format)
+- **Output:** 85-95 questions across 10 risk dimensions (JSON format)
 - **Sections:**
   1. Company Overview (8-10 questions)
   2. AI Architecture (12-15 questions)
