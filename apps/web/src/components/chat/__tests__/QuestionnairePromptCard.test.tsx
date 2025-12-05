@@ -17,7 +17,6 @@ describe('QuestionnairePromptCard', () => {
     payload: mockPayload,
     uiState: 'ready' as const,
     onGenerate: jest.fn(),
-    onDismiss: jest.fn(),
     onDownload: jest.fn(),
     onRetry: jest.fn(),
   };
@@ -53,12 +52,6 @@ describe('QuestionnairePromptCard', () => {
       render(<QuestionnairePromptCard {...defaultProps} />);
       fireEvent.click(screen.getByTestId('generate-questionnaire-btn'));
       expect(defaultProps.onGenerate).toHaveBeenCalled();
-    });
-
-    it('calls onDismiss when X clicked', () => {
-      render(<QuestionnairePromptCard {...defaultProps} />);
-      fireEvent.click(screen.getByTestId('dismiss-btn'));
-      expect(defaultProps.onDismiss).toHaveBeenCalled();
     });
 
     it('renders with minimal payload', () => {
@@ -99,11 +92,6 @@ describe('QuestionnairePromptCard', () => {
       expect(screen.getByText('Generating Questionnaire...')).toBeInTheDocument();
     });
 
-    it('hides dismiss button during generation', () => {
-      render(<QuestionnairePromptCard {...defaultProps} uiState="generating" />);
-      expect(screen.queryByTestId('dismiss-btn')).not.toBeInTheDocument();
-    });
-
     it('applies opacity style during generation', () => {
       const { container } = render(<QuestionnairePromptCard {...defaultProps} uiState="generating" />);
       const card = container.querySelector('[data-testid="questionnaire-card-ready"]');
@@ -117,12 +105,12 @@ describe('QuestionnairePromptCard', () => {
         <QuestionnairePromptCard
           {...defaultProps}
           uiState="download"
-          exportData={{ formats: ['pdf', 'docx', 'xlsx'], assessmentId: 'assess-123' }}
+          exportData={{ formats: ['pdf', 'word', 'excel'], assessmentId: 'assess-123' }}
         />
       );
       expect(screen.getByTestId('download-pdf-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('download-docx-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('download-xlsx-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('download-word-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('download-excel-btn')).toBeInTheDocument();
     });
 
     it('displays correct text for download state', () => {
@@ -154,25 +142,14 @@ describe('QuestionnairePromptCard', () => {
         <QuestionnairePromptCard
           {...defaultProps}
           uiState="download"
-          exportData={{ formats: ['pdf', 'docx'], assessmentId: 'assess-123' }}
+          exportData={{ formats: ['pdf', 'word'], assessmentId: 'assess-123' }}
         />
       );
       fireEvent.click(screen.getByTestId('download-pdf-btn'));
-      fireEvent.click(screen.getByTestId('download-docx-btn'));
+      fireEvent.click(screen.getByTestId('download-word-btn'));
       expect(defaultProps.onDownload).toHaveBeenCalledWith('pdf');
-      expect(defaultProps.onDownload).toHaveBeenCalledWith('docx');
+      expect(defaultProps.onDownload).toHaveBeenCalledWith('word');
       expect(defaultProps.onDownload).toHaveBeenCalledTimes(2);
-    });
-
-    it('shows dismiss button in download state', () => {
-      render(
-        <QuestionnairePromptCard
-          {...defaultProps}
-          uiState="download"
-          exportData={{ formats: ['pdf'], assessmentId: 'assess-123' }}
-        />
-      );
-      expect(screen.getByTestId('dismiss-btn')).toBeInTheDocument();
     });
   });
 
@@ -196,38 +173,31 @@ describe('QuestionnairePromptCard', () => {
       fireEvent.click(screen.getByTestId('retry-btn'));
       expect(defaultProps.onRetry).toHaveBeenCalled();
     });
-
-    it('shows dismiss button in error state', () => {
-      render(<QuestionnairePromptCard {...defaultProps} uiState="error" />);
-      expect(screen.getByTestId('dismiss-btn')).toBeInTheDocument();
-    });
-
-    it('calls onDismiss from error state', () => {
-      render(<QuestionnairePromptCard {...defaultProps} uiState="error" />);
-      fireEvent.click(screen.getByTestId('dismiss-btn'));
-      expect(defaultProps.onDismiss).toHaveBeenCalled();
-    });
   });
 
-  describe('Assessment type styling', () => {
-    it('applies correct styling for quick assessment', () => {
-      const quickPayload = { ...mockPayload, assessmentType: 'quick' as const };
-      const { container } = render(<QuestionnairePromptCard {...defaultProps} payload={quickPayload} />);
-      const card = container.querySelector('[data-testid="questionnaire-card-ready"]');
-      expect(card).toHaveClass('border-green-200', 'bg-green-50');
-    });
-
-    it('applies correct styling for comprehensive assessment', () => {
+  describe('Bubble styling', () => {
+    it('applies assistant bubble styling', () => {
       const { container } = render(<QuestionnairePromptCard {...defaultProps} />);
       const card = container.querySelector('[data-testid="questionnaire-card-ready"]');
-      expect(card).toHaveClass('border-blue-200', 'bg-blue-50');
+      expect(card).toHaveClass('bg-slate-50', 'rounded-2xl', 'rounded-tl-sm');
     });
 
-    it('applies correct styling for category_focused assessment', () => {
+    it('applies same bubble styling for all assessment types', () => {
+      const quickPayload = { ...mockPayload, assessmentType: 'quick' as const };
+      const { container: quickContainer } = render(<QuestionnairePromptCard {...defaultProps} payload={quickPayload} />);
+      const quickCard = quickContainer.querySelector('[data-testid="questionnaire-card-ready"]');
+      expect(quickCard).toHaveClass('bg-slate-50');
+
       const categoryPayload = { ...mockPayload, assessmentType: 'category_focused' as const };
-      const { container } = render(<QuestionnairePromptCard {...defaultProps} payload={categoryPayload} />);
-      const card = container.querySelector('[data-testid="questionnaire-card-ready"]');
-      expect(card).toHaveClass('border-purple-200', 'bg-purple-50');
+      const { container: categoryContainer } = render(<QuestionnairePromptCard {...defaultProps} payload={categoryPayload} />);
+      const categoryCard = categoryContainer.querySelector('[data-testid="questionnaire-card-ready"]');
+      expect(categoryCard).toHaveClass('bg-slate-50');
+    });
+
+    it('keeps assessment type badge colors', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+      const badge = screen.getByText('Comprehensive Assessment');
+      expect(badge).toHaveClass('text-blue-600', 'bg-blue-50');
     });
   });
 

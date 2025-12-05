@@ -47,12 +47,11 @@ jest.mock('../Composer', () => ({
 }));
 
 jest.mock('../QuestionnairePromptCard', () => ({
-  QuestionnairePromptCard: React.forwardRef(({ payload, uiState, onGenerate, onDismiss, onDownload, onRetry }: any, ref) => (
+  QuestionnairePromptCard: React.forwardRef(({ payload, uiState, onGenerate, onDownload, onRetry }: any, ref) => (
     <div data-testid="questionnaire-prompt-card" ref={ref as any}>
       <span data-testid="card-state">State: {uiState}</span>
       <span data-testid="card-type">Type: {payload?.assessmentType}</span>
       <button onClick={onGenerate} data-testid="generate-btn">Generate</button>
-      <button onClick={onDismiss} data-testid="dismiss-btn">Dismiss</button>
       {onDownload && <button onClick={() => onDownload('pdf')} data-testid="download-btn">Download</button>}
       {onRetry && <button onClick={onRetry} data-testid="retry-btn">Retry</button>}
     </div>

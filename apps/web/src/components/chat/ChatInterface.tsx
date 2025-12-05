@@ -110,17 +110,6 @@ export function ChatInterface() {
     // - extraction_failed event -> 'error' state
   }, [pendingQuestionnaire, adapter, setGenerating, setQuestionnaireUIState]);
 
-  const handleDismiss = useCallback(() => {
-    if (!activeConversationId || !pendingQuestionnaire) return;
-
-    // Mark as dismissed in localStorage
-    persistence.dismiss(activeConversationId);
-
-    // Clear from store (transitions to 'hidden')
-    clearPendingQuestionnaire();
-    setQuestionnaireUIState('hidden');
-  }, [activeConversationId, pendingQuestionnaire, persistence, clearPendingQuestionnaire, setQuestionnaireUIState]);
-
   const handleDownload = useCallback(async (format: string) => {
     if (!exportData || !token) return;
 
@@ -226,7 +215,6 @@ export function ChatInterface() {
                     error={questionnaireError}
                     exportData={exportData}
                     onGenerate={handleGenerateQuestionnaire}
-                    onDismiss={handleDismiss}
                     onDownload={handleDownload}
                     onRetry={handleGenerateQuestionnaire}
                     className="mx-4 mb-4"
