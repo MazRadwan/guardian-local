@@ -1,16 +1,14 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { QuestionnairePromptCard } from './QuestionnairePromptCard';
-import { StickyQuestionnaireIndicator } from './StickyQuestionnaireIndicator';
 import { AlertCircle } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
-import { useQuestionnaireCardVisibility } from '@/hooks/useQuestionnaireCardVisibility';
 
 export function ChatInterface() {
   const {
@@ -40,9 +38,6 @@ export function ChatInterface() {
   // Persistence hook - MUST be at top level
   const persistence = useQuestionnairePersistence(user?.id);
 
-  // Refs for questionnaire card visibility tracking
-  const questionnaireCardRef = useRef<HTMLDivElement>(null);
-
   // Questionnaire generation state from store
   const pendingQuestionnaire = useChatStore((state) => state.pendingQuestionnaire);
   const questionnaireUIState = useChatStore((state) => state.questionnaireUIState);
@@ -56,9 +51,6 @@ export function ChatInterface() {
   const exportData = activeConversationId
     ? exportReadyByConversation[activeConversationId]
     : null;
-
-  // Track card visibility for sticky indicator
-  const isCardVisible = useQuestionnaireCardVisibility(questionnaireCardRef, messageListRef);
 
   // Track previous conversation ID to detect actual changes
   const prevConversationIdRef = useRef<string | null>(null);
@@ -128,13 +120,6 @@ export function ChatInterface() {
     clearPendingQuestionnaire();
     setQuestionnaireUIState('hidden');
   }, [activeConversationId, pendingQuestionnaire, persistence, clearPendingQuestionnaire, setQuestionnaireUIState]);
-
-  const handleScrollToCard = useCallback(() => {
-    questionnaireCardRef.current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-    });
-  }, []);
 
   const handleDownload = useCallback(async (format: string) => {
     if (!exportData || !token) return;
@@ -236,7 +221,6 @@ export function ChatInterface() {
                 pendingQuestionnaire.conversationId === activeConversationId &&
                 questionnaireUIState !== 'hidden' ? (
                   <QuestionnairePromptCard
-                    ref={questionnaireCardRef}
                     payload={pendingQuestionnaire}
                     uiState={questionnaireUIState}
                     error={questionnaireError}
@@ -252,16 +236,6 @@ export function ChatInterface() {
             />
           </div>
           <div className="flex-shrink-0 bg-white z-10">
-            {/* Sticky Questionnaire Indicator - appears above Composer when card scrolled out */}
-            {pendingQuestionnaire &&
-              pendingQuestionnaire.conversationId === activeConversationId &&
-              questionnaireUIState !== 'hidden' && (
-                <StickyQuestionnaireIndicator
-                  uiState={questionnaireUIState}
-                  isVisible={isCardVisible}
-                  onScrollToCard={handleScrollToCard}
-                />
-              )}
             <div className="max-w-3xl mx-auto w-full">
               <Composer
                 ref={composerRef}

@@ -59,23 +59,6 @@ jest.mock('../QuestionnairePromptCard', () => ({
   )),
 }));
 
-jest.mock('../StickyQuestionnaireIndicator', () => ({
-  StickyQuestionnaireIndicator: ({ uiState, isVisible, onScrollToCard }: any) => {
-    // Only render when isVisible is false
-    if (isVisible) return null;
-
-    return (
-      <div data-testid="sticky-indicator" onClick={onScrollToCard}>
-        Sticky: {uiState}
-      </div>
-    );
-  },
-}));
-
-jest.mock('@/hooks/useQuestionnaireCardVisibility', () => ({
-  useQuestionnaireCardVisibility: jest.fn().mockReturnValue(true),
-}));
-
 // Mock hooks
 jest.mock('@/stores/chatStore');
 jest.mock('@/hooks/useWebSocket');
@@ -1425,17 +1408,4 @@ describe('ChatInterface', () => {
       expect(screen.queryByTestId('questionnaire-prompt-card')).not.toBeInTheDocument();
     });
   });
-
-  // Sticky Indicator
-  // NOTE: Sticky Indicator tests temporarily disabled due to Jest/Zustand mocking complexity
-  // The useQuestionnaireCardVisibility mock with require() pattern doesn't properly
-  // override the module-level mock within test cases.
-  //
-  // Manual testing verified:
-  // - Sticky indicator shows when card scrolled out of view
-  // - Sticky indicator hides when card is in view
-  // - Clicking indicator scrolls to card
-  //
-  // TODO: Refactor these tests to use proper Jest mock reset patterns
-  // or convert to E2E tests for reliable coverage.
 });
