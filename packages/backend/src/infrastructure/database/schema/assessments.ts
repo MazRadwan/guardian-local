@@ -13,7 +13,7 @@ export const assessments = pgTable(
     // Assessment details
     assessmentType: text('assessment_type')
       .notNull()
-      .$type<'quick' | 'comprehensive' | 'renewal'>(),
+      .$type<'quick' | 'comprehensive' | 'category_focused'>(),
     solutionName: text('solution_name'),
     solutionType: text('solution_type'),
 

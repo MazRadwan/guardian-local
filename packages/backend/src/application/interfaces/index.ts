@@ -7,12 +7,12 @@ export * from './IClaudeClient.js';
 export * from './IConversationRepository.js';
 export * from './IExportService.js';
 export * from './IMessageRepository.js';
-export * from './IQuestionExtractionService.js';
 export * from './IQuestionRepository.js';
 export * from './ITokenProvider.js';
 export * from './IToolUseHandler.js';
 export * from './IUserRepository.js';
 export * from './IVendorRepository.js';
+export * from './IQuestionnaireGenerationService.js';
 
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)

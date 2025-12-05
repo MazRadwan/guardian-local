@@ -61,8 +61,8 @@ export class Question {
       throw new Error('Section name is required');
     }
 
-    if (props.sectionNumber < 1 || props.sectionNumber > 11) {
-      throw new Error('Section number must be between 1 and 11');
+    if (props.sectionNumber < 1 || props.sectionNumber > 10) {
+      throw new Error('Section number must be between 1 and 10');
     }
 
     if (props.questionNumber < 1) {

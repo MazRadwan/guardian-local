@@ -62,18 +62,18 @@ describe('Question Entity', () => {
           questionText: 'Does your solution comply with PIPEDA?',
           questionType: 'boolean',
         })
-      ).toThrow('Section number must be between 1 and 11');
+      ).toThrow('Section number must be between 1 and 10');
 
       expect(() =>
         Question.create({
           assessmentId: 'test-id',
           sectionName: 'Privacy',
-          sectionNumber: 12,
+          sectionNumber: 11,
           questionNumber: 1,
           questionText: 'Does your solution comply with PIPEDA?',
           questionType: 'boolean',
         })
-      ).toThrow('Section number must be between 1 and 11');
+      ).toThrow('Section number must be between 1 and 10');
     });
 
     it('should throw error if question number is invalid', () => {

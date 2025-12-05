@@ -18,6 +18,9 @@ describe('chatStore', () => {
       Object.keys(result.current.exportReadyByConversation).forEach((convId) => {
         result.current.clearExportReady(convId);
       });
+      // Reset questionnaire UI state (Story 4.3.1)
+      result.current.setQuestionnaireUIState('hidden');
+      result.current.setQuestionnaireError(null);
     });
   });
 
@@ -931,6 +934,122 @@ describe('chatStore', () => {
       });
 
       expect(result.current.exportReadyByConversation).toEqual({});
+    });
+  });
+
+  describe('Questionnaire UI State Management (Story 4.3.1)', () => {
+    it('initializes with hidden state and no error', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      expect(result.current.questionnaireUIState).toBe('hidden');
+      expect(result.current.questionnaireError).toBeNull();
+    });
+
+    it('setQuestionnaireUIState updates state correctly', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireUIState('ready');
+      });
+
+      expect(result.current.questionnaireUIState).toBe('ready');
+
+      act(() => {
+        result.current.setQuestionnaireUIState('generating');
+      });
+
+      expect(result.current.questionnaireUIState).toBe('generating');
+
+      act(() => {
+        result.current.setQuestionnaireUIState('download');
+      });
+
+      expect(result.current.questionnaireUIState).toBe('download');
+    });
+
+    it('setQuestionnaireError stores error message', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireError('Generation failed');
+      });
+
+      expect(result.current.questionnaireError).toBe('Generation failed');
+
+      act(() => {
+        result.current.setQuestionnaireError(null);
+      });
+
+      expect(result.current.questionnaireError).toBeNull();
+    });
+
+    it('state transitions: hidden → ready → generating → download', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Initial state
+      expect(result.current.questionnaireUIState).toBe('hidden');
+
+      // Questionnaire ready
+      act(() => {
+        result.current.setQuestionnaireUIState('ready');
+      });
+      expect(result.current.questionnaireUIState).toBe('ready');
+
+      // User clicks generate
+      act(() => {
+        result.current.setQuestionnaireUIState('generating');
+      });
+      expect(result.current.questionnaireUIState).toBe('generating');
+
+      // Generation complete
+      act(() => {
+        result.current.setQuestionnaireUIState('download');
+      });
+      expect(result.current.questionnaireUIState).toBe('download');
+    });
+
+    it('state transitions: generating → error → ready (retry)', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Start generation
+      act(() => {
+        result.current.setQuestionnaireUIState('generating');
+      });
+      expect(result.current.questionnaireUIState).toBe('generating');
+
+      // Generation fails
+      act(() => {
+        result.current.setQuestionnaireUIState('error');
+        result.current.setQuestionnaireError('API timeout');
+      });
+      expect(result.current.questionnaireUIState).toBe('error');
+      expect(result.current.questionnaireError).toBe('API timeout');
+
+      // User retries
+      act(() => {
+        result.current.setQuestionnaireUIState('ready');
+        result.current.setQuestionnaireError(null);
+      });
+      expect(result.current.questionnaireUIState).toBe('ready');
+      expect(result.current.questionnaireError).toBeNull();
+    });
+
+    it('error state clears when returning to ready', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireUIState('error');
+        result.current.setQuestionnaireError('Something went wrong');
+      });
+
+      expect(result.current.questionnaireError).toBe('Something went wrong');
+
+      act(() => {
+        result.current.setQuestionnaireUIState('ready');
+        result.current.setQuestionnaireError(null);
+      });
+
+      expect(result.current.questionnaireError).toBeNull();
     });
   });
 });

@@ -218,7 +218,7 @@ describe('Assessment API E2E Tests', () => {
       await request(BASE_URL)
         .post('/api/assessments')
         .set('Authorization', `Bearer ${authToken}`)
-        .send({ vendorName: 'Vendor C', assessmentType: 'renewal' })
+        .send({ vendorName: 'Vendor C', assessmentType: 'category_focused' })
 
       // List assessments
       const response = await request(BASE_URL)

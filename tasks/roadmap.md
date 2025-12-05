@@ -121,7 +121,7 @@ This roadmap defines **what we're building and when**. Features are organized by
 - ⏸️ Option B: Web form (all questions visible, batch entry)
 - ⏸️ Option C: Document upload + parsing (OCR handwritten notes or typed Word doc)
 - ⏸️ Option D: Hybrid (user chooses method)
-
+ 
 **AI Tool Use & Research:**
 - ⏸️ Web search integration (Brave Search API or similar)
 - ⏸️ Real-time vendor documentation lookup

@@ -44,6 +44,22 @@ export interface ChatState {
    */
   isGeneratingQuestionnaire: boolean;
 
+  /**
+   * UI state for questionnaire prompt card (Story 4.3.1)
+   * - 'hidden': No pending questionnaire
+   * - 'ready': Prompt card visible, ready to generate
+   * - 'generating': Generation in progress (loading state)
+   * - 'download': Download buttons available
+   * - 'error': Generation failed (retry available)
+   */
+  questionnaireUIState: 'hidden' | 'ready' | 'generating' | 'download' | 'error';
+
+  /**
+   * Error message when questionnaireUIState is 'error'
+   * Null for all other states
+   */
+  questionnaireError: string | null;
+
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
@@ -92,6 +108,16 @@ export interface ChatState {
    * Set generation state (true when generating, false on completion/error)
    */
   setGenerating: (value: boolean) => void;
+
+  /**
+   * Set questionnaire UI state (Story 4.3.1)
+   */
+  setQuestionnaireUIState: (state: 'hidden' | 'ready' | 'generating' | 'download' | 'error') => void;
+
+  /**
+   * Set questionnaire error message (Story 4.3.1)
+   */
+  setQuestionnaireError: (error: string | null) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -119,6 +145,10 @@ export const useChatStore = create<ChatState>()(
       // Questionnaire generation - defaults
       pendingQuestionnaire: null,
       isGeneratingQuestionnaire: false,
+
+      // Questionnaire UI state - defaults
+      questionnaireUIState: 'hidden',
+      questionnaireError: null,
 
       addMessage: (message) =>
         set((state) => ({
@@ -348,6 +378,17 @@ export const useChatStore = create<ChatState>()(
       setGenerating: (value) => {
         console.log('[chatStore] Setting isGeneratingQuestionnaire:', value);
         set({ isGeneratingQuestionnaire: value });
+      },
+
+      // Questionnaire UI state actions (Story 4.3.1)
+      setQuestionnaireUIState: (state) => {
+        console.log('[chatStore] Setting questionnaireUIState:', state);
+        set({ questionnaireUIState: state });
+      },
+
+      setQuestionnaireError: (error) => {
+        console.log('[chatStore] Setting questionnaireError:', error);
+        set({ questionnaireError: error });
       },
     }),
     {

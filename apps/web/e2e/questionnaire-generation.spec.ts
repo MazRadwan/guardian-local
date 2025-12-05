@@ -4,10 +4,10 @@ import { test, expect } from '@playwright/test';
  * Epic 12 E2E Tests - Tool-Based Questionnaire Generation
  *
  * These tests verify the complete flow from conversation to questionnaire generation
- * using the tool-based trigger approach.
+ * using the tool-based trigger approach (now the only approach).
  *
  * Prerequisites:
- * - Backend running with USE_TOOL_BASED_TRIGGER=true
+ * - Backend running
  * - Frontend running
  * - Test user account available
  *
@@ -36,7 +36,7 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     await page.press('[data-testid="chat-input"]', 'Enter');
 
     // Wait for and verify button appears (tool was called)
-    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
       timeout: 15000
     });
     await expect(page.locator('text=Comprehensive Assessment')).toBeVisible();
@@ -52,7 +52,7 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     await page.press('[data-testid="chat-input"]', 'Enter');
 
     // Wait for button to appear
-    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
       timeout: 15000
     });
 
@@ -62,16 +62,17 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     // Verify loading state
     await expect(page.locator('text=Generating')).toBeVisible();
 
-    // Wait for completion (questionnaire streams in)
-    // Look for the questionnaire start marker
-    await expect(page.locator('text=QUESTIONNAIRE_START')).toBeVisible({
+    // Wait for completion (questionnaire content streams in as markdown)
+    // Look for questionnaire heading or content in the chat
+    await expect(page.locator('text=Assessment Questionnaire').or(page.locator('text=Risk Assessment'))).toBeVisible({
       timeout: 60000
     });
 
-    // Verify download buttons appear
-    await expect(page.locator('[data-testid="download-pdf"]')).toBeVisible({
+    // Verify download buttons appear (card transitions to download state)
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
       timeout: 10000
     });
+    await expect(page.locator('[data-testid="download-pdf-btn"]')).toBeVisible();
   });
 
   test('Scenario 4: no tool call for questions about questionnaires', async ({ page }) => {
@@ -89,7 +90,7 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     });
 
     // Verify NO generate button appeared
-    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).not.toBeVisible();
   });
 
   test('Scenario 5: conversation switch clears button', async ({ page }) => {
@@ -100,7 +101,7 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     await page.press('[data-testid="chat-input"]', 'Enter');
 
     // Wait for button to appear
-    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
       timeout: 15000
     });
 
@@ -108,13 +109,13 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     await page.click('[data-testid="new-conversation-btn"]');
 
     // Verify button disappears
-    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).not.toBeVisible();
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).not.toBeVisible();
 
     // Switch back to original conversation (if conversation list exists)
     // await page.click('[data-testid="conversation-list-item-0"]');
 
     // Verify button is still gone
-    // await expect(page.locator('[data-testid="questionnaire-ready-card"]')).not.toBeVisible();
+    // await expect(page.locator('[data-testid="questionnaire-card-ready"]')).not.toBeVisible();
   });
 
   test('Edge case: rapid button clicking', async ({ page }) => {
@@ -124,7 +125,7 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     await page.fill('[data-testid="chat-input"]', 'Generate questionnaire');
     await page.press('[data-testid="chat-input"]', 'Enter');
 
-    await expect(page.locator('[data-testid="questionnaire-ready-card"]')).toBeVisible({
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
       timeout: 15000
     });
 
@@ -139,14 +140,14 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
     await expect(button).toBeDisabled();
     await expect(page.locator('text=Generating')).toBeVisible();
 
-    // Wait for generation to complete
-    await expect(page.locator('text=QUESTIONNAIRE_START')).toBeVisible({
+    // Wait for generation to complete (questionnaire content appears as markdown)
+    await expect(page.locator('text=Assessment Questionnaire').or(page.locator('text=Risk Assessment'))).toBeVisible({
       timeout: 60000
     });
 
-    // Verify only one questionnaire marker appears (not multiple)
-    const markers = await page.locator('text=QUESTIONNAIRE_START').count();
-    expect(markers).toBe(1);
+    // Verify only one download card appears (not multiple)
+    const downloadCards = await page.locator('[data-testid="questionnaire-card-download"]').count();
+    expect(downloadCards).toBe(1);
   });
 });
 
@@ -166,7 +167,7 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
  * }
  *
  * Environment setup for CI:
- * - Set USE_TOOL_BASED_TRIGGER=true in backend .env
  * - Ensure backend and frontend are running before tests
  * - Use test database to avoid polluting production data
+ * - Optional: Set GUARDIAN_FAST_GENERATION=true for faster fixture-based tests
  */

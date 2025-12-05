@@ -2,11 +2,10 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import { ConversationService } from '../../application/services/ConversationService.js';
 import { AssessmentService } from '../../application/services/AssessmentService.js';
 import { VendorService } from '../../application/services/VendorService.js';
-import { QuestionExtractionService } from '../../application/services/QuestionExtractionService.js';
+import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
-import { detectGenerateTrigger } from './TriggerDetection.js';
 import jwt from 'jsonwebtoken';
 import { QuestionnaireReadyService } from '../../application/services/QuestionnaireReadyService.js';
 import { assessmentModeTools } from '../ai/tools/index.js';
@@ -40,6 +39,15 @@ interface GetHistoryPayload {
   offset?: number;
 }
 
+interface GenerateQuestionnairePayload {
+  conversationId: string;
+  assessmentType?: string;
+  vendorName?: string;
+  solutionName?: string;
+  contextSummary?: string;
+  selectedCategories?: string[];
+}
+
 export class ChatServer {
   private io: SocketIOServer;
   private conversationService: ConversationService;
@@ -48,6 +56,7 @@ export class ChatServer {
   private jwtSecret: string;
   private promptCacheManager: PromptCacheManager;
   private pendingConversationCreations: Map<string, { conversationId: string; timestamp: number }>;
+  private abortedStreams: Set<string> = new Set();
 
   constructor(
     io: SocketIOServer,
@@ -58,8 +67,8 @@ export class ChatServer {
     promptCacheManager: PromptCacheManager,
     private readonly assessmentService: AssessmentService,
     private readonly vendorService: VendorService,
-    private readonly questionExtractionService: QuestionExtractionService,
-    private readonly questionnaireReadyService: QuestionnaireReadyService
+    private readonly questionnaireReadyService: QuestionnaireReadyService,
+    private readonly questionnaireGenerationService: QuestionnaireGenerationService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -112,9 +121,9 @@ export class ChatServer {
       }));
 
     // Get system prompt (and cache metadata) based on conversation mode
-    // Include tool instructions if feature flag is enabled
+    // Always include tool instructions (tool-based trigger is now the only path)
     const promptCache = this.promptCacheManager.ensureCached(conversation.mode, {
-      includeToolInstructions: this.isToolBasedTriggerEnabled(),
+      includeToolInstructions: true,
     });
 
     return {
@@ -146,13 +155,6 @@ export class ChatServer {
       console.warn(`[ChatServer] SECURITY: User ${userId} attempted to access conversation ${conversationId} owned by ${conversation.userId}`);
       throw new Error('Unauthorized: You do not have access to this conversation');
     }
-  }
-
-  /**
-   * Check if tool-based trigger is enabled
-   */
-  private isToolBasedTriggerEnabled(): boolean {
-    return process.env.USE_TOOL_BASED_TRIGGER === 'true';
   }
 
   private setupNamespace(): void {
@@ -293,12 +295,6 @@ export class ChatServer {
             `[ChatServer] Message received from ${socket.userId} for conversation ${conversationId}`
           );
 
-          // Detect if this is a questionnaire generation request (only if tool-based trigger disabled)
-          let isGenerateRequest = false;
-          if (!this.isToolBasedTriggerEnabled()) {
-            isGenerateRequest = detectGenerateTrigger(messageText);
-          }
-
           // Save user message
           const message = await this.conversationService.sendMessage({
             conversationId,
@@ -308,40 +304,6 @@ export class ChatServer {
               components: payload.components,
             },
           });
-
-          // Create assessment if trigger detected and in assessment mode without existing link
-          let assessmentId: string | null = null;
-
-          if (isGenerateRequest) {
-            const conversation = await this.conversationService.getConversation(conversationId);
-
-            if (conversation && conversation.mode === 'assessment' && !conversation.assessmentId) {
-              try {
-                // Create default vendor using VendorService
-                const vendor = await this.vendorService.findOrCreateDefault(socket.userId!);
-
-                // Create assessment in draft status
-                const assessmentResponse = await this.assessmentService.createAssessment({
-                  vendorName: vendor.name,
-                  assessmentType: 'comprehensive',
-                  solutionName: 'Assessment from Chat',
-                  createdBy: socket.userId!,
-                });
-
-                assessmentId = assessmentResponse.assessmentId;
-
-                // Link assessment to conversation
-                await this.conversationService.linkAssessment(conversationId, assessmentId);
-
-                console.log(`[ChatServer] Created assessment ${assessmentId} for conversation ${conversationId}`);
-              } catch (error) {
-                console.error('[ChatServer] Failed to create assessment:', error);
-                // Continue without assessment - extraction will be skipped
-              }
-            } else if (conversation?.assessmentId) {
-              assessmentId = conversation.assessmentId;
-            }
-          }
 
           // Emit confirmation only (frontend already added user message to UI)
           socket.emit('message_sent', {
@@ -378,10 +340,8 @@ export class ChatServer {
               conversationId,
             });
 
-            // Determine if we should pass tools
-            const shouldUseTool =
-              this.isToolBasedTriggerEnabled() &&
-              mode === 'assessment';
+            // Determine if we should pass tools (always in assessment mode)
+            const shouldUseTool = mode === 'assessment';
 
             // Build Claude options with optional tools
             const claudeOptions = {
@@ -421,42 +381,40 @@ export class ChatServer {
             }
 
             // Save message to database (even if aborted, save partial response)
+            let savedMessageId: string | null = null;
+
             if (fullResponse.length > 0) {
               const completeMessage = await this.conversationService.sendMessage({
                 conversationId,
                 role: 'assistant',
                 content: { text: fullResponse },
               });
+              savedMessageId = completeMessage.id;
+            }
 
-              // Emit stream complete with final message (only if not aborted)
-              if (!socket.data.abortRequested) {
-                socket.emit('assistant_done', {
-                  messageId: completeMessage.id,
+            // Handle completion (only if not aborted)
+            if (!socket.data.abortRequested) {
+              // Emit assistant_done even for tool-only responses (no text)
+              // This stops the "thinking" spinner in the UI
+              socket.emit('assistant_done', {
+                messageId: savedMessageId,
+                conversationId,
+                fullText: fullResponse,
+                assessmentId: null,
+              });
+
+              // Handle tool use if present (works even when fullResponse is empty)
+              if (toolUseBlocks.length > 0) {
+                console.log(`[ChatServer] Processing ${toolUseBlocks.length} tool use block(s)`);
+                await this.handleToolUse(socket, toolUseBlocks, {
                   conversationId,
-                  fullText: fullResponse,
-                  assessmentId: assessmentId || null,
+                  userId: socket.userId!,
+                  assessmentId: null,
+                  mode: mode,
                 });
-
-                // Handle tool use if present (after message is saved)
-                if (toolUseBlocks.length > 0) {
-                  await this.handleToolUse(socket, toolUseBlocks, {
-                    conversationId,
-                    userId: socket.userId!,
-                    assessmentId: assessmentId,
-                    mode: mode,
-                  });
-                }
-
-                // Fire-and-forget extraction with fallback (non-blocking)
-                // Do NOT await this - extraction runs in background after socket event completes
-                // NOTE: Frontend reads assessmentId from export_ready, not assistant_done
-                if (socket.userId) {
-                  this.performExtractionWithFallback(socket, conversationId, fullResponse, socket.userId)
-                    .catch(err => console.error('[ChatServer] Extraction error:', err));
-                }
-              } else {
-                console.log(`[ChatServer] Stream aborted - partial response saved (${fullResponse.length} chars)`);
               }
+            } else {
+              console.log(`[ChatServer] Stream aborted - partial response saved (${fullResponse.length} chars)`);
             }
           } catch (claudeError) {
             console.error('[ChatServer] Claude API error:', claudeError);
@@ -785,8 +743,8 @@ Please select your assessment approach (reply with 1, 2, or 3):
 1️⃣ **Quick Assessment** (30-40 questions)  
    ↳ Fast red-flag screening, ~15 minutes
 
-2️⃣ **Comprehensive Assessment** (85-95 questions)  
-   ↳ Full coverage across all 11 risk dimensions
+2️⃣ **Comprehensive Assessment** (85-95 questions)
+   ↳ Full coverage across all 10 risk dimensions
 
 3️⃣ **Category-Focused Assessment**  
    ↳ Tailored to your AI solution type
@@ -821,8 +779,13 @@ Reply with: **1**, **2**, or **3**
       socket.on('abort_stream', () => {
         console.log(`[ChatServer] Stream abort requested by user ${socket.userId}`);
 
-        // Mark socket as aborted - the streaming loop will check this flag
+        // Mark for Claude streaming (original path)
         socket.data.abortRequested = true;
+
+        // Mark for simulated streaming (Epic 12.5 path)
+        if (socket.conversationId) {
+          this.abortedStreams.add(socket.conversationId);
+        }
 
         // Emit acknowledgment - frontend will call finishStreaming()
         socket.emit('stream_aborted', { conversationId: socket.conversationId });
@@ -831,138 +794,17 @@ Reply with: **1**, **2**, or **3**
       /**
        * Handle user clicking "Generate Questionnaire" button
        *
-       * Uses focused instruction approach (not full history replay) to:
-       * - Save tokens by not replaying entire conversation
-       * - Avoid re-triggering tools
-       * - Use context summary from questionnaire_ready payload
+       * Epic 12.5: Delegates to handleGenerateQuestionnaire public method
+       * which uses QuestionnaireGenerationService for hybrid JSON/markdown generation.
        */
-      socket.on('generate_questionnaire', async (payload: {
-        conversationId: string;
-        assessmentType?: string;
-        vendorName?: string;
-        solutionName?: string;
-        contextSummary?: string;
-      }) => {
-        const {
-          conversationId,
-          assessmentType: rawAssessmentType = 'comprehensive',
-          vendorName,
-          solutionName,
-          contextSummary,
-        } = payload;
-
-        // Validate assessmentType from untrusted client input
-        const validClientTypes = ['quick', 'comprehensive', 'category_focused'] as const;
-        type ValidClientType = typeof validClientTypes[number];
-        const assessmentType: ValidClientType = validClientTypes.includes(rawAssessmentType as ValidClientType)
-          ? (rawAssessmentType as ValidClientType)
-          : 'comprehensive'; // Default for invalid input
-
-        if (rawAssessmentType !== assessmentType) {
-          console.warn(`[ChatServer] Invalid assessmentType '${rawAssessmentType}', defaulting to 'comprehensive'`);
+      socket.on('generate_questionnaire', async (payload: GenerateQuestionnairePayload) => {
+        const userId = socket.userId;
+        if (!userId) {
+          console.error('[ChatServer] generate_questionnaire called without authenticated user');
+          socket.emit('error', { event: 'generate_questionnaire', message: 'Not authenticated' });
+          return;
         }
-
-        try {
-          // Validate ownership
-          await this.validateConversationOwnership(conversationId, socket.userId!);
-
-          const conversation = await this.conversationService.getConversation(conversationId);
-          if (!conversation) {
-            socket.emit('error', { message: 'Conversation not found' });
-            return;
-          }
-
-          // Create assessment if not exists
-          let assessmentId = conversation.assessmentId;
-          if (!assessmentId) {
-            const vendor = await this.vendorService.findOrCreateDefault(socket.userId!);
-            // Map client types to domain types (category_focused → comprehensive)
-            const mappedAssessmentType: 'quick' | 'comprehensive' | 'renewal' =
-              assessmentType === 'category_focused' ? 'comprehensive' : assessmentType;
-            const assessment = await this.assessmentService.createAssessment({
-              vendorName: vendorName || vendor.name,
-              assessmentType: mappedAssessmentType,
-              solutionName: solutionName || 'Assessment from Chat',
-              createdBy: socket.userId!,
-            });
-            assessmentId = assessment.assessmentId;
-            await this.conversationService.linkAssessment(conversationId, assessmentId);
-          }
-
-          // Build focused generation prompt (NO full history replay)
-          // Uses context from questionnaire_ready payload to save tokens
-          const generatePrompt = `Generate a ${assessmentType} vendor assessment questionnaire.
-
-Context: ${contextSummary || 'General AI vendor assessment'}
-Vendor: ${vendorName || 'Not specified'}
-Solution: ${solutionName || 'Not specified'}
-
-Requirements:
-1. Include all relevant risk dimensions for a ${assessmentType} assessment
-2. Wrap the questionnaire in markers:
-   <!-- QUESTIONNAIRE_START -->
-   [questionnaire content]
-   <!-- QUESTIONNAIRE_END -->
-3. Use proper markdown formatting with sections and numbered questions
-4. Include guidance text for each section
-
-Generate the complete questionnaire now.`;
-
-          // Single user message (no history needed - saves tokens)
-          const messages = [{ role: 'user' as const, content: generatePrompt }];
-
-          // Save the generate instruction as user message
-          await this.conversationService.sendMessage({
-            conversationId,
-            role: 'user',
-            content: { text: '[System: User clicked Generate Questionnaire button]' },
-          });
-
-          // Get the appropriate prompt (assessment mode)
-          const { systemPrompt, promptCache } = await this.buildConversationContext(conversationId);
-
-          // Stream the generation response (WITHOUT tools - we want the questionnaire output)
-          let fullResponse = '';
-          for await (const chunk of this.claudeClient.streamMessage(messages, {
-            systemPrompt,
-            usePromptCache: promptCache?.usePromptCache || false,
-            ...(promptCache?.cachedPromptId && { cachedPromptId: promptCache.cachedPromptId }),
-            // No tools here - we want Claude to output the questionnaire
-          })) {
-            if (chunk.content) {
-              fullResponse += chunk.content;
-              socket.emit('assistant_token', { conversationId, token: chunk.content });
-            }
-          }
-
-          // Save assistant response
-          await this.conversationService.sendMessage({
-            conversationId,
-            role: 'assistant',
-            content: { text: fullResponse },
-          });
-
-          // Emit done
-          socket.emit('assistant_done', {
-            conversationId,
-            content: fullResponse,
-            assessmentId,
-          });
-
-          // Trigger extraction (existing flow)
-          await this.performExtractionWithFallback(
-            socket,
-            conversationId,
-            fullResponse,
-            socket.userId!
-          );
-
-        } catch (error) {
-          console.error('[ChatServer] Error in generate_questionnaire:', error);
-          socket.emit('error', {
-            message: error instanceof Error ? error.message : 'Failed to generate questionnaire',
-          });
-        }
+        await this.handleGenerateQuestionnaire(socket, payload, userId);
       });
 
       // Handle disconnect
@@ -972,104 +814,6 @@ Generate the complete questionnaire now.`;
     });
 
     console.log('[ChatServer] WebSocket /chat namespace configured');
-  }
-
-  /**
-   * Attempt questionnaire extraction in background (fire-and-forget)
-   * Emits export_ready event on success, logs errors on failure
-   * Does NOT block the socket event handler
-   */
-  private attemptQuestionnaireExtraction(
-    socket: Socket,
-    conversationId: string,
-    assessmentId: string,
-    fullResponse: string
-  ): void {
-    // Intentionally not awaited - runs in background
-    this.questionExtractionService
-      .handleAssistantCompletion(conversationId, assessmentId, fullResponse)
-      .then((extractionResult) => {
-        if (extractionResult?.success) {
-          console.log(`[ChatServer] Extracted ${extractionResult.questionCount} questions for assessment ${assessmentId}`);
-
-          // Validate payload before emitting
-          const formats = ['pdf', 'word', 'excel'] as const;
-          const questionCount = extractionResult.questionCount;
-
-          if (!assessmentId || !formats || questionCount === undefined) {
-            console.error('[ChatServer] Invalid export_ready payload:', { assessmentId, formats, questionCount });
-            return;
-          }
-
-          console.log('[ChatServer] Emitting export_ready:', {
-            conversationId,
-            assessmentId,
-            formats,
-            questionCount
-          });
-
-          // Emit export_ready to THIS socket only (not broadcast)
-          socket.emit('export_ready', {
-            conversationId,
-            assessmentId,
-            formats,
-            questionCount,
-          });
-        } else if (extractionResult) {
-          console.warn(`[ChatServer] Extraction failed: ${extractionResult.error}`);
-
-          // Emit extraction_failed for UI to show error
-          socket.emit('extraction_failed', {
-            conversationId,
-            assessmentId,
-            error: extractionResult.error,
-          });
-        }
-        // extractionResult === null means no markers found, which is normal
-      })
-      .catch((error) => {
-        console.error('[ChatServer] Extraction service error:', error);
-        // Don't fail the socket connection for extraction errors
-      });
-  }
-
-  /**
-   * Create fallback assessment when markers detected but no assessment linked.
-   * Includes race condition guard via re-fetch check.
-   */
-  private async createFallbackAssessment(
-    conversationId: string,
-    userId: string
-  ): Promise<string | null> {
-    try {
-      // Create "Unknown Vendor" placeholder (can be updated later by user)
-      const vendor = await this.vendorService.findOrCreateVendor('Unknown Vendor');
-
-      // Create assessment linked to conversation
-      const assessmentResponse = await this.assessmentService.createAssessment({
-        vendorName: vendor.name,
-        assessmentType: 'comprehensive',
-        solutionName: 'Assessment from Chat',
-        createdBy: userId,
-      });
-
-      // Link assessment to conversation
-      await this.conversationService.linkAssessment(conversationId, assessmentResponse.assessmentId);
-
-      // RACE CONDITION GUARD: Re-fetch to verify we won the race
-      const updatedConversation = await this.conversationService.getConversation(conversationId);
-      if (updatedConversation?.assessmentId !== assessmentResponse.assessmentId) {
-        // Another request won the race - use their assessment instead
-        console.log('[ChatServer] Race condition detected - using existing assessment');
-        return updatedConversation?.assessmentId || null;
-      }
-
-      console.log(`[ChatServer] Fallback assessment created: ${assessmentResponse.assessmentId}`);
-      return assessmentResponse.assessmentId;
-    } catch (error) {
-      console.error('[ChatServer] Failed to create fallback assessment:', error);
-      return null;
-    }
   }
 
   /**
@@ -1123,57 +867,164 @@ Generate the complete questionnaire now.`;
   }
 
   /**
-   * Process completed assistant response for questionnaire extraction.
-   * Called after streaming completes.
+   * Handle user clicking "Generate Questionnaire" button
+   *
+   * Epic 12.5: Hybrid flow - delegates to QuestionnaireGenerationService
+   * which makes a single Claude call and returns JSON + pre-rendered markdown.
+   *
+   * Extracted as public method for testability.
    */
-  private async performExtractionWithFallback(
+  public async handleGenerateQuestionnaire(
     socket: AuthenticatedSocket,
-    conversationId: string,
-    fullResponse: string,
+    payload: GenerateQuestionnairePayload,
     userId: string
   ): Promise<void> {
-    // STEP 1: Check for markers (DRY - extract content once)
-    const extractedContent = this.questionExtractionService.extractMarkedContent(fullResponse);
+    const {
+      conversationId,
+      assessmentType: rawAssessmentType = 'comprehensive',
+      vendorName,
+      solutionName,
+      contextSummary,
+      selectedCategories,
+    } = payload;
 
-    if (!extractedContent) {
-      // No markers found - nothing to extract
-      return;
+    // Validate assessment type
+    type ValidType = 'quick' | 'comprehensive' | 'category_focused';
+    const validTypes: ValidType[] = ['quick', 'comprehensive', 'category_focused'];
+    const assessmentType: ValidType = validTypes.includes(rawAssessmentType as ValidType)
+      ? (rawAssessmentType as ValidType)
+      : 'comprehensive';
+
+    console.log(`[ChatServer] Received generate_questionnaire from user ${userId} for conversation ${conversationId}`);
+
+    try {
+      // Validate ownership
+      await this.validateConversationOwnership(conversationId, userId);
+
+      // Save user action as message
+      await this.conversationService.sendMessage({
+        conversationId,
+        role: 'user',
+        content: { text: '[System: User clicked Generate Questionnaire button]' },
+      });
+
+      // Emit stream start for UX consistency (even though we're not streaming from Claude)
+      socket.emit('assistant_stream_start', { conversationId });
+
+      // Delegate to service (single Claude call, returns schema + markdown)
+      // NOTE: Service creates assessment - handler does NOT create assessments
+      const result = await this.questionnaireGenerationService.generate({
+        conversationId,
+        userId,
+        assessmentType,
+        vendorName,
+        solutionName,
+        contextSummary,
+        selectedCategories,
+      });
+
+      // Stream pre-rendered markdown to chat (simulated streaming for UX)
+      await this.streamMarkdownToSocket(socket, result.markdown, conversationId);
+
+      // Save assistant response
+      await this.conversationService.sendMessage({
+        conversationId,
+        role: 'assistant',
+        content: { text: result.markdown },
+      });
+
+      // Emit export ready (no extraction needed - we have the assessmentId from service)
+      socket.emit('export_ready', {
+        conversationId,
+        assessmentId: result.assessmentId,
+        questionCount: result.schema.metadata.questionCount,
+        formats: ['pdf', 'word', 'excel'],
+      });
+
+      console.log(`[ChatServer] Questionnaire generation complete:`, {
+        conversationId,
+        assessmentId: result.assessmentId,
+        questionCount: result.schema.metadata.questionCount,
+      });
+
+    } catch (error) {
+      console.error('[ChatServer] Error in generate_questionnaire:', error);
+      socket.emit('error', {
+        event: 'generate_questionnaire',
+        message: error instanceof Error ? error.message : 'Failed to generate questionnaire',
+      });
     }
+  }
 
-    console.log('[ChatServer] Questionnaire markers detected in response');
+  /**
+   * Split markdown into chunks for simulated streaming
+   *
+   * Tries to break at word boundaries for natural reading.
+   */
+  private chunkMarkdown(markdown: string, chunkSize: number): string[] {
+    const chunks: string[] = [];
+    let remaining = markdown;
 
-    // STEP 2: Get current assessment (if any)
-    const conversation = await this.conversationService.getConversation(conversationId);
-    let assessmentId = conversation?.assessmentId || null;
-
-    // STEP 3: Check if existing assessment is usable (must be in 'draft' status)
-    // If assessment exists but isn't draft, create new one for repeat generation
-    if (assessmentId) {
-      const existingAssessment = await this.assessmentService.getAssessment(assessmentId);
-      if (existingAssessment && existingAssessment.status !== 'draft') {
-        console.log(`[ChatServer] Existing assessment is '${existingAssessment.status}' - creating new for repeat generation`);
-        assessmentId = null; // Force fallback creation
+    while (remaining.length > 0) {
+      // Try to break at word boundary
+      let end = Math.min(chunkSize, remaining.length);
+      if (end < remaining.length) {
+        const lastSpace = remaining.lastIndexOf(' ', end);
+        if (lastSpace > chunkSize * 0.5) {
+          end = lastSpace + 1;
+        }
       }
+      chunks.push(remaining.slice(0, end));
+      remaining = remaining.slice(end);
     }
 
-    // STEP 4: Create fallback assessment if needed (no assessment or existing not in draft)
-    if (!assessmentId) {
-      console.log('[ChatServer] No usable assessment linked - creating fallback');
-      assessmentId = await this.createFallbackAssessment(conversationId, userId);
+    return chunks;
+  }
 
-      if (!assessmentId) {
-        // Fallback creation failed - emit error and abort
-        socket.emit('extraction_failed', {
-          conversationId,
-          assessmentId: null,
-          error: 'Failed to create assessment for questionnaire export',
-        });
+  /**
+   * Stream markdown to socket with simulated typing effect
+   *
+   * Chunks the markdown and emits with small delays for familiar UX.
+   * This replaces Claude streaming with deterministic content.
+   *
+   * Supports abort handling for user cancellation.
+   */
+  private async streamMarkdownToSocket(
+    socket: AuthenticatedSocket,
+    markdown: string,
+    conversationId: string
+  ): Promise<void> {
+    const chunks = this.chunkMarkdown(markdown, 80); // ~80 chars per chunk
+
+    for (const chunk of chunks) {
+      // Check abort flag between chunks
+      if (this.abortedStreams.has(conversationId)) {
+        this.abortedStreams.delete(conversationId);
+        socket.emit('assistant_aborted', { conversationId });
+        console.log(`[ChatServer] Stream aborted for conversation ${conversationId}`);
         return;
       }
+
+      socket.emit('assistant_token', {
+        conversationId,
+        token: chunk,
+      });
+
+      // Small delay for natural streaming feel (20ms per chunk)
+      await this.sleep(20);
     }
 
-    // STEP 5: Extract questions (pass full response - service will re-extract marked content)
-    this.attemptQuestionnaireExtraction(socket, conversationId, assessmentId, fullResponse);
+    socket.emit('assistant_done', {
+      conversationId,
+      content: markdown,
+    });
+  }
+
+  /**
+   * Simple sleep helper
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**

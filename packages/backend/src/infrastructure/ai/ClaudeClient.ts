@@ -40,11 +40,14 @@ export class ClaudeClient implements IClaudeClient {
     messages: ClaudeMessage[],
     options: ClaudeRequestOptions = {}
   ): Promise<ClaudeResponse> {
-    const { systemPrompt, usePromptCache, tools } = options;
+    const { systemPrompt, usePromptCache, tools, tool_choice, maxTokens } = options;
     const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
     const requestOptions = usePromptCache
       ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
       : undefined;
+
+    // Use provided maxTokens or default
+    const effectiveMaxTokens = maxTokens ?? this.maxTokens;
 
     let lastError: Error | null = null;
 
@@ -53,7 +56,7 @@ export class ClaudeClient implements IClaudeClient {
         const response = await this.client.messages.create(
           {
             model: this.model,
-            max_tokens: this.maxTokens,
+            max_tokens: effectiveMaxTokens,
             system,
             messages: messages.map((msg) => ({
               role: msg.role,
@@ -61,6 +64,8 @@ export class ClaudeClient implements IClaudeClient {
             })),
             // Add tools if provided
             ...(tools && tools.length > 0 && { tools }),
+            // Add tool_choice if provided (forces tool usage)
+            ...(tool_choice && { tool_choice }),
           },
           requestOptions
         );

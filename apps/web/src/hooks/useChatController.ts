@@ -13,6 +13,7 @@ import { useDelayedLoading } from '@/hooks/useDelayedLoading';
 import { useHistoryManager } from '@/hooks/useHistoryManager';
 import { useConversationSync } from '@/hooks/useConversationSync';
 import { useWebSocketEvents } from '@/hooks/useWebSocketEvents';
+import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
 import { ChatMessage as ChatMessageType } from '@/lib/websocket';
 
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
@@ -78,10 +79,13 @@ export function useChatController(): UseChatControllerReturn {
     getExportReady,
   } = useChatStore();
   const { mode, changeMode, isChanging, setModeFromConversation } = useConversationMode('consult');
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const composerRef = useRef<ComposerRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const hasInitialized = useRef(false);
+
+  // Questionnaire persistence (Story 4.3.5)
+  const persistence = useQuestionnairePersistence(user?.id);
 
   // Delay showing skeleton to prevent flash on quick loads (300ms threshold)
   const showDelayedLoading = useDelayedLoading(isLoading, 300);
@@ -188,6 +192,8 @@ export function useChatController(): UseChatControllerReturn {
     setModeFromConversation,
     setRegeneratingMessageIndex,
     focusComposer,
+    userId: user?.id,
+    persistence,
   });
 
   // Memoize handlers to prevent adapter recreation on every render

@@ -119,7 +119,7 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
     const [updated] = await db
       .update(assessments)
       .set({
-        assessmentType: persistence.assessmentType as 'quick' | 'comprehensive' | 'renewal',
+        assessmentType: persistence.assessmentType as 'quick' | 'comprehensive' | 'category_focused',
         solutionName: persistence.solutionName,
         solutionType: persistence.solutionType,
         status: persistence.status as 'draft' | 'questions_generated' | 'exported' | 'cancelled',

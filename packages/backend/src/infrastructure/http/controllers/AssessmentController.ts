@@ -65,7 +65,7 @@ export class AssessmentController {
       const validTypes: AssessmentTypeValue[] = [
         'quick',
         'comprehensive',
-        'renewal',
+        'category_focused',
       ]
       if (!validTypes.includes(assessmentType)) {
         res.status(400).json({

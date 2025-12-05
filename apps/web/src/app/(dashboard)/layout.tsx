@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatStore } from '@/stores/chatStore';
+import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
 import { Sidebar } from '@/components/chat/Sidebar';
 import { PanelLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,9 @@ export default function DashboardLayout({
 }) {
   const router = useRouter();
   const { isAuthenticated, isLoading, user, logout } = useAuth();
+
+  // Questionnaire persistence for logout cleanup (Story 4.3.5)
+  const persistence = useQuestionnairePersistence(user?.id);
 
   const {
     sidebarOpen,
@@ -43,6 +47,9 @@ export default function DashboardLayout({
   }, [isLoading, isAuthenticated, router]);
 
   const handleLogout = () => {
+    // Story 4.3.5: Clear all questionnaire state for this user
+    persistence.clearAllForUser();
+
     logout();
     router.push('/login');
   };

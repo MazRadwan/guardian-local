@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "assessmentType": "comprehensive",
+    "vendorName": "Golden Vendor",
+    "solutionName": "Golden Solution",
+    "generatedAt": "2025-01-15T10:00:00Z",
+    "questionCount": 2
+  },
+  "sections": [
+    {
+      "id": "privacy_risk",
+      "title": "Privacy Risk",
+      "riskDimension": "privacy_risk",
+      "description": "Assess privacy and data protection practices.",
+      "questions": [
+        {
+          "id": "privacy_1",
+          "text": "Does the vendor have a documented data protection policy?",
+          "category": "Data Protection",
+          "riskDimension": "privacy_risk",
+          "questionType": "yes_no",
+          "required": true
+        },
+        {
+          "id": "privacy_2",
+          "text": "How is PHI encrypted at rest?",
+          "category": "Encryption",
+          "riskDimension": "privacy_risk",
+          "questionType": "text",
+          "required": true,
+          "guidance": "Look for AES-256 or equivalent."
+        }
+      ]
+    }
+  ]
+}

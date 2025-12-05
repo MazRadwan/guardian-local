@@ -4,13 +4,13 @@
  * Represents the type of assessment being conducted
  */
 
-export type AssessmentTypeValue = 'quick' | 'comprehensive' | 'renewal'
+export type AssessmentTypeValue = 'quick' | 'comprehensive' | 'category_focused'
 
 export class AssessmentType {
   private static readonly VALID_TYPES: AssessmentTypeValue[] = [
     'quick',
     'comprehensive',
-    'renewal',
+    'category_focused',
   ]
 
   private constructor(private readonly value: AssessmentTypeValue) {}
@@ -33,8 +33,8 @@ export class AssessmentType {
     return new AssessmentType('comprehensive')
   }
 
-  static renewal(): AssessmentType {
-    return new AssessmentType('renewal')
+  static categoryFocused(): AssessmentType {
+    return new AssessmentType('category_focused')
   }
 
   getValue(): AssessmentTypeValue {
@@ -49,8 +49,8 @@ export class AssessmentType {
     return this.value === 'comprehensive'
   }
 
-  isRenewal(): boolean {
-    return this.value === 'renewal'
+  isCategoryFocused(): boolean {
+    return this.value === 'category_focused'
   }
 
   equals(other: AssessmentType): boolean {

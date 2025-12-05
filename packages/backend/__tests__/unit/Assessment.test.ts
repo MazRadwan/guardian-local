@@ -246,7 +246,7 @@ describe('AssessmentType Value Object', () => {
     expect(AssessmentType.create('comprehensive').getValue()).toBe(
       'comprehensive'
     )
-    expect(AssessmentType.create('renewal').getValue()).toBe('renewal')
+    expect(AssessmentType.create('category_focused').getValue()).toBe('category_focused')
   })
 
   it('should throw error for invalid type', () => {
@@ -258,7 +258,7 @@ describe('AssessmentType Value Object', () => {
   it('should provide static factory methods', () => {
     expect(AssessmentType.quick().isQuick()).toBe(true)
     expect(AssessmentType.comprehensive().isComprehensive()).toBe(true)
-    expect(AssessmentType.renewal().isRenewal()).toBe(true)
+    expect(AssessmentType.categoryFocused().isCategoryFocused()).toBe(true)
   })
 
   it('should check type correctly', () => {

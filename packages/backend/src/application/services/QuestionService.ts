@@ -1,11 +1,20 @@
 /**
- * QuestionService
+ * QuestionService - DEPRECATED for questionnaire generation
  *
- * Orchestrates question generation workflow:
- * 1. Call Claude API with vendor context
- * 2. Parse and validate response
- * 3. Persist questions to database
- * 4. Update assessment status
+ * This service was originally used for managing questions in the legacy flow.
+ *
+ * For NEW questionnaire generation:
+ * - Use QuestionnaireGenerationService (Epic 12.5)
+ * - Uses IQuestionRepository.bulkCreate directly
+ * - Produces canonical QuestionnaireSchema
+ *
+ * This service is still used for:
+ * - Individual question updates
+ * - Question retrieval by ID
+ * - Legacy import flows
+ *
+ * @deprecated For questionnaire generation, use QuestionnaireGenerationService instead.
+ * @see QuestionnaireGenerationService
  */
 
 import type { IClaudeClient } from '../interfaces/IClaudeClient.js';

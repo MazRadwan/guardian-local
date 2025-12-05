@@ -14,15 +14,18 @@ export interface ClaudeMessage {
  * JSON Schema property type for tool input definitions
  */
 export interface JSONSchemaProperty {
-  type: string;
+  type: string | string[]; // Can be 'string' or ['string', 'null'] for union types
   description?: string;
-  enum?: string[];
+  enum?: readonly string[] | string[];
+  const?: string;
   items?: JSONSchemaProperty;
   properties?: Record<string, JSONSchemaProperty>;
   required?: string[];
   additionalProperties?: boolean;
   minimum?: number;
   maximum?: number;
+  minItems?: number;
+  format?: string;
 }
 
 /**
@@ -83,12 +86,24 @@ export interface StreamChunk {
   stopReason?: string;
 }
 
+/**
+ * Tool choice configuration for Claude API
+ */
+export type ClaudeToolChoice =
+  | { type: 'auto' }           // Claude decides whether to use tools
+  | { type: 'any' }            // Claude must use at least one tool
+  | { type: 'tool'; name: string }; // Force Claude to use specific tool
+
 export interface ClaudeRequestOptions {
   systemPrompt?: string;
   cachedPromptId?: string; // Optional prompt caching handle (future use)
   usePromptCache?: boolean; // Flag to send system prompt with cache_control (Anthropic prompt caching)
   /** Optional tools to make available to Claude */
   tools?: ClaudeTool[];
+  /** Control how Claude uses tools */
+  tool_choice?: ClaudeToolChoice;
+  /** Override max tokens (default 4096, use higher for large outputs like questionnaires) */
+  maxTokens?: number;
 }
 
 export interface IClaudeClient {
