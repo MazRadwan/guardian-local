@@ -978,63 +978,7 @@ describe('ChatInterface', () => {
       expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('ready');
     });
 
-    it('does not restore if conversation was dismissed', () => {
-      mockPersistence.isDismissed.mockReturnValue(true);
-
-      // Mock useChatController to return active conversation
-      const { useChatController } = require('@/hooks/useChatController');
-      (useChatController as jest.Mock).mockReturnValue({
-        messages: [],
-        isLoading: false,
-        error: null,
-        isStreaming: false,
-        isConnected: true,
-        isConnecting: false,
-        mode: 'consult',
-        isChanging: false,
-        showDelayedLoading: false,
-        regeneratingMessageIndex: null,
-        composerRef: { current: null },
-        messageListRef: { current: null },
-        handleSendMessage: jest.fn(),
-        handleModeChange: jest.fn(),
-        handleRegenerate: jest.fn(),
-        abortStream: jest.fn(),
-        setError: jest.fn(),
-        activeConversationId: 'conv-dismissed', // Active conversation
-        adapter: { generateQuestionnaire: jest.fn() },
-      });
-
-      (useChatStore as unknown as jest.Mock).mockReturnValue({
-        messages: [],
-        isLoading: false,
-        error: null,
-        addMessage: mockAddMessage,
-        startStreaming: mockStartStreaming,
-        appendToLastMessage: mockAppendToLastMessage,
-        finishStreaming: mockFinishStreaming,
-        setError: mockSetError,
-        setLoading: jest.fn(),
-        setMessages: jest.fn(),
-        clearMessages: mockClearMessages,
-        activeConversationId: 'conv-dismissed',
-        setActiveConversation: mockSetActiveConversation,
-        setConversations: jest.fn(),
-        addConversation: jest.fn(),
-        pendingQuestionnaire: null,
-        isGeneratingQuestionnaire: false,
-        setGenerating: jest.fn(),
-        clearPendingQuestionnaire: mockClearPendingQuestionnaire,
-      });
-
-      render(<ChatInterface />);
-
-      expect(mockClearPendingQuestionnaire).toHaveBeenCalled();
-      expect(mockSetQuestionnaireUIState).toHaveBeenCalledWith('hidden');
-      expect(mockPersistence.isDismissed).toHaveBeenCalledWith('conv-dismissed');
-      expect(mockPersistence.loadPayload).not.toHaveBeenCalled();
-      expect(mockSetPendingQuestionnaire).not.toHaveBeenCalled();
-    });
+    // Note: dismiss-related test removed in Story 13.2 - dismiss flag no longer checked
 
     it('does not restore if no payload exists', () => {
       mockPersistence.loadPayload.mockReturnValue(null);

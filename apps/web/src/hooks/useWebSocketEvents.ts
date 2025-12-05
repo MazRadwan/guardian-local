@@ -408,9 +408,8 @@ export function useWebSocketEvents({
         assessmentType: data.assessmentType,
       });
 
-      // Story 4.3.5: Clear dismiss flag and save to localStorage
+      // Save questionnaire payload to localStorage for rehydration
       if (persistence) {
-        persistence.clearDismiss(data.conversationId);
         persistence.savePayload(data.conversationId, data);
       }
 

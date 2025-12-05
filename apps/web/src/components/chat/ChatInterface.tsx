@@ -72,22 +72,31 @@ export function ChatInterface() {
       return;
     }
 
-    // Always clear previous conversation's state first
+    // Always clear previous conversation's UI state first
     useChatStore.getState().clearPendingQuestionnaire();
     useChatStore.getState().setQuestionnaireUIState('hidden');
 
-    // If dismissed for this conversation, don't restore
-    if (persistence.isDismissed(activeConversationId)) {
+    // Priority 1: Check in-memory export state (survives conversation switch)
+    const exportData = useChatStore.getState().exportReadyByConversation?.[activeConversationId];
+    if (exportData && exportData.conversationId === activeConversationId) {
+      // Restore to download state - export already completed for this conversation
+      useChatStore.getState().setQuestionnaireUIState('download');
       return;
     }
 
-    // Try to load persisted payload
+    // Priority 2: Check localStorage payload with shape validation
     const savedPayload = persistence.loadPayload(activeConversationId);
     if (savedPayload) {
-      useChatStore.getState().setPendingQuestionnaire(savedPayload);
-      useChatStore.getState().setQuestionnaireUIState('ready');
+      // Validate payload shape and conversation match
+      if (savedPayload.conversationId === activeConversationId && savedPayload.assessmentType) {
+        useChatStore.getState().setPendingQuestionnaire(savedPayload);
+        useChatStore.getState().setQuestionnaireUIState('ready');
+      } else {
+        // Malformed or mismatched payload - clear to prevent state poisoning
+        persistence.clearPayload(activeConversationId);
+      }
     }
-  }, [activeConversationId, user?.id]); // Remove persistence from deps - it's stable (memoized by userId)
+  }, [activeConversationId, user?.id]);
 
   const handleGenerateQuestionnaire = useCallback(() => {
     if (!pendingQuestionnaire || !adapter) return;
