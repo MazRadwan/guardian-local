@@ -275,6 +275,22 @@ describe('ChatServer.handleGetExportStatus (Story 13.9.1)', () => {
   });
 
   describe('Authorization', () => {
+    it('emits export_status_error when userId is not set on socket', async () => {
+      const unauthenticatedSocket = {
+        ...mockSocket,
+        userId: undefined,
+      };
+
+      await chatServer.handleGetExportStatus(unauthenticatedSocket, { conversationId: 'conv-123' });
+
+      expect(emittedEvents).toContainEqual({
+        event: 'export_status_error',
+        data: { conversationId: 'conv-123', error: 'Not authenticated' },
+      });
+      // Should not hit conversation service
+      expect(mockConversationService.getConversation).not.toHaveBeenCalled();
+    });
+
     it('emits export_status_error when conversation not found', async () => {
       mockConversationService.getConversation.mockResolvedValue(null);
 

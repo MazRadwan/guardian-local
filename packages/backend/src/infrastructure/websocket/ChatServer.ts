@@ -1023,6 +1023,16 @@ Reply with: **1**, **2**, or **3**
       return;
     }
 
+    // Early validation: userId must be present (auth middleware should set this)
+    if (!userId) {
+      console.log(`[ChatServer] get_export_status auth error: conversationId=${conversationId}, reason=Not authenticated`);
+      socket.emit('export_status_error', {
+        conversationId,
+        error: 'Not authenticated',
+      });
+      return;
+    }
+
     console.log(`[ChatServer] get_export_status request: conversationId=${conversationId}, userId=${userId}`);
 
     try {
