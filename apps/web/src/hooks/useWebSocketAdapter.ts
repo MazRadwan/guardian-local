@@ -2,7 +2,8 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
+import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
 export type ConversationMode = 'consult' | 'assessment';
@@ -27,6 +28,10 @@ export interface WebSocketEventHandlers {
   onExportReady?: (data: ExportReadyPayload) => void;
   onExtractionFailed?: (data: ExtractionFailedPayload) => void;
   onQuestionnaireReady?: (data: QuestionnaireReadyPayload) => void;
+  onGenerationPhase?: (data: GenerationPhasePayload) => void;
+  // Story 13.9.2: Export status resume callbacks
+  onExportStatusNotFound?: (data: ExportStatusNotFoundPayload) => void;
+  onExportStatusError?: (data: ExportStatusErrorPayload) => void;
 }
 
 /**
@@ -68,6 +73,9 @@ export interface WebSocketAdapterInterface {
 
   // Questionnaire generation
   generateQuestionnaire: (payload: GenerateQuestionnairePayload) => void;
+
+  // Story 13.9.2: Export status resume
+  requestExportStatus: (conversationId: string) => void;
 }
 
 /**
@@ -134,6 +142,9 @@ export function useWebSocketAdapter({
     onExportReady: handlers.onExportReady,
     onExtractionFailed: handlers.onExtractionFailed,
     onQuestionnaireReady: handlers.onQuestionnaireReady,
+    onGenerationPhase: handlers.onGenerationPhase,
+    onExportStatusNotFound: handlers.onExportStatusNotFound,
+    onExportStatusError: handlers.onExportStatusError,
     autoConnect,
   });
 
@@ -182,6 +193,11 @@ export function useWebSocketAdapter({
     generateQuestionnaire: (payload: GenerateQuestionnairePayload) => {
       wsHook.generateQuestionnaire(payload);
     },
+
+    // Story 13.9.2: Export status resume
+    requestExportStatus: (conversationId: string) => {
+      wsHook.requestExportStatus(conversationId);
+    },
   }), [
     wsHook.isConnected,
     wsHook.isConnecting,
@@ -193,6 +209,7 @@ export function useWebSocketAdapter({
     wsHook.updateConversationMode,
     wsHook.abortStream,
     wsHook.generateQuestionnaire,
+    wsHook.requestExportStatus,
     wsHook.connect,
     wsHook.disconnect,
   ]);

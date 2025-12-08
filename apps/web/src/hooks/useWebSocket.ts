@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
+import type { GenerationPhasePayload } from '@guardian/shared';
 
 export interface UseWebSocketOptions {
   url: string;
@@ -23,6 +24,10 @@ export interface UseWebSocketOptions {
   onExportReady?: (data: ExportReadyPayload) => void;
   onExtractionFailed?: (data: ExtractionFailedPayload) => void;
   onQuestionnaireReady?: (data: QuestionnaireReadyPayload) => void;
+  onGenerationPhase?: (data: GenerationPhasePayload) => void;
+  // Story 13.9.2: Export status resume callbacks
+  onExportStatusNotFound?: (data: ExportStatusNotFoundPayload) => void;
+  onExportStatusError?: (data: ExportStatusErrorPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -46,6 +51,9 @@ export function useWebSocket({
   onExportReady,
   onExtractionFailed,
   onQuestionnaireReady,
+  onGenerationPhase,
+  onExportStatusNotFound,
+  onExportStatusError,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -146,6 +154,15 @@ export function useWebSocket({
       return;
     }
     clientRef.current.generateQuestionnaire(payload);
+  }, [isConnected]);
+
+  // Story 13.9.2: Request export status for a conversation
+  const requestExportStatus = useCallback((conversationId: string) => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot request export status - not connected');
+      return;
+    }
+    clientRef.current.requestExportStatus(conversationId);
   }, [isConnected]);
 
   // Setup event listeners
@@ -256,6 +273,13 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    if (onGenerationPhase) {
+      const unsub = client.onGenerationPhase((data) => {
+        onGenerationPhase(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     if (onConnectionReady) {
       const unsub = client.onConnectionReady((data) => {
         onConnectionReady(data);
@@ -263,10 +287,25 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // Story 13.9.2: Export status resume subscriptions
+    if (onExportStatusNotFound) {
+      const unsub = client.onExportStatusNotFound((data) => {
+        onExportStatusNotFound(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onExportStatusError) {
+      const unsub = client.onExportStatusError((data) => {
+        onExportStatusError(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onConnectionReady]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onConnectionReady, onExportStatusNotFound, onExportStatusError]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -295,6 +334,7 @@ export function useWebSocket({
     deleteConversation,
     updateConversationMode,
     generateQuestionnaire,
+    requestExportStatus,
   }), [
     isConnected,
     isConnecting,
@@ -308,5 +348,6 @@ export function useWebSocket({
     deleteConversation,
     updateConversationMode,
     generateQuestionnaire,
+    requestExportStatus,
   ]);
 }

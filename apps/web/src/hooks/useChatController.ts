@@ -14,9 +14,12 @@ import { useHistoryManager } from '@/hooks/useHistoryManager';
 import { useConversationSync } from '@/hooks/useConversationSync';
 import { useWebSocketEvents } from '@/hooks/useWebSocketEvents';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
-import { ChatMessage as ChatMessageType } from '@/lib/websocket';
+import { ChatMessage as ChatMessageType, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
 
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
+
+// Story 13.9.2: Track pending export status requests to avoid duplicates
+const pendingExportStatusRequests = new Set<string>();
 
 export interface UseChatControllerReturn {
   // State
@@ -162,6 +165,7 @@ export function useChatController(): UseChatControllerReturn {
     handleExportReady,
     handleExtractionFailed,
     handleQuestionnaireReady,
+    handleGenerationPhase,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
@@ -196,6 +200,20 @@ export function useChatController(): UseChatControllerReturn {
     persistence,
   });
 
+  // Story 13.9.2: Handler for export_status_not_found
+  const handleExportStatusNotFound = useCallback((data: ExportStatusNotFoundPayload) => {
+    pendingExportStatusRequests.delete(data.conversationId);
+    console.log('[useChatController] No export found for conversation, user can generate:', data.conversationId);
+    // UI remains in ready state - no action needed
+  }, []);
+
+  // Story 13.9.2: Handler for export_status_error
+  const handleExportStatusError = useCallback((data: ExportStatusErrorPayload) => {
+    pendingExportStatusRequests.delete(data.conversationId);
+    console.error('[useChatController] Export status error:', data.error);
+    // Don't disrupt UX - user can still generate if needed
+  }, []);
+
   // Memoize handlers to prevent adapter recreation on every render
   const handlers = useMemo(() => ({
     onMessage: handleMessage,
@@ -213,6 +231,9 @@ export function useChatController(): UseChatControllerReturn {
     onExportReady: handleExportReady,
     onExtractionFailed: handleExtractionFailed,
     onQuestionnaireReady: handleQuestionnaireReady,
+    onGenerationPhase: handleGenerationPhase,
+    onExportStatusNotFound: handleExportStatusNotFound,
+    onExportStatusError: handleExportStatusError,
   }), [
     handleMessage,
     handleMessageStream,
@@ -229,6 +250,9 @@ export function useChatController(): UseChatControllerReturn {
     handleExportReady,
     handleExtractionFailed,
     handleQuestionnaireReady,
+    handleGenerationPhase,
+    handleExportStatusNotFound,
+    handleExportStatusError,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket
@@ -348,6 +372,47 @@ export function useChatController(): UseChatControllerReturn {
     // REMOVED: Auto-create logic when activeConversationId === null
     // New conversations are now created ONLY via explicit user action (New Chat button)
   }, [activeConversationId, isConnected]);
+
+  // Story 13.9.2: Request export status on conversation resume
+  // This restores download buttons when user returns to a conversation that has already generated a questionnaire
+  useEffect(() => {
+    if (!isConnected || !activeConversationId) return;
+
+    // Check if we already have export data in memory
+    const existingExport = getExportReady(activeConversationId);
+    if (existingExport) {
+      console.log('[useChatController] Export data cached in memory, skipping server request');
+      return;
+    }
+
+    // Check localStorage (key must match 13.3 pattern exactly)
+    const storageKey = `export_${activeConversationId}`;
+    const stored = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        console.log('[useChatController] Export data found in localStorage, restoring');
+        setExportReady(activeConversationId, parsed);
+        useChatStore.getState().setQuestionnaireUIState('download');
+        return;
+      } catch (e) {
+        console.warn('[useChatController] Invalid localStorage export data, continuing to server');
+        localStorage.removeItem(storageKey);
+      }
+    }
+
+    // Avoid duplicate requests for same conversation
+    if (pendingExportStatusRequests.has(activeConversationId)) {
+      console.log('[useChatController] Export status request already pending for:', activeConversationId);
+      return;
+    }
+
+    // Request from server (server controls spam via 404)
+    console.log('[useChatController] Requesting export status from server for:', activeConversationId);
+    pendingExportStatusRequests.add(activeConversationId);
+    adapter.requestExportStatus(activeConversationId);
+
+  }, [isConnected, activeConversationId, getExportReady, setExportReady, adapter]);
 
   // Handle explicit new chat requests (from "New Chat" button)
   useEffect(() => {
