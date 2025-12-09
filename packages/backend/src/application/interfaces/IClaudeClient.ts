@@ -25,6 +25,8 @@ export interface JSONSchemaProperty {
   minimum?: number;
   maximum?: number;
   minItems?: number;
+  minLength?: number;
+  maxLength?: number;
   format?: string;
 }
 

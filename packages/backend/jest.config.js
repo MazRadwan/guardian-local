@@ -4,7 +4,6 @@ import dotenv from 'dotenv'
 dotenv.config()
 
 export default {
-  preset: 'ts-jest/presets/default-esm',
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts'],
@@ -16,6 +15,14 @@ export default {
       'ts-jest',
       {
         useESM: true,
+        tsconfig: {
+          module: 'NodeNext',
+          target: 'ES2022',
+          moduleResolution: 'NodeNext',
+          esModuleInterop: true,
+          allowSyntheticDefaultImports: true,
+          rootDir: '.',
+        },
       },
     ],
   },

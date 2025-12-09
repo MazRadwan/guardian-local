@@ -1052,4 +1052,159 @@ describe('chatStore', () => {
       expect(result.current.questionnaireError).toBeNull();
     });
   });
+
+  // Story 13.4.2: Stepper State Tests
+  describe('Stepper State (Story 13.4.2)', () => {
+    it('initializes with default generation steps', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      expect(result.current.generationSteps).toEqual([
+        { id: 'context', label: 'Context gathered' },
+        { id: 'generating', label: 'Generating questions' },
+        { id: 'validating', label: 'Validating structure' },
+        { id: 'saving', label: 'Saving assessment' },
+      ]);
+    });
+
+    it('initializes with currentGenerationStep at -1 (idle)', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      expect(result.current.currentGenerationStep).toBe(-1);
+    });
+
+    it('setCurrentGenerationStep updates the step index', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setCurrentGenerationStep(0);
+      });
+      expect(result.current.currentGenerationStep).toBe(0);
+
+      act(() => {
+        result.current.setCurrentGenerationStep(1);
+      });
+      expect(result.current.currentGenerationStep).toBe(1);
+
+      act(() => {
+        result.current.setCurrentGenerationStep(2);
+      });
+      expect(result.current.currentGenerationStep).toBe(2);
+
+      act(() => {
+        result.current.setCurrentGenerationStep(3);
+      });
+      expect(result.current.currentGenerationStep).toBe(3);
+    });
+
+    it('setCurrentGenerationStep can go beyond steps length (completion)', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setCurrentGenerationStep(4);
+      });
+      expect(result.current.currentGenerationStep).toBe(4);
+      expect(result.current.currentGenerationStep).toBeGreaterThanOrEqual(
+        result.current.generationSteps.length
+      );
+    });
+
+    it('resetGenerationStep resets to -1', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Set to some value first
+      act(() => {
+        result.current.setCurrentGenerationStep(2);
+      });
+      expect(result.current.currentGenerationStep).toBe(2);
+
+      // Reset
+      act(() => {
+        result.current.resetGenerationStep();
+      });
+      expect(result.current.currentGenerationStep).toBe(-1);
+    });
+
+    it('setActiveConversation resets generation step to -1', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Set generation step
+      act(() => {
+        result.current.setCurrentGenerationStep(2);
+      });
+      expect(result.current.currentGenerationStep).toBe(2);
+
+      // Switch conversation
+      act(() => {
+        result.current.setActiveConversation('new-conv-123');
+      });
+
+      // Step should be reset
+      expect(result.current.currentGenerationStep).toBe(-1);
+    });
+
+    it('stepper can progress through all steps', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Simulate generation progress
+      const steps = result.current.generationSteps;
+
+      steps.forEach((_, index) => {
+        act(() => {
+          result.current.setCurrentGenerationStep(index);
+        });
+        expect(result.current.currentGenerationStep).toBe(index);
+      });
+
+      // Mark as complete (beyond last step)
+      act(() => {
+        result.current.setCurrentGenerationStep(steps.length);
+      });
+      expect(result.current.currentGenerationStep).toBe(steps.length);
+    });
+
+    it('stepper state persists across renders', () => {
+      const { result, rerender } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setCurrentGenerationStep(2);
+      });
+
+      rerender();
+
+      expect(result.current.currentGenerationStep).toBe(2);
+    });
+
+    it('conversation change clears pending questionnaire and resets stepper', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Set up questionnaire state
+      act(() => {
+        result.current.setPendingQuestionnaire({
+          conversationId: 'old-conv',
+          assessmentType: 'comprehensive',
+          vendorName: 'Test',
+          solutionName: 'Test',
+          contextSummary: 'Test',
+          selectedCategories: [],
+          estimatedQuestions: 90,
+        });
+        result.current.setCurrentGenerationStep(2);
+        result.current.setGenerating(true);
+      });
+
+      expect(result.current.pendingQuestionnaire).not.toBeNull();
+      expect(result.current.currentGenerationStep).toBe(2);
+      expect(result.current.isGeneratingQuestionnaire).toBe(true);
+
+      // Switch conversation
+      act(() => {
+        result.current.setActiveConversation('new-conv');
+      });
+
+      // All should be cleared/reset
+      expect(result.current.pendingQuestionnaire).toBeNull();
+      expect(result.current.currentGenerationStep).toBe(-1);
+      expect(result.current.isGeneratingQuestionnaire).toBe(false);
+    });
+  });
 });

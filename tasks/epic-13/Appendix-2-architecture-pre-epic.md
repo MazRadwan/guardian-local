@@ -1,3 +1,5 @@
+ #Appendix 2: Pre-Epic 13 Architecture
+ 
  Updated architecture reflecting the current code (tool-triggered questionnaire flow, expanded WebSocket
   events, and hybrid generation service). Key pieces: chat UI with questionnaire card/indicator in apps/
   web/src/components/chat/ChatInterface.tsx, WebSocket handling in apps/web/src/infrastructure/websocket.ts

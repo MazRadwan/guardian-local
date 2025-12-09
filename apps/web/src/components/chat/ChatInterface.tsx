@@ -9,6 +9,7 @@ import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
+import type { QuestionnaireReadyPayload } from '@/lib/websocket';
 
 export function ChatInterface() {
   const {
@@ -47,6 +48,13 @@ export function ChatInterface() {
   const clearPendingQuestionnaire = useChatStore((state) => state.clearPendingQuestionnaire);
   const setQuestionnaireUIState = useChatStore((state) => state.setQuestionnaireUIState);
 
+  // Stepper state from store (Story 13.4.3)
+  const generationSteps = useChatStore((state) => state.generationSteps);
+  const currentGenerationStep = useChatStore((state) => state.currentGenerationStep);
+  const isGeneratingQuestionnaire = useChatStore((state) => state.isGeneratingQuestionnaire);
+  const setCurrentGenerationStep = useChatStore((state) => state.setCurrentGenerationStep);
+  const resetGenerationStep = useChatStore((state) => state.resetGenerationStep);
+
   // Get export data for active conversation
   const exportData = activeConversationId
     ? exportReadyByConversation[activeConversationId]
@@ -58,6 +66,23 @@ export function ChatInterface() {
   // Rehydrate questionnaire state from localStorage on conversation switch
   useEffect(() => {
     if (!activeConversationId || !user?.id) return;
+
+    const applyPayloadIfValid = (payload: QuestionnaireReadyPayload | null) => {
+      if (!payload) return false;
+
+      const isValid =
+        payload.conversationId === activeConversationId &&
+        Boolean(payload.assessmentType);
+
+      if (isValid) {
+        useChatStore.getState().setPendingQuestionnaire(payload);
+        return true;
+      }
+
+      // Malformed or mismatched payload - clear to prevent stale state
+      persistence.clearPayload(activeConversationId);
+      return false;
+    };
 
     // GUARD 1: Only rehydrate if conversation actually changed
     if (prevConversationIdRef.current === activeConversationId) {
@@ -79,32 +104,49 @@ export function ChatInterface() {
     // Priority 1: Check in-memory export state (survives conversation switch)
     const exportData = useChatStore.getState().exportReadyByConversation?.[activeConversationId];
     if (exportData && exportData.conversationId === activeConversationId) {
-      // Restore to download state - export already completed for this conversation
+      // BUGFIX: Still need payload for QuestionnairePromptCard to render
+      const savedPayload = persistence.loadPayload(activeConversationId);
+      applyPayloadIfValid(savedPayload);
+      useChatStore.getState().setQuestionnaireUIState('download');
+      return;
+    }
+
+    // Story 13.3.2: Priority 1.5 - Check localStorage export (page reload case)
+    const savedExport = persistence.loadExport(activeConversationId);
+    if (savedExport && savedExport.conversationId === activeConversationId) {
+      // Restore to in-memory cache
+      useChatStore.getState().setExportReady(activeConversationId, savedExport);
+      // Also restore payload for card rendering
+      const savedPayload = persistence.loadPayload(activeConversationId);
+      applyPayloadIfValid(savedPayload);
       useChatStore.getState().setQuestionnaireUIState('download');
       return;
     }
 
     // Priority 2: Check localStorage payload with shape validation
     const savedPayload = persistence.loadPayload(activeConversationId);
-    if (savedPayload) {
-      // Validate payload shape and conversation match
-      if (savedPayload.conversationId === activeConversationId && savedPayload.assessmentType) {
-        useChatStore.getState().setPendingQuestionnaire(savedPayload);
-        useChatStore.getState().setQuestionnaireUIState('ready');
-      } else {
-        // Malformed or mismatched payload - clear to prevent state poisoning
-        persistence.clearPayload(activeConversationId);
-      }
+    if (applyPayloadIfValid(savedPayload)) {
+      useChatStore.getState().setQuestionnaireUIState('ready');
     }
-  }, [activeConversationId, user?.id]);
+  }, [activeConversationId, user?.id, persistence]);
+
+  // Reset stepper when conversation changes (Story 13.5.4)
+  useEffect(() => {
+    resetGenerationStep();
+  }, [activeConversationId, resetGenerationStep]);
 
   const handleGenerateQuestionnaire = useCallback(() => {
     if (!pendingQuestionnaire || !adapter) return;
+
+    // Reset stepper and start at step 0 (immediate feedback before backend response)
+    resetGenerationStep();
+    setCurrentGenerationStep(0);
 
     // Transition to generating state
     setQuestionnaireUIState('generating');
     setGenerating(true);
 
+    // Emit generation request - backend handles phase progression (Story 13.5.4)
     adapter.generateQuestionnaire({
       conversationId: pendingQuestionnaire.conversationId,
       assessmentType: pendingQuestionnaire.assessmentType,
@@ -114,10 +156,18 @@ export function ChatInterface() {
       selectedCategories: pendingQuestionnaire.selectedCategories,
     });
 
-    // IMPORTANT: State transitions happen in event handlers:
-    // - export_ready event -> 'download' state
-    // - extraction_failed event -> 'error' state
-  }, [pendingQuestionnaire, adapter, setGenerating, setQuestionnaireUIState]);
+    // State transitions happen via WebSocket event handlers:
+    // - generation_phase events -> step progression (handled in useWebSocketEvents)
+    // - export_ready event -> 'download' state, step complete
+    // - extraction_failed event -> 'error' state, stepper reset
+  }, [
+    pendingQuestionnaire,
+    adapter,
+    setGenerating,
+    setQuestionnaireUIState,
+    setCurrentGenerationStep,
+    resetGenerationStep,
+  ]);
 
   const handleDownload = useCallback(async (format: string) => {
     if (!exportData || !token) return;
@@ -156,17 +206,13 @@ export function ChatInterface() {
 
       console.log(`[ChatInterface] Successfully downloaded ${format.toUpperCase()} file`);
 
-      // After successful download, clear state and persist
-      if (activeConversationId) {
-        persistence.clearPayload(activeConversationId);
-      }
-      clearPendingQuestionnaire();
-      setQuestionnaireUIState('hidden');
+      // Story 13.3.1: Keep download state visible for re-downloads
+      // State only clears on: conversation delete, new questionnaire_ready, or extraction error
     } catch (err) {
       console.error('[ChatInterface] Download error:', err);
       // Don't change state on download error - user can retry
     }
-  }, [exportData, token, activeConversationId, persistence, clearPendingQuestionnaire, setQuestionnaireUIState]);
+  }, [exportData, token]);
 
   return (
     <div className="flex h-full flex-col relative">
@@ -227,6 +273,9 @@ export function ChatInterface() {
                     onDownload={handleDownload}
                     onRetry={handleGenerateQuestionnaire}
                     className="mx-4 mb-4"
+                    steps={generationSteps}
+                    currentStep={currentGenerationStep}
+                    isRunning={isGeneratingQuestionnaire}
                   />
                 ) : undefined
               }

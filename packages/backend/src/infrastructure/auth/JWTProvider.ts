@@ -4,7 +4,7 @@
  * Infrastructure Layer - Implements ITokenProvider with jsonwebtoken library
  */
 
-import jwt from 'jsonwebtoken'
+import jwt, { SignOptions } from 'jsonwebtoken'
 import {
   ITokenProvider,
   TokenPayload,
@@ -37,9 +37,10 @@ export class JWTProvider implements ITokenProvider {
    * Generate JWT token
    */
   generateToken(payload: TokenPayload): string {
-    return jwt.sign(payload, this.secret, {
-      expiresIn: this.expiresIn,
-    })
+    const options: SignOptions = {
+      expiresIn: this.expiresIn as SignOptions['expiresIn'],
+    }
+    return jwt.sign(payload, this.secret, options)
   }
 
   /**

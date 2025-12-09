@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Download } from '@playwright/test';
 
 /**
  * Epic 12 E2E Tests - Tool-Based Questionnaire Generation
@@ -13,6 +13,53 @@ import { test, expect } from '@playwright/test';
  *
  * Run with: npx playwright test questionnaire-generation.spec.ts
  */
+
+// Story 13.3.4: Mock export API responses for download tests
+// Uses wildcard pattern to match any assessmentId from backend
+const MOCK_PDF_CONTENT = Buffer.from('Mock PDF content for testing');
+const MOCK_WORD_CONTENT = Buffer.from('Mock Word content for testing');
+const MOCK_EXCEL_CONTENT = Buffer.from('Mock Excel content for testing');
+
+/**
+ * Intercepts all export API requests regardless of assessmentId.
+ * The actual assessmentId comes from the backend's export_ready WebSocket payload,
+ * so we use a wildcard pattern to match any ID.
+ */
+function setupExportApiMock(page: import('@playwright/test').Page) {
+  // Use wildcard (*) to match any assessmentId
+  return page.route('**/api/assessments/*/export/*', async (route) => {
+    const url = route.request().url();
+    let content: Buffer;
+    let contentType: string;
+    let filename: string;
+
+    if (url.includes('/export/pdf')) {
+      content = MOCK_PDF_CONTENT;
+      contentType = 'application/pdf';
+      filename = 'questionnaire.pdf';
+    } else if (url.includes('/export/word')) {
+      content = MOCK_WORD_CONTENT;
+      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      filename = 'questionnaire.docx';
+    } else if (url.includes('/export/excel')) {
+      content = MOCK_EXCEL_CONTENT;
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      filename = 'questionnaire.xlsx';
+    } else {
+      await route.fulfill({ status: 404 });
+      return;
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType,
+      headers: {
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      },
+      body: content,
+    });
+  });
+}
 
 test.describe('Questionnaire Generation (Tool Flow)', () => {
   test.beforeEach(async ({ page }) => {
@@ -152,19 +199,239 @@ test.describe('Questionnaire Generation (Tool Flow)', () => {
 });
 
 /**
+ * Story 13.3.4: Durable Download Tests
+ *
+ * These tests verify that download buttons remain visible after download
+ * and that the download state survives page reload.
+ */
+test.describe('Durable Downloads (Story 13.3)', () => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to app
+    await page.goto('/');
+
+    // Setup export API mock
+    await setupExportApiMock(page);
+
+    // TODO: Add login steps once auth is implemented
+  });
+
+  test('download buttons remain visible after downloading', async ({ page }) => {
+    // Setup: Trigger questionnaire generation and wait for download state
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for ready state
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Click generate button
+    await page.click('[data-testid="generate-questionnaire-btn"]');
+
+    // Wait for download state
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
+      timeout: 60000,
+    });
+
+    // Download PDF
+    const [download1] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('[data-testid="download-pdf-btn"]'),
+    ]);
+
+    // Verify download completed
+    expect(download1.suggestedFilename()).toContain('.pdf');
+
+    // KEY ASSERTION: Download buttons should STILL be visible after download
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible();
+    await expect(page.locator('[data-testid="download-pdf-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="download-word-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="download-excel-btn"]')).toBeVisible();
+  });
+
+  test('can download multiple formats sequentially', async ({ page }) => {
+    // Setup: Trigger questionnaire generation and wait for download state
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for ready state
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Click generate button
+    await page.click('[data-testid="generate-questionnaire-btn"]');
+
+    // Wait for download state
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
+      timeout: 60000,
+    });
+
+    // Download PDF
+    const [pdfDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('[data-testid="download-pdf-btn"]'),
+    ]);
+    expect(pdfDownload.suggestedFilename()).toContain('.pdf');
+
+    // Download Word (buttons should still be visible)
+    await expect(page.locator('[data-testid="download-word-btn"]')).toBeVisible();
+    const [wordDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('[data-testid="download-word-btn"]'),
+    ]);
+    expect(wordDownload.suggestedFilename()).toContain('.docx');
+
+    // Download Excel (buttons should still be visible)
+    await expect(page.locator('[data-testid="download-excel-btn"]')).toBeVisible();
+    const [excelDownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('[data-testid="download-excel-btn"]'),
+    ]);
+    expect(excelDownload.suggestedFilename()).toContain('.xlsx');
+
+    // All buttons should STILL be visible after all downloads
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible();
+  });
+
+  test('download state survives page reload', async ({ page, context }) => {
+    // Setup: Trigger questionnaire generation and wait for download state
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for ready state
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Click generate button
+    await page.click('[data-testid="generate-questionnaire-btn"]');
+
+    // Wait for download state
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
+      timeout: 60000,
+    });
+
+    // Download PDF to verify download state is active
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('[data-testid="download-pdf-btn"]'),
+    ]);
+    expect(download.suggestedFilename()).toContain('.pdf');
+
+    // Reload the page
+    await page.reload();
+
+    // Re-setup export API mock after reload
+    await setupExportApiMock(page);
+
+    // KEY ASSERTION: Download state should be restored from localStorage
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
+      timeout: 5000,
+    });
+
+    // Download buttons should be available again
+    await expect(page.locator('[data-testid="download-pdf-btn"]')).toBeVisible();
+    await expect(page.locator('[data-testid="download-word-btn"]')).toBeVisible();
+
+    // Should be able to download again after reload
+    const [redownload] = await Promise.all([
+      page.waitForEvent('download'),
+      page.click('[data-testid="download-word-btn"]'),
+    ]);
+    expect(redownload.suggestedFilename()).toContain('.docx');
+  });
+
+  test('download state clears when conversation is deleted', async ({ page }) => {
+    // Setup: Trigger questionnaire generation and wait for download state
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for ready state
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Click generate button
+    await page.click('[data-testid="generate-questionnaire-btn"]');
+
+    // Wait for download state
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
+      timeout: 60000,
+    });
+
+    // Delete the conversation (if delete button exists)
+    const deleteButton = page.locator('[data-testid="delete-conversation-btn"]');
+    if (await deleteButton.isVisible()) {
+      await deleteButton.click();
+
+      // Confirm deletion if there's a confirmation dialog
+      const confirmButton = page.locator('[data-testid="confirm-delete-btn"]');
+      if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+        await confirmButton.click();
+      }
+
+      // Download card should disappear
+      await expect(page.locator('[data-testid="questionnaire-card-download"]')).not.toBeVisible();
+    }
+  });
+
+  test('new questionnaire_ready clears previous download state', async ({ page }) => {
+    // Setup: Trigger questionnaire generation and wait for download state
+    await page.click('[data-testid="mode-selector"]');
+    await page.click('[data-testid="assessment-mode"]');
+    await page.fill('[data-testid="chat-input"]', 'Generate a comprehensive questionnaire');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for ready state
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Click generate button
+    await page.click('[data-testid="generate-questionnaire-btn"]');
+
+    // Wait for download state
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).toBeVisible({
+      timeout: 60000,
+    });
+
+    // Request a new questionnaire in the same conversation
+    await page.fill('[data-testid="chat-input"]', 'Generate a quick questionnaire instead');
+    await page.press('[data-testid="chat-input"]', 'Enter');
+
+    // Wait for new ready state (replaces download state)
+    await expect(page.locator('[data-testid="questionnaire-card-ready"]')).toBeVisible({
+      timeout: 15000,
+    });
+
+    // Previous download state should be cleared
+    await expect(page.locator('[data-testid="questionnaire-card-download"]')).not.toBeVisible();
+  });
+});
+
+/**
  * CI Configuration Notes:
  *
- * Add to playwright.config.ts:
- * {
- *   testDir: './e2e',
- *   timeout: 120000, // 2 minutes for long-running tests
- *   retries: 1,      // Retry once on flaky Claude responses
- *   use: {
- *     baseURL: 'http://localhost:3000',
- *     screenshot: 'only-on-failure',
- *     video: 'retain-on-failure'
- *   }
- * }
+ * playwright.config.ts is now configured with:
+ * - testDir: './e2e'
+ * - timeout: 120000 (2 minutes for long-running Claude responses)
+ * - retries: 2 on CI, 1 locally
+ * - acceptDownloads: true (Story 13.3.4 - required for download tests)
+ * - screenshot/video on failure
+ *
+ * To run E2E tests:
+ * 1. Install Playwright: pnpm add -D @playwright/test && npx playwright install
+ * 2. Start backend: pnpm --filter @guardian/backend dev
+ * 3. Run tests: npx playwright test
  *
  * Environment setup for CI:
  * - Ensure backend and frontend are running before tests

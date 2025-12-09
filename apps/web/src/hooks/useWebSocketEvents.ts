@@ -3,7 +3,8 @@
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
-import { useChatStore } from '@/stores/chatStore';
+import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
+import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 import type { ComposerRef } from '@/components/chat/Composer';
 import type { ConversationMode } from '@/components/chat/ModeSelector';
@@ -48,11 +49,15 @@ export interface UseWebSocketEventsParams {
   setRegeneratingMessageIndex: (index: number | null) => void;
   focusComposer: () => void;
 
-  // Persistence (Story 4.3.5)
+  // Persistence (Story 4.3.5, Story 13.3.2)
   userId?: string;
   persistence?: {
     clearDismiss: (conversationId: string) => void;
     savePayload: (conversationId: string, payload: QuestionnaireReadyPayload) => void;
+    // Story 13.3.2: Export persistence
+    saveExport: (conversationId: string, payload: ExportReadyPayload) => void;
+    loadExport: (conversationId: string) => ExportReadyPayload | null;
+    clearExport: (conversationId: string) => void;
   };
 }
 
@@ -72,6 +77,7 @@ export interface UseWebSocketEventsReturn {
   handleExportReady: (data: ExportReadyPayload) => void;
   handleExtractionFailed: (data: ExtractionFailedPayload) => void;
   handleQuestionnaireReady: (data: QuestionnaireReadyPayload) => void;
+  handleGenerationPhase: (data: GenerationPhasePayload) => void;
 }
 
 /**
@@ -179,6 +185,8 @@ export function useWebSocketEvents({
 
       // Reset generating state on error (allows retry - don't clear pendingQuestionnaire)
       useChatStore.getState().setGenerating(false);
+      // Story 13.6.1: Reset generation step so Generate button re-enables
+      useChatStore.getState().resetGenerationStep();
       // Transition to error state for questionnaire card to show retry
       useChatStore.getState().setQuestionnaireUIState('error');
       useChatStore.getState().setQuestionnaireError(errorMessage);
@@ -291,6 +299,12 @@ export function useWebSocketEvents({
       console.log('[useWebSocketEvents] Conversation deleted:', conversationId);
       // Clear export cache for this conversation before removal
       clearExportReady(conversationId);
+
+      // Story 13.3.2: Also clear localStorage export
+      if (persistence) {
+        persistence.clearExport(conversationId);
+      }
+
       // Remove from local store
       removeConversationFromList(conversationId);
       // Clear the request flag
@@ -320,7 +334,7 @@ export function useWebSocketEvents({
         requestNewChat();
       }
     },
-    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat]
+    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat, persistence]
   );
 
   // Handler 11: Conversation mode updated (server→client)
@@ -351,15 +365,23 @@ export function useWebSocketEvents({
 
       console.log('[useWebSocketEvents] Export ready:', data);
 
+      // Story 13.4.5: Mark stepper as complete (step = GENERATION_STEPS.length)
+      useChatStore.getState().setCurrentGenerationStep(GENERATION_STEPS.length);
+
       // Cache the export ready payload for this conversation
       setExportReady(data.conversationId, data);
+
+      // Story 13.3.2: Persist to localStorage for page reload survival
+      if (persistence) {
+        persistence.saveExport(data.conversationId, data);
+      }
 
       // Story 4.3.5: Transition questionnaire UI to 'download' state
       // NOTE: Legacy injection removed - QuestionnairePromptCard handles download UI
       useChatStore.getState().setQuestionnaireUIState('download');
       useChatStore.getState().setGenerating(false);
     },
-    [activeConversationId, setExportReady]
+    [activeConversationId, setExportReady, persistence]
   );
 
   // Handler 13: Extraction failed (questionnaire extraction error)
@@ -373,8 +395,16 @@ export function useWebSocketEvents({
 
       console.log('[useWebSocketEvents] Extraction failed:', data);
 
+      // Story 13.4.5: Reset stepper on error
+      useChatStore.getState().resetGenerationStep();
+
       // Clear any previous export state for this conversation (in case of retry)
       clearExportReady(data.conversationId);
+
+      // Story 13.3.2: Also clear localStorage export to prevent stale rehydration
+      if (persistence) {
+        persistence.clearExport(data.conversationId);
+      }
 
       // Story 4.3.5: Transition questionnaire UI to 'error' state
       // NOTE: Legacy injection removed - QuestionnairePromptCard handles error UI
@@ -382,7 +412,7 @@ export function useWebSocketEvents({
       useChatStore.getState().setQuestionnaireError(data.error);
       useChatStore.getState().setGenerating(false);
     },
-    [activeConversationId, clearExportReady]
+    [activeConversationId, clearExportReady, persistence]
   );
 
   // Handler 14: Questionnaire ready (Claude indicates readiness to generate)
@@ -408,6 +438,12 @@ export function useWebSocketEvents({
         assessmentType: data.assessmentType,
       });
 
+      // Story 13.3.2: Clear old export state (in-memory + localStorage) before setting new questionnaire
+      clearExportReady(data.conversationId);
+      if (persistence) {
+        persistence.clearExport(data.conversationId);
+      }
+
       // Save questionnaire payload to localStorage for rehydration
       if (persistence) {
         persistence.savePayload(data.conversationId, data);
@@ -418,7 +454,29 @@ export function useWebSocketEvents({
       useChatStore.getState().setQuestionnaireUIState('ready');
       useChatStore.getState().setQuestionnaireError(null); // Clear any previous error
     },
-    [activeConversationId, persistence]
+    [activeConversationId, clearExportReady, persistence]
+  );
+
+  // Handler 15: Generation phase update (Story 13.5.3)
+  const handleGenerationPhase = useCallback(
+    (data: GenerationPhasePayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring phase event for inactive conversation:', data.conversationId);
+        return;
+      }
+
+      // Only advance forward (idempotency - handles reconnection/duplicates)
+      const currentStep = useChatStore.getState().currentGenerationStep;
+      if (data.phase <= currentStep) {
+        console.log('[useWebSocketEvents] Ignoring out-of-order phase event:', data.phase, '<=', currentStep);
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Generation phase:', data.phaseId, '(', data.phase, ')');
+      useChatStore.getState().setCurrentGenerationStep(data.phase);
+    },
+    [activeConversationId]
   );
 
   return {
@@ -436,5 +494,6 @@ export function useWebSocketEvents({
     handleExportReady,
     handleExtractionFailed,
     handleQuestionnaireReady,
+    handleGenerationPhase,
   };
 }

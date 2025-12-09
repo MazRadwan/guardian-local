@@ -385,20 +385,16 @@ export function useChatController(): UseChatControllerReturn {
       return;
     }
 
-    // Check localStorage (key must match 13.3 pattern exactly)
-    const storageKey = `export_${activeConversationId}`;
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        console.log('[useChatController] Export data found in localStorage, restoring');
-        setExportReady(activeConversationId, parsed);
-        useChatStore.getState().setQuestionnaireUIState('download');
-        return;
-      } catch (e) {
-        console.warn('[useChatController] Invalid localStorage export data, continuing to server');
-        localStorage.removeItem(storageKey);
-      }
+    // Story 13.3.2: Rehydrate export from localStorage using shared key pattern
+    const storedExport = persistence.loadExport
+      ? persistence.loadExport(activeConversationId)
+      : null;
+
+    if (storedExport) {
+      console.log('[useChatController] Export data found in localStorage, restoring');
+      setExportReady(activeConversationId, storedExport);
+      useChatStore.getState().setQuestionnaireUIState('download');
+      return;
     }
 
     // Avoid duplicate requests for same conversation
@@ -412,7 +408,7 @@ export function useChatController(): UseChatControllerReturn {
     pendingExportStatusRequests.add(activeConversationId);
     adapter.requestExportStatus(activeConversationId);
 
-  }, [isConnected, activeConversationId, getExportReady, setExportReady, adapter]);
+  }, [isConnected, activeConversationId, getExportReady, setExportReady, adapter, persistence]);
 
   // Handle explicit new chat requests (from "New Chat" button)
   useEffect(() => {

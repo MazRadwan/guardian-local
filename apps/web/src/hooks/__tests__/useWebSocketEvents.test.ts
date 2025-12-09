@@ -2,7 +2,8 @@ import { renderHook } from '@testing-library/react';
 import { useWebSocketEvents } from '../useWebSocketEvents';
 import type { ChatMessage, QuestionnaireReadyPayload } from '@/lib/websocket';
 import type { Conversation } from '@/stores/chatStore';
-import { useChatStore } from '@/stores/chatStore';
+import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
+import type { GenerationPhasePayload } from '@guardian/shared';
 
 // Mock refs
 const createMockComposerRef = () => ({
@@ -79,7 +80,7 @@ describe('useWebSocketEvents', () => {
   });
 
   describe('Initialization', () => {
-    it('should return all 14 event handlers', () => {
+    it('should return all 15 event handlers', () => {
       const { result } = renderHook(() => useWebSocketEvents(defaultParams));
 
       expect(result.current.handleMessage).toBeInstanceOf(Function);
@@ -96,6 +97,7 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleExportReady).toBeInstanceOf(Function);
       expect(result.current.handleExtractionFailed).toBeInstanceOf(Function);
       expect(result.current.handleQuestionnaireReady).toBeInstanceOf(Function);
+      expect(result.current.handleGenerationPhase).toBeInstanceOf(Function);
     });
 
     it('should return stable handler references across re-renders', () => {
@@ -118,6 +120,7 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleExportReady).toBe(handlers.handleExportReady);
       expect(result.current.handleExtractionFailed).toBe(handlers.handleExtractionFailed);
       expect(result.current.handleQuestionnaireReady).toBe(handlers.handleQuestionnaireReady);
+      expect(result.current.handleGenerationPhase).toBe(handlers.handleGenerationPhase);
     });
   });
 
@@ -698,6 +701,197 @@ describe('useWebSocketEvents', () => {
     });
   });
 
+  describe('handleGenerationPhase (Story 13.5.6)', () => {
+    beforeEach(() => {
+      // Reset store state before each test
+      useChatStore.setState({
+        currentGenerationStep: -1,
+        questionnaireUIState: 'hidden',
+      });
+    });
+
+    const createPhasePayload = (
+      phase: number,
+      phaseId: string,
+      conversationId = 'conv-1'
+    ): GenerationPhasePayload => ({
+      conversationId,
+      phase,
+      phaseId: phaseId as GenerationPhasePayload['phaseId'],
+      timestamp: Date.now(),
+    });
+
+    describe('basic phase handling', () => {
+      it('should update currentGenerationStep on phase event', () => {
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(1, 'generating'));
+
+        expect(useChatStore.getState().currentGenerationStep).toBe(1);
+      });
+
+      it('should progress through all phases in order', () => {
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(0, 'context'));
+        expect(useChatStore.getState().currentGenerationStep).toBe(0);
+
+        result.current.handleGenerationPhase(createPhasePayload(1, 'generating'));
+        expect(useChatStore.getState().currentGenerationStep).toBe(1);
+
+        result.current.handleGenerationPhase(createPhasePayload(2, 'validating'));
+        expect(useChatStore.getState().currentGenerationStep).toBe(2);
+
+        result.current.handleGenerationPhase(createPhasePayload(3, 'saving'));
+        expect(useChatStore.getState().currentGenerationStep).toBe(3);
+      });
+    });
+
+    describe('conversation scoping', () => {
+      it('should ignore phase events for other conversations', () => {
+        useChatStore.setState({ currentGenerationStep: 0 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(2, 'validating', 'different-convo'));
+
+        // Should stay at 0, not advance to 2
+        expect(useChatStore.getState().currentGenerationStep).toBe(0);
+      });
+
+      it('should process phase events for active conversation', () => {
+        useChatStore.setState({ currentGenerationStep: 0 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(2, 'validating', 'conv-1'));
+
+        expect(useChatStore.getState().currentGenerationStep).toBe(2);
+      });
+    });
+
+    describe('idempotency', () => {
+      it('should ignore out-of-order phase events (lower than current)', () => {
+        useChatStore.setState({ currentGenerationStep: 2 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(1, 'generating'));
+
+        // Should stay at 2, not go back to 1
+        expect(useChatStore.getState().currentGenerationStep).toBe(2);
+      });
+
+      it('should ignore duplicate phase events (equal to current)', () => {
+        useChatStore.setState({ currentGenerationStep: 2 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(2, 'validating'));
+
+        expect(useChatStore.getState().currentGenerationStep).toBe(2);
+      });
+
+      it('should accept forward phase events', () => {
+        useChatStore.setState({ currentGenerationStep: 1 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleGenerationPhase(createPhasePayload(3, 'saving'));
+
+        expect(useChatStore.getState().currentGenerationStep).toBe(3);
+      });
+    });
+
+    describe('export_ready marks complete', () => {
+      it('should set step to GENERATION_STEPS.length on export_ready', () => {
+        useChatStore.setState({ currentGenerationStep: 3 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleExportReady({
+          conversationId: 'conv-1',
+          formats: ['pdf', 'word', 'excel'],
+          assessmentId: 'test-123',
+          questionCount: 50,
+        });
+
+        expect(useChatStore.getState().currentGenerationStep).toBe(GENERATION_STEPS.length);
+      });
+
+      it('should not update step on export_ready for other conversations', () => {
+        useChatStore.setState({ currentGenerationStep: 3 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleExportReady({
+          conversationId: 'different-convo',
+          formats: ['pdf'],
+          assessmentId: 'test-123',
+          questionCount: 50,
+        });
+
+        // Should stay at 3, not mark complete
+        expect(useChatStore.getState().currentGenerationStep).toBe(3);
+      });
+    });
+
+    describe('error handling', () => {
+      it('should reset step to -1 on extraction_failed', () => {
+        useChatStore.setState({ currentGenerationStep: 2 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleExtractionFailed({
+          conversationId: 'conv-1',
+          error: 'Generation failed',
+          assessmentId: 'test-123',
+        });
+
+        expect(useChatStore.getState().currentGenerationStep).toBe(-1);
+      });
+
+      it('should not reset step on extraction_failed for other conversations', () => {
+        useChatStore.setState({ currentGenerationStep: 2 });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleExtractionFailed({
+          conversationId: 'different-convo',
+          error: 'Generation failed',
+          assessmentId: 'test-123',
+        });
+
+        // Should stay at 2, not reset
+        expect(useChatStore.getState().currentGenerationStep).toBe(2);
+      });
+    });
+  });
+
   describe('Callback Stability', () => {
     it('should maintain stable references when unrelated state changes', () => {
       const { result, rerender } = renderHook(
@@ -725,6 +919,7 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleExportReady).toBe(handlersBeforeRerender.handleExportReady);
       expect(result.current.handleExtractionFailed).toBe(handlersBeforeRerender.handleExtractionFailed);
       expect(result.current.handleQuestionnaireReady).toBe(handlersBeforeRerender.handleQuestionnaireReady);
+      expect(result.current.handleGenerationPhase).toBe(handlersBeforeRerender.handleGenerationPhase);
     });
 
     it('should update handlers when dependencies change', () => {

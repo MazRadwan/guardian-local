@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { useQuestionnairePersistence } from '../useQuestionnairePersistence';
-import { QuestionnaireReadyPayload } from '@/lib/websocket';
+import { ExportReadyPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
 
 describe('useQuestionnairePersistence', () => {
   beforeEach(() => {
@@ -214,5 +214,145 @@ describe('useQuestionnairePersistence', () => {
     user1.current.dismiss('conv1');
     expect(user1.current.isDismissed('conv1')).toBe(true);
     expect(user2.current.isDismissed('conv1')).toBe(false);
+  });
+
+  // Story 13.3.2: Export persistence tests
+  describe('export persistence (Story 13.3.2)', () => {
+    const userId = 'user123';
+    const conversationId = 'conv456';
+    const validExport: ExportReadyPayload = {
+      conversationId: 'conv456',
+      assessmentId: 'assess789',
+      formats: ['pdf', 'word', 'excel'],
+      questionCount: 40,
+    };
+
+    it('saveExport() saves export to localStorage with user-scoped key', () => {
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      result.current.saveExport(conversationId, validExport);
+
+      const stored = localStorage.getItem(`guardian_q_export_${userId}:${conversationId}`);
+      expect(JSON.parse(stored!)).toEqual(validExport);
+    });
+
+    it('loadExport() returns null when no export exists', () => {
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      expect(result.current.loadExport(conversationId)).toBeNull();
+    });
+
+    it('loadExport() returns valid export when present', () => {
+      localStorage.setItem(
+        `guardian_q_export_${userId}:${conversationId}`,
+        JSON.stringify(validExport)
+      );
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      expect(result.current.loadExport(conversationId)).toEqual(validExport);
+    });
+
+    it('loadExport() returns null and clears malformed export (missing assessmentId)', () => {
+      const malformed = { conversationId, formats: ['pdf'] }; // missing assessmentId
+      localStorage.setItem(
+        `guardian_q_export_${userId}:${conversationId}`,
+        JSON.stringify(malformed)
+      );
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      expect(result.current.loadExport(conversationId)).toBeNull();
+      expect(localStorage.getItem(`guardian_q_export_${userId}:${conversationId}`)).toBeNull();
+    });
+
+    it('loadExport() returns null and clears malformed export (wrong conversationId)', () => {
+      const malformed = { ...validExport, conversationId: 'wrong-id' };
+      localStorage.setItem(
+        `guardian_q_export_${userId}:${conversationId}`,
+        JSON.stringify(malformed)
+      );
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      expect(result.current.loadExport(conversationId)).toBeNull();
+      expect(localStorage.getItem(`guardian_q_export_${userId}:${conversationId}`)).toBeNull();
+    });
+
+    it('loadExport() returns null and clears malformed export (formats not array)', () => {
+      const malformed = { ...validExport, formats: 'pdf' }; // not an array
+      localStorage.setItem(
+        `guardian_q_export_${userId}:${conversationId}`,
+        JSON.stringify(malformed)
+      );
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      expect(result.current.loadExport(conversationId)).toBeNull();
+      expect(localStorage.getItem(`guardian_q_export_${userId}:${conversationId}`)).toBeNull();
+    });
+
+    it('loadExport() returns null when export is invalid JSON', () => {
+      localStorage.setItem(`guardian_q_export_${userId}:${conversationId}`, 'invalid-json');
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+
+      expect(result.current.loadExport(conversationId)).toBeNull();
+    });
+
+    it('clearExport() removes export from localStorage', () => {
+      localStorage.setItem(
+        `guardian_q_export_${userId}:${conversationId}`,
+        JSON.stringify(validExport)
+      );
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+      result.current.clearExport(conversationId);
+
+      expect(localStorage.getItem(`guardian_q_export_${userId}:${conversationId}`)).toBeNull();
+    });
+
+    it('clearAllForUser() clears export keys along with payload and dismissed keys', () => {
+      // Set up various keys
+      localStorage.setItem(`guardian_q_export_${userId}:conv-1`, JSON.stringify(validExport));
+      localStorage.setItem(`guardian_q_payload_${userId}:conv-2`, JSON.stringify({}));
+      localStorage.setItem(`guardian_q_dismissed_${userId}:conv-3`, 'true');
+      localStorage.setItem('unrelated_key', 'should remain');
+
+      const { result } = renderHook(() => useQuestionnairePersistence(userId));
+      result.current.clearAllForUser();
+
+      expect(localStorage.getItem(`guardian_q_export_${userId}:conv-1`)).toBeNull();
+      expect(localStorage.getItem(`guardian_q_payload_${userId}:conv-2`)).toBeNull();
+      expect(localStorage.getItem(`guardian_q_dismissed_${userId}:conv-3`)).toBeNull();
+      expect(localStorage.getItem('unrelated_key')).toBe('should remain');
+    });
+
+    it('export persistence respects user namespacing', () => {
+      const { result: user1 } = renderHook(() => useQuestionnairePersistence('user1'));
+      const { result: user2 } = renderHook(() => useQuestionnairePersistence('user2'));
+
+      const export1: ExportReadyPayload = { ...validExport, assessmentId: 'assess1' };
+      const export2: ExportReadyPayload = { ...validExport, assessmentId: 'assess2' };
+
+      user1.current.saveExport(conversationId, export1);
+      user2.current.saveExport(conversationId, export2);
+
+      expect(user1.current.loadExport(conversationId)).toEqual(export1);
+      expect(user2.current.loadExport(conversationId)).toEqual(export2);
+    });
+
+    it('returns no-op export functions when userId is undefined', () => {
+      const { result } = renderHook(() => useQuestionnairePersistence(undefined));
+
+      // Should not throw
+      result.current.saveExport('any', validExport);
+      result.current.clearExport('any');
+
+      expect(result.current.loadExport('any')).toBeNull();
+
+      // Verify nothing was written to localStorage
+      expect(localStorage.length).toBe(0);
+    });
   });
 });
