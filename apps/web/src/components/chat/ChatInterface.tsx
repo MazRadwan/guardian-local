@@ -1,16 +1,15 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { QuestionnairePromptCard } from './QuestionnairePromptCard';
-import { StickyQuestionnaireIndicator } from './StickyQuestionnaireIndicator';
 import { AlertCircle } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
-import { useQuestionnaireCardVisibility } from '@/hooks/useQuestionnaireCardVisibility';
+import type { QuestionnaireReadyPayload } from '@/lib/websocket';
 
 export function ChatInterface() {
   const {
@@ -40,9 +39,6 @@ export function ChatInterface() {
   // Persistence hook - MUST be at top level
   const persistence = useQuestionnairePersistence(user?.id);
 
-  // Refs for questionnaire card visibility tracking
-  const questionnaireCardRef = useRef<HTMLDivElement>(null);
-
   // Questionnaire generation state from store
   const pendingQuestionnaire = useChatStore((state) => state.pendingQuestionnaire);
   const questionnaireUIState = useChatStore((state) => state.questionnaireUIState);
@@ -52,13 +48,17 @@ export function ChatInterface() {
   const clearPendingQuestionnaire = useChatStore((state) => state.clearPendingQuestionnaire);
   const setQuestionnaireUIState = useChatStore((state) => state.setQuestionnaireUIState);
 
+  // Stepper state from store (Story 13.4.3)
+  const generationSteps = useChatStore((state) => state.generationSteps);
+  const currentGenerationStep = useChatStore((state) => state.currentGenerationStep);
+  const isGeneratingQuestionnaire = useChatStore((state) => state.isGeneratingQuestionnaire);
+  const setCurrentGenerationStep = useChatStore((state) => state.setCurrentGenerationStep);
+  const resetGenerationStep = useChatStore((state) => state.resetGenerationStep);
+
   // Get export data for active conversation
   const exportData = activeConversationId
     ? exportReadyByConversation[activeConversationId]
     : null;
-
-  // Track card visibility for sticky indicator
-  const isCardVisible = useQuestionnaireCardVisibility(questionnaireCardRef, messageListRef);
 
   // Track previous conversation ID to detect actual changes
   const prevConversationIdRef = useRef<string | null>(null);
@@ -66,6 +66,23 @@ export function ChatInterface() {
   // Rehydrate questionnaire state from localStorage on conversation switch
   useEffect(() => {
     if (!activeConversationId || !user?.id) return;
+
+    const applyPayloadIfValid = (payload: QuestionnaireReadyPayload | null) => {
+      if (!payload) return false;
+
+      const isValid =
+        payload.conversationId === activeConversationId &&
+        Boolean(payload.assessmentType);
+
+      if (isValid) {
+        useChatStore.getState().setPendingQuestionnaire(payload);
+        return true;
+      }
+
+      // Malformed or mismatched payload - clear to prevent stale state
+      persistence.clearPayload(activeConversationId);
+      return false;
+    };
 
     // GUARD 1: Only rehydrate if conversation actually changed
     if (prevConversationIdRef.current === activeConversationId) {
@@ -80,30 +97,56 @@ export function ChatInterface() {
       return;
     }
 
-    // Always clear previous conversation's state first
+    // Always clear previous conversation's UI state first
     useChatStore.getState().clearPendingQuestionnaire();
     useChatStore.getState().setQuestionnaireUIState('hidden');
 
-    // If dismissed for this conversation, don't restore
-    if (persistence.isDismissed(activeConversationId)) {
+    // Priority 1: Check in-memory export state (survives conversation switch)
+    const exportData = useChatStore.getState().exportReadyByConversation?.[activeConversationId];
+    if (exportData && exportData.conversationId === activeConversationId) {
+      // BUGFIX: Still need payload for QuestionnairePromptCard to render
+      const savedPayload = persistence.loadPayload(activeConversationId);
+      applyPayloadIfValid(savedPayload);
+      useChatStore.getState().setQuestionnaireUIState('download');
       return;
     }
 
-    // Try to load persisted payload
+    // Story 13.3.2: Priority 1.5 - Check localStorage export (page reload case)
+    const savedExport = persistence.loadExport(activeConversationId);
+    if (savedExport && savedExport.conversationId === activeConversationId) {
+      // Restore to in-memory cache
+      useChatStore.getState().setExportReady(activeConversationId, savedExport);
+      // Also restore payload for card rendering
+      const savedPayload = persistence.loadPayload(activeConversationId);
+      applyPayloadIfValid(savedPayload);
+      useChatStore.getState().setQuestionnaireUIState('download');
+      return;
+    }
+
+    // Priority 2: Check localStorage payload with shape validation
     const savedPayload = persistence.loadPayload(activeConversationId);
-    if (savedPayload) {
-      useChatStore.getState().setPendingQuestionnaire(savedPayload);
+    if (applyPayloadIfValid(savedPayload)) {
       useChatStore.getState().setQuestionnaireUIState('ready');
     }
-  }, [activeConversationId, user?.id]); // Remove persistence from deps - it's stable (memoized by userId)
+  }, [activeConversationId, user?.id, persistence]);
+
+  // Reset stepper when conversation changes (Story 13.5.4)
+  useEffect(() => {
+    resetGenerationStep();
+  }, [activeConversationId, resetGenerationStep]);
 
   const handleGenerateQuestionnaire = useCallback(() => {
     if (!pendingQuestionnaire || !adapter) return;
+
+    // Reset stepper and start at step 0 (immediate feedback before backend response)
+    resetGenerationStep();
+    setCurrentGenerationStep(0);
 
     // Transition to generating state
     setQuestionnaireUIState('generating');
     setGenerating(true);
 
+    // Emit generation request - backend handles phase progression (Story 13.5.4)
     adapter.generateQuestionnaire({
       conversationId: pendingQuestionnaire.conversationId,
       assessmentType: pendingQuestionnaire.assessmentType,
@@ -113,28 +156,18 @@ export function ChatInterface() {
       selectedCategories: pendingQuestionnaire.selectedCategories,
     });
 
-    // IMPORTANT: State transitions happen in event handlers:
-    // - export_ready event -> 'download' state
-    // - extraction_failed event -> 'error' state
-  }, [pendingQuestionnaire, adapter, setGenerating, setQuestionnaireUIState]);
-
-  const handleDismiss = useCallback(() => {
-    if (!activeConversationId || !pendingQuestionnaire) return;
-
-    // Mark as dismissed in localStorage
-    persistence.dismiss(activeConversationId);
-
-    // Clear from store (transitions to 'hidden')
-    clearPendingQuestionnaire();
-    setQuestionnaireUIState('hidden');
-  }, [activeConversationId, pendingQuestionnaire, persistence, clearPendingQuestionnaire, setQuestionnaireUIState]);
-
-  const handleScrollToCard = useCallback(() => {
-    questionnaireCardRef.current?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-    });
-  }, []);
+    // State transitions happen via WebSocket event handlers:
+    // - generation_phase events -> step progression (handled in useWebSocketEvents)
+    // - export_ready event -> 'download' state, step complete
+    // - extraction_failed event -> 'error' state, stepper reset
+  }, [
+    pendingQuestionnaire,
+    adapter,
+    setGenerating,
+    setQuestionnaireUIState,
+    setCurrentGenerationStep,
+    resetGenerationStep,
+  ]);
 
   const handleDownload = useCallback(async (format: string) => {
     if (!exportData || !token) return;
@@ -173,17 +206,13 @@ export function ChatInterface() {
 
       console.log(`[ChatInterface] Successfully downloaded ${format.toUpperCase()} file`);
 
-      // After successful download, clear state and persist
-      if (activeConversationId) {
-        persistence.clearPayload(activeConversationId);
-      }
-      clearPendingQuestionnaire();
-      setQuestionnaireUIState('hidden');
+      // Story 13.3.1: Keep download state visible for re-downloads
+      // State only clears on: conversation delete, new questionnaire_ready, or extraction error
     } catch (err) {
       console.error('[ChatInterface] Download error:', err);
       // Don't change state on download error - user can retry
     }
-  }, [exportData, token, activeConversationId, persistence, clearPendingQuestionnaire, setQuestionnaireUIState]);
+  }, [exportData, token]);
 
   return (
     <div className="flex h-full flex-col relative">
@@ -236,32 +265,23 @@ export function ChatInterface() {
                 pendingQuestionnaire.conversationId === activeConversationId &&
                 questionnaireUIState !== 'hidden' ? (
                   <QuestionnairePromptCard
-                    ref={questionnaireCardRef}
                     payload={pendingQuestionnaire}
                     uiState={questionnaireUIState}
                     error={questionnaireError}
                     exportData={exportData}
                     onGenerate={handleGenerateQuestionnaire}
-                    onDismiss={handleDismiss}
                     onDownload={handleDownload}
                     onRetry={handleGenerateQuestionnaire}
                     className="mx-4 mb-4"
+                    steps={generationSteps}
+                    currentStep={currentGenerationStep}
+                    isRunning={isGeneratingQuestionnaire}
                   />
                 ) : undefined
               }
             />
           </div>
           <div className="flex-shrink-0 bg-white z-10">
-            {/* Sticky Questionnaire Indicator - appears above Composer when card scrolled out */}
-            {pendingQuestionnaire &&
-              pendingQuestionnaire.conversationId === activeConversationId &&
-              questionnaireUIState !== 'hidden' && (
-                <StickyQuestionnaireIndicator
-                  uiState={questionnaireUIState}
-                  isVisible={isCardVisible}
-                  onScrollToCard={handleScrollToCard}
-                />
-              )}
             <div className="max-w-3xl mx-auto w-full">
               <Composer
                 ref={composerRef}

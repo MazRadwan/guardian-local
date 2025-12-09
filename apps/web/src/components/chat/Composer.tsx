@@ -83,7 +83,6 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
     const isSendEnabled = message.trim().length > 0 && !disabled;
     const isBusy = isStreaming || isLoading;
-    const showThinking = isLoading && !isStreaming;
 
     return (
       <div className="bg-white p-2">
@@ -139,25 +138,6 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                       <Paperclip className="h-5 w-5" />
                     </Button>
                   </>
-                )}
-                
-                {/* Show status text only during pre-stream loading */}
-                {showThinking && (
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-                      </svg>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium">Guardian is thinking</span>
-                      <span className="flex gap-0.5">
-                        <span className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                        <span className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                        <span className="h-1 w-1 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                      </span>
-                    </div>
-                  </div>
                 )}
               </div>
 

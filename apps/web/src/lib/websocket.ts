@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import type { GenerationPhasePayload } from '@guardian/shared';
 
 export interface Conversation {
   id: string;
@@ -58,6 +59,16 @@ export interface ExportReadyPayload {
 export interface ExtractionFailedPayload {
   conversationId: string;
   assessmentId: string;
+  error: string;
+}
+
+// Story 13.9.2: Export status resume types
+export interface ExportStatusNotFoundPayload {
+  conversationId: string;
+}
+
+export interface ExportStatusErrorPayload {
+  conversationId: string;
   error: string;
 }
 
@@ -547,6 +558,81 @@ export class WebSocketClient {
     console.log('[WebSocket] Requesting questionnaire generation:', payload.conversationId);
 
     this.socket.emit('generate_questionnaire', payload);
+  }
+
+  /**
+   * Listen for generation_phase events (Story 13.5.3)
+   * Emitted by backend at each phase boundary during questionnaire generation.
+   *
+   * @param callback - Function to call with phase payload
+   * @returns Unsubscribe function
+   */
+  onGenerationPhase(callback: (data: GenerationPhasePayload) => void): () => void {
+    if (!this.socket) {
+      throw new Error('WebSocket not initialized');
+    }
+
+    const handler = (data: GenerationPhasePayload) => {
+      console.log('[WebSocket] Generation phase:', data.phaseId, '(', data.phase, ')');
+      callback(data);
+    };
+
+    this.socket.on('generation_phase', handler);
+
+    return () => {
+      this.socket?.off('generation_phase', handler);
+    };
+  }
+
+  // Story 13.9.2: Export status resume methods
+
+  /**
+   * Request export status for a conversation (13.9.2)
+   * Used to restore download buttons on session resume.
+   */
+  requestExportStatus(conversationId: string): void {
+    if (!this.socket?.connected) {
+      console.warn('[WebSocket] Cannot request export status: not connected');
+      return;
+    }
+    console.log('[WebSocket] Requesting export status for:', conversationId);
+    this.socket.emit('get_export_status', { conversationId });
+  }
+
+  /**
+   * Subscribe to export_status_not_found events (13.9.2)
+   * Called when server confirms no export exists for the conversation.
+   */
+  onExportStatusNotFound(
+    callback: (data: ExportStatusNotFoundPayload) => void
+  ): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ExportStatusNotFoundPayload) => {
+      console.log('[WebSocket] Export status not found:', data.conversationId);
+      callback(data);
+    };
+
+    this.socket.on('export_status_not_found', handler);
+    return () => this.socket?.off('export_status_not_found', handler);
+  }
+
+  /**
+   * Subscribe to export_status_error events (13.9.2)
+   * Called when server returns an error (auth, invalid input, etc.)
+   */
+  onExportStatusError(
+    callback: (data: ExportStatusErrorPayload) => void
+  ): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ExportStatusErrorPayload) => {
+      console.error('[WebSocket] Export status error:', data);
+      callback(data);
+    };
+
+    this.socket.on('export_status_error', handler);
+    return () => this.socket?.off('export_status_error', handler);
   }
 
 }

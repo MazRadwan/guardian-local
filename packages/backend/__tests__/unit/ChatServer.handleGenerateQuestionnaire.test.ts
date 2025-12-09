@@ -12,6 +12,9 @@ import { ChatServer } from '../../src/infrastructure/websocket/ChatServer.js';
 import type { QuestionnaireSchema } from '../../src/domain/types/QuestionnaireSchema.js';
 import { QUESTIONNAIRE_OUTPUT_TOOL_NAME } from '../../src/infrastructure/ai/tools/questionnaireOutputTool.js';
 
+// Inline definition to avoid @guardian/shared ESM import issues in Jest
+const GENERATION_PHASES = ['context', 'generating', 'validating', 'saving'] as const;
+
 // Create fixture for QuestionnaireSchema
 function fixtureQuestionnaireSchema(
   overrides: Partial<QuestionnaireSchema['metadata']> = {}
@@ -56,6 +59,7 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
   let mockVendorService: any;
   let mockQuestionnaireReadyService: any;
   let mockQuestionnaireGenerationService: any;
+  let mockQuestionService: any;
   let mockIo: any;
   let mockRateLimiter: any;
   let mockPromptCacheManager: any;
@@ -124,6 +128,12 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
       handle: jest.fn(),
     };
 
+    // Mock QuestionService
+    mockQuestionService = {
+      getQuestionCount: jest.fn().mockResolvedValue(90),
+      getQuestions: jest.fn().mockResolvedValue([]),
+    };
+
     // Mock IO
     mockIo = {
       of: jest.fn().mockReturnValue({
@@ -158,7 +168,8 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
       mockAssessmentService,
       mockVendorService,
       mockQuestionnaireReadyService,
-      mockQuestionnaireGenerationService
+      mockQuestionnaireGenerationService,
+      mockQuestionService
     );
   });
 
@@ -470,6 +481,157 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
         contextSummary: 'Evaluating AI diagnostics',
         selectedCategories: ['privacy_risk', 'security_risk'],
       });
+    });
+  });
+
+  describe('Phase Events (Story 13.5.5)', () => {
+    it('emits generation_phase events in order (0, 1, 2, 3)', async () => {
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const phaseEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'generation_phase'
+      );
+
+      expect(phaseEvents).toHaveLength(4);
+      expect(phaseEvents[0][1].phase).toBe(0);
+      expect(phaseEvents[0][1].phaseId).toBe('context');
+      expect(phaseEvents[1][1].phase).toBe(1);
+      expect(phaseEvents[1][1].phaseId).toBe('generating');
+      expect(phaseEvents[2][1].phase).toBe(2);
+      expect(phaseEvents[2][1].phaseId).toBe('validating');
+      expect(phaseEvents[3][1].phase).toBe(3);
+      expect(phaseEvents[3][1].phaseId).toBe('saving');
+    });
+
+    it('emits export_ready after all phase events', async () => {
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const eventNames = mockSocket.emit.mock.calls.map((call: any[]) => call[0]);
+      const exportReadyIndex = eventNames.lastIndexOf('export_ready');
+      const lastPhaseIndex = eventNames.lastIndexOf('generation_phase');
+
+      expect(exportReadyIndex).toBeGreaterThan(lastPhaseIndex);
+    });
+
+    it('includes conversationId in all phase events', async () => {
+      const conversationId = 'conv-123';
+
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId, assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const phaseEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'generation_phase'
+      );
+      phaseEvents.forEach((call: any[]) => {
+        expect(call[1].conversationId).toBe(conversationId);
+      });
+    });
+
+    it('includes timestamp in all phase events', async () => {
+      const before = Date.now();
+
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const after = Date.now();
+      const phaseEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'generation_phase'
+      );
+
+      phaseEvents.forEach((call: any[]) => {
+        expect(call[1].timestamp).toBeGreaterThanOrEqual(before);
+        expect(call[1].timestamp).toBeLessThanOrEqual(after);
+      });
+    });
+
+    it('phaseId matches GENERATION_PHASES constant', async () => {
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const phaseEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'generation_phase'
+      );
+
+      phaseEvents.forEach((call: any[], idx: number) => {
+        expect(call[1].phaseId).toBe(GENERATION_PHASES[idx]);
+      });
+    });
+  });
+
+  describe('Phase Events Error Handling (Story 13.5.5)', () => {
+    it('emits only phase 0 when Claude call fails', async () => {
+      mockQuestionnaireGenerationService.generate.mockRejectedValue(
+        new Error('Claude API error')
+      );
+
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const phaseEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'generation_phase'
+      );
+
+      // Phase 0 emitted before Claude call, then error
+      expect(phaseEvents.length).toBeLessThanOrEqual(1);
+      if (phaseEvents.length === 1) {
+        expect(phaseEvents[0][1].phase).toBe(0);
+      }
+    });
+
+    it('emits error event on generation failure', async () => {
+      mockQuestionnaireGenerationService.generate.mockRejectedValue(
+        new Error('Generation failed')
+      );
+
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      // ChatServer emits 'error' event on failure (not extraction_failed)
+      const errorEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'error'
+      );
+      expect(errorEvents.length).toBeGreaterThanOrEqual(1);
+      expect(errorEvents[0][1].event).toBe('generate_questionnaire');
+    });
+
+    it('does not emit export_ready on error', async () => {
+      mockQuestionnaireGenerationService.generate.mockRejectedValue(
+        new Error('Generation failed')
+      );
+
+      await chatServer.handleGenerateQuestionnaire(
+        mockSocket,
+        { conversationId: 'conv-123', assessmentType: 'comprehensive' },
+        'test-user'
+      );
+
+      const exportEvents = mockSocket.emit.mock.calls.filter(
+        (call: any[]) => call[0] === 'export_ready'
+      );
+      expect(exportEvents).toHaveLength(0);
     });
   });
 });

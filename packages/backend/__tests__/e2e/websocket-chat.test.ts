@@ -3,6 +3,11 @@
  * Tests WebSocket connection, authentication, and message handling
  */
 
+// Mock prompts module to avoid import.meta.url issues in Jest
+jest.mock('../../src/infrastructure/ai/prompts', () => ({
+  getSystemPrompt: jest.fn().mockReturnValue('Mocked system prompt for testing'),
+}))
+
 import { Server as HTTPServer } from 'http'
 import { Server as SocketIOServer } from 'socket.io'
 import { io as ioClient, Socket as ClientSocket } from 'socket.io-client'
@@ -20,6 +25,11 @@ import type { IClaudeClient, ClaudeMessage, StreamChunk, ClaudeRequestOptions } 
 import { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter'
 import { PromptCacheManager } from '../../src/infrastructure/ai/PromptCacheManager'
 import { getSystemPrompt } from '../../src/infrastructure/ai/prompts'
+import { AssessmentService } from '../../src/application/services/AssessmentService'
+import { VendorService } from '../../src/application/services/VendorService'
+import { QuestionnaireReadyService } from '../../src/application/services/QuestionnaireReadyService'
+import { QuestionnaireGenerationService } from '../../src/application/services/QuestionnaireGenerationService'
+import { QuestionService } from '../../src/application/services/QuestionService'
 
 // Mock Claude client for deterministic test responses
 class MockClaudeClient implements IClaudeClient {
@@ -39,6 +49,33 @@ class MockClaudeClient implements IClaudeClient {
     yield { content: 'streaming response', isComplete: false }
     yield { content: '', isComplete: true }
   }
+}
+
+// Mock repository implementations for test service construction
+const mockVendorRepository = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByUserId: jest.fn(),
+  findByName: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+}
+
+const mockAssessmentRepository = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByUserId: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+}
+
+const mockQuestionRepository = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByAssessmentId: jest.fn(),
+  update: jest.fn(),
+  delete: jest.fn(),
+  bulkCreate: jest.fn(),
 }
 
 describe('WebSocket Chat E2E Tests', () => {
@@ -87,13 +124,36 @@ describe('WebSocket Chat E2E Tests', () => {
       { enabled: false, prefix: 'test' },
       getSystemPrompt
     )
+
+    // Create service instances with mock repositories (for constructor compatibility)
+    const vendorService = new VendorService(mockVendorRepository as any)
+    const assessmentService = new AssessmentService(mockVendorRepository as any, mockAssessmentRepository as any)
+    const questionnaireReadyService = new QuestionnaireReadyService(conversationService)
+    const questionnaireGenerationService = new QuestionnaireGenerationService(
+      mockClaudeClient,
+      mockQuestionRepository as any,
+      assessmentService,
+      vendorService,
+      conversationService
+    )
+    const questionService = new QuestionService(
+      mockClaudeClient,
+      mockQuestionRepository as any,
+      mockAssessmentRepository as any
+    )
+
     chatServer = new ChatServer(
       ioServer,
       conversationService,
       mockClaudeClient,
       rateLimiter,
       'test-jwt-secret-key',
-      promptCacheManager
+      promptCacheManager,
+      assessmentService,
+      vendorService,
+      questionnaireReadyService,
+      questionnaireGenerationService,
+      questionService
     )
 
     // Start server
@@ -174,14 +234,14 @@ describe('WebSocket Chat E2E Tests', () => {
       })
     })
 
-    it('should receive connected event with user info', (done) => {
+    it('should receive connection_ready event with user info', (done) => {
       clientSocket = ioClient(`http://localhost:${PORT}/chat`, {
         auth: {
           token: testToken,
         },
       })
 
-      clientSocket.on('connected', (data) => {
+      clientSocket.on('connection_ready', (data) => {
         expect(data.message).toBe('Connected to Guardian chat server')
         expect(data.userId).toBe(testUserId)
         done()
@@ -244,8 +304,8 @@ describe('WebSocket Chat E2E Tests', () => {
         },
       })
 
-      // Capture the auto-created conversationId
-      clientSocket.on('connected', (data) => {
+      // Capture the conversationId from connection_ready event
+      clientSocket.on('connection_ready', (data) => {
         socketConversationId = data.conversationId
         done()
       })
@@ -348,7 +408,7 @@ describe('WebSocket Chat E2E Tests', () => {
   })
 
   describe('get_history event', () => {
-    beforeEach(async (done) => {
+    beforeEach(async () => {
       // Create some messages
       await conversationService.sendMessage({
         conversationId: testConversationId,
@@ -375,8 +435,11 @@ describe('WebSocket Chat E2E Tests', () => {
         },
       })
 
-      clientSocket.on('connect', () => {
-        done()
+      // Wait for connection
+      await new Promise<void>((resolve) => {
+        clientSocket.on('connect', () => {
+          resolve()
+        })
       })
     })
 
@@ -422,7 +485,7 @@ describe('WebSocket Chat E2E Tests', () => {
       })
     })
 
-    it('should return empty array for conversation with no messages', async (done) => {
+    it('should return empty array for conversation with no messages', async () => {
       // Create a new empty conversation
       const emptyConversation = await conversationService.createConversation({
         userId: testUserId,
@@ -433,10 +496,13 @@ describe('WebSocket Chat E2E Tests', () => {
         conversationId: emptyConversation.id,
       })
 
-      clientSocket.on('history', (data) => {
-        expect(data.conversationId).toBe(emptyConversation.id)
-        expect(data.messages).toEqual([])
-        done()
+      // Wait for history event
+      await new Promise<void>((resolve) => {
+        clientSocket.on('history', (data) => {
+          expect(data.conversationId).toBe(emptyConversation.id)
+          expect(data.messages).toEqual([])
+          resolve()
+        })
       })
     })
 

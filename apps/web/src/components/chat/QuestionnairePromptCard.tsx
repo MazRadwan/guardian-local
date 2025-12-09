@@ -1,11 +1,13 @@
 'use client';
 
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { FileText, Loader2, Download, X, AlertCircle, RefreshCw } from 'lucide-react';
+import { FileText, Loader2, Download, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react';
 import { QuestionnaireReadyPayload } from '@/lib/websocket';
 import { cn } from '@/lib/utils';
+import { VerticalStepper } from './VerticalStepper';
+import type { Step } from '@/types/stepper';
+import { useChatStore } from '@/stores/chatStore';
 
 export type QuestionnaireUIState = 'ready' | 'generating' | 'download' | 'error';
 
@@ -20,14 +22,18 @@ interface QuestionnairePromptCardProps {
   exportData?: { formats: string[]; assessmentId: string } | null;
   /** Called when user clicks Generate */
   onGenerate: () => void;
-  /** Called when user clicks Dismiss (X) */
-  onDismiss: () => void;
   /** Called when user clicks a download format button */
   onDownload: (format: string) => void;
   /** Called when user clicks Retry (from error state) */
   onRetry: () => void;
   /** Optional className */
   className?: string;
+  /** Stepper props (Story 13.4.3) */
+  steps?: Step[];
+  /** Current step index (-1 = idle, 0-N = in progress, >= length = complete) */
+  currentStep?: number;
+  /** Whether generation is actively running */
+  isRunning?: boolean;
 }
 
 /**
@@ -60,222 +66,324 @@ const assessmentTypeConfig = {
 /**
  * QuestionnairePromptCard
  *
- * Unified inline card for questionnaire generation flow.
+ * Assistant-style bubble for questionnaire generation flow.
  * Handles 4 states: Ready, Generating, Download, Error.
- * Uses forwardRef for visibility tracking via IntersectionObserver.
+ * Styled to match chat assistant messages.
  */
 export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnairePromptCardProps>(
   (
-    { payload, uiState, error, exportData, onGenerate, onDismiss, onDownload, onRetry, className },
+    { payload, uiState, error, exportData, onGenerate, onDownload, onRetry, className, steps = [], currentStep = -1, isRunning = false },
     ref
   ) => {
     const config = assessmentTypeConfig[payload.assessmentType] || assessmentTypeConfig.comprehensive;
+
+    // Story 13.4.4: Collapse/expand state
+    const [isExpanded, setIsExpanded] = useState(true);
+
+    // Story 13.6.1: Timer ref for collapse (enables manual clearing in 13.6.2)
+    const collapseTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Derive complete state from stepper
+    const isComplete = currentStep >= steps.length && steps.length > 0;
+    const hasStartedGeneration = currentStep >= 0;
+
+    // Story 13.6.1: Guard - only collapse on successful completion
+    const isSuccessfullyComplete = isComplete && uiState === 'download';
+
+    // Story 13.6.1: Auto-collapse when complete (with guards)
+    useEffect(() => {
+      // Only auto-collapse on successful completion, not error
+      if (isSuccessfullyComplete) {
+        collapseTimerRef.current = setTimeout(() => {
+          setIsExpanded(false);
+          collapseTimerRef.current = null;
+        }, 800);
+      }
+      // Always return cleanup to clear any pending timer on ANY state change
+      return () => {
+        if (collapseTimerRef.current) {
+          clearTimeout(collapseTimerRef.current);
+          collapseTimerRef.current = null;
+        }
+      };
+    }, [isSuccessfullyComplete]);
+
+    // Story 13.6.1: Keep expanded on error to show failure point
+    useEffect(() => {
+      if (uiState === 'error') {
+        // Clear any pending collapse timer
+        if (collapseTimerRef.current) {
+          clearTimeout(collapseTimerRef.current);
+          collapseTimerRef.current = null;
+        }
+        setIsExpanded(true);
+      }
+    }, [uiState]);
+
+    // Story 13.6.2: Reset collapse state on conversation switch
+    const activeConversationId = useChatStore((s) => s.activeConversationId);
+    const prevConversationIdRef = useRef(activeConversationId);
+    useEffect(() => {
+      // Skip on initial mount - only act on actual conversation changes
+      if (prevConversationIdRef.current === activeConversationId) {
+        return;
+      }
+      prevConversationIdRef.current = activeConversationId;
+
+      // Clear any pending collapse timer when conversation changes
+      if (collapseTimerRef.current) {
+        clearTimeout(collapseTimerRef.current);
+        collapseTimerRef.current = null;
+      }
+      // Reset to expanded on conversation switch
+      setIsExpanded(true);
+    }, [activeConversationId]);
+
+    // Story 13.4.4: Auto-expand when generation starts
+    useEffect(() => {
+      if (isRunning && currentStep >= 0) {
+        setIsExpanded(true);
+      }
+    }, [isRunning, currentStep]);
 
     // ─────────────────────────────────────────────────────────────
     // ERROR STATE
     // ─────────────────────────────────────────────────────────────
     if (uiState === 'error') {
       return (
-        <Card
+        <div
           ref={ref}
           data-testid="questionnaire-card-error"
-          className={cn('border-2 border-red-200 bg-red-50', className)}
+          className={cn(
+            'bg-red-50 rounded-2xl rounded-tl-sm p-4 max-w-md border-2 border-red-200',
+            className
+          )}
         >
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-red-600">Generation Failed</p>
-                  <p className="text-sm text-red-700 mt-1">{error || 'An unexpected error occurred'}</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={onRetry}
-                    className="mt-2"
-                    data-testid="retry-btn"
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Retry
-                  </Button>
-                </div>
-              </div>
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-red-600">Generation Failed</p>
+              <p className="text-sm text-red-700 mt-1">{error || 'An unexpected error occurred'}</p>
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismiss}
-                className="h-6 w-6 flex-shrink-0"
-                data-testid="dismiss-btn"
+                size="sm"
+                variant="outline"
+                onClick={onRetry}
+                className="mt-2"
+                data-testid="retry-btn"
               >
-                <X className="h-4 w-4" />
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Retry
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       );
     }
 
     // ─────────────────────────────────────────────────────────────
-    // DOWNLOAD STATE
+    // DOWNLOAD STATE (Story 13.4.3-4: with collapsible stepper)
     // ─────────────────────────────────────────────────────────────
     if (uiState === 'download' && exportData) {
       return (
-        <Card
+        <div
           ref={ref}
           data-testid="questionnaire-card-download"
-          className={cn('border-2 border-green-200 bg-green-50', className)}
+          className={cn(
+            'bg-slate-50 rounded-2xl rounded-tl-sm p-4 max-w-md border border-slate-100',
+            className
+          )}
         >
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <Download className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-green-600">Questionnaire Ready</p>
-                  <p className="text-sm text-gray-600 mt-1">Download your questionnaire:</p>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {exportData.formats.map((format) => (
-                      <Button
-                        key={format}
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onDownload(format)}
-                        data-testid={`download-${format}-btn`}
-                      >
-                        <Download className="h-4 w-4 mr-1" />
-                        {format.toUpperCase()}
-                      </Button>
-                    ))}
+          {/* Message text */}
+          <p className="text-sm text-slate-700 mb-3">
+            Perfect! I&apos;ve generated the questionnaire for your {config.label.toLowerCase()}.
+          </p>
+
+          {/* Collapsible stepper section */}
+          {steps.length > 0 && (
+            <div className="border border-slate-200 rounded-lg bg-white overflow-hidden mb-3">
+              {/* Header - clickable to toggle */}
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors"
+                data-testid="stepper-toggle"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-slate-700">Assessment Complete</span>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    'w-4 h-4 text-slate-400 transition-transform duration-200',
+                    isExpanded && 'rotate-180'
+                  )}
+                />
+              </button>
+
+              {/* Expandable stepper content */}
+              <div
+                className={cn(
+                  'overflow-hidden transition-all duration-300 ease-in-out',
+                  isExpanded ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'
+                )}
+              >
+                <div className="px-3 pb-3 border-t border-slate-100">
+                  <div className="pt-3">
+                    <VerticalStepper steps={steps} currentStep={currentStep} isRunning={false} />
                   </div>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismiss}
-                className="h-6 w-6 flex-shrink-0"
-                data-testid="dismiss-btn"
-              >
-                <X className="h-4 w-4" />
-              </Button>
+
+              {/* Summary meta - shown when collapsed (Story 13.6.4: safe fallbacks) */}
+              {!isExpanded && (
+                <div className="px-3 pb-2.5 -mt-1">
+                  <span className="text-xs text-slate-500">
+                    {payload?.estimatedQuestions
+                      ? `~${payload.estimatedQuestions} questions`
+                      : 'Assessment complete'}
+                    {config?.label && ` · ${config.label}`}
+                  </span>
+                </div>
+              )}
             </div>
-          </CardContent>
-        </Card>
+          )}
+
+          {/* Download buttons - dynamically rendered from exportData.formats */}
+          <div className="flex flex-wrap items-center gap-2 animate-fadeIn">
+            {exportData.formats.map((format, index) => (
+              <Button
+                key={format}
+                size="sm"
+                variant={index === 0 ? 'default' : 'outline'}
+                onClick={() => onDownload(format)}
+                data-testid={`download-${format}-btn`}
+                className={index === 0 ? 'inline-flex items-center gap-1.5' : undefined}
+              >
+                {index === 0 && <Download className="h-4 w-4" />}
+                {format.charAt(0).toUpperCase() + format.slice(1)}
+              </Button>
+            ))}
+          </div>
+        </div>
       );
     }
 
     // ─────────────────────────────────────────────────────────────
-    // READY / GENERATING STATE
+    // READY / GENERATING STATE (Story 13.4.3-4: with stepper during generation)
     // ─────────────────────────────────────────────────────────────
     const isGenerating = uiState === 'generating';
 
     return (
-      <Card
+      <div
         ref={ref}
         data-testid="questionnaire-card-ready"
         className={cn(
-          'border-2 transition-all duration-200',
-          config.borderColor,
-          config.bgColor,
-          isGenerating && 'opacity-75',
+          'bg-slate-50 rounded-2xl rounded-tl-sm p-4 max-w-md border border-slate-100',
           className
         )}
       >
-        <CardContent className="p-4">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-3">
-              {/* Icon */}
-              <div className={cn('mt-0.5 flex-shrink-0', config.color)}>
-                {isGenerating ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <FileText className="h-5 w-5" />
-                )}
+        {/* Message text - changes based on state */}
+        <p className="text-sm text-slate-700 mb-3">
+          {!hasStartedGeneration && 'Ready to generate your questionnaire.'}
+          {hasStartedGeneration && !isComplete && `Generating questionnaire for your ${config.label.toLowerCase()}.`}
+        </p>
+
+        {/* Collapsible stepper section - shown during generation */}
+        {hasStartedGeneration && steps.length > 0 && (
+          <div className="border border-slate-200 rounded-lg bg-white overflow-hidden mb-3">
+            {/* Header - clickable to toggle */}
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors"
+              data-testid="stepper-toggle"
+            >
+              <div className="flex items-center gap-2">
+                {/* Spinner or checkmark based on state */}
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm font-medium text-slate-700">Generating Assessment</span>
               </div>
+              <ChevronDown
+                className={cn(
+                  'w-4 h-4 text-slate-400 transition-transform duration-200',
+                  isExpanded && 'rotate-180'
+                )}
+              />
+            </button>
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                {/* Header */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={cn('text-sm font-semibold', config.color)}>
-                    {isGenerating ? 'Generating...' : 'Ready to Generate'}
-                  </span>
-                  <span
-                    className={cn(
-                      'px-2 py-0.5 rounded-full text-xs font-medium border',
-                      config.bgColor,
-                      config.color,
-                      config.borderColor
-                    )}
-                  >
-                    {config.label}
-                  </span>
-                </div>
-
-                {/* Summary */}
-                <div className="mt-2 space-y-1">
-                  {payload.vendorName && (
-                    <p className="text-sm text-gray-700">
-                      <span className="font-medium">Vendor:</span> {payload.vendorName}
-                      {payload.solutionName && ` - ${payload.solutionName}`}
-                    </p>
-                  )}
-
-                  {payload.contextSummary && (
-                    <p className="text-sm text-gray-600 italic line-clamp-2">
-                      &quot;{payload.contextSummary}&quot;
-                    </p>
-                  )}
-
-                  <p className="text-sm text-gray-500">
-                    {payload.estimatedQuestions
-                      ? `~${payload.estimatedQuestions} questions`
-                      : config.description}
-                    {payload.selectedCategories && payload.selectedCategories.length > 0 && (
-                      <span> &bull; {payload.selectedCategories.join(', ')}</span>
-                    )}
-                  </p>
-                </div>
-
-                {/* Action Button */}
-                <div className="mt-3">
-                  <Button
-                    data-testid="generate-questionnaire-btn"
-                    onClick={onGenerate}
-                    disabled={isGenerating}
-                    size="sm"
-                    className={cn('transition-all', !isGenerating && 'hover:scale-105')}
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Generating Questionnaire...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Generate Questionnaire
-                      </>
-                    )}
-                  </Button>
+            {/* Expandable stepper content */}
+            <div
+              className={cn(
+                'overflow-hidden transition-all duration-300 ease-in-out',
+                isExpanded ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'
+              )}
+            >
+              <div className="px-3 pb-3 border-t border-slate-100">
+                <div className="pt-3">
+                  <VerticalStepper steps={steps} currentStep={currentStep} isRunning={isRunning} />
                 </div>
               </div>
             </div>
-
-            {/* Dismiss button - hidden during generation */}
-            {!isGenerating && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onDismiss}
-                className="h-6 w-6 flex-shrink-0"
-                data-testid="dismiss-btn"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
           </div>
-        </CardContent>
-      </Card>
+        )}
+
+        {/* Summary info - only when NOT generating */}
+        {!hasStartedGeneration && (
+          <div className="space-y-1 mb-3">
+            {payload.vendorName && (
+              <p className="text-sm text-gray-700">
+                <span className="font-medium">Vendor:</span> {payload.vendorName}
+                {payload.solutionName && ` - ${payload.solutionName}`}
+              </p>
+            )}
+
+            {payload.contextSummary && (
+              <p className="text-sm text-gray-600 italic line-clamp-2">
+                &quot;{payload.contextSummary}&quot;
+              </p>
+            )}
+
+            <p className="text-sm text-gray-500">
+              <span
+                className={cn(
+                  'px-2 py-0.5 rounded-full text-xs font-medium border mr-2',
+                  config.bgColor,
+                  config.color,
+                  config.borderColor
+                )}
+              >
+                {config.label}
+              </span>
+              {payload.estimatedQuestions
+                ? `~${payload.estimatedQuestions} questions`
+                : config.description}
+            </p>
+          </div>
+        )}
+
+        {/* Generate button - always visible, disabled during generation */}
+        <Button
+          data-testid="generate-questionnaire-btn"
+          onClick={onGenerate}
+          disabled={isGenerating || hasStartedGeneration}
+          size="sm"
+          className="inline-flex items-center gap-2"
+        >
+          {hasStartedGeneration ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Generating...
+            </>
+          ) : (
+            <>
+              <FileText className="h-4 w-4" />
+              Generate Questionnaire
+            </>
+          )}
+        </Button>
+      </div>
     );
   }
 );

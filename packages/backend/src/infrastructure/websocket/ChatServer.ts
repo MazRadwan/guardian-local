@@ -3,12 +3,14 @@ import { ConversationService } from '../../application/services/ConversationServ
 import { AssessmentService } from '../../application/services/AssessmentService.js';
 import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
+import { QuestionService } from '../../application/services/QuestionService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
 import { QuestionnaireReadyService } from '../../application/services/QuestionnaireReadyService.js';
 import { assessmentModeTools } from '../ai/tools/index.js';
+import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -68,7 +70,8 @@ export class ChatServer {
     private readonly assessmentService: AssessmentService,
     private readonly vendorService: VendorService,
     private readonly questionnaireReadyService: QuestionnaireReadyService,
-    private readonly questionnaireGenerationService: QuestionnaireGenerationService
+    private readonly questionnaireGenerationService: QuestionnaireGenerationService,
+    private readonly questionService: QuestionService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -807,6 +810,11 @@ Reply with: **1**, **2**, or **3**
         await this.handleGenerateQuestionnaire(socket, payload, userId);
       });
 
+      // Handle get_export_status (Story 13.9.1)
+      socket.on('get_export_status', async (data: { conversationId: string }) => {
+        await this.handleGetExportStatus(socket, data);
+      });
+
       // Handle disconnect
       socket.on('disconnect', (reason) => {
         console.log(`[ChatServer] Client disconnected: ${socket.id} (Reason: ${reason})`);
@@ -867,6 +875,30 @@ Reply with: **1**, **2**, or **3**
   }
 
   /**
+   * Emit a generation phase event to the client (Story 13.5.2)
+   *
+   * @param socket - The client socket to emit to
+   * @param conversationId - The conversation being processed
+   * @param phase - The phase index (0-3)
+   * @param phaseId - The phase identifier ('context' | 'generating' | 'validating' | 'saving')
+   */
+  private emitGenerationPhase(
+    socket: AuthenticatedSocket,
+    conversationId: string,
+    phase: number,
+    phaseId: GenerationPhaseId
+  ): void {
+    const payload: GenerationPhasePayload = {
+      conversationId,
+      phase,
+      phaseId,
+      timestamp: Date.now(),
+    };
+    socket.emit('generation_phase', payload);
+    console.log(`[ChatServer] Emitted generation_phase: phase=${phase}, phaseId=${phaseId}`);
+  }
+
+  /**
    * Handle user clicking "Generate Questionnaire" button
    *
    * Epic 12.5: Hybrid flow - delegates to QuestionnaireGenerationService
@@ -911,6 +943,9 @@ Reply with: **1**, **2**, or **3**
       // Emit stream start for UX consistency (even though we're not streaming from Claude)
       socket.emit('assistant_stream_start', { conversationId });
 
+      // Phase 0: Context ready (validation passed, about to call Claude)
+      this.emitGenerationPhase(socket, conversationId, 0, 'context');
+
       // Delegate to service (single Claude call, returns schema + markdown)
       // NOTE: Service creates assessment - handler does NOT create assessments
       const result = await this.questionnaireGenerationService.generate({
@@ -923,6 +958,12 @@ Reply with: **1**, **2**, or **3**
         selectedCategories,
       });
 
+      // Phase 1: Claude call complete
+      this.emitGenerationPhase(socket, conversationId, 1, 'generating');
+
+      // Phase 2: Validation complete (validation happens inside generate())
+      this.emitGenerationPhase(socket, conversationId, 2, 'validating');
+
       // Stream pre-rendered markdown to chat (simulated streaming for UX)
       await this.streamMarkdownToSocket(socket, result.markdown, conversationId);
 
@@ -933,7 +974,11 @@ Reply with: **1**, **2**, or **3**
         content: { text: result.markdown },
       });
 
+      // Phase 3: Persistence complete
+      this.emitGenerationPhase(socket, conversationId, 3, 'saving');
+
       // Emit export ready (no extraction needed - we have the assessmentId from service)
+      // This signals phase 4 (complete) to the frontend
       socket.emit('export_ready', {
         conversationId,
         assessmentId: result.assessmentId,
@@ -952,6 +997,104 @@ Reply with: **1**, **2**, or **3**
       socket.emit('error', {
         event: 'generate_questionnaire',
         message: error instanceof Error ? error.message : 'Failed to generate questionnaire',
+      });
+    }
+  }
+
+  /**
+   * Handle export status query (Story 13.9.1)
+   * Returns existing export if questionnaire was already generated for conversation.
+   * Used to restore download buttons on session resume.
+   */
+  public async handleGetExportStatus(
+    socket: AuthenticatedSocket,
+    data: { conversationId: string }
+  ): Promise<void> {
+    const { conversationId } = data;
+    const userId = socket.userId;
+
+    // Early validation: conversationId must be a non-empty string
+    if (!conversationId || typeof conversationId !== 'string' || conversationId.trim() === '') {
+      console.log(`[ChatServer] get_export_status invalid input: conversationId=${conversationId}`);
+      socket.emit('export_status_error', {
+        conversationId: conversationId ?? '',
+        error: 'Invalid conversation ID',
+      });
+      return;
+    }
+
+    // Early validation: userId must be present (auth middleware should set this)
+    if (!userId) {
+      console.log(`[ChatServer] get_export_status auth error: conversationId=${conversationId}, reason=Not authenticated`);
+      socket.emit('export_status_error', {
+        conversationId,
+        error: 'Not authenticated',
+      });
+      return;
+    }
+
+    console.log(`[ChatServer] get_export_status request: conversationId=${conversationId}, userId=${userId}`);
+
+    try {
+      // 1. Get conversation and verify ownership
+      const conversation = await this.conversationService.getConversation(conversationId);
+      if (!conversation) {
+        console.log(`[ChatServer] export_status auth error: conversationId=${conversationId}, reason=Conversation not found`);
+        socket.emit('export_status_error', {
+          conversationId,
+          error: 'Conversation not found',
+        });
+        return;
+      }
+
+      if (conversation.userId !== userId) {
+        console.log(`[ChatServer] export_status auth error: conversationId=${conversationId}, reason=Unauthorized`);
+        socket.emit('export_status_error', {
+          conversationId,
+          error: 'Unauthorized',
+        });
+        return;
+      }
+
+      // 2. Check if conversation has a linked assessment
+      if (!conversation.assessmentId) {
+        console.log(`[ChatServer] export_status not found: conversationId=${conversationId}`);
+        socket.emit('export_status_not_found', { conversationId });
+        return;
+      }
+
+      // 3. Verify assessment exists
+      const assessment = await this.assessmentService.getAssessment(conversation.assessmentId);
+      if (!assessment) {
+        console.log(`[ChatServer] export_status not found: conversationId=${conversationId}`);
+        socket.emit('export_status_not_found', { conversationId });
+        return;
+      }
+
+      // 4. Count questions for this assessment
+      const questionCount = await this.questionService.getQuestionCount(assessment.id);
+
+      if (questionCount === 0) {
+        console.log(`[ChatServer] export_status not found: conversationId=${conversationId}`);
+        socket.emit('export_status_not_found', { conversationId });
+        return;
+      }
+
+      // 5. Emit export_ready payload (reuses existing frontend handler)
+      socket.emit('export_ready', {
+        conversationId,
+        assessmentId: assessment.id,
+        questionCount,
+        formats: ['word', 'pdf', 'excel'],
+      });
+
+      console.log(`[ChatServer] export_status found: assessmentId=${assessment.id}, questions=${questionCount}`);
+
+    } catch (error) {
+      console.error(`[ChatServer] get_export_status error:`, error);
+      socket.emit('export_status_error', {
+        conversationId,
+        error: 'Internal server error',
       });
     }
   }

@@ -151,7 +151,8 @@ const chatServer = new ChatServer(
   assessmentService,
   vendorService,
   questionnaireReadyService,
-  questionnaireGenerationService
+  questionnaireGenerationService,
+  questionService
 );
 
 console.log('[App] ChatServer initialized');

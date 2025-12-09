@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
+import type { Step } from '@/types/stepper';
+import { GENERATION_STEPS } from '@/types/stepper';
+
+// Re-export for convenience
+export { GENERATION_STEPS };
 
 export interface Conversation {
   id: string;
@@ -60,6 +65,20 @@ export interface ChatState {
    */
   questionnaireError: string | null;
 
+  /**
+   * Generation steps for vertical stepper (Story 13.4.2)
+   * Array of step definitions to display
+   */
+  generationSteps: Step[];
+
+  /**
+   * Current generation step index (Story 13.4.2)
+   * -1 = idle/not started
+   * 0-N = in progress (index of current step)
+   * >= length = complete
+   */
+  currentGenerationStep: number;
+
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
@@ -118,6 +137,17 @@ export interface ChatState {
    * Set questionnaire error message (Story 4.3.1)
    */
   setQuestionnaireError: (error: string | null) => void;
+
+  /**
+   * Set current generation step (Story 13.4.2)
+   * @param step - Step index (-1 to N, where N >= steps.length means complete)
+   */
+  setCurrentGenerationStep: (step: number) => void;
+
+  /**
+   * Reset generation step to -1 (idle) (Story 13.4.2)
+   */
+  resetGenerationStep: () => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -149,6 +179,10 @@ export const useChatStore = create<ChatState>()(
       // Questionnaire UI state - defaults
       questionnaireUIState: 'hidden',
       questionnaireError: null,
+
+      // Stepper state - defaults (Story 13.4.2)
+      generationSteps: GENERATION_STEPS,
+      currentGenerationStep: -1,
 
       addMessage: (message) =>
         set((state) => ({
@@ -287,6 +321,8 @@ export const useChatStore = create<ChatState>()(
         get().clearPendingQuestionnaire();
         // Also reset generation state
         get().setGenerating(false);
+        // Reset stepper on conversation change (Story 13.4.2)
+        get().resetGenerationStep();
       },
 
       // Delete conversation immediately (used by tests and direct local operations)
@@ -389,6 +425,17 @@ export const useChatStore = create<ChatState>()(
       setQuestionnaireError: (error) => {
         console.log('[chatStore] Setting questionnaireError:', error);
         set({ questionnaireError: error });
+      },
+
+      // Stepper actions (Story 13.4.2)
+      setCurrentGenerationStep: (step) => {
+        console.log('[chatStore] Setting currentGenerationStep:', step);
+        set({ currentGenerationStep: step });
+      },
+
+      resetGenerationStep: () => {
+        console.log('[chatStore] Resetting generation step to -1');
+        set({ currentGenerationStep: -1 });
       },
     }),
     {
