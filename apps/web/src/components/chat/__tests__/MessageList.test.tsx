@@ -7,7 +7,14 @@ import { ChatMessage as ChatMessageType } from '@/lib/websocket';
 // Mock ChatMessage component
 jest.mock('../ChatMessage', () => ({
   ChatMessage: ({ role, content }: { role: string; content: string }) => (
-    <div data-testid={`chat-message-${role}`}>{content}</div>
+    <div data-testid={`chat-message-${role}`} role="article">{content}</div>
+  ),
+}));
+
+// Mock QuestionnaireMessage component
+jest.mock('../QuestionnaireMessage', () => ({
+  QuestionnaireMessage: () => (
+    <div data-testid="questionnaire-message" role="article">Mocked Questionnaire</div>
   ),
 }));
 
@@ -418,45 +425,126 @@ describe('MessageList', () => {
     });
   });
 
-  // Story 4.3.4: Questionnaire slot tests
-  describe('questionnaireSlot', () => {
-    it('renders questionnaireSlot content when provided', () => {
+  // Story 14.1.2: Inline Questionnaire tests
+  describe('Inline Questionnaire (Story 14.1.2)', () => {
+    const mockQuestionnaireProps = {
+      payload: {
+        conversationId: 'conv-123',
+        assessmentType: 'comprehensive' as const,
+        vendorName: 'Test Vendor',
+        solutionName: 'Test Solution',
+        contextSummary: 'Test context',
+        estimatedQuestions: 85,
+        selectedCategories: null,
+      },
+      uiState: 'ready' as const,
+      onGenerate: jest.fn(),
+      onDownload: jest.fn(),
+      onRetry: jest.fn(),
+      insertIndex: 1, // After first message
+    };
+
+    it('renders questionnaire at correct position (middle of messages)', () => {
       const messages: ChatMessageType[] = [
-        { role: 'user', content: 'Test message', timestamp: new Date() },
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+        { role: 'assistant', content: 'Message 2', timestamp: new Date() },
+        { role: 'user', content: 'Message 3', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 1 }}
+        />
+      );
+
+      const centeredContainer = container.querySelector('.max-w-3xl');
+      const allItems = centeredContainer?.querySelectorAll('[role="article"]');
+
+      // Should have 4 items: 3 messages + 1 questionnaire
+      expect(allItems?.length).toBe(4);
+
+      // Questionnaire should be at index 1 (after first message)
+      expect(allItems?.[1]).toHaveAttribute('data-testid', 'questionnaire-message');
+    });
+
+    it('renders questionnaire at end when insertIndex >= messages.length', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 5 }} // Beyond messages
+        />
+      );
+
+      const centeredContainer = container.querySelector('.max-w-3xl');
+      const allItems = centeredContainer?.querySelectorAll('[role="article"]');
+
+      // Questionnaire should be last
+      expect(allItems?.[allItems!.length - 1]).toHaveAttribute('data-testid', 'questionnaire-message');
+    });
+
+    it('does not render questionnaire when prop is undefined', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test', timestamp: new Date() },
+      ];
+
+      render(<MessageList messages={messages} />);
+
+      expect(screen.queryByTestId('questionnaire-message')).not.toBeInTheDocument();
+    });
+
+    it('preserves message ordering with questionnaire inserted', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'First', timestamp: new Date() },
+        { role: 'assistant', content: 'Second', timestamp: new Date() },
+        { role: 'user', content: 'Third', timestamp: new Date() },
       ];
 
       render(
         <MessageList
           messages={messages}
-          questionnaireSlot={<div data-testid="test-slot">Slot Content</div>}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 2 }}
         />
       );
 
-      expect(screen.getByTestId('test-slot')).toBeInTheDocument();
-      expect(screen.getByText('Slot Content')).toBeInTheDocument();
+      // Verify message content order
+      expect(screen.getByText('First')).toBeInTheDocument();
+      expect(screen.getByText('Second')).toBeInTheDocument();
+      expect(screen.getByText('Third')).toBeInTheDocument();
     });
 
-    it('does not render anything when questionnaireSlot is not provided', () => {
+    it('questionnaire is inside centered container (max-w-3xl)', () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Test message', timestamp: new Date() },
       ];
 
-      render(<MessageList messages={messages} />);
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 1 }}
+        />
+      );
 
-      expect(screen.queryByTestId('test-slot')).not.toBeInTheDocument();
+      const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
+      const questionnaire = screen.getByTestId('questionnaire-message');
+
+      expect(centeredContainer).toContainElement(questionnaire);
     });
 
-    it('renders slot after messages but before typing indicator', () => {
+    it('renders questionnaire before typing indicator when both present', () => {
       const messages: ChatMessageType[] = [
         { role: 'user', content: 'Message 1', timestamp: new Date() },
-        { role: 'assistant', content: 'Message 2', timestamp: new Date() },
       ];
 
       const { container } = render(
         <MessageList
           messages={messages}
           isLoading={true}
-          questionnaireSlot={<div data-testid="test-slot">Slot Content</div>}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 10 }} // At end
         />
       );
 
@@ -465,36 +553,178 @@ describe('MessageList', () => {
 
       if (children) {
         // Find indices
-        const slotIndex = Array.from(children).findIndex(
-          (child) => child.getAttribute('data-testid') === 'test-slot'
+        const questionnaireIndex = Array.from(children).findIndex(
+          (child) => child.getAttribute('data-testid') === 'questionnaire-message'
         );
         const typingIndicatorIndex = Array.from(children).findIndex(
           (child) => child.getAttribute('data-testid') === 'typing-indicator'
         );
 
-        // Slot should come before typing indicator
-        expect(slotIndex).toBeGreaterThan(-1);
+        // Questionnaire should come before typing indicator
+        expect(questionnaireIndex).toBeGreaterThan(-1);
         expect(typingIndicatorIndex).toBeGreaterThan(-1);
-        expect(slotIndex).toBeLessThan(typingIndicatorIndex);
+        expect(questionnaireIndex).toBeLessThan(typingIndicatorIndex);
       }
     });
 
-    it('slot is inside centered container (max-w-3xl)', () => {
+    it('renders questionnaire at position 0 when insertIndex is 0', () => {
       const messages: ChatMessageType[] = [
-        { role: 'user', content: 'Test message', timestamp: new Date() },
+        { role: 'user', content: 'Message 1', timestamp: new Date() },
+        { role: 'assistant', content: 'Message 2', timestamp: new Date() },
       ];
 
       const { container } = render(
         <MessageList
           messages={messages}
-          questionnaireSlot={<div data-testid="test-slot">Slot Content</div>}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 0 }}
+        />
+      );
+
+      const centeredContainer = container.querySelector('.max-w-3xl');
+      const allItems = centeredContainer?.querySelectorAll('[role="article"]');
+
+      // Questionnaire should be first
+      expect(allItems?.[0]).toHaveAttribute('data-testid', 'questionnaire-message');
+    });
+  });
+
+  // Story 14.1.3: Scroll Behavior with Questionnaire
+  describe('Scroll Behavior with Questionnaire (Story 14.1.3)', () => {
+    const mockQuestionnaireProps = {
+      payload: {
+        conversationId: 'conv-123',
+        assessmentType: 'comprehensive' as const,
+        vendorName: 'Test Vendor',
+        solutionName: null,
+        contextSummary: null,
+        estimatedQuestions: 85,
+        selectedCategories: null,
+      },
+      uiState: 'ready' as const,
+      onGenerate: jest.fn(),
+      onDownload: jest.fn(),
+      onRetry: jest.fn(),
+      insertIndex: 1,
+    };
+
+    it('questionnaire message is inside scroll container', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 1 }}
+        />
+      );
+
+      const scrollContainer = container.querySelector('.overflow-y-auto');
+      const questionnaire = screen.getByTestId('questionnaire-message');
+
+      expect(scrollContainer).toContainElement(questionnaire);
+    });
+
+    it('questionnaire message is within max-width centered container', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 1 }}
         />
       );
 
       const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
-      const slot = screen.getByTestId('test-slot');
+      const questionnaire = screen.getByTestId('questionnaire-message');
 
-      expect(centeredContainer).toContainElement(slot);
+      expect(centeredContainer).toContainElement(questionnaire);
+    });
+
+    it('bottom padding exists in content container', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 1 }}
+        />
+      );
+
+      const centeredContainer = container.querySelector('.max-w-3xl.mx-auto');
+      // Should have pb-6 class for bottom padding
+      expect(centeredContainer?.className).toMatch(/pb-6/);
+    });
+
+    it('scroll-to-bottom button positioned outside scroll container', async () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test 1', timestamp: new Date() },
+        { role: 'assistant', content: 'Test 2', timestamp: new Date() },
+      ];
+
+      const { container } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, insertIndex: 2 }}
+        />
+      );
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLElement;
+
+      // Mock overflow
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, writable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 400, writable: true });
+
+      // Trigger intersection - NOT at bottom
+      await triggerIntersection(false);
+
+      const button = screen.getByLabelText('Scroll to bottom');
+
+      // Button should NOT be inside scroll container (prevents scrolling with content)
+      expect(scrollContainer).not.toContainElement(button);
+
+      // Button should be in the outer container
+      const outerContainer = container.querySelector('.relative.flex.h-full');
+      expect(outerContainer).toContainElement(button);
+    });
+
+    it('questionnaire in different states renders correctly inside scroll container', () => {
+      const messages: ChatMessageType[] = [
+        { role: 'user', content: 'Test', timestamp: new Date() },
+      ];
+
+      // Test with generating state
+      const { container, rerender } = render(
+        <MessageList
+          messages={messages}
+          questionnaire={{ ...mockQuestionnaireProps, uiState: 'generating', insertIndex: 1 }}
+        />
+      );
+
+      let scrollContainer = container.querySelector('.overflow-y-auto');
+      let questionnaire = screen.getByTestId('questionnaire-message');
+      expect(scrollContainer).toContainElement(questionnaire);
+
+      // Test with download state
+      rerender(
+        <MessageList
+          messages={messages}
+          questionnaire={{
+            ...mockQuestionnaireProps,
+            uiState: 'download',
+            exportData: { formats: ['pdf', 'word'], assessmentId: 'assess-123' },
+            insertIndex: 1,
+          }}
+        />
+      );
+
+      scrollContainer = container.querySelector('.overflow-y-auto');
+      questionnaire = screen.getByTestId('questionnaire-message');
+      expect(scrollContainer).toContainElement(questionnaire);
     });
   });
 });

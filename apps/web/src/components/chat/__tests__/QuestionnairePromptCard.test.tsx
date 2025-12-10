@@ -336,6 +336,78 @@ describe('QuestionnairePromptCard', () => {
         expect(screen.getByText(/90 questions · Comprehensive Assessment/i)).toBeInTheDocument();
       });
     });
+
+    it('stepper toggle has type="button" to prevent form submission', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="download"
+          exportData={{ formats: ['pdf'], assessmentId: 'assess-123' }}
+          steps={mockSteps}
+          currentStep={GENERATION_STEPS.length}
+          isRunning={false}
+        />
+      );
+
+      const toggle = screen.getByTestId('stepper-toggle');
+      expect(toggle).toHaveAttribute('type', 'button');
+    });
+
+    it('stepper toggle has aria-expanded attribute', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="download"
+          exportData={{ formats: ['pdf'], assessmentId: 'assess-123' }}
+          steps={mockSteps}
+          currentStep={GENERATION_STEPS.length}
+          isRunning={false}
+        />
+      );
+
+      const toggle = screen.getByTestId('stepper-toggle');
+      // Initially expanded
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+      // Click to collapse
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('stepper toggle has aria-controls pointing to content', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="download"
+          exportData={{ formats: ['pdf'], assessmentId: 'assess-123' }}
+          steps={mockSteps}
+          currentStep={GENERATION_STEPS.length}
+          isRunning={false}
+        />
+      );
+
+      const toggle = screen.getByTestId('stepper-toggle');
+      expect(toggle).toHaveAttribute('aria-controls', 'stepper-content-download');
+      expect(document.getElementById('stepper-content-download')).toBeInTheDocument();
+    });
+
+    it('generating state stepper toggle has proper accessibility attributes', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="generating"
+          steps={mockSteps}
+          currentStep={1}
+          isRunning={true}
+        />
+      );
+
+      const toggle = screen.getByTestId('stepper-toggle');
+      expect(toggle).toHaveAttribute('type', 'button');
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(toggle).toHaveAttribute('aria-controls', 'stepper-content-generating');
+      expect(document.getElementById('stepper-content-generating')).toBeInTheDocument();
+    });
   });
 
   describe('Bubble styling', () => {
@@ -887,6 +959,461 @@ describe('QuestionnairePromptCard', () => {
       expect(onDownload).toHaveBeenNthCalledWith(1, 'pdf');
       expect(onDownload).toHaveBeenNthCalledWith(2, 'pdf');
       expect(onDownload).toHaveBeenNthCalledWith(3, 'word');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Story 14.1.1 - Inline Mode
+  // ─────────────────────────────────────────────────────────────
+  describe('Inline Mode (Story 14.1.1)', () => {
+    it('removes card styling when inline=true', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          inline={true}
+        />
+      );
+
+      const card = screen.getByTestId('questionnaire-card-ready');
+      expect(card).not.toHaveClass('bg-slate-50');
+      expect(card).not.toHaveClass('rounded-2xl');
+      expect(card).not.toHaveClass('border');
+      expect(card).not.toHaveClass('max-w-md');
+    });
+
+    it('keeps card styling when inline=false (default)', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const card = screen.getByTestId('questionnaire-card-ready');
+      expect(card).toHaveClass('bg-slate-50');
+      expect(card).toHaveClass('rounded-2xl');
+      expect(card).toHaveClass('border');
+      expect(card).toHaveClass('max-w-md');
+    });
+
+    it('removes error card styling when inline=true', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="error"
+          error="Test error"
+          inline={true}
+        />
+      );
+
+      const card = screen.getByTestId('questionnaire-card-error');
+      expect(card).not.toHaveClass('bg-red-50');
+      expect(card).not.toHaveClass('rounded-2xl');
+      expect(card).not.toHaveClass('border-2');
+      expect(card).not.toHaveClass('max-w-md');
+    });
+
+    it('keeps error card styling when inline=false', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="error"
+          error="Test error"
+        />
+      );
+
+      const card = screen.getByTestId('questionnaire-card-error');
+      expect(card).toHaveClass('bg-red-50');
+      expect(card).toHaveClass('rounded-2xl');
+      expect(card).toHaveClass('border-2');
+      expect(card).toHaveClass('max-w-md');
+    });
+
+    it('removes download card styling when inline=true', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="download"
+          exportData={{ formats: ['pdf'], assessmentId: 'assess-123' }}
+          inline={true}
+        />
+      );
+
+      const card = screen.getByTestId('questionnaire-card-download');
+      expect(card).not.toHaveClass('bg-slate-50');
+      expect(card).not.toHaveClass('rounded-2xl');
+      expect(card).not.toHaveClass('border');
+      expect(card).not.toHaveClass('max-w-md');
+    });
+
+    it('keeps download card styling when inline=false', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="download"
+          exportData={{ formats: ['pdf'], assessmentId: 'assess-123' }}
+        />
+      );
+
+      const card = screen.getByTestId('questionnaire-card-download');
+      expect(card).toHaveClass('bg-slate-50');
+      expect(card).toHaveClass('rounded-2xl');
+      expect(card).toHaveClass('border');
+      expect(card).toHaveClass('max-w-md');
+    });
+
+    it('preserves functionality when inline=true', () => {
+      const onGenerate = jest.fn();
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          onGenerate={onGenerate}
+          inline={true}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('generate-questionnaire-btn'));
+      expect(onGenerate).toHaveBeenCalled();
+    });
+
+    it('preserves download functionality when inline=true', () => {
+      const onDownload = jest.fn();
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          onDownload={onDownload}
+          uiState="download"
+          exportData={{ formats: ['pdf', 'word'], assessmentId: 'assess-123' }}
+          inline={true}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('download-pdf-btn'));
+      expect(onDownload).toHaveBeenCalledWith('pdf');
+
+      fireEvent.click(screen.getByTestId('download-word-btn'));
+      expect(onDownload).toHaveBeenCalledWith('word');
+    });
+
+    it('preserves retry functionality when inline=true', () => {
+      const onRetry = jest.fn();
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          onRetry={onRetry}
+          uiState="error"
+          error="Test error"
+          inline={true}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('retry-btn'));
+      expect(onRetry).toHaveBeenCalled();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Story 14.2.1 - Generate Button Styling
+  // ─────────────────────────────────────────────────────────────
+  describe('Generate Button Styling (Story 14.2.1)', () => {
+    it('has primary dark styling (bg-slate-800)', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveClass('bg-slate-800');
+      expect(button).toHaveClass('text-white');
+    });
+
+    it('has correct padding and rounded corners', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveClass('px-4');
+      expect(button).toHaveClass('py-2');
+      expect(button).toHaveClass('rounded-lg');
+    });
+
+    it('has font styling (text-sm, font-medium)', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveClass('text-sm');
+      expect(button).toHaveClass('font-medium');
+    });
+
+    it('has hover state (hover:bg-slate-700)', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveClass('hover:bg-slate-700');
+    });
+
+    it('has focus-visible ring styling (keyboard only)', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveClass('focus-visible:ring-2');
+      expect(button).toHaveClass('focus-visible:ring-slate-500');
+    });
+
+    it('has type="button" to prevent form submission', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveAttribute('type', 'button');
+    });
+
+    it('has aria-busy when generating', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="generating"
+          currentStep={0}
+        />
+      );
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('does not have aria-busy when not generating', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveAttribute('aria-busy', 'false');
+    });
+
+    it('has disabled styling', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="generating"
+          currentStep={0}
+        />
+      );
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toBeDisabled();
+      expect(button).toHaveClass('disabled:opacity-50');
+      expect(button).toHaveClass('disabled:cursor-not-allowed');
+    });
+
+    it('displays correct content when not generating', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveTextContent('Generate Questionnaire');
+    });
+
+    it('displays loading content when generating', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="generating"
+          currentStep={0}
+        />
+      );
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      expect(button).toHaveTextContent('Generating...');
+    });
+
+    it('contains icon element', () => {
+      render(<QuestionnairePromptCard {...defaultProps} />);
+
+      const button = screen.getByTestId('generate-questionnaire-btn');
+      const icon = button.querySelector('svg');
+      expect(icon).toBeInTheDocument();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Story 14.2.2 - Download Button Styling
+  // ─────────────────────────────────────────────────────────────
+  describe('Download Button Styling (Story 14.2.2)', () => {
+    const downloadProps = {
+      ...defaultProps,
+      uiState: 'download' as const,
+      exportData: { formats: ['word', 'pdf', 'excel'], assessmentId: 'assess-123' },
+    };
+
+    describe('Primary button (first format)', () => {
+      it('has primary dark styling (bg-slate-800)', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveClass('bg-slate-800');
+        expect(primaryBtn).toHaveClass('text-white');
+      });
+
+      it('has correct padding and rounded corners', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveClass('px-4');
+        expect(primaryBtn).toHaveClass('py-2');
+        expect(primaryBtn).toHaveClass('rounded-lg');
+      });
+
+      it('has font styling (font-medium)', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveClass('font-medium');
+      });
+
+      it('has hover state (hover:bg-slate-700)', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveClass('hover:bg-slate-700');
+      });
+
+      it('has focus-visible ring styling', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveClass('focus-visible:ring-2');
+        expect(primaryBtn).toHaveClass('focus-visible:ring-slate-500');
+      });
+
+      it('has type="button" to prevent form submission', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveAttribute('type', 'button');
+      });
+
+      it('contains download icon', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        const icon = primaryBtn.querySelector('svg');
+        expect(icon).toBeInTheDocument();
+      });
+
+      it('has inline-flex layout for icon alignment', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const primaryBtn = screen.getByTestId('download-word-btn');
+        expect(primaryBtn).toHaveClass('inline-flex');
+        expect(primaryBtn).toHaveClass('items-center');
+        expect(primaryBtn).toHaveClass('gap-1.5');
+      });
+    });
+
+    describe('Secondary buttons (subsequent formats)', () => {
+      it('has ghost styling (no background, text-slate-600)', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        const excelBtn = screen.getByTestId('download-excel-btn');
+
+        // Should NOT have primary styling
+        expect(pdfBtn).not.toHaveClass('bg-slate-800');
+        expect(excelBtn).not.toHaveClass('bg-slate-800');
+
+        // Should have ghost text color
+        expect(pdfBtn).toHaveClass('text-slate-600');
+        expect(excelBtn).toHaveClass('text-slate-600');
+      });
+
+      it('has correct padding (px-3 py-2)', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        expect(pdfBtn).toHaveClass('px-3');
+        expect(pdfBtn).toHaveClass('py-2');
+      });
+
+      it('has hover states', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        expect(pdfBtn).toHaveClass('hover:text-slate-800');
+        expect(pdfBtn).toHaveClass('hover:bg-slate-100');
+      });
+
+      it('has focus-visible ring styling', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        expect(pdfBtn).toHaveClass('focus-visible:ring-2');
+        expect(pdfBtn).toHaveClass('focus-visible:ring-slate-400');
+      });
+
+      it('has type="button" to prevent form submission', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        const excelBtn = screen.getByTestId('download-excel-btn');
+        expect(pdfBtn).toHaveAttribute('type', 'button');
+        expect(excelBtn).toHaveAttribute('type', 'button');
+      });
+
+      it('does NOT contain download icon', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        const excelBtn = screen.getByTestId('download-excel-btn');
+        expect(pdfBtn.querySelector('svg')).not.toBeInTheDocument();
+        expect(excelBtn.querySelector('svg')).not.toBeInTheDocument();
+      });
+
+      it('does NOT have font-medium', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        expect(pdfBtn).not.toHaveClass('font-medium');
+      });
+    });
+
+    describe('Button ordering and functionality', () => {
+      it('Word is always primary styled regardless of array order', () => {
+        // Test with pdf first in array - Word should still be primary
+        render(
+          <QuestionnairePromptCard
+            {...defaultProps}
+            uiState="download"
+            exportData={{ formats: ['pdf', 'word', 'excel'], assessmentId: 'assess-123' }}
+          />
+        );
+
+        const pdfBtn = screen.getByTestId('download-pdf-btn');
+        const wordBtn = screen.getByTestId('download-word-btn');
+
+        // Word should be primary (always first due to sorting)
+        expect(wordBtn).toHaveClass('bg-slate-800');
+        expect(wordBtn.querySelector('svg')).toBeInTheDocument();
+
+        // PDF should be secondary (sorted after Word)
+        expect(pdfBtn).not.toHaveClass('bg-slate-800');
+        expect(pdfBtn.querySelector('svg')).not.toBeInTheDocument();
+      });
+
+      it('maintains click handlers for all button types', () => {
+        const onDownload = jest.fn();
+        render(
+          <QuestionnairePromptCard
+            {...defaultProps}
+            onDownload={onDownload}
+            uiState="download"
+            exportData={{ formats: ['word', 'pdf', 'excel'], assessmentId: 'assess-123' }}
+          />
+        );
+
+        fireEvent.click(screen.getByTestId('download-word-btn'));
+        fireEvent.click(screen.getByTestId('download-pdf-btn'));
+        fireEvent.click(screen.getByTestId('download-excel-btn'));
+
+        expect(onDownload).toHaveBeenCalledWith('word');
+        expect(onDownload).toHaveBeenCalledWith('pdf');
+        expect(onDownload).toHaveBeenCalledWith('excel');
+        expect(onDownload).toHaveBeenCalledTimes(3);
+      });
+
+      it('displays capitalized format labels', () => {
+        render(<QuestionnairePromptCard {...downloadProps} />);
+
+        expect(screen.getByTestId('download-word-btn')).toHaveTextContent('Word');
+        expect(screen.getByTestId('download-pdf-btn')).toHaveTextContent('Pdf');
+        expect(screen.getByTestId('download-excel-btn')).toHaveTextContent('Excel');
+      });
     });
   });
 });

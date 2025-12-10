@@ -66,6 +66,22 @@ export interface ChatState {
   questionnaireError: string | null;
 
   /**
+   * Index in messages array where questionnaire should render (Story 14.1.2)
+   * Set when questionnaire_ready event is received
+   * Used to inject questionnaire into message list at correct position
+   * -1 means append at end (legacy behavior)
+   * NOTE: This is IN-MEMORY only - NOT persisted
+   */
+  questionnaireMessageIndex: number;
+
+  /**
+   * Story 14.1.5: Flag indicating questionnaire stream has completed
+   * Used to gate download bubble visibility until streaming finishes
+   * Reset to false on new questionnaire_ready, set true on stream complete
+   */
+  isQuestionnaireStreamComplete: boolean;
+
+  /**
    * Generation steps for vertical stepper (Story 13.4.2)
    * Array of step definitions to display
    */
@@ -139,6 +155,12 @@ export interface ChatState {
   setQuestionnaireError: (error: string | null) => void;
 
   /**
+   * Set questionnaire message position (Story 14.1.2)
+   * @param index - Position in messages array, or -1 for end
+   */
+  setQuestionnaireMessageIndex: (index: number) => void;
+
+  /**
    * Set current generation step (Story 13.4.2)
    * @param step - Step index (-1 to N, where N >= steps.length means complete)
    */
@@ -148,6 +170,12 @@ export interface ChatState {
    * Reset generation step to -1 (idle) (Story 13.4.2)
    */
   resetGenerationStep: () => void;
+
+  /**
+   * Story 14.1.5: Set questionnaire stream complete flag
+   * Called when streaming finishes to allow download bubble to render
+   */
+  setQuestionnaireStreamComplete: (value: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -179,6 +207,13 @@ export const useChatStore = create<ChatState>()(
       // Questionnaire UI state - defaults
       questionnaireUIState: 'hidden',
       questionnaireError: null,
+
+      // Questionnaire position - defaults (Story 14.1.2)
+      // NOTE: This is IN-MEMORY only - NOT persisted
+      questionnaireMessageIndex: -1,
+
+      // Story 14.1.5: Stream complete flag (gates download visibility)
+      isQuestionnaireStreamComplete: false,
 
       // Stepper state - defaults (Story 13.4.2)
       generationSteps: GENERATION_STEPS,
@@ -403,12 +438,24 @@ export const useChatStore = create<ChatState>()(
       // Questionnaire generation actions
       setPendingQuestionnaire: (payload) => {
         console.log('[chatStore] Setting pending questionnaire:', payload.conversationId);
-        set({ pendingQuestionnaire: payload });
+        // Story 14.1.2: Capture current message count as insertion point
+        const currentMessageCount = get().messages.length;
+        set({
+          pendingQuestionnaire: payload,
+          questionnaireMessageIndex: currentMessageCount, // Insert after current messages
+          // Story 14.1.5: Reset stream complete flag for new questionnaire
+          isQuestionnaireStreamComplete: false,
+        });
       },
 
       clearPendingQuestionnaire: () => {
         console.log('[chatStore] Clearing pending questionnaire');
-        set({ pendingQuestionnaire: null });
+        set({
+          pendingQuestionnaire: null,
+          questionnaireMessageIndex: -1,
+          // Story 14.1.5: Reset stream complete flag
+          isQuestionnaireStreamComplete: false,
+        });
       },
 
       setGenerating: (value) => {
@@ -427,6 +474,12 @@ export const useChatStore = create<ChatState>()(
         set({ questionnaireError: error });
       },
 
+      // Story 14.1.2: Questionnaire position action
+      setQuestionnaireMessageIndex: (index) => {
+        console.log('[chatStore] Setting questionnaireMessageIndex:', index);
+        set({ questionnaireMessageIndex: index });
+      },
+
       // Stepper actions (Story 13.4.2)
       setCurrentGenerationStep: (step) => {
         console.log('[chatStore] Setting currentGenerationStep:', step);
@@ -436,6 +489,12 @@ export const useChatStore = create<ChatState>()(
       resetGenerationStep: () => {
         console.log('[chatStore] Resetting generation step to -1');
         set({ currentGenerationStep: -1 });
+      },
+
+      // Story 14.1.5: Set questionnaire stream complete flag
+      setQuestionnaireStreamComplete: (value) => {
+        console.log('[chatStore] Setting isQuestionnaireStreamComplete:', value);
+        set({ isQuestionnaireStreamComplete: value });
       },
     }),
     {

@@ -34,6 +34,8 @@ interface QuestionnairePromptCardProps {
   currentStep?: number;
   /** Whether generation is actively running */
   isRunning?: boolean;
+  /** Whether rendered inline in chat message (no card styling) */
+  inline?: boolean;
 }
 
 /**
@@ -72,7 +74,7 @@ const assessmentTypeConfig = {
  */
 export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnairePromptCardProps>(
   (
-    { payload, uiState, error, exportData, onGenerate, onDownload, onRetry, className, steps = [], currentStep = -1, isRunning = false },
+    { payload, uiState, error, exportData, onGenerate, onDownload, onRetry, className, steps = [], currentStep = -1, isRunning = false, inline = false },
     ref
   ) => {
     const config = assessmentTypeConfig[payload.assessmentType] || assessmentTypeConfig.comprehensive;
@@ -89,6 +91,16 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
 
     // Story 13.6.1: Guard - only collapse on successful completion
     const isSuccessfullyComplete = isComplete && uiState === 'download';
+
+    // Story 14.1.1: Inline mode - minimal styling (no card background/border)
+    // Card mode: full card styling with bg, border, rounded corners
+    const cardClasses = inline
+      ? '' // No card styling when inline
+      : 'bg-slate-50 rounded-2xl rounded-tl-sm p-4 max-w-md border border-slate-100';
+
+    const errorCardClasses = inline
+      ? '' // No card styling when inline
+      : 'bg-red-50 rounded-2xl rounded-tl-sm p-4 max-w-md border-2 border-red-200';
 
     // Story 13.6.1: Auto-collapse when complete (with guards)
     useEffect(() => {
@@ -154,10 +166,7 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
         <div
           ref={ref}
           data-testid="questionnaire-card-error"
-          className={cn(
-            'bg-red-50 rounded-2xl rounded-tl-sm p-4 max-w-md border-2 border-red-200',
-            className
-          )}
+          className={cn(errorCardClasses, className)}
         >
           <div className="flex items-start gap-3">
             <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
@@ -188,10 +197,7 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
         <div
           ref={ref}
           data-testid="questionnaire-card-download"
-          className={cn(
-            'bg-slate-50 rounded-2xl rounded-tl-sm p-4 max-w-md border border-slate-100',
-            className
-          )}
+          className={cn(cardClasses, className)}
         >
           {/* Message text */}
           <p className="text-sm text-slate-700 mb-3">
@@ -203,9 +209,12 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
             <div className="border border-slate-200 rounded-lg bg-white overflow-hidden mb-3">
               {/* Header - clickable to toggle */}
               <button
+                type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
                 className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors"
                 data-testid="stepper-toggle"
+                aria-expanded={isExpanded}
+                aria-controls="stepper-content-download"
               >
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
@@ -225,6 +234,7 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
 
               {/* Expandable stepper content */}
               <div
+                id="stepper-content-download"
                 className={cn(
                   'overflow-hidden transition-all duration-300 ease-in-out',
                   isExpanded ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'
@@ -252,20 +262,38 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
           )}
 
           {/* Download buttons - dynamically rendered from exportData.formats */}
+          {/* Story 14.2.2: Primary dark (Word) + ghost (others) per Appendix */}
+          {/* Word is primary as it's the most common enterprise format */}
           <div className="flex flex-wrap items-center gap-2 animate-fadeIn">
-            {exportData.formats.map((format, index) => (
-              <Button
-                key={format}
-                size="sm"
-                variant={index === 0 ? 'default' : 'outline'}
-                onClick={() => onDownload(format)}
-                data-testid={`download-${format}-btn`}
-                className={index === 0 ? 'inline-flex items-center gap-1.5' : undefined}
-              >
-                {index === 0 && <Download className="h-4 w-4" />}
-                {format.charAt(0).toUpperCase() + format.slice(1)}
-              </Button>
-            ))}
+            {[...exportData.formats]
+              .sort((a, b) => {
+                // Word first (primary), then PDF, then others alphabetically
+                if (a === 'word') return -1;
+                if (b === 'word') return 1;
+                if (a === 'pdf') return -1;
+                if (b === 'pdf') return 1;
+                return a.localeCompare(b);
+              })
+              .map((format, index) => (
+                <button
+                  key={format}
+                  type="button"
+                  onClick={() => onDownload(format)}
+                  data-testid={`download-${format}-btn`}
+                  className={cn(
+                    'text-sm rounded-lg transition-colors',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                    index === 0
+                      ? // Primary: dark style with icon
+                        'inline-flex items-center gap-1.5 px-4 py-2 font-medium bg-slate-800 text-white hover:bg-slate-700 focus-visible:ring-slate-500'
+                      : // Secondary: ghost style
+                        'px-3 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 focus-visible:ring-slate-400'
+                  )}
+                >
+                  {index === 0 && <Download className="h-4 w-4" />}
+                  {format.charAt(0).toUpperCase() + format.slice(1)}
+                </button>
+              ))}
           </div>
         </div>
       );
@@ -280,10 +308,7 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
       <div
         ref={ref}
         data-testid="questionnaire-card-ready"
-        className={cn(
-          'bg-slate-50 rounded-2xl rounded-tl-sm p-4 max-w-md border border-slate-100',
-          className
-        )}
+        className={cn(cardClasses, className)}
       >
         {/* Message text - changes based on state */}
         <p className="text-sm text-slate-700 mb-3">
@@ -296,9 +321,12 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
           <div className="border border-slate-200 rounded-lg bg-white overflow-hidden mb-3">
             {/* Header - clickable to toggle */}
             <button
+              type="button"
               onClick={() => setIsExpanded(!isExpanded)}
               className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors"
               data-testid="stepper-toggle"
+              aria-expanded={isExpanded}
+              aria-controls="stepper-content-generating"
             >
               <div className="flex items-center gap-2">
                 {/* Spinner or checkmark based on state */}
@@ -315,6 +343,7 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
 
             {/* Expandable stepper content */}
             <div
+              id="stepper-content-generating"
               className={cn(
                 'overflow-hidden transition-all duration-300 ease-in-out',
                 isExpanded ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'
@@ -363,13 +392,20 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
           </div>
         )}
 
-        {/* Generate button - always visible, disabled during generation */}
-        <Button
+        {/* Generate button - Story 14.2.1: Primary dark styling per Appendix */}
+        <button
+          type="button"
           data-testid="generate-questionnaire-btn"
           onClick={onGenerate}
           disabled={isGenerating || hasStartedGeneration}
-          size="sm"
-          className="inline-flex items-center gap-2"
+          aria-busy={hasStartedGeneration}
+          className={cn(
+            'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+            'bg-slate-800 text-white',
+            'hover:bg-slate-700',
+            'focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2',
+            'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-800'
+          )}
         >
           {hasStartedGeneration ? (
             <>
@@ -382,7 +418,7 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
               Generate Questionnaire
             </>
           )}
-        </Button>
+        </button>
       </div>
     );
   }

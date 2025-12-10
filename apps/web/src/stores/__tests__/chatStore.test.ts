@@ -1207,4 +1207,125 @@ describe('chatStore', () => {
       expect(result.current.isGeneratingQuestionnaire).toBe(false);
     });
   });
+
+  // Story 14.1.2: Questionnaire Message Index Tests
+  describe('questionnaireMessageIndex (Story 14.1.2)', () => {
+    it('defaults to -1', () => {
+      const { result } = renderHook(() => useChatStore());
+      expect(result.current.questionnaireMessageIndex).toBe(-1);
+    });
+
+    it('setQuestionnaireMessageIndex updates the index', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireMessageIndex(5);
+      });
+
+      expect(result.current.questionnaireMessageIndex).toBe(5);
+    });
+
+    it('setPendingQuestionnaire captures current message count', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Add some messages first
+      act(() => {
+        result.current.addMessage({ role: 'user', content: 'Test 1', timestamp: new Date() });
+        result.current.addMessage({ role: 'assistant', content: 'Test 2', timestamp: new Date() });
+      });
+
+      // Set pending questionnaire
+      act(() => {
+        result.current.setPendingQuestionnaire({
+          conversationId: 'conv-123',
+          assessmentType: 'comprehensive',
+          vendorName: 'Test',
+          solutionName: null,
+          contextSummary: null,
+          estimatedQuestions: 85,
+          selectedCategories: null,
+        });
+      });
+
+      // Should capture position at time of setting (2 messages exist)
+      expect(result.current.questionnaireMessageIndex).toBe(2);
+    });
+
+    it('clearPendingQuestionnaire resets index to -1', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireMessageIndex(5);
+        result.current.clearPendingQuestionnaire();
+      });
+
+      expect(result.current.questionnaireMessageIndex).toBe(-1);
+    });
+
+    it('setActiveConversation resets index to -1 (via clearPendingQuestionnaire)', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireMessageIndex(3);
+      });
+
+      expect(result.current.questionnaireMessageIndex).toBe(3);
+
+      act(() => {
+        result.current.setActiveConversation('new-conv');
+      });
+
+      expect(result.current.questionnaireMessageIndex).toBe(-1);
+    });
+
+    it('index is captured at questionnaire creation, not affected by subsequent messages', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      // Add initial messages
+      act(() => {
+        result.current.addMessage({ role: 'user', content: 'Test 1', timestamp: new Date() });
+        result.current.addMessage({ role: 'assistant', content: 'Test 2', timestamp: new Date() });
+      });
+
+      // Set pending questionnaire (captures index = 2)
+      act(() => {
+        result.current.setPendingQuestionnaire({
+          conversationId: 'conv-123',
+          assessmentType: 'comprehensive',
+          vendorName: 'Test',
+          solutionName: null,
+          contextSummary: null,
+          estimatedQuestions: 85,
+          selectedCategories: null,
+        });
+      });
+
+      expect(result.current.questionnaireMessageIndex).toBe(2);
+
+      // Add more messages
+      act(() => {
+        result.current.addMessage({ role: 'user', content: 'Test 3', timestamp: new Date() });
+        result.current.addMessage({ role: 'assistant', content: 'Test 4', timestamp: new Date() });
+      });
+
+      // Index should NOT change - it was captured at creation time
+      expect(result.current.questionnaireMessageIndex).toBe(2);
+    });
+
+    it('questionnaireMessageIndex is NOT persisted to localStorage', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireMessageIndex(5);
+      });
+
+      // Check localStorage - index should NOT be persisted
+      const stored = localStorage.getItem('guardian-chat-store');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+
+      // Verify index is NOT in persisted state
+      expect(parsed.state.questionnaireMessageIndex).toBeUndefined();
+    });
+  });
 });

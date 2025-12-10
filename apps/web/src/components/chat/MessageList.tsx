@@ -3,8 +3,11 @@
 import React, { useEffect, useRef, forwardRef, useState, useCallback } from 'react';
 import { ChatMessage } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
-import { ChatMessage as ChatMessageType } from '@/lib/websocket';
+import { QuestionnaireMessage } from './QuestionnaireMessage';
+import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload } from '@/lib/websocket';
 import { ChevronDown } from 'lucide-react';
+import type { Step } from '@/types/stepper';
+import type { QuestionnaireUIState } from './QuestionnairePromptCard';
 
 export interface MessageListProps {
   messages: ChatMessageType[];
@@ -12,12 +15,25 @@ export interface MessageListProps {
   isStreaming?: boolean;
   onRegenerate?: (messageIndex: number) => void;
   regeneratingMessageIndex?: number | null;
-  /** Optional slot for rendering the questionnaire card inline */
-  questionnaireSlot?: React.ReactNode;
+  /** Story 14.1.2: Inline questionnaire rendering props */
+  questionnaire?: {
+    payload: QuestionnaireReadyPayload;
+    uiState: QuestionnaireUIState;
+    error?: string | null;
+    exportData?: { formats: string[]; assessmentId: string } | null;
+    onGenerate: () => void;
+    onDownload: (format: string) => void;
+    onRetry: () => void;
+    steps?: Step[];
+    currentStep?: number;
+    isRunning?: boolean;
+    /** Position in message list (-1 = append at end) */
+    insertIndex: number;
+  };
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, questionnaireSlot }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, questionnaire }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -123,20 +139,51 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
           {/* Centered content container (max-w-3xl = 768px) */}
           <div className="max-w-3xl mx-auto w-full px-4 py-6 pb-6">
             {messages.map((message, index) => (
-              <ChatMessage
-                key={message.id || `msg-${index}`}
-                role={message.role}
-                content={message.content}
-                components={message.components}
-                timestamp={message.timestamp}
-                messageIndex={index}
-                onRegenerate={onRegenerate}
-                isRegenerating={regeneratingMessageIndex === index}
-              />
+              <React.Fragment key={message.id || `msg-${index}`}>
+                {/* Story 14.1.2: Render questionnaire before this message if it's the insertion point */}
+                {questionnaire && questionnaire.insertIndex === index && (
+                  <QuestionnaireMessage
+                    payload={questionnaire.payload}
+                    uiState={questionnaire.uiState}
+                    error={questionnaire.error}
+                    exportData={questionnaire.exportData}
+                    onGenerate={questionnaire.onGenerate}
+                    onDownload={questionnaire.onDownload}
+                    onRetry={questionnaire.onRetry}
+                    steps={questionnaire.steps}
+                    currentStep={questionnaire.currentStep}
+                    isRunning={questionnaire.isRunning}
+                    timestamp={new Date()}
+                  />
+                )}
+                <ChatMessage
+                  role={message.role}
+                  content={message.content}
+                  components={message.components}
+                  timestamp={message.timestamp}
+                  messageIndex={index}
+                  onRegenerate={onRegenerate}
+                  isRegenerating={regeneratingMessageIndex === index}
+                />
+              </React.Fragment>
             ))}
 
-            {/* Questionnaire card slot - renders inline after messages */}
-            {questionnaireSlot}
+            {/* Story 14.1.2: Render questionnaire at end if insertIndex >= messages.length */}
+            {questionnaire && questionnaire.insertIndex >= messages.length && (
+              <QuestionnaireMessage
+                payload={questionnaire.payload}
+                uiState={questionnaire.uiState}
+                error={questionnaire.error}
+                exportData={questionnaire.exportData}
+                onGenerate={questionnaire.onGenerate}
+                onDownload={questionnaire.onDownload}
+                onRetry={questionnaire.onRetry}
+                steps={questionnaire.steps}
+                currentStep={questionnaire.currentStep}
+                isRunning={questionnaire.isRunning}
+                timestamp={new Date()}
+              />
+            )}
 
             {isLoading && (
               <div data-testid="typing-indicator" className="flex gap-3 py-6">

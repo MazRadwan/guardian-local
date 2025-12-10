@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
-import { QuestionnairePromptCard } from './QuestionnairePromptCard';
 import { AlertCircle } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
@@ -55,10 +54,24 @@ export function ChatInterface() {
   const setCurrentGenerationStep = useChatStore((state) => state.setCurrentGenerationStep);
   const resetGenerationStep = useChatStore((state) => state.resetGenerationStep);
 
+  // Story 14.1.2: Position for inline questionnaire rendering
+  const questionnaireMessageIndex = useChatStore((state) => state.questionnaireMessageIndex);
+
+  // Story 14.1.5: Gate download visibility until stream completes
+  const isQuestionnaireStreamComplete = useChatStore((state) => state.isQuestionnaireStreamComplete);
+
   // Get export data for active conversation
   const exportData = activeConversationId
     ? exportReadyByConversation[activeConversationId]
     : null;
+
+  // Story 14.1.5: Gate both exportData AND uiState until stream is complete
+  // This ensures download bubble renders AFTER the streamed questionnaire content
+  // AND prevents UI state mismatch (showing 'download' state without export data)
+  const gatedExportData = isQuestionnaireStreamComplete ? exportData : null;
+  const gatedUIState = (questionnaireUIState === 'download' && !isQuestionnaireStreamComplete)
+    ? 'generating' // Show generating state while waiting for stream to complete
+    : questionnaireUIState;
 
   // Track previous conversation ID to detect actual changes
   const prevConversationIdRef = useRef<string | null>(null);
@@ -108,6 +121,8 @@ export function ChatInterface() {
       const savedPayload = persistence.loadPayload(activeConversationId);
       applyPayloadIfValid(savedPayload);
       useChatStore.getState().setQuestionnaireUIState('download');
+      // Story 14.1.5: No active stream on rehydration, enable download visibility
+      useChatStore.getState().setQuestionnaireStreamComplete(true);
       return;
     }
 
@@ -120,6 +135,8 @@ export function ChatInterface() {
       const savedPayload = persistence.loadPayload(activeConversationId);
       applyPayloadIfValid(savedPayload);
       useChatStore.getState().setQuestionnaireUIState('download');
+      // Story 14.1.5: No active stream on rehydration, enable download visibility
+      useChatStore.getState().setQuestionnaireStreamComplete(true);
       return;
     }
 
@@ -260,24 +277,24 @@ export function ChatInterface() {
               isStreaming={isStreaming}
               onRegenerate={handleRegenerate}
               regeneratingMessageIndex={regeneratingMessageIndex}
-              questionnaireSlot={
+              questionnaire={
                 pendingQuestionnaire &&
                 pendingQuestionnaire.conversationId === activeConversationId &&
-                questionnaireUIState !== 'hidden' ? (
-                  <QuestionnairePromptCard
-                    payload={pendingQuestionnaire}
-                    uiState={questionnaireUIState}
-                    error={questionnaireError}
-                    exportData={exportData}
-                    onGenerate={handleGenerateQuestionnaire}
-                    onDownload={handleDownload}
-                    onRetry={handleGenerateQuestionnaire}
-                    className="mx-4 mb-4"
-                    steps={generationSteps}
-                    currentStep={currentGenerationStep}
-                    isRunning={isGeneratingQuestionnaire}
-                  />
-                ) : undefined
+                gatedUIState !== 'hidden'
+                  ? {
+                      payload: pendingQuestionnaire,
+                      uiState: gatedUIState, // Story 14.1.5: Gated to 'generating' until stream completes
+                      error: questionnaireError,
+                      exportData: gatedExportData, // Story 14.1.5: Gated until stream completes
+                      onGenerate: handleGenerateQuestionnaire,
+                      onDownload: handleDownload,
+                      onRetry: handleGenerateQuestionnaire,
+                      steps: generationSteps,
+                      currentStep: currentGenerationStep,
+                      isRunning: isGeneratingQuestionnaire,
+                      insertIndex: questionnaireMessageIndex,
+                    }
+                  : undefined
               }
             />
           </div>
