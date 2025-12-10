@@ -78,15 +78,17 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     }, [messages.length]); // Re-observe when messages change
 
     // Use useLayoutEffect for synchronous scroll updates to prevent visual lag (text going behind composer)
+    // Story 14.1.3: Include questionnaire in deps so scroll fires when bubble appears (not just messages)
     React.useLayoutEffect(() => {
       const container = scrollContainerRef.current;
       if (!container) return;
 
       // If we are streaming OR if we were already near bottom, force scroll to bottom immediately
+      // This covers both normal messages AND questionnaire bubble injection
       if (isStreaming || isNearBottom) {
         container.scrollTop = container.scrollHeight;
       }
-    }, [messages, isStreaming, isNearBottom]);
+    }, [messages, isStreaming, isNearBottom, questionnaire?.uiState, questionnaire?.insertIndex]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
