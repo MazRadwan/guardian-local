@@ -727,7 +727,7 @@ describe('MessageList', () => {
       expect(scrollContainer).toContainElement(questionnaire);
     });
 
-    it('auto-scrolls when questionnaire appears (Story 14.1.3 regression)', () => {
+    it('auto-scrolls when questionnaire appears (Story 14.1.3 regression)', async () => {
       const messages = [
         { role: 'user' as const, content: 'Can you generate a report?', timestamp: new Date() },
         { role: 'assistant' as const, content: 'Yes, I can generate a report for you.', timestamp: new Date() },
@@ -740,10 +740,17 @@ describe('MessageList', () => {
       const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLDivElement;
       expect(scrollContainer).toBeInTheDocument();
 
-      // Mock scrollHeight and simulate being near bottom
-      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 500, configurable: true });
+      // Mock scroll dimensions - content overflows
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, configurable: true });
       Object.defineProperty(scrollContainer, 'clientHeight', { value: 400, configurable: true });
-      Object.defineProperty(scrollContainer, 'scrollTop', { value: 50, writable: true, configurable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 100, writable: true, configurable: true });
+
+      // Simulate NOT being near bottom (IntersectionObserver reports not intersecting)
+      // This is the key scenario: user has scrolled up, but questionnaire should still scroll into view
+      await triggerIntersection(false);
+
+      // Verify we're not near bottom before questionnaire appears
+      expect(scrollContainer.scrollTop).toBe(100);
 
       // Rerender with questionnaire appearing (transitions from undefined to 'ready')
       rerender(
@@ -756,10 +763,9 @@ describe('MessageList', () => {
       // The questionnaire should be rendered and visible
       expect(screen.getByTestId('questionnaire-message')).toBeInTheDocument();
 
-      // Scroll should have been triggered (scrollTop should be set to scrollHeight)
-      // Note: In JSDOM, scrollHeight may not update, but we verify the effect ran
-      // by checking the questionnaire is rendered within the scroll container
-      expect(scrollContainer).toContainElement(screen.getByTestId('questionnaire-message'));
+      // Scroll should have been triggered because questionnaire just appeared
+      // Even though isNearBottom is false, the questionnaire appearance forces scroll
+      expect(scrollContainer.scrollTop).toBe(1000); // scrollTop set to scrollHeight
     });
 
     it('auto-scrolls when questionnaire uiState changes', () => {

@@ -39,6 +39,9 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [isNearBottom, setIsNearBottom] = useState(true);
 
+    // Story 14.1.3: Track previous questionnaire visibility to detect appearance
+    const prevQuestionnaireVisibleRef = useRef<boolean>(false);
+
     // Merged ref callback to ensure both parent ref and local ref point to same DOM node
     const mergedRef = useCallback((node: HTMLDivElement | null) => {
       scrollContainerRef.current = node;
@@ -83,9 +86,14 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      // If we are streaming OR if we were already near bottom, force scroll to bottom immediately
-      // This covers both normal messages AND questionnaire bubble injection
-      if (isStreaming || isNearBottom) {
+      // Story 14.1.3: Detect when questionnaire transitions from hidden/undefined to visible
+      const isQuestionnaireVisible = !!(questionnaire?.uiState && questionnaire.uiState !== 'hidden');
+      const questionnaireJustAppeared = isQuestionnaireVisible && !prevQuestionnaireVisibleRef.current;
+      prevQuestionnaireVisibleRef.current = isQuestionnaireVisible;
+
+      // If streaming OR near bottom OR questionnaire just became visible, force scroll to bottom
+      // This ensures the questionnaire bubble scrolls into view when it first appears
+      if (isStreaming || isNearBottom || questionnaireJustAppeared) {
         container.scrollTop = container.scrollHeight;
       }
     }, [messages, isStreaming, isNearBottom, questionnaire?.uiState, questionnaire?.insertIndex]);
