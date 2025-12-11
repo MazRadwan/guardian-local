@@ -103,4 +103,61 @@ describe('chatStore pending questionnaire', () => {
       expect(useChatStore.getState().isGeneratingQuestionnaire).toBe(false);
     });
   });
+
+  // Story 14.1.5: Stream completion gating for download bubble
+  describe('isQuestionnaireStreamComplete (Story 14.1.5)', () => {
+    it('should default to false', () => {
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(false);
+    });
+
+    it('should set stream complete flag', () => {
+      useChatStore.getState().setQuestionnaireStreamComplete(true);
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(true);
+
+      useChatStore.getState().setQuestionnaireStreamComplete(false);
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(false);
+    });
+
+    it('should reset to false when setPendingQuestionnaire is called', () => {
+      // Set flag to true
+      useChatStore.getState().setQuestionnaireStreamComplete(true);
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(true);
+
+      // Set new pending questionnaire - should reset flag
+      useChatStore.getState().setPendingQuestionnaire(testPayload);
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(false);
+    });
+
+    it('should reset to false when clearPendingQuestionnaire is called', () => {
+      // Set flag to true
+      useChatStore.getState().setQuestionnaireStreamComplete(true);
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(true);
+
+      // Clear pending questionnaire - should reset flag
+      useChatStore.getState().clearPendingQuestionnaire();
+      expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(false);
+    });
+
+    it('should capture questionnaireMessageIndex when setPendingQuestionnaire is called', () => {
+      // Add some messages first
+      useChatStore.getState().addMessage({ role: 'user', content: 'msg 1', timestamp: new Date() });
+      useChatStore.getState().addMessage({ role: 'assistant', content: 'msg 2', timestamp: new Date() });
+
+      // Set pending questionnaire - should capture current message count
+      useChatStore.getState().setPendingQuestionnaire(testPayload);
+
+      // Index should be 2 (inserted after existing messages)
+      expect(useChatStore.getState().questionnaireMessageIndex).toBe(2);
+    });
+
+    it('should reset questionnaireMessageIndex to -1 when clearPendingQuestionnaire is called', () => {
+      // Set pending questionnaire first
+      useChatStore.getState().setPendingQuestionnaire(testPayload);
+      expect(useChatStore.getState().questionnaireMessageIndex).toBeGreaterThanOrEqual(0);
+
+      // Clear should reset to -1
+      useChatStore.getState().clearPendingQuestionnaire();
+      expect(useChatStore.getState().questionnaireMessageIndex).toBe(-1);
+    });
+  });
 });

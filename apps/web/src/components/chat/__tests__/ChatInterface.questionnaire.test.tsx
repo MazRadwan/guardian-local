@@ -24,14 +24,24 @@ import {
 
 // Mock child components
 jest.mock('../MessageList', () => ({
-  MessageList: React.forwardRef(({ messages, isLoading, questionnaireSlot }: {
+  MessageList: React.forwardRef(({ messages, isLoading, questionnaire }: {
     messages: unknown[];
     isLoading: boolean;
-    questionnaireSlot?: React.ReactNode;
+    questionnaire?: {
+      payload: { assessmentType: string };
+      uiState: string;
+      insertIndex: number;
+    };
   }, ref) => (
     <div data-testid="message-list" ref={ref as React.Ref<HTMLDivElement>}>
       Messages: {messages.length}, Loading: {isLoading.toString()}
-      {questionnaireSlot && <div data-testid="questionnaire-slot">{questionnaireSlot}</div>}
+      {questionnaire && (
+        <div data-testid="questionnaire-message">
+          <span data-testid="card-state">State: {questionnaire.uiState}</span>
+          <span data-testid="card-type">Type: {questionnaire.payload?.assessmentType}</span>
+          <span data-testid="insert-index">Index: {questionnaire.insertIndex}</span>
+        </div>
+      )}
     </div>
   )),
 }));
@@ -44,17 +54,8 @@ jest.mock('../Composer', () => ({
   )),
 }));
 
-jest.mock('../QuestionnairePromptCard', () => ({
-  QuestionnairePromptCard: React.forwardRef(({ payload, uiState }: {
-    payload: { assessmentType: string };
-    uiState: string;
-  }, ref) => (
-    <div data-testid="questionnaire-prompt-card" ref={ref as React.Ref<HTMLDivElement>}>
-      <span data-testid="card-state">State: {uiState}</span>
-      <span data-testid="card-type">Type: {payload?.assessmentType}</span>
-    </div>
-  )),
-}));
+// QuestionnairePromptCard no longer rendered directly by ChatInterface
+// It's rendered via MessageList -> QuestionnaireMessage (Story 14.1)
 
 // Mock hooks
 jest.mock('@/stores/chatStore');
@@ -310,10 +311,10 @@ describe('ChatInterface Questionnaire', () => {
     });
   });
 
-  describe('Questionnaire Inline Card (Epic 12.4.3)', () => {
+  describe('Questionnaire Inline Rendering (Story 14.1)', () => {
     const mockPayload = createQuestionnairePayload();
 
-    it('renders QuestionnairePromptCard in slot when pending questionnaire exists', () => {
+    it('renders questionnaire message when pending questionnaire exists', () => {
       const { useChatController } = require('@/hooks/useChatController');
       (useChatController as jest.Mock).mockReturnValue(createControllerMock({
         messages: [{ role: 'user', content: 'test', timestamp: new Date() }],
@@ -326,12 +327,12 @@ describe('ChatInterface Questionnaire', () => {
         activeConversationId: 'conv-123',
         pendingQuestionnaire: mockPayload,
         questionnaireUIState: 'ready',
+        questionnaireMessageIndex: 1,
       }));
 
       render(<ChatInterface />);
 
-      expect(screen.getByTestId('questionnaire-slot')).toBeInTheDocument();
-      expect(screen.getByTestId('questionnaire-prompt-card')).toBeInTheDocument();
+      expect(screen.getByTestId('questionnaire-message')).toBeInTheDocument();
       expect(screen.getByTestId('card-state')).toHaveTextContent('State: ready');
       expect(screen.getByTestId('card-type')).toHaveTextContent('Type: comprehensive');
     });
@@ -349,12 +350,12 @@ describe('ChatInterface Questionnaire', () => {
         activeConversationId: 'conv-123',
         pendingQuestionnaire: mockPayload,
         questionnaireUIState: 'hidden',
+        questionnaireMessageIndex: 1,
       }));
 
       render(<ChatInterface />);
 
-      expect(screen.queryByTestId('questionnaire-slot')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('questionnaire-prompt-card')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('questionnaire-message')).not.toBeInTheDocument();
     });
 
     it('does not render card when conversation ID mismatch', () => {
@@ -370,12 +371,39 @@ describe('ChatInterface Questionnaire', () => {
         activeConversationId: 'conv-456',
         pendingQuestionnaire: mockPayload, // conv-123
         questionnaireUIState: 'ready',
+        questionnaireMessageIndex: 1,
       }));
 
       render(<ChatInterface />);
 
-      expect(screen.queryByTestId('questionnaire-slot')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('questionnaire-prompt-card')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('questionnaire-message')).not.toBeInTheDocument();
+    });
+
+    it('passes correct insert index to MessageList', () => {
+      const { useChatController } = require('@/hooks/useChatController');
+      (useChatController as jest.Mock).mockReturnValue(createControllerMock({
+        messages: [
+          { role: 'user', content: 'test 1', timestamp: new Date() },
+          { role: 'assistant', content: 'test 2', timestamp: new Date() },
+        ],
+        mode: 'assessment',
+        activeConversationId: 'conv-123',
+      }));
+
+      mockChatStoreWithState(createStoreMock({
+        messages: [
+          { role: 'user', content: 'test 1', timestamp: new Date() },
+          { role: 'assistant', content: 'test 2', timestamp: new Date() },
+        ],
+        activeConversationId: 'conv-123',
+        pendingQuestionnaire: mockPayload,
+        questionnaireUIState: 'ready',
+        questionnaireMessageIndex: 2,
+      }));
+
+      render(<ChatInterface />);
+
+      expect(screen.getByTestId('insert-index')).toHaveTextContent('Index: 2');
     });
   });
 });

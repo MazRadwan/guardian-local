@@ -53,6 +53,12 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 - ✅ E2E tests for critical workflows (auth, chat, question generation)
 - ✅ Minimum 70% coverage (aim for 80%+)
 
+- **E2E strategy (Epic 13+):**
+- Keep E2E only for critical happy paths (auth, chat, question gen, export/resume, stepper main flow).
+- UI polish/variants go to component/integration tests; one E2E smoke per epic is enough.
+- Tag suites: run `smoke` on PRs, full E2E nightly or pre-release.
+- Stabilize: deterministic fixtures/seeds, mock externals, assert via test-ids, wait on events (no sleeps), isolate storage per test.
+
 **Before committing:**
 - Run: `npm test` (all tests must pass)
 - Run: `npm run test:coverage` (check coverage)

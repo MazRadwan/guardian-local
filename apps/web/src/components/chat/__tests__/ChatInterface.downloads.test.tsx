@@ -25,15 +25,35 @@ import {
 } from './_testUtils';
 
 // Mock child components
+// Story 14.1: Updated to use new `questionnaire` prop instead of deprecated `questionnaireSlot`
 jest.mock('../MessageList', () => ({
-  MessageList: React.forwardRef(({ messages, isLoading, questionnaireSlot }: {
+  MessageList: React.forwardRef(({ messages, isLoading, questionnaire }: {
     messages: unknown[];
     isLoading: boolean;
-    questionnaireSlot?: React.ReactNode;
+    questionnaire?: {
+      payload: { assessmentType: string };
+      uiState: string;
+      exportData?: { formats: string[]; assessmentId: string } | null;
+      onGenerate: () => void;
+      onDownload: (format: string) => void;
+      onRetry: () => void;
+    };
   }, ref) => (
     <div data-testid="message-list" ref={ref as React.Ref<HTMLDivElement>}>
       Messages: {messages.length}, Loading: {isLoading.toString()}
-      {questionnaireSlot && <div data-testid="questionnaire-slot">{questionnaireSlot}</div>}
+      {questionnaire && (
+        <div data-testid="questionnaire-message">
+          <div data-testid="questionnaire-prompt-card">
+            <span data-testid="card-state">State: {questionnaire.uiState}</span>
+            <span data-testid="card-type">Type: {questionnaire.payload?.assessmentType}</span>
+            {questionnaire.exportData && (
+              <button onClick={() => questionnaire.onDownload('pdf')} data-testid="download-btn">
+                Download
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )),
 }));
@@ -258,6 +278,7 @@ describe('ChatInterface Download Durability (Story 13.3)', () => {
         pendingQuestionnaire: downloadPayload,
         questionnaireUIState: 'download',
         exportReadyByConversation: { 'conv-123': exportData },
+        isQuestionnaireStreamComplete: true, // Story 14.1.5: Required for download to be visible
         clearPendingQuestionnaire: mockClearPending,
         setQuestionnaireUIState: mockSetUIState,
       });
@@ -349,6 +370,7 @@ describe('ChatInterface Download Durability (Story 13.3)', () => {
         pendingQuestionnaire: quickPayload,
         questionnaireUIState: 'download',
         exportReadyByConversation: { 'conv-123': exportData },
+        isQuestionnaireStreamComplete: true, // Story 14.1.5: Required for download to be visible
         clearPendingQuestionnaire: mockClearPending,
         setQuestionnaireUIState: mockSetUIState,
       });

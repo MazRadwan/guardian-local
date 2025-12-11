@@ -89,6 +89,8 @@ export const createStoreMock = (overrides: Record<string, unknown> = {}) => ({
   isGeneratingQuestionnaire: false,
   questionnaireUIState: 'hidden' as const,
   questionnaireError: null,
+  questionnaireMessageIndex: -1, // Story 14.1.2
+  isQuestionnaireStreamComplete: false, // Story 14.1.5
 
   // Questionnaire actions
   setPendingQuestionnaire: jest.fn(),
@@ -96,6 +98,8 @@ export const createStoreMock = (overrides: Record<string, unknown> = {}) => ({
   setGenerating: jest.fn(),
   setQuestionnaireUIState: jest.fn(),
   setQuestionnaireError: jest.fn(),
+  setQuestionnaireMessageIndex: jest.fn(), // Story 14.1.2
+  setQuestionnaireStreamComplete: jest.fn(), // Story 14.1.5
 
   // Stepper state (Story 13.4.2)
   generationSteps: GENERATION_STEPS,

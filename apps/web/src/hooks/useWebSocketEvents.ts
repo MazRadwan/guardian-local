@@ -240,7 +240,16 @@ export function useWebSocketEvents({
     // - User downloads successfully
     // - New questionnaire_ready event received
     useChatStore.getState().setGenerating(false);
-  }, [finishStreaming, setLoading, setRegeneratingMessageIndex, focusComposer]);
+
+    // Story 14.1.5: Mark questionnaire stream as complete and update index
+    // This gates download bubble visibility until streaming finishes
+    const state = useChatStore.getState();
+    if (state.pendingQuestionnaire) {
+      // Update index to current messages length (download bubble renders AFTER questionnaire)
+      state.setQuestionnaireMessageIndex(messages.length);
+      state.setQuestionnaireStreamComplete(true);
+    }
+  }, [finishStreaming, setLoading, setRegeneratingMessageIndex, focusComposer, messages.length]);
 
   // Handler 6: Update conversations list
   const handleConversationsList = useCallback(
