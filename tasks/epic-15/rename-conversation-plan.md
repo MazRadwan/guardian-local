@@ -20,9 +20,11 @@
 | `packages/backend/src/application/services/ConversationService.ts` | Add `updateConversationTitle()` + modify `getConversationTitle()` to prefer stored title |
 | `packages/backend/src/infrastructure/websocket/ChatServer.ts` | Add `rename_conversation` event handler |
 
-### Frontend (4 files)
+### Frontend (6 files)
 | File | Change |
 |------|--------|
+| `apps/web/src/lib/websocket.ts` | Add `renameConversation(conversationId, title)` emit method |
+| `apps/web/src/hooks/useWebSocket.ts` | Expose `renameConversation()` passthrough |
 | `apps/web/src/hooks/useWebSocketAdapter.ts` | Add `renameConversation(id, title)` method |
 | `apps/web/src/services/ConversationService.ts` | Add `renameConversation()` wrapper |
 | `apps/web/src/components/chat/ConversationListItem.tsx` | Add Shadcn DropdownMenu (Rename + Delete), inline edit mode, remove standalone delete button |
@@ -38,7 +40,7 @@
 
 ## Implementation Summary
 
-**Total: ~14 files** (8 source + 4 tests + 1 migration + 1 schema)
+**Total: ~16 files** (10 source + 4 tests + 1 migration + 1 schema)
 
 ### Data Flow (After Implementation)
 ```
@@ -52,7 +54,7 @@ ChatServer handler → ConversationService.updateConversationTitle()
   ↓
 Repository.updateTitle() → DB UPDATE
   ↓
-WebSocket: emit 'conversation_renamed' { conversationId, title }
+WebSocket: emit 'conversation_title_updated' { conversationId, title }
   ↓
 Zustand store.updateConversationTitle() → UI re-renders
 ```
@@ -65,6 +67,7 @@ Zustand store.updateConversationTitle() → UI re-renders
 5. **Escape to cancel, Enter to save** - Standard keyboard UX
 6. **Optimistic update** - Update UI immediately, revert on error
 7. **Extensible menu** - Easy to add future options (archive, duplicate, export)
+8. **Reuse existing server event** - Emit `conversation_title_updated` to avoid adding a new “renamed” event type
 
 ## Effort Estimate
 - Small-medium feature (~3-4 hours implementation)

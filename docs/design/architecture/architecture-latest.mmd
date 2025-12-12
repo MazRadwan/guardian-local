@@ -1,0 +1,134 @@
+flowchart TB
+  subgraph Presentation["Presentation (Next.js 16 / React 19)"]
+    ChatInterface["ChatInterface"]
+    Composer["Composer + ModeSelector"]
+    MessageList["MessageList + inline QuestionnaireMessage"]
+    VerticalStepper["VerticalStepper (generation phases)"]
+    Sidebar["Sidebar + ConversationList/Search"]
+    QuestionnairePrompt["QuestionnairePromptCard"]
+    DownloadBubble["Download/Export bubble"]
+  end
+
+  subgraph HooksState["Hooks, State & Persistence"]
+    useChatController["useChatController"]
+    useWebSocketAdapter["useWebSocketAdapter"]
+    useWebSocketEvents["useWebSocketEvents (generation_phase, export_status, etc.)"]
+    useHistoryManager["useHistoryManager"]
+    useConversationSync["useConversationSync"]
+    useConversationMode["useConversationMode"]
+    useQuestionnairePersistence["useQuestionnairePersistence (localStorage)"]
+    useAuth["useAuth"]
+    chatStore["Zustand chatStore\n(pendingQuestionnaire, generationSteps,\nquestionnaireMessageIndex, streamComplete,\nexportReadyByConversation)"]
+    ChatServiceFE["ChatService (FE)"]
+    ConversationServiceFE["ConversationService (FE)"]
+  end
+
+  subgraph WebSocket["WebSocket Layer (Socket.IO /chat)"]
+    WSClient["WebSocketClient"]
+    ClientEvents["Client emits:\nsend_message / start_new_conversation / switch_mode /\nget_history / get_conversations / delete_conversation /\nabort_stream / generate_questionnaire / get_export_status"]
+    ServerEvents["Server emits:\nmessage / assistant_token / assistant_done / generation_phase\nconnection_ready / history\nconversations_list / conversation_created\nconversation_title_updated / conversation_deleted\nconversation_mode_updated / stream_aborted\nquestionnaire_ready (with insert_index)\nexport_ready / export_status / export_status_not_found /\nexport_status_error / extraction_failed"]
+  end
+
+  subgraph Backend["Backend (Express 5 + Socket.IO)"]
+    ChatServer["ChatServer (/chat namespace)"]
+    RateLimiter["RateLimiter"]
+    HttpRoutes["HTTP routes:\n/api/auth\n/api/vendors\n/api/assessments\n/api/questions\n/api/assessments/:id/export/{pdf|word|excel}"]
+    Controllers["Auth / Vendor / Assessment /\nQuestion / Export Controllers"]
+  end
+
+  subgraph Services["Application Services"]
+    AuthService
+    ConversationService
+    AssessmentService
+    VendorService
+    QuestionService["QuestionService (legacy gen)"]
+    QuestionnaireReadyService
+    QuestionnaireGenerationService
+    ExportService
+  end
+
+  subgraph Domain["Domain Entities"]
+    User
+    Conversation
+    Assessment
+    Vendor
+    Question
+    Message
+  end
+
+  subgraph AI["AI & Rendering"]
+    ClaudeClient["ClaudeClient (Sonnet 4.5)"]
+    PromptCacheManager["PromptCacheManager (tool-aware)"]
+    assessmentModeTools["assessmentModeTools\n(questionnaire_ready tool)"]
+    questionnaireOutputTool["questionnaireOutputTool\n(structured JSON)"]
+    questionGenPrompt["questionGeneration prompt"]
+    QuestionnaireSchemaAdapter
+    questionnaireToMarkdown["questionnaireToMarkdown / Markdown converter"]
+  end
+
+  subgraph Data["Data Layer (Drizzle + PostgreSQL 17)"]
+    UserRepo
+    ConversationRepo
+    MessageRepo
+    VendorRepo
+    AssessmentRepo
+    QuestionRepo
+    Tables["users, conversations,\nmessages, vendors,\nassessments, questions"]
+    Exporters["PDFExporter / WordExporter / ExcelExporter"]
+    JWTProvider
+  end
+
+  subgraph External["External"]
+    ClaudeAPI["Anthropic Claude API"]
+  end
+
+  ChatInterface --> useChatController
+  Sidebar --> useChatController
+  MessageList --> chatStore
+  VerticalStepper --> chatStore
+  QuestionnairePrompt --> chatStore
+  DownloadBubble --> chatStore
+
+  useChatController --> ChatServiceFE
+  useChatController --> ConversationServiceFE
+  useChatController --> useWebSocketAdapter
+  useChatController --> useWebSocketEvents
+  useChatController --> useHistoryManager
+  useChatController --> useConversationSync
+  useChatController --> useConversationMode
+  useChatController --> useQuestionnairePersistence
+  useChatController --> chatStore
+
+  ChatServiceFE --> useWebSocketAdapter
+  ConversationServiceFE --> useWebSocketAdapter
+  useWebSocketAdapter --> WSClient
+  WSClient --> ClientEvents
+  WSClient --> ServerEvents
+
+  ClientEvents --> ChatServer
+  ChatServer --> ServerEvents
+  ChatServer --> RateLimiter
+  ChatServer --> ConversationService
+  ChatServer --> QuestionnaireReadyService
+  ChatServer --> QuestionnaireGenerationService
+  ChatServer --> PromptCacheManager
+  PromptCacheManager --> ClaudeClient
+  ChatServer --> HttpRoutes
+  HttpRoutes --> Controllers
+  Controllers --> AuthService
+  Controllers --> VendorService
+  Controllers --> AssessmentService
+  Controllers --> QuestionService
+  Controllers --> ExportService
+
+  AuthService --> JWTProvider
+  ConversationService --> ConversationRepo --> Tables
+  ConversationService --> MessageRepo --> Tables
+  QuestionService --> QuestionRepo --> Tables
+  QuestionnaireGenerationService --> ClaudeClient
+  QuestionnaireGenerationService --> QuestionnaireSchemaAdapter --> QuestionRepo
+  QuestionnaireGenerationService --> AssessmentService
+  QuestionnaireGenerationService --> VendorService
+  QuestionnaireGenerationService --> questionnaireToMarkdown
+  ExportService --> Exporters
+  ClaudeClient <--> ClaudeAPI

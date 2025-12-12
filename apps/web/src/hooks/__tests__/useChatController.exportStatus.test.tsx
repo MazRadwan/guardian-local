@@ -193,5 +193,3 @@ describe('useChatController export persistence', () => {
     expect(mockRequestExportStatus).not.toHaveBeenCalled();
   });
 });
-
-
