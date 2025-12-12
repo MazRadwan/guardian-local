@@ -58,3 +58,13 @@ verify-*.sh
 # GUARDIAN original docs (keep only in .claude/documentation/)
 GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md
 GUARDIAN_Training_Guide_v1.0.md
+
+# Playwright test artifacts
+apps/web/playwright-report/
+apps/web/test-results/
+
+# TypeScript build output in shared package
+packages/shared/src/**/*.js
+packages/shared/src/**/*.d.ts
+packages/shared/src/**/*.js.map
+packages/shared/src/**/*.d.ts.map
