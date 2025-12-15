@@ -11,3 +11,4 @@ export * from './ExportService.js';
 export * from './QuestionService.js';
 export * from './QuestionnaireReadyService.js';
 export * from './VendorService.js';
+export * from './FileValidationService.js';

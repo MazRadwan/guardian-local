@@ -18,6 +18,7 @@ export * from './IQuestionnaireGenerationService.js';
 export * from './IDocumentParser.js';
 export * from './IIntakeDocumentParser.js';
 export * from './IScoringDocumentParser.js';
+export * from './IFileStorage.js';
 
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)
