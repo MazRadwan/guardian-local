@@ -64,14 +64,25 @@ export class FileValidationService {
       if (!isDocxAsZip) {
         const actualType = this.mapMimeToDocType(detectedType.mime);
 
-        if (actualType && actualType !== expectedType) {
+        // SECURITY: If file-type detects a MIME we don't support/map, reject
+        // This prevents malicious files (EXE, scripts) disguised with wrong extension
+        if (actualType === null) {
+          return {
+            valid: false,
+            documentType: null,
+            error: `File content does not match a supported type. Detected: ${detectedType.mime} (${detectedType.ext})`,
+            warnings,
+          };
+        }
+
+        if (actualType !== expectedType) {
           warnings.push(
             `File extension (${ext}) doesn't match actual content (${detectedType.ext})`
           );
         }
 
-        // Use detected type as source of truth (unless it's the docx-as-zip case)
-        if (actualType && !this.isSupported(actualType)) {
+        // Use detected type as source of truth
+        if (!this.isSupported(actualType)) {
           return {
             valid: false,
             documentType: null,

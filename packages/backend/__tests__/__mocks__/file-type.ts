@@ -22,6 +22,10 @@ const MAGIC_PATTERNS: Array<{
   { header: [0xff, 0xd8, 0xff], ext: 'jpg', mime: 'image/jpeg' },
   // ZIP (and DOCX): PK
   { header: [0x50, 0x4b, 0x03, 0x04], ext: 'zip', mime: 'application/zip' },
+  // PE/EXE: MZ
+  { header: [0x4d, 0x5a], ext: 'exe', mime: 'application/x-msdownload' },
+  // ELF (Linux executable): \x7FELF
+  { header: [0x7f, 0x45, 0x4c, 0x46], ext: 'elf', mime: 'application/x-executable' },
 ];
 
 export async function fileTypeFromBuffer(

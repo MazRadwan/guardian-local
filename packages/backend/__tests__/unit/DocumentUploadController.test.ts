@@ -163,8 +163,8 @@ describe('DocumentUploadController', () => {
     it('should emit progress events on successful processing', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
-      // Wait for async processing
-      await new Promise(process.nextTick);
+      // Wait for async processing (setImmediate is more stable than nextTick)
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Verify progress events emitted
       expect(mockChatNamespace.to).toHaveBeenCalledWith('user:user-123');
@@ -180,8 +180,8 @@ describe('DocumentUploadController', () => {
     it('should emit intake_context_ready on successful intake parse', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
-      // Wait for async processing
-      await new Promise(process.nextTick);
+      // Wait for async processing (setImmediate is more stable than nextTick)
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'intake_context_ready',
@@ -197,8 +197,8 @@ describe('DocumentUploadController', () => {
     it('should emit upload_progress with stage "complete" on successful parse', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
-      // Wait for async processing
-      await new Promise(process.nextTick);
+      // Wait for async processing (setImmediate is more stable than nextTick)
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Verify final stage is 'complete' for success
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
@@ -211,7 +211,7 @@ describe('DocumentUploadController', () => {
       );
     });
 
-    it('should emit upload_progress with stage "error" when parsing fails', async () => {
+    it('should emit upload_progress with stage "error" and error details when parsing fails', async () => {
       // Make parser return failure (success: false, not throw)
       mockIntakeParser.parseForContext.mockResolvedValue({
         success: false,
@@ -222,7 +222,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise(process.nextTick);
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Verify intake_context_ready emitted with success: false
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
@@ -233,13 +233,14 @@ describe('DocumentUploadController', () => {
         })
       );
 
-      // Verify final stage is 'error', NOT 'complete'
+      // Verify final stage is 'error' with specific error message
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'upload_progress',
         expect.objectContaining({
           stage: 'error',
           progress: 0,
           message: 'Document parsing failed',
+          error: 'Failed to parse document', // Parser error included
         })
       );
 
@@ -250,7 +251,7 @@ describe('DocumentUploadController', () => {
       expect(completeCall).toBeUndefined();
     });
 
-    it('should emit upload_progress with stage "error" when scoring parse fails', async () => {
+    it('should emit upload_progress with stage "error" and error details when scoring parse fails', async () => {
       // Switch to scoring mode
       mockReq.body = {
         conversationId: 'conv-123',
@@ -267,7 +268,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise(process.nextTick);
+      await new Promise((resolve) => setImmediate(resolve));
 
       // Verify scoring_parse_ready emitted with success: false
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
@@ -278,11 +279,12 @@ describe('DocumentUploadController', () => {
         })
       );
 
-      // Verify final stage is 'error'
+      // Verify final stage is 'error' with specific error
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'upload_progress',
         expect.objectContaining({
           stage: 'error',
+          error: 'Not a Guardian questionnaire', // Parser error included
         })
       );
     });

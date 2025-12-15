@@ -124,5 +124,53 @@ describe('FileValidationService', () => {
       // Should include warning about mismatch
       expect(result.warnings.length).toBeGreaterThan(0);
     });
+
+    it('should reject EXE bytes disguised as PDF (security)', async () => {
+      // Create a Windows PE/EXE header (MZ magic bytes) but name it .pdf
+      const exeHeader = Buffer.from([0x4d, 0x5a]); // MZ - PE executable header
+      const maliciousBuffer = Buffer.concat([exeHeader, Buffer.alloc(200, 0)]);
+
+      const result = await service.validate(
+        maliciousBuffer,
+        'application/pdf',
+        'virus.pdf'
+      );
+
+      // Should reject - EXE is not a supported type
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('does not match a supported type');
+      expect(result.error).toContain('exe');
+    });
+
+    it('should reject ELF bytes disguised as PNG (security)', async () => {
+      // Create a Linux ELF header but name it .png
+      const elfHeader = Buffer.from([0x7f, 0x45, 0x4c, 0x46]); // \x7FELF
+      const maliciousBuffer = Buffer.concat([elfHeader, Buffer.alloc(200, 0)]);
+
+      const result = await service.validate(
+        maliciousBuffer,
+        'image/png',
+        'image.png'
+      );
+
+      // Should reject - ELF executable is not a supported type
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('does not match a supported type');
+    });
+
+    it('should accept valid PDF with correct magic bytes', async () => {
+      // Create valid PDF header
+      const pdfHeader = Buffer.from([0x25, 0x50, 0x44, 0x46]); // %PDF
+      const validPdf = Buffer.concat([pdfHeader, Buffer.alloc(200, 0)]);
+
+      const result = await service.validate(
+        validPdf,
+        'application/pdf',
+        'document.pdf'
+      );
+
+      expect(result.valid).toBe(true);
+      expect(result.documentType).toBe('pdf');
+    });
   });
 });

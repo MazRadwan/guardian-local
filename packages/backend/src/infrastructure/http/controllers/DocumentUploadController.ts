@@ -155,21 +155,29 @@ export class DocumentUploadController {
       // Emit: parsing
       this.emitProgress(socketRoom, conversationId, uploadId, 50, 'parsing', 'Analyzing document...');
 
-      // Parse based on mode - track success for correct stage emission
-      let parseSuccess: boolean;
+      // Parse based on mode - track success and error for correct stage emission
+      let parseResult: { success: boolean; error?: string };
       if (mode === 'intake') {
-        parseSuccess = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId);
+        parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId);
       } else {
-        parseSuccess = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId);
+        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId);
       }
 
       // Emit final stage based on parse result
-      if (parseSuccess) {
+      if (parseResult.success) {
         this.emitProgress(socketRoom, conversationId, uploadId, 100, 'complete', 'Document processed successfully');
       } else {
-        // Parser failed - emit error stage (not complete)
+        // Parser failed - emit error stage with specific error message
         // Note: *_ready event with success:false was already emitted by parser
-        this.emitProgress(socketRoom, conversationId, uploadId, 0, 'error', 'Document parsing failed');
+        this.emitProgress(
+          socketRoom,
+          conversationId,
+          uploadId,
+          0,
+          'error',
+          'Document parsing failed',
+          parseResult.error
+        );
       }
 
     } catch (error) {
@@ -211,7 +219,7 @@ export class DocumentUploadController {
 
   /**
    * Parse document for intake context
-   * @returns true if parsing succeeded, false otherwise
+   * @returns { success: boolean, error?: string } - parse result with error details
    */
   private async parseForIntake(
     socketRoom: string,
@@ -219,7 +227,7 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; error?: string }> {
     const result = await this.intakeParser.parseForContext(buffer, metadata, {
       conversationId,
     });
@@ -243,22 +251,23 @@ export class DocumentUploadController {
         gapCategories: result.gapCategories,
         confidence: result.confidence,
       });
-      return true;
+      return { success: true };
     } else {
+      const errorMessage = result.error || 'Failed to extract context from document';
       this.chatNamespace.to(socketRoom).emit('intake_context_ready', {
         conversationId,
         uploadId,
         success: false,
         context: null,
-        error: result.error || 'Failed to extract context from document',
+        error: errorMessage,
       });
-      return false;
+      return { success: false, error: errorMessage };
     }
   }
 
   /**
    * Parse document for scoring responses
-   * @returns true if parsing succeeded, false otherwise
+   * @returns { success: boolean, error?: string } - parse result with error details
    */
   private async parseForScoring(
     socketRoom: string,
@@ -266,7 +275,7 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string
-  ): Promise<boolean> {
+  ): Promise<{ success: boolean; error?: string }> {
     const result = await this.scoringParser.parseForResponses(buffer, metadata, {
       conversationId,
     });
@@ -283,16 +292,17 @@ export class DocumentUploadController {
         isComplete: result.isComplete,
         confidence: result.confidence,
       });
-      return true;
+      return { success: true };
     } else {
+      const errorMessage = result.error || 'Failed to extract responses. Ensure this is a Guardian-exported questionnaire.';
       this.chatNamespace.to(socketRoom).emit('scoring_parse_ready', {
         conversationId,
         uploadId,
         success: false,
         assessmentId: null,
-        error: result.error || 'Failed to extract responses. Ensure this is a Guardian-exported questionnaire.',
+        error: errorMessage,
       });
-      return false;
+      return { success: false, error: errorMessage };
     }
   }
 
