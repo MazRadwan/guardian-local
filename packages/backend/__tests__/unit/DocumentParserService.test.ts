@@ -5,10 +5,12 @@ import {
   QuestionnaireMismatchError,
 } from '../../src/application/interfaces/IScoringDocumentParser.js';
 
-// Mock pdf-parse module
+// Mock pdf-parse module (v2 class-based API)
 jest.mock('pdf-parse', () => ({
-  __esModule: true,
-  default: jest.fn().mockResolvedValue({ text: 'Extracted PDF text', numpages: 2 }),
+  PDFParse: jest.fn().mockImplementation(() => ({
+    getText: jest.fn().mockResolvedValue({ text: 'Extracted PDF text', total: 2, pages: [] }),
+    destroy: jest.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 // Mock mammoth module

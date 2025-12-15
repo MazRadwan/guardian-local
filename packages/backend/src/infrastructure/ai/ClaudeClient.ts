@@ -8,7 +8,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
-import * as pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import type {
   IClaudeClient,
   ClaudeMessage,
@@ -24,11 +24,6 @@ import type {
   VisionRequest,
   VisionResponse,
 } from '../../application/interfaces/IVisionClient.js';
-
-// pdf-parse default export workaround for ESM
-// Type the function signature explicitly for the callable
-type PdfParser = (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
-const pdf = ((pdfParse as { default?: unknown }).default ?? pdfParse) as PdfParser;
 
 export class ClaudeClient implements IClaudeClient, IVisionClient {
   private client: Anthropic;
@@ -328,19 +323,25 @@ export class ClaudeClient implements IClaudeClient, IVisionClient {
 
     // Simple approach: Return text extracted from PDF
     // Claude can process this directly without vision
-    const data = await pdf(buffer);
+    // pdf-parse v2 uses class-based API
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
 
-    // For now, we'll handle PDF text extraction separately
-    // Vision is primarily for scanned docs and images
-    console.log(
-      '[ClaudeClient] PDF detected, extracted text:',
-      data.numpages,
-      'pages'
-    );
+      // For now, we'll handle PDF text extraction separately
+      // Vision is primarily for scanned docs and images
+      console.log(
+        '[ClaudeClient] PDF detected, extracted text:',
+        result.total,
+        'pages'
+      );
 
-    // Return empty for now - PDFs handled via text extraction
-    // In production, use pdf2pic for image-based PDFs (scans)
-    return [];
+      // Return empty for now - PDFs handled via text extraction
+      // In production, use pdf2pic for image-based PDFs (scans)
+      return [];
+    } finally {
+      await parser.destroy();
+    }
   }
 
   private prepareImageDocument(

@@ -40,13 +40,8 @@ import {
   buildScoringExtractionPrompt,
   SCORING_EXTRACTION_SYSTEM_PROMPT,
 } from './prompts/scoringExtraction.js';
-import * as pdfParse from 'pdf-parse';
+import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
-
-// pdf-parse default export workaround for ESM
-// Type the function signature explicitly for the callable
-type PdfParser = (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
-const pdf = ((pdfParse as { default?: unknown }).default ?? pdfParse) as PdfParser;
 
 /** Default maximum characters to send to Claude (prevents context overflow) */
 const DEFAULT_MAX_EXTRACTED_TEXT_CHARS = 100000;
@@ -438,8 +433,14 @@ export class DocumentParserService
   }
 
   private async extractPdfText(buffer: Buffer): Promise<string> {
-    const data = await pdf(buffer);
-    return data.text;
+    // pdf-parse v2 uses class-based API
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+      return result.text;
+    } finally {
+      await parser.destroy();
+    }
   }
 
   private async extractDocxText(buffer: Buffer): Promise<string> {
