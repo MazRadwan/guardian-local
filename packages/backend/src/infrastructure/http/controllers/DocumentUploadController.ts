@@ -13,9 +13,10 @@ import { Request, Response } from 'express';
 import { Namespace } from 'socket.io';
 import { IFileStorage } from '../../../application/interfaces/IFileStorage.js';
 import { FileValidationService } from '../../../application/services/FileValidationService.js';
-import { IIntakeDocumentParser } from '../../../application/interfaces/IIntakeDocumentParser.js';
+import { IIntakeDocumentParser, IntakeContext } from '../../../application/interfaces/IIntakeDocumentParser.js';
 import { IScoringDocumentParser } from '../../../application/interfaces/IScoringDocumentParser.js';
 import { IConversationRepository } from '../../../application/interfaces/IConversationRepository.js';
+import { ConversationService } from '../../../application/services/ConversationService.js';
 import { DocumentMetadata } from '../../../application/interfaces/IDocumentParser.js';
 import { User } from '../../../domain/entities/User.js';
 
@@ -35,6 +36,8 @@ export class DocumentUploadController {
     private readonly intakeParser: IIntakeDocumentParser,
     private readonly scoringParser: IScoringDocumentParser,
     private readonly conversationRepository: IConversationRepository,
+    /** Story 4.3: Save context as assistant message so Claude sees it */
+    private readonly conversationService: ConversationService,
     /** Must be the /chat namespace, not base io - clients connect to /chat */
     private readonly chatNamespace: Namespace
   ) {}
@@ -219,6 +222,12 @@ export class DocumentUploadController {
 
   /**
    * Parse document for intake context
+   *
+   * Story 4.3: When parsing succeeds:
+   * 1. Save context as ASSISTANT message (so Claude sees it)
+   * 2. Emit 'message' event (so it appears in chat UI)
+   * 3. Emit 'intake_context_ready' (for UI state updates)
+   *
    * @returns { success: boolean, error?: string } - parse result with error details
    */
   private async parseForIntake(
@@ -233,6 +242,30 @@ export class DocumentUploadController {
     });
 
     if (result.success && result.context) {
+      // 1. Format context as assistant message
+      const contextMessage = this.formatIntakeContextMessage(
+        result.context,
+        result.gapCategories
+      );
+
+      // 2. Save as ASSISTANT message (not system!) so Claude sees it
+      // ChatServer.buildConversationContext filters to user/assistant only
+      const savedMessage = await this.conversationService.sendMessage({
+        conversationId,
+        role: 'assistant',
+        content: { text: contextMessage },
+      });
+
+      // 3. Emit 'message' event so it appears in chat UI
+      this.chatNamespace.to(socketRoom).emit('message', {
+        id: savedMessage.id,
+        conversationId,
+        role: 'assistant',
+        content: savedMessage.content,
+        createdAt: savedMessage.createdAt,
+      });
+
+      // 4. Emit 'intake_context_ready' for UI state updates
       this.chatNamespace.to(socketRoom).emit('intake_context_ready', {
         conversationId,
         uploadId,
@@ -263,6 +296,51 @@ export class DocumentUploadController {
       });
       return { success: false, error: errorMessage };
     }
+  }
+
+  /**
+   * Format intake context as assistant message for conversation history
+   *
+   * @param context - IntakeContext with vendor/solution info
+   * @param gapCategories - From IntakeParseResult (not on IntakeContext per Story 1.2)
+   */
+  private formatIntakeContextMessage(
+    context: IntakeContext,
+    gapCategories: string[]
+  ): string {
+    const parts: string[] = [
+      '📄 **Document Context Extracted**',
+      '',
+    ];
+
+    if (context.vendorName) {
+      parts.push(`**Vendor:** ${context.vendorName}`);
+    }
+    if (context.solutionName) {
+      parts.push(`**Solution:** ${context.solutionName}`);
+    }
+    if (context.solutionType) {
+      parts.push(`**Type:** ${context.solutionType}`);
+    }
+
+    if (context.features.length > 0) {
+      parts.push('', '**Key Features:**');
+      context.features.slice(0, 5).forEach(f => parts.push(`- ${f}`));
+      if (context.features.length > 5) {
+        parts.push(`- ... and ${context.features.length - 5} more`);
+      }
+    }
+
+    if (context.complianceMentions.length > 0) {
+      parts.push('', `**Compliance Mentions:** ${context.complianceMentions.join(', ')}`);
+    }
+
+    // gapCategories comes from IntakeParseResult, not IntakeContext
+    if (gapCategories && gapCategories.length > 0) {
+      parts.push('', `**Areas Needing Clarification:** ${gapCategories.join(', ')}`);
+    }
+
+    return parts.join('\n');
   }
 
   /**

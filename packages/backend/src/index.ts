@@ -179,6 +179,7 @@ const documentUploadController = new DocumentUploadController(
   documentParserService,  // IIntakeDocumentParser
   documentParserService,  // IScoringDocumentParser (same implementation)
   conversationRepo,
+  conversationService,    // Story 4.3: Save context as assistant message
   chatNamespace
 );
 

@@ -8,6 +8,7 @@ describe('DocumentUploadController', () => {
   let mockIntakeParser: jest.Mocked<any>;
   let mockScoringParser: jest.Mocked<any>;
   let mockConversationRepo: jest.Mocked<any>;
+  let mockConversationService: jest.Mocked<any>;
   let mockChatNamespace: jest.Mocked<any>;
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
@@ -47,6 +48,17 @@ describe('DocumentUploadController', () => {
       }),
     };
 
+    // Story 4.3: ConversationService for saving assistant message
+    mockConversationService = {
+      sendMessage: jest.fn().mockResolvedValue({
+        id: 'msg-123',
+        conversationId: 'conv-123',
+        role: 'assistant',
+        content: { text: 'Document Context Extracted' },
+        createdAt: new Date(),
+      }),
+    };
+
     // Mock the /chat namespace (not base io)
     mockChatNamespace = {
       to: jest.fn().mockReturnThis(),
@@ -59,7 +71,8 @@ describe('DocumentUploadController', () => {
       mockIntakeParser,
       mockScoringParser,
       mockConversationRepo,
-      mockChatNamespace // /chat namespace
+      mockConversationService, // Story 4.3: ConversationService
+      mockChatNamespace        // /chat namespace
     );
 
     // Auth middleware sets req.user (full User object), not req.userId
@@ -190,6 +203,34 @@ describe('DocumentUploadController', () => {
           context: expect.objectContaining({
             vendorName: 'Test Vendor',
           }),
+        })
+      );
+    });
+
+    // Story 4.3: Verify assistant message is saved and emitted
+    it('should save context as assistant message on successful intake parse', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Verify conversationService.sendMessage was called with assistant role
+      expect(mockConversationService.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-123',
+          role: 'assistant',
+          content: expect.objectContaining({
+            text: expect.stringContaining('Document Context Extracted'),
+          }),
+        })
+      );
+
+      // Verify 'message' event emitted (so it appears in chat UI)
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'message',
+        expect.objectContaining({
+          role: 'assistant',
+          conversationId: 'conv-123',
         })
       );
     });
