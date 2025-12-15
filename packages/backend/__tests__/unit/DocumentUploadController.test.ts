@@ -193,5 +193,98 @@ describe('DocumentUploadController', () => {
         })
       );
     });
+
+    it('should emit upload_progress with stage "complete" on successful parse', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise(process.nextTick);
+
+      // Verify final stage is 'complete' for success
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'upload_progress',
+        expect.objectContaining({
+          stage: 'complete',
+          progress: 100,
+          message: 'Document processed successfully',
+        })
+      );
+    });
+
+    it('should emit upload_progress with stage "error" when parsing fails', async () => {
+      // Make parser return failure (success: false, not throw)
+      mockIntakeParser.parseForContext.mockResolvedValue({
+        success: false,
+        context: null,
+        error: 'Failed to parse document',
+      });
+
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise(process.nextTick);
+
+      // Verify intake_context_ready emitted with success: false
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'intake_context_ready',
+        expect.objectContaining({
+          success: false,
+          error: 'Failed to parse document',
+        })
+      );
+
+      // Verify final stage is 'error', NOT 'complete'
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'upload_progress',
+        expect.objectContaining({
+          stage: 'error',
+          progress: 0,
+          message: 'Document parsing failed',
+        })
+      );
+
+      // Verify 'complete' was NOT emitted
+      const completeCall = mockChatNamespace.emit.mock.calls.find(
+        (call: any[]) => call[0] === 'upload_progress' && call[1]?.stage === 'complete'
+      );
+      expect(completeCall).toBeUndefined();
+    });
+
+    it('should emit upload_progress with stage "error" when scoring parse fails', async () => {
+      // Switch to scoring mode
+      mockReq.body = {
+        conversationId: 'conv-123',
+        mode: 'scoring',
+      };
+
+      // Make scoring parser return failure
+      mockScoringParser.parseForResponses.mockResolvedValue({
+        success: false,
+        assessmentId: null,
+        error: 'Not a Guardian questionnaire',
+      });
+
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise(process.nextTick);
+
+      // Verify scoring_parse_ready emitted with success: false
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'scoring_parse_ready',
+        expect.objectContaining({
+          success: false,
+          error: 'Not a Guardian questionnaire',
+        })
+      );
+
+      // Verify final stage is 'error'
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'upload_progress',
+        expect.objectContaining({
+          stage: 'error',
+        })
+      );
+    });
   });
 });

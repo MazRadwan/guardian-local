@@ -187,6 +187,14 @@ export class ChatServer {
     chatNamespace.on('connection', async (socket: AuthenticatedSocket) => {
       console.log(`[ChatServer] Client connected: ${socket.id} (User: ${socket.userId})`);
 
+      // Join user-specific room for receiving document upload progress events
+      // This room is used by DocumentUploadController to emit upload_progress,
+      // intake_context_ready, and scoring_parse_ready events
+      if (socket.userId) {
+        socket.join(`user:${socket.userId}`);
+        console.log(`[ChatServer] Socket ${socket.id} joined room user:${socket.userId}`);
+      }
+
       // Check if client wants to resume an existing conversation
       const resumeConversationId = socket.handshake.auth.conversationId;
       let conversation = null;

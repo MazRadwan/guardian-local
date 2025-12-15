@@ -155,15 +155,22 @@ export class DocumentUploadController {
       // Emit: parsing
       this.emitProgress(socketRoom, conversationId, uploadId, 50, 'parsing', 'Analyzing document...');
 
-      // Parse based on mode
+      // Parse based on mode - track success for correct stage emission
+      let parseSuccess: boolean;
       if (mode === 'intake') {
-        await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId);
+        parseSuccess = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId);
       } else {
-        await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId);
+        parseSuccess = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId);
       }
 
-      // Emit: complete
-      this.emitProgress(socketRoom, conversationId, uploadId, 100, 'complete', 'Document processed successfully');
+      // Emit final stage based on parse result
+      if (parseSuccess) {
+        this.emitProgress(socketRoom, conversationId, uploadId, 100, 'complete', 'Document processed successfully');
+      } else {
+        // Parser failed - emit error stage (not complete)
+        // Note: *_ready event with success:false was already emitted by parser
+        this.emitProgress(socketRoom, conversationId, uploadId, 0, 'error', 'Document parsing failed');
+      }
 
     } catch (error) {
       console.error('[DocumentUpload] Processing error:', error);
@@ -204,6 +211,7 @@ export class DocumentUploadController {
 
   /**
    * Parse document for intake context
+   * @returns true if parsing succeeded, false otherwise
    */
   private async parseForIntake(
     socketRoom: string,
@@ -211,7 +219,7 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     const result = await this.intakeParser.parseForContext(buffer, metadata, {
       conversationId,
     });
@@ -235,6 +243,7 @@ export class DocumentUploadController {
         gapCategories: result.gapCategories,
         confidence: result.confidence,
       });
+      return true;
     } else {
       this.chatNamespace.to(socketRoom).emit('intake_context_ready', {
         conversationId,
@@ -243,11 +252,13 @@ export class DocumentUploadController {
         context: null,
         error: result.error || 'Failed to extract context from document',
       });
+      return false;
     }
   }
 
   /**
    * Parse document for scoring responses
+   * @returns true if parsing succeeded, false otherwise
    */
   private async parseForScoring(
     socketRoom: string,
@@ -255,7 +266,7 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     const result = await this.scoringParser.parseForResponses(buffer, metadata, {
       conversationId,
     });
@@ -272,6 +283,7 @@ export class DocumentUploadController {
         isComplete: result.isComplete,
         confidence: result.confidence,
       });
+      return true;
     } else {
       this.chatNamespace.to(socketRoom).emit('scoring_parse_ready', {
         conversationId,
@@ -280,6 +292,7 @@ export class DocumentUploadController {
         assessmentId: null,
         error: result.error || 'Failed to extract responses. Ensure this is a Guardian-exported questionnaire.',
       });
+      return false;
     }
   }
 
