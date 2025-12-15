@@ -466,12 +466,13 @@ export class DocumentParserService
 
       const parsed = JSON.parse(jsonStr.trim());
 
-      if (typeof parsed !== 'object' || parsed === null) {
+      // Use isObject to fail fast on arrays, nulls, primitives
+      if (!isObject(parsed)) {
         console.error('[DocumentParserService] Parsed JSON is not an object');
         return null;
       }
 
-      return parsed as Record<string, unknown>;
+      return parsed;
     } catch (error) {
       console.error('[DocumentParserService] JSON parse error:', error);
       return null;
