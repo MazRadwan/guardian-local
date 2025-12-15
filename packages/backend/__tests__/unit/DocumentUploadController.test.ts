@@ -7,7 +7,6 @@ describe('DocumentUploadController', () => {
   let mockFileValidator: jest.Mocked<any>;
   let mockIntakeParser: jest.Mocked<any>;
   let mockScoringParser: jest.Mocked<any>;
-  let mockConversationRepo: jest.Mocked<any>;
   let mockConversationService: jest.Mocked<any>;
   let mockChatNamespace: jest.Mocked<any>;
   let mockReq: Partial<Request>;
@@ -41,15 +40,12 @@ describe('DocumentUploadController', () => {
       parseForResponses: jest.fn(),
     };
 
-    mockConversationRepo = {
-      findById: jest.fn().mockResolvedValue({
+    // ConversationService for ownership validation + saving assistant message
+    mockConversationService = {
+      getConversation: jest.fn().mockResolvedValue({
         id: 'conv-123',
         userId: 'user-123',
       }),
-    };
-
-    // Story 4.3: ConversationService for saving assistant message
-    mockConversationService = {
       sendMessage: jest.fn().mockResolvedValue({
         id: 'msg-123',
         conversationId: 'conv-123',
@@ -70,8 +66,7 @@ describe('DocumentUploadController', () => {
       mockFileValidator,
       mockIntakeParser,
       mockScoringParser,
-      mockConversationRepo,
-      mockConversationService, // Story 4.3: ConversationService
+      mockConversationService, // Ownership validation + assistant messages
       mockChatNamespace        // /chat namespace
     );
 
@@ -128,7 +123,7 @@ describe('DocumentUploadController', () => {
     });
 
     it('should reject unauthorized conversation access', async () => {
-      mockConversationRepo.findById.mockResolvedValue({
+      mockConversationService.getConversation.mockResolvedValue({
         id: 'conv-123',
         userId: 'other-user', // Different user
       });
@@ -139,7 +134,7 @@ describe('DocumentUploadController', () => {
     });
 
     it('should return 404 for non-existent conversation', async () => {
-      mockConversationRepo.findById.mockResolvedValue(null);
+      mockConversationService.getConversation.mockResolvedValue(null);
 
       await controller.upload(mockReq as any, mockRes as any);
 

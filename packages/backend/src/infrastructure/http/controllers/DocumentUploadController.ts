@@ -15,7 +15,6 @@ import { IFileStorage } from '../../../application/interfaces/IFileStorage.js';
 import { FileValidationService } from '../../../application/services/FileValidationService.js';
 import { IIntakeDocumentParser, IntakeContext } from '../../../application/interfaces/IIntakeDocumentParser.js';
 import { IScoringDocumentParser } from '../../../application/interfaces/IScoringDocumentParser.js';
-import { IConversationRepository } from '../../../application/interfaces/IConversationRepository.js';
 import { ConversationService } from '../../../application/services/ConversationService.js';
 import { DocumentMetadata } from '../../../application/interfaces/IDocumentParser.js';
 import { User } from '../../../domain/entities/User.js';
@@ -35,8 +34,7 @@ export class DocumentUploadController {
     private readonly fileValidator: FileValidationService,
     private readonly intakeParser: IIntakeDocumentParser,
     private readonly scoringParser: IScoringDocumentParser,
-    private readonly conversationRepository: IConversationRepository,
-    /** Story 4.3: Save context as assistant message so Claude sees it */
+    /** ConversationService for ownership validation + saving assistant messages */
     private readonly conversationService: ConversationService,
     /** Must be the /chat namespace, not base io - clients connect to /chat */
     private readonly chatNamespace: Namespace
@@ -75,9 +73,9 @@ export class DocumentUploadController {
       return;
     }
 
-    // 3. SECURITY: Validate conversation ownership
+    // 3. SECURITY: Validate conversation ownership (via service layer)
     try {
-      const conversation = await this.conversationRepository.findById(conversationId);
+      const conversation = await this.conversationService.getConversation(conversationId);
       if (!conversation) {
         res.status(404).json({ error: 'Conversation not found' });
         return;

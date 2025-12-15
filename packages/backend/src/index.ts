@@ -144,9 +144,6 @@ server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentContr
 server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
 server.registerRoutes('/api', createQuestionRoutes(questionController, authService));
 
-// Finalize 404 handler (after all routes)
-server.finalize404Handler();
-
 // Initialize rate limiter (10 messages per user per minute)
 const rateLimiter = new RateLimiter(
   parseInt(process.env.RATE_LIMIT_MAX_MESSAGES || '10', 10),
@@ -178,13 +175,15 @@ const documentUploadController = new DocumentUploadController(
   fileValidationService,
   documentParserService,  // IIntakeDocumentParser
   documentParserService,  // IScoringDocumentParser (same implementation)
-  conversationRepo,
-  conversationService,    // Story 4.3: Save context as assistant message
+  conversationService,    // Ownership validation + save assistant messages
   chatNamespace
 );
 
 // Register document routes (Epic 16)
 server.registerRoutes('/api/documents', createDocumentRoutes(documentUploadController, authService));
+
+// Finalize 404 handler (MUST be after all routes are registered)
+server.finalize404Handler();
 
 console.log('[App] Vendor, Assessment, Question, and Document routes registered');
 
