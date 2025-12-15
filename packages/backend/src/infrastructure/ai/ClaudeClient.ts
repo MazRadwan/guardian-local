@@ -276,12 +276,14 @@ export class ClaudeClient implements IClaudeClient, IVisionClient {
       messages,
     });
 
-    const textContent = response.content.find(
-      (c): c is Anthropic.TextBlock => c.type === 'text'
-    );
+    // Join all text blocks (consistent with sendMessage behavior)
+    const content = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
 
     return {
-      content: textContent?.text || '',
+      content,
       usage: {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,

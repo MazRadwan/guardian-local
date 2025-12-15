@@ -1,6 +1,9 @@
 import { DocumentParserService } from '../../src/infrastructure/ai/DocumentParserService.js';
 import { DocumentMetadata } from '../../src/application/interfaces/IDocumentParser.js';
-import { AssessmentNotFoundError } from '../../src/application/interfaces/IScoringDocumentParser.js';
+import {
+  AssessmentNotFoundError,
+  QuestionnaireMismatchError,
+} from '../../src/application/interfaces/IScoringDocumentParser.js';
 
 // Mock pdf-parse module
 jest.mock('pdf-parse', () => ({
@@ -302,6 +305,20 @@ describe('DocumentParserService', () => {
       await expect(
         service.parseForResponses(Buffer.from('content'), metadata)
       ).rejects.toThrow(AssessmentNotFoundError);
+    });
+
+    it('throws QuestionnaireMismatchError when assessment ID does not match expected', async () => {
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({ assessmentId: 'different-id' })),
+      });
+
+      const metadata = createMetadata();
+
+      await expect(
+        service.parseForResponses(Buffer.from('content'), metadata, {
+          expectedAssessmentId: 'expected-id',
+        })
+      ).rejects.toThrow(QuestionnaireMismatchError);
     });
 
     it('uses Vision API for scanned questionnaire images', async () => {

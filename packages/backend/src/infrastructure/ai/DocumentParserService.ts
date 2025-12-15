@@ -25,6 +25,7 @@ import {
   ScoringParseOptions,
   ExtractedResponse,
   AssessmentNotFoundError,
+  QuestionnaireMismatchError,
 } from '../../application/interfaces/IScoringDocumentParser.js';
 import {
   DocumentMetadata,
@@ -47,9 +48,18 @@ import mammoth from 'mammoth';
 type PdfParser = (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
 const pdf = ((pdfParse as { default?: unknown }).default ?? pdfParse) as PdfParser;
 
+/** Default maximum characters to send to Claude (prevents context overflow) */
+const DEFAULT_MAX_EXTRACTED_TEXT_CHARS = 100000;
+
+/** Truncation notice appended when text is truncated */
+const TRUNCATION_NOTICE = '\n\n[NOTE: Document text was truncated due to length. Full document contains additional content.]';
+
+// =============================================================================
+// Types and Validation Helpers for AI JSON
+// =============================================================================
+
 /**
  * Shape of Claude's intake extraction response
- * (includes fields that map to IntakeParseResult, not just IntakeContext)
  */
 interface IntakeExtractionResponse {
   vendorName: string | null;
@@ -66,6 +76,81 @@ interface IntakeExtractionResponse {
   suggestedQuestions: string[];
   coveredCategories: string[];
   gapCategories: string[];
+}
+
+/**
+ * Shape of Claude's scoring extraction response
+ */
+interface ScoringExtractionResponse {
+  assessmentId: string | null;
+  vendorName: string | null;
+  solutionName: string | null;
+  responses: Array<{
+    sectionNumber: number;
+    sectionTitle: string | null;
+    questionNumber: number;
+    questionText: string;
+    responseText: string;
+    confidence: number;
+    hasVisualContent: boolean;
+    visualContentDescription: string | null;
+  }>;
+  expectedQuestionCount: number | null;
+  parsedQuestionCount: number;
+  unparsedQuestions: string[];
+  isComplete: boolean;
+  overallConfidence: number;
+}
+
+/**
+ * Apply safe defaults to intake extraction response
+ * Ensures arrays are always arrays, numbers have defaults
+ */
+function applyIntakeDefaults(raw: Record<string, unknown>): IntakeExtractionResponse {
+  return {
+    vendorName: typeof raw.vendorName === 'string' ? raw.vendorName : null,
+    solutionName: typeof raw.solutionName === 'string' ? raw.solutionName : null,
+    solutionType: typeof raw.solutionType === 'string' ? raw.solutionType : null,
+    industry: typeof raw.industry === 'string' ? raw.industry : null,
+    features: Array.isArray(raw.features) ? raw.features : [],
+    claims: Array.isArray(raw.claims) ? raw.claims : [],
+    integrations: Array.isArray(raw.integrations) ? raw.integrations : [],
+    complianceMentions: Array.isArray(raw.complianceMentions) ? raw.complianceMentions : [],
+    architectureNotes: Array.isArray(raw.architectureNotes) ? raw.architectureNotes : [],
+    securityMentions: Array.isArray(raw.securityMentions) ? raw.securityMentions : [],
+    confidence: typeof raw.confidence === 'number' ? raw.confidence : 0.5,
+    suggestedQuestions: Array.isArray(raw.suggestedQuestions) ? raw.suggestedQuestions : [],
+    coveredCategories: Array.isArray(raw.coveredCategories) ? raw.coveredCategories : [],
+    gapCategories: Array.isArray(raw.gapCategories) ? raw.gapCategories : [],
+  };
+}
+
+/**
+ * Apply safe defaults to scoring extraction response
+ */
+function applyScoringDefaults(raw: Record<string, unknown>): ScoringExtractionResponse {
+  const rawResponses = Array.isArray(raw.responses) ? raw.responses : [];
+
+  return {
+    assessmentId: typeof raw.assessmentId === 'string' ? raw.assessmentId : null,
+    vendorName: typeof raw.vendorName === 'string' ? raw.vendorName : null,
+    solutionName: typeof raw.solutionName === 'string' ? raw.solutionName : null,
+    responses: rawResponses.map((r: Record<string, unknown>) => ({
+      sectionNumber: typeof r.sectionNumber === 'number' ? r.sectionNumber : 0,
+      sectionTitle: typeof r.sectionTitle === 'string' ? r.sectionTitle : null,
+      questionNumber: typeof r.questionNumber === 'number' ? r.questionNumber : 0,
+      questionText: typeof r.questionText === 'string' ? r.questionText : '',
+      responseText: typeof r.responseText === 'string' ? r.responseText : '',
+      confidence: typeof r.confidence === 'number' ? r.confidence : 0.5,
+      hasVisualContent: r.hasVisualContent === true,
+      visualContentDescription: typeof r.visualContentDescription === 'string' ? r.visualContentDescription : null,
+    })),
+    expectedQuestionCount: typeof raw.expectedQuestionCount === 'number' ? raw.expectedQuestionCount : null,
+    parsedQuestionCount: typeof raw.parsedQuestionCount === 'number' ? raw.parsedQuestionCount : 0,
+    unparsedQuestions: Array.isArray(raw.unparsedQuestions) ? raw.unparsedQuestions : [],
+    isComplete: raw.isComplete === true,
+    overallConfidence: typeof raw.overallConfidence === 'number' ? raw.overallConfidence : 0.5,
+  };
 }
 
 export class DocumentParserService
@@ -91,19 +176,23 @@ export class DocumentParserService
 
     try {
       // 1. Extract content from document (text or vision-based)
-      const { text: documentText, visionContent } = await this.extractContent(
+      const { text: rawDocumentText, visionContent } = await this.extractContent(
         file,
         metadata.documentType,
         metadata.mimeType
       );
 
-      // 2. Build extraction prompt
+      // 2. Apply text length limits to prevent context overflow
+      const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
+      const documentText = this.truncateText(rawDocumentText, maxChars);
+
+      // 3. Build extraction prompt
       const prompt = buildIntakeExtractionPrompt({
         focusCategories: options?.focusCategories,
         filename: metadata.filename,
       });
 
-      // 3. Call Claude for extraction (use Vision API for images)
+      // 4. Call Claude for extraction (use Vision API for images)
       let responseContent: string;
 
       if (visionContent && visionContent.length > 0) {
@@ -129,23 +218,22 @@ export class DocumentParserService
         responseContent = response.content;
       }
 
-      // 4. Parse response
-      const extracted =
-        this.parseJsonResponse<IntakeExtractionResponse>(responseContent);
-
-      if (!extracted) {
+      // 5. Parse and apply safe defaults
+      const rawJson = this.parseJsonResponse(responseContent);
+      if (!rawJson) {
         return this.createFailedIntakeResult(
           metadata,
           startTime,
           'Failed to parse extraction response'
         );
       }
+      const extracted = applyIntakeDefaults(rawJson);
 
-      // 5. Build successful result
+      // 6. Build successful result
       // Note: rawTextExcerpt is populated by service (not Claude) - first 2000 chars
       return {
         success: true,
-        confidence: extracted.confidence ?? 0.8,
+        confidence: extracted.confidence,
         metadata,
         parseTimeMs: Date.now() - startTime,
         context: {
@@ -180,19 +268,23 @@ export class DocumentParserService
 
     try {
       // 1. Extract content from document (text or vision-based)
-      const { text: documentText, visionContent } = await this.extractContent(
+      const { text: rawDocumentText, visionContent } = await this.extractContent(
         file,
         metadata.documentType,
         metadata.mimeType
       );
 
-      // 2. Build extraction prompt
+      // 2. Apply text length limits to prevent context overflow
+      const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
+      const documentText = this.truncateText(rawDocumentText, maxChars);
+
+      // 3. Build extraction prompt
       const prompt = buildScoringExtractionPrompt({
         expectedAssessmentId: options?.expectedAssessmentId,
         filename: metadata.filename,
       });
 
-      // 3. Call Claude for extraction (use Vision API for images)
+      // 4. Call Claude for extraction (use Vision API for images)
       let responseContent: string;
 
       if (visionContent && visionContent.length > 0) {
@@ -218,28 +310,18 @@ export class DocumentParserService
         responseContent = response.content;
       }
 
-      // 4. Parse response
-      const extracted = this.parseJsonResponse<{
-        assessmentId: string | null;
-        vendorName: string | null;
-        solutionName: string | null;
-        responses: ExtractedResponse[];
-        expectedQuestionCount: number | null;
-        parsedQuestionCount: number;
-        unparsedQuestions: string[];
-        isComplete: boolean;
-        overallConfidence: number;
-      }>(responseContent);
-
-      if (!extracted) {
+      // 5. Parse and apply safe defaults
+      const rawJson = this.parseJsonResponse(responseContent);
+      if (!rawJson) {
         return this.createFailedScoringResult(
           metadata,
           startTime,
           'Failed to parse extraction response'
         );
       }
+      const extracted = applyScoringDefaults(rawJson);
 
-      // 5. Validate assessment ID
+      // 6. Validate assessment ID - must exist
       if (!extracted.assessmentId) {
         throw new AssessmentNotFoundError(
           'Assessment ID not found in document header. Please ensure this is a Guardian-exported questionnaire.',
@@ -247,7 +329,16 @@ export class DocumentParserService
         );
       }
 
-      // 6. Filter by confidence if threshold set
+      // 7. Validate assessment ID matches expected (if provided)
+      if (options?.expectedAssessmentId && extracted.assessmentId !== options.expectedAssessmentId) {
+        throw new QuestionnaireMismatchError(
+          `Document assessment ID "${extracted.assessmentId}" does not match expected "${options.expectedAssessmentId}". Please ensure you uploaded the correct questionnaire.`,
+          options.expectedAssessmentId,
+          extracted.assessmentId
+        );
+      }
+
+      // 8. Filter by confidence if threshold set
       let responses = extracted.responses;
       if (options?.minConfidence && !options.includeLowConfidence) {
         responses = responses.filter(
@@ -255,7 +346,7 @@ export class DocumentParserService
         );
       }
 
-      // 7. Build successful result
+      // 9. Build successful result
       return {
         success: true,
         confidence: extracted.overallConfidence,
@@ -273,8 +364,9 @@ export class DocumentParserService
     } catch (error) {
       console.error('[DocumentParserService] Scoring parsing error:', error);
 
-      if (error instanceof AssessmentNotFoundError) {
-        throw error; // Re-throw specific error
+      // Re-throw specific errors for upstream handling
+      if (error instanceof AssessmentNotFoundError || error instanceof QuestionnaireMismatchError) {
+        throw error;
       }
 
       return this.createFailedScoringResult(
@@ -339,9 +431,12 @@ export class DocumentParserService
   }
 
   /**
-   * Parse JSON from Claude response
+   * Parse JSON from Claude response, returning raw object
+   *
+   * @param content - Raw response from Claude (may contain markdown code blocks)
+   * @returns Parsed JSON object, or null if parsing fails
    */
-  private parseJsonResponse<T>(content: string): T | null {
+  private parseJsonResponse(content: string): Record<string, unknown> | null {
     try {
       // Try to extract JSON from response (handle markdown code blocks)
       let jsonStr = content;
@@ -352,11 +447,30 @@ export class DocumentParserService
         jsonStr = jsonMatch[1];
       }
 
-      return JSON.parse(jsonStr.trim()) as T;
+      const parsed = JSON.parse(jsonStr.trim());
+
+      if (typeof parsed !== 'object' || parsed === null) {
+        console.error('[DocumentParserService] Parsed JSON is not an object');
+        return null;
+      }
+
+      return parsed as Record<string, unknown>;
     } catch (error) {
       console.error('[DocumentParserService] JSON parse error:', error);
       return null;
     }
+  }
+
+  /**
+   * Truncate text to max characters, adding notice if truncated
+   */
+  private truncateText(text: string, maxChars: number): string {
+    if (text.length <= maxChars) {
+      return text;
+    }
+    // Reserve space for truncation notice
+    const truncatedText = text.slice(0, maxChars - TRUNCATION_NOTICE.length);
+    return truncatedText + TRUNCATION_NOTICE;
   }
 
   private createFailedIntakeResult(
