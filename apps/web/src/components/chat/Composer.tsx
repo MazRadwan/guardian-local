@@ -51,8 +51,10 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Epic 16: File upload (only enabled when wsAdapter and conversationId are provided)
     const uploadEnabled = !!wsAdapter && !!conversationId;
 
-    // Map ConversationMode to UploadMode: assessment mode uses intake parsing
-    const uploadMode: UploadMode = currentMode === 'assessment' ? 'intake' : 'intake';
+    // MVP: Always use 'intake' mode for document parsing (extracts vendor context)
+    // Future: Wire 'scoring' mode when assessment mode needs to parse completed questionnaires
+    // See: packages/backend/src/application/interfaces/IScoringDocumentParser.ts
+    const uploadMode: UploadMode = 'intake';
 
     // Build adapter stub for useFileUpload when not connected
     const uploadAdapter = wsAdapter ?? {

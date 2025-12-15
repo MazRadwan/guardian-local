@@ -52,7 +52,15 @@ const ACCEPTED_TYPES: Record<string, string[]> = {
   'image/jpeg': ['.jpg', '.jpeg'],
 };
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+/** Size limits aligned with backend (packages/backend/src/application/interfaces/IDocumentParser.ts) */
+const MAX_FILE_SIZES: Record<string, number> = {
+  'application/pdf': 20 * 1024 * 1024,           // 20MB
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 20 * 1024 * 1024, // 20MB
+  'image/png': 10 * 1024 * 1024,                 // 10MB
+  'image/jpeg': 10 * 1024 * 1024,                // 10MB
+};
+
+const DEFAULT_MAX_SIZE = 20 * 1024 * 1024; // 20MB fallback
 
 export function useFileUpload(options: UseFileUploadOptions) {
   const { conversationId, mode, wsAdapter, onContextReady, onScoringReady, onError } = options;
@@ -83,7 +91,15 @@ export function useFileUpload(options: UseFileUploadOptions) {
     const unsubProgress = wsAdapter.subscribeUploadProgress((data) => {
       // Filter: only handle events for our current upload
       if (data.conversationId !== conversationId) return;
-      if (currentUploadIdRef.current && data.uploadId !== currentUploadIdRef.current) return;
+
+      // Upload correlation: once we have an uploadId, only accept matching events
+      // This prevents cross-upload event bleed if multiple uploads overlap
+      if (currentUploadIdRef.current) {
+        if (data.uploadId !== currentUploadIdRef.current) return;
+      } else {
+        // First event - adopt this uploadId (handles race where WS arrives before HTTP response)
+        currentUploadIdRef.current = data.uploadId;
+      }
 
       setUploadProgress({
         uploadId: data.uploadId,
@@ -101,6 +117,8 @@ export function useFileUpload(options: UseFileUploadOptions) {
     // Intake context ready
     const unsubIntake = wsAdapter.subscribeIntakeContextReady((data) => {
       if (data.conversationId !== conversationId) return;
+
+      // Upload correlation: require uploadId match (should be set by progress events)
       if (currentUploadIdRef.current && data.uploadId !== currentUploadIdRef.current) return;
 
       if (data.success) {
@@ -126,6 +144,8 @@ export function useFileUpload(options: UseFileUploadOptions) {
     // Scoring parse ready
     const unsubScoring = wsAdapter.subscribeScoringParseReady((data) => {
       if (data.conversationId !== conversationId) return;
+
+      // Upload correlation: require uploadId match (should be set by progress events)
       if (currentUploadIdRef.current && data.uploadId !== currentUploadIdRef.current) return;
 
       if (data.success) {
@@ -155,14 +175,16 @@ export function useFileUpload(options: UseFileUploadOptions) {
     };
   }, [wsAdapter.isConnected, wsAdapter, conversationId, onContextReady, onScoringReady, onError]);
 
-  // Validate file
+  // Validate file (type + size limits aligned with backend)
   const validateFile = useCallback((file: File): string | null => {
     if (!Object.keys(ACCEPTED_TYPES).includes(file.type)) {
       return 'Unsupported file type. Please upload PDF, DOCX, or image files.';
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      return 'File too large. Maximum size is 20MB.';
+    const maxSize = MAX_FILE_SIZES[file.type] ?? DEFAULT_MAX_SIZE;
+    if (file.size > maxSize) {
+      const maxMB = maxSize / (1024 * 1024);
+      return `File too large. Maximum size for this file type is ${maxMB}MB.`;
     }
 
     return null;
