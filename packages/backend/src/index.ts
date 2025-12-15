@@ -38,12 +38,17 @@ import { VendorController } from './infrastructure/http/controllers/VendorContro
 import { AssessmentController } from './infrastructure/http/controllers/AssessmentController.js';
 import { QuestionController } from './infrastructure/http/controllers/QuestionController.js';
 import { ExportController } from './infrastructure/http/controllers/ExportController.js';
+import { DocumentUploadController } from './infrastructure/http/controllers/DocumentUploadController.js';
 import { createAuthRoutes } from './infrastructure/http/routes/auth.routes.js';
 import { createVendorRoutes } from './infrastructure/http/routes/vendor.routes.js';
 import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.routes.js';
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
 import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
+import { createDocumentRoutes } from './infrastructure/http/routes/document.routes.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
+import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
+import { createFileStorage } from './infrastructure/storage/index.js';
+import { FileValidationService } from './application/services/FileValidationService.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
@@ -111,6 +116,14 @@ const exportService = new ExportService(
   excelExporter
 );
 
+// Initialize file storage and validation (Epic 16)
+const fileStorage = createFileStorage();
+const fileValidationService = new FileValidationService();
+const documentParserService = new DocumentParserService(
+  claudeClient,  // IClaudeClient
+  claudeClient   // IVisionClient - ClaudeClient implements both
+);
+
 // Initialize controllers
 const authController = new AuthController(authService);
 const vendorController = new VendorController(assessmentService);
@@ -156,7 +169,23 @@ const chatServer = new ChatServer(
 );
 
 console.log('[App] ChatServer initialized');
-console.log('[App] Vendor, Assessment, and Question routes registered');
+
+// Initialize DocumentUploadController (Epic 16)
+// Must be after ChatServer to access the /chat namespace
+const chatNamespace = server.getIO().of('/chat');
+const documentUploadController = new DocumentUploadController(
+  fileStorage,
+  fileValidationService,
+  documentParserService,  // IIntakeDocumentParser
+  documentParserService,  // IScoringDocumentParser (same implementation)
+  conversationRepo,
+  chatNamespace
+);
+
+// Register document routes (Epic 16)
+server.registerRoutes('/api/documents', createDocumentRoutes(documentUploadController, authService));
+
+console.log('[App] Vendor, Assessment, Question, and Document routes registered');
 
 // Graceful shutdown handlers
 const shutdown = async (signal: string) => {
