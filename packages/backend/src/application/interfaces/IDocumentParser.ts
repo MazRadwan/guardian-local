@@ -139,9 +139,12 @@ export const REJECTED_MIME_TYPES: Record<string, string> = {
 
 /**
  * Validate file type is supported
+ *
+ * Uses Object.hasOwn to avoid prototype pollution edge cases
+ * (e.g., '__proto__' being treated as a valid MIME type)
  */
 export function isSupported(mimeType: string): boolean {
-  return mimeType in MIME_TYPE_MAP;
+  return Object.hasOwn(MIME_TYPE_MAP, mimeType);
 }
 
 /**

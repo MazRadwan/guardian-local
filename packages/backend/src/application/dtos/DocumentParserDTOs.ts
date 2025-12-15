@@ -46,6 +46,9 @@ export interface UploadProgressDTO {
   /** Conversation ID */
   conversationId: string;
 
+  /** Unique upload ID for correlating events */
+  uploadId: string;
+
   /** Progress percentage (0-100) */
   progress: number;
 
@@ -106,6 +109,9 @@ export interface IntakeContextResultDTO {
   /** Conversation ID */
   conversationId: string;
 
+  /** Unique upload ID for correlating events */
+  uploadId: string;
+
   /** Whether parsing succeeded */
   success: boolean;
 
@@ -142,6 +148,9 @@ export interface IntakeContextResultDTO {
 export interface ScoringParseResultDTO {
   /** Conversation ID */
   conversationId: string;
+
+  /** Unique upload ID for correlating events */
+  uploadId: string;
 
   /** Whether parsing succeeded */
   success: boolean;

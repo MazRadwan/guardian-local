@@ -71,7 +71,10 @@ export interface IntakeContext {
   /** Overall extraction confidence (0-1) */
   confidence: number;
 
-  /** Path to stored original file */
+  /**
+   * Path to stored original file
+   * SECURITY: Internal-only - never emit to clients. Use opaque IDs instead.
+   */
   sourceFilePath: string;
 }
 
