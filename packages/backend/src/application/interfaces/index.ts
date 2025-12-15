@@ -14,6 +14,11 @@ export * from './IUserRepository.js';
 export * from './IVendorRepository.js';
 export * from './IQuestionnaireGenerationService.js';
 
+// Epic 16: Document Parser Infrastructure
+export * from './IDocumentParser.js';
+export * from './IIntakeDocumentParser.js';
+export * from './IScoringDocumentParser.js';
+
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)
 export type { QuestionnaireData } from './IExcelExporter.js';
