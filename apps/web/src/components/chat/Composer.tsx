@@ -4,6 +4,9 @@ import React, { useState, useRef, useEffect, KeyboardEvent, forwardRef, useImper
 import { Button } from '@/components/ui/button';
 import { Send, Paperclip, Square } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
+import { UploadProgress } from './UploadProgress';
+import { useFileUpload, UploadMode } from '@/hooks/useFileUpload';
+import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
 
 export interface ComposerProps {
   onSendMessage: (message: string) => void;
@@ -15,6 +18,9 @@ export interface ComposerProps {
   isStreaming?: boolean;
   isLoading?: boolean;
   onStopStream?: () => void;
+  // Epic 16: Upload support
+  wsAdapter?: WebSocketAdapterInterface;
+  conversationId?: string;
 }
 
 export interface ComposerRef {
@@ -33,11 +39,51 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       isStreaming = false,
       isLoading = false,
       onStopStream,
+      // Epic 16 props
+      wsAdapter,
+      conversationId,
     },
     ref
   ) => {
     const [message, setMessage] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Epic 16: File upload (only enabled when wsAdapter and conversationId are provided)
+    const uploadEnabled = !!wsAdapter && !!conversationId;
+
+    // Map ConversationMode to UploadMode: assessment mode uses intake parsing
+    const uploadMode: UploadMode = currentMode === 'assessment' ? 'intake' : 'intake';
+
+    // Build adapter stub for useFileUpload when not connected
+    const uploadAdapter = wsAdapter ?? {
+      isConnected: false,
+      subscribeUploadProgress: () => () => {},
+      subscribeIntakeContextReady: () => () => {},
+      subscribeScoringParseReady: () => () => {},
+    };
+
+    const {
+      uploadProgress,
+      selectedFilename,
+      fileInputRef,
+      openFilePicker,
+      handleFileChange,
+      isUploading,
+      acceptedTypes,
+      reset,
+    } = useFileUpload({
+      conversationId: conversationId ?? '',
+      mode: uploadMode,
+      wsAdapter: uploadAdapter,
+      onContextReady: (context) => {
+        // Context ready - assistant message already appears in chat via WS 'message' event
+        console.log('[Composer] Intake context ready:', context.context?.vendorName);
+      },
+      onError: (error) => {
+        // TODO: Show error toast
+        console.error('[Composer] Upload error:', error);
+      },
+    });
 
     // Expose focus method to parent
     useImperativeHandle(ref, () => ({
@@ -86,8 +132,29 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
     return (
       <div className="bg-white p-2">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={acceptedTypes}
+          onChange={handleFileChange}
+          className="hidden"
+          aria-hidden="true"
+        />
+
         {/* Centered composer container */}
         <div className="max-w-3xl mx-auto">
+          {/* Upload progress indicator */}
+          {uploadProgress.stage !== 'idle' && (
+            <div className="mb-2">
+              <UploadProgress
+                progress={uploadProgress}
+                filename={selectedFilename ?? undefined}
+                onDismiss={reset}
+              />
+            </div>
+          )}
+
           {/* Elevated composer box */}
           <div className="border border-gray-200 rounded-2xl shadow-lg bg-white overflow-hidden">
             {/* Textarea section (top) */}
@@ -122,18 +189,15 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                       />
                     )}
 
-                    {/* File upload button (stub for now) */}
+                    {/* File upload button - only enabled when upload is available */}
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
-                      disabled={disabled}
+                      disabled={disabled || !uploadEnabled || isUploading}
                       aria-label="Attach file"
-                      onClick={() => {
-                        // Stub - file upload functionality deferred
-                        console.log('File upload clicked (not yet implemented)');
-                      }}
+                      onClick={openFilePicker}
                     >
                       <Paperclip className="h-5 w-5" />
                     </Button>

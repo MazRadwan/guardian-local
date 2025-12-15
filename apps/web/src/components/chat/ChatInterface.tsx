@@ -263,6 +263,8 @@ export function ChatInterface() {
               isStreaming={isStreaming}
               isLoading={isLoading}
               onStopStream={abortStream}
+              wsAdapter={adapter}
+              conversationId={activeConversationId ?? undefined}
             />
           </div>
         </div>
@@ -310,6 +312,8 @@ export function ChatInterface() {
                 isStreaming={isStreaming}
                 isLoading={isLoading}
                 onStopStream={abortStream}
+                wsAdapter={adapter}
+                conversationId={activeConversationId ?? undefined}
               />
             </div>
             <div className="text-center text-xs text-gray-400 py-2 pb-4">

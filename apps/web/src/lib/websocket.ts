@@ -72,6 +72,49 @@ export interface ExportStatusErrorPayload {
   error: string;
 }
 
+// Epic 16: Document upload event payloads
+export interface UploadProgressEvent {
+  conversationId: string;
+  uploadId: string;
+  progress: number;
+  stage: 'storing' | 'parsing' | 'complete' | 'error';
+  message: string;
+  error?: string;
+}
+
+export interface IntakeContextResult {
+  conversationId: string;
+  uploadId: string;
+  success: boolean;
+  context: {
+    vendorName: string | null;
+    solutionName: string | null;
+    solutionType: string | null;
+    industry: string | null;
+    features: string[];
+    claims: string[];
+    complianceMentions: string[];
+  } | null;
+  suggestedQuestions: string[];
+  coveredCategories: string[];
+  gapCategories: string[];
+  confidence: number;
+  error?: string;
+}
+
+export interface ScoringParseResult {
+  conversationId: string;
+  uploadId: string;
+  success: boolean;
+  assessmentId: string | null;
+  vendorName: string | null;
+  responseCount: number;
+  expectedCount: number | null;
+  isComplete: boolean;
+  confidence: number;
+  error?: string;
+}
+
 /**
  * Payload for questionnaire_ready event from backend
  */
@@ -633,6 +676,56 @@ export class WebSocketClient {
 
     this.socket.on('export_status_error', handler);
     return () => this.socket?.off('export_status_error', handler);
+  }
+
+  // Epic 16: Document upload event handlers
+
+  /**
+   * Subscribe to upload_progress events
+   * Emitted by backend during document upload processing
+   */
+  onUploadProgress(callback: (data: UploadProgressEvent) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: UploadProgressEvent) => {
+      console.log('[WebSocket] Upload progress:', data.stage, data.progress + '%');
+      callback(data);
+    };
+
+    this.socket.on('upload_progress', handler);
+    return () => this.socket?.off('upload_progress', handler);
+  }
+
+  /**
+   * Subscribe to intake_context_ready events
+   * Emitted when intake document parsing completes
+   */
+  onIntakeContextReady(callback: (data: IntakeContextResult) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: IntakeContextResult) => {
+      console.log('[WebSocket] Intake context ready:', data.success ? 'success' : 'failed');
+      callback(data);
+    };
+
+    this.socket.on('intake_context_ready', handler);
+    return () => this.socket?.off('intake_context_ready', handler);
+  }
+
+  /**
+   * Subscribe to scoring_parse_ready events
+   * Emitted when scoring document parsing completes
+   */
+  onScoringParseReady(callback: (data: ScoringParseResult) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringParseResult) => {
+      console.log('[WebSocket] Scoring parse ready:', data.success ? 'success' : 'failed');
+      callback(data);
+    };
+
+    this.socket.on('scoring_parse_ready', handler);
+    return () => this.socket?.off('scoring_parse_ready', handler);
   }
 
 }

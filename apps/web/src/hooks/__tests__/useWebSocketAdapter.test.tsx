@@ -21,6 +21,12 @@ describe('useWebSocketAdapter', () => {
     abortStream: jest.fn(),
     deleteConversation: jest.fn(),
     updateConversationMode: jest.fn(),
+    generateQuestionnaire: jest.fn(),
+    requestExportStatus: jest.fn(),
+    // Epic 16: Upload event subscriptions
+    subscribeUploadProgress: jest.fn().mockReturnValue(() => {}),
+    subscribeIntakeContextReady: jest.fn().mockReturnValue(() => {}),
+    subscribeScoringParseReady: jest.fn().mockReturnValue(() => {}),
   });
 
   beforeEach(() => {
@@ -63,6 +69,12 @@ describe('useWebSocketAdapter', () => {
         onStreamAborted: undefined,
         onConversationDeleted: undefined,
         onConversationModeUpdated: undefined,
+        onExportReady: undefined,
+        onExtractionFailed: undefined,
+        onQuestionnaireReady: undefined,
+        onGenerationPhase: undefined,
+        onExportStatusNotFound: undefined,
+        onExportStatusError: undefined,
         autoConnect: true,
       });
     });

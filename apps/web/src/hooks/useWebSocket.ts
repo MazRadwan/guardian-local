@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 
 export interface UseWebSocketOptions {
@@ -321,6 +321,29 @@ export function useWebSocket({
     };
   }, []); // Empty deps = only runs on mount/unmount
 
+  // Epic 16: Dynamic subscribe methods for upload events
+  // These allow components to subscribe/unsubscribe during their lifecycle
+  const subscribeUploadProgress = useCallback(
+    (handler: (data: UploadProgressEvent) => void) => {
+      return clientRef.current?.onUploadProgress(handler) ?? (() => {});
+    },
+    []
+  );
+
+  const subscribeIntakeContextReady = useCallback(
+    (handler: (data: IntakeContextResult) => void) => {
+      return clientRef.current?.onIntakeContextReady(handler) ?? (() => {});
+    },
+    []
+  );
+
+  const subscribeScoringParseReady = useCallback(
+    (handler: (data: ScoringParseResult) => void) => {
+      return clientRef.current?.onScoringParseReady(handler) ?? (() => {});
+    },
+    []
+  );
+
   return useMemo(() => ({
     isConnected,
     isConnecting,
@@ -335,6 +358,10 @@ export function useWebSocket({
     updateConversationMode,
     generateQuestionnaire,
     requestExportStatus,
+    // Epic 16: Upload event subscriptions
+    subscribeUploadProgress,
+    subscribeIntakeContextReady,
+    subscribeScoringParseReady,
   }), [
     isConnected,
     isConnecting,
@@ -349,5 +376,8 @@ export function useWebSocket({
     updateConversationMode,
     generateQuestionnaire,
     requestExportStatus,
+    subscribeUploadProgress,
+    subscribeIntakeContextReady,
+    subscribeScoringParseReady,
   ]);
 }

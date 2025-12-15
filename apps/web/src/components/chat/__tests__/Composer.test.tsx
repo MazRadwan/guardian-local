@@ -298,19 +298,23 @@ describe('Composer', () => {
     });
   });
 
-  // File upload (stub)
-  describe('File Upload (Stub)', () => {
-    it('file upload button logs to console (stub implementation)', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-
+  // File upload (Epic 16)
+  describe('File Upload', () => {
+    it('file upload button is disabled when wsAdapter or conversationId not provided', async () => {
+      // Without wsAdapter and conversationId, upload should be disabled
       render(<Composer onSendMessage={mockOnSendMessage} />);
 
       const uploadButton = screen.getByLabelText('Attach file');
-      await userEvent.click(uploadButton);
+      expect(uploadButton).toBeDisabled();
+    });
 
-      expect(consoleSpy).toHaveBeenCalledWith('File upload clicked (not yet implemented)');
+    it('has hidden file input for upload', () => {
+      render(<Composer onSendMessage={mockOnSendMessage} />);
 
-      consoleSpy.mockRestore();
+      // File input should exist but be hidden
+      const fileInput = document.querySelector('input[type="file"]');
+      expect(fileInput).toBeTruthy();
+      expect(fileInput).toHaveClass('hidden');
     });
   });
 

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
@@ -76,6 +76,11 @@ export interface WebSocketAdapterInterface {
 
   // Story 13.9.2: Export status resume
   requestExportStatus: (conversationId: string) => void;
+
+  // Epic 16: Upload event subscriptions (return unsubscribe functions)
+  subscribeUploadProgress: (handler: (data: UploadProgressEvent) => void) => () => void;
+  subscribeIntakeContextReady: (handler: (data: IntakeContextResult) => void) => () => void;
+  subscribeScoringParseReady: (handler: (data: ScoringParseResult) => void) => () => void;
 }
 
 /**
@@ -198,6 +203,11 @@ export function useWebSocketAdapter({
     requestExportStatus: (conversationId: string) => {
       wsHook.requestExportStatus(conversationId);
     },
+
+    // Epic 16: Upload event subscriptions (delegate to wsHook)
+    subscribeUploadProgress: wsHook.subscribeUploadProgress,
+    subscribeIntakeContextReady: wsHook.subscribeIntakeContextReady,
+    subscribeScoringParseReady: wsHook.subscribeScoringParseReady,
   }), [
     wsHook.isConnected,
     wsHook.isConnecting,
@@ -212,5 +222,8 @@ export function useWebSocketAdapter({
     wsHook.requestExportStatus,
     wsHook.connect,
     wsHook.disconnect,
+    wsHook.subscribeUploadProgress,
+    wsHook.subscribeIntakeContextReady,
+    wsHook.subscribeScoringParseReady,
   ]);
 }
