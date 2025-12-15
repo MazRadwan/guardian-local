@@ -103,8 +103,15 @@ interface ScoringExtractionResponse {
 }
 
 /**
+ * Filter array to only include strings (hygiene for AI responses)
+ */
+function filterStrings(arr: unknown[]): string[] {
+  return arr.filter((x): x is string => typeof x === 'string');
+}
+
+/**
  * Apply safe defaults to intake extraction response
- * Ensures arrays are always arrays, numbers have defaults
+ * Ensures arrays are always arrays of strings, numbers have defaults
  */
 function applyIntakeDefaults(raw: Record<string, unknown>): IntakeExtractionResponse {
   return {
@@ -112,17 +119,24 @@ function applyIntakeDefaults(raw: Record<string, unknown>): IntakeExtractionResp
     solutionName: typeof raw.solutionName === 'string' ? raw.solutionName : null,
     solutionType: typeof raw.solutionType === 'string' ? raw.solutionType : null,
     industry: typeof raw.industry === 'string' ? raw.industry : null,
-    features: Array.isArray(raw.features) ? raw.features : [],
-    claims: Array.isArray(raw.claims) ? raw.claims : [],
-    integrations: Array.isArray(raw.integrations) ? raw.integrations : [],
-    complianceMentions: Array.isArray(raw.complianceMentions) ? raw.complianceMentions : [],
-    architectureNotes: Array.isArray(raw.architectureNotes) ? raw.architectureNotes : [],
-    securityMentions: Array.isArray(raw.securityMentions) ? raw.securityMentions : [],
+    features: Array.isArray(raw.features) ? filterStrings(raw.features) : [],
+    claims: Array.isArray(raw.claims) ? filterStrings(raw.claims) : [],
+    integrations: Array.isArray(raw.integrations) ? filterStrings(raw.integrations) : [],
+    complianceMentions: Array.isArray(raw.complianceMentions) ? filterStrings(raw.complianceMentions) : [],
+    architectureNotes: Array.isArray(raw.architectureNotes) ? filterStrings(raw.architectureNotes) : [],
+    securityMentions: Array.isArray(raw.securityMentions) ? filterStrings(raw.securityMentions) : [],
     confidence: typeof raw.confidence === 'number' ? raw.confidence : 0.5,
-    suggestedQuestions: Array.isArray(raw.suggestedQuestions) ? raw.suggestedQuestions : [],
-    coveredCategories: Array.isArray(raw.coveredCategories) ? raw.coveredCategories : [],
-    gapCategories: Array.isArray(raw.gapCategories) ? raw.gapCategories : [],
+    suggestedQuestions: Array.isArray(raw.suggestedQuestions) ? filterStrings(raw.suggestedQuestions) : [],
+    coveredCategories: Array.isArray(raw.coveredCategories) ? filterStrings(raw.coveredCategories) : [],
+    gapCategories: Array.isArray(raw.gapCategories) ? filterStrings(raw.gapCategories) : [],
   };
+}
+
+/**
+ * Check if value is a non-null object (safe for property access)
+ */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -135,19 +149,22 @@ function applyScoringDefaults(raw: Record<string, unknown>): ScoringExtractionRe
     assessmentId: typeof raw.assessmentId === 'string' ? raw.assessmentId : null,
     vendorName: typeof raw.vendorName === 'string' ? raw.vendorName : null,
     solutionName: typeof raw.solutionName === 'string' ? raw.solutionName : null,
-    responses: rawResponses.map((r: Record<string, unknown>) => ({
-      sectionNumber: typeof r.sectionNumber === 'number' ? r.sectionNumber : 0,
-      sectionTitle: typeof r.sectionTitle === 'string' ? r.sectionTitle : null,
-      questionNumber: typeof r.questionNumber === 'number' ? r.questionNumber : 0,
-      questionText: typeof r.questionText === 'string' ? r.questionText : '',
-      responseText: typeof r.responseText === 'string' ? r.responseText : '',
-      confidence: typeof r.confidence === 'number' ? r.confidence : 0.5,
-      hasVisualContent: r.hasVisualContent === true,
-      visualContentDescription: typeof r.visualContentDescription === 'string' ? r.visualContentDescription : null,
-    })),
+    // Filter out null/non-object elements before mapping
+    responses: rawResponses
+      .filter(isObject)
+      .map((r) => ({
+        sectionNumber: typeof r.sectionNumber === 'number' ? r.sectionNumber : 0,
+        sectionTitle: typeof r.sectionTitle === 'string' ? r.sectionTitle : null,
+        questionNumber: typeof r.questionNumber === 'number' ? r.questionNumber : 0,
+        questionText: typeof r.questionText === 'string' ? r.questionText : '',
+        responseText: typeof r.responseText === 'string' ? r.responseText : '',
+        confidence: typeof r.confidence === 'number' ? r.confidence : 0.5,
+        hasVisualContent: r.hasVisualContent === true,
+        visualContentDescription: typeof r.visualContentDescription === 'string' ? r.visualContentDescription : null,
+      })),
     expectedQuestionCount: typeof raw.expectedQuestionCount === 'number' ? raw.expectedQuestionCount : null,
     parsedQuestionCount: typeof raw.parsedQuestionCount === 'number' ? raw.parsedQuestionCount : 0,
-    unparsedQuestions: Array.isArray(raw.unparsedQuestions) ? raw.unparsedQuestions : [],
+    unparsedQuestions: Array.isArray(raw.unparsedQuestions) ? filterStrings(raw.unparsedQuestions) : [],
     isComplete: raw.isComplete === true,
     overallConfidence: typeof raw.overallConfidence === 'number' ? raw.overallConfidence : 0.5,
   };
@@ -468,6 +485,14 @@ export class DocumentParserService
     if (text.length <= maxChars) {
       return text;
     }
+
+    // Guard: If maxChars is too small to fit notice + meaningful content,
+    // just truncate without notice to avoid returning less than maxChars
+    const minMeaningfulContent = 100;
+    if (maxChars < TRUNCATION_NOTICE.length + minMeaningfulContent) {
+      return text.slice(0, maxChars);
+    }
+
     // Reserve space for truncation notice
     const truncatedText = text.slice(0, maxChars - TRUNCATION_NOTICE.length);
     return truncatedText + TRUNCATION_NOTICE;
