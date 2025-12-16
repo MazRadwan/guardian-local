@@ -176,6 +176,19 @@ describe('useChatController', () => {
       deleteConversationRequested: null,
       clearDeleteConversationRequest: mockClearDeleteConversationRequest,
       removeConversationFromList: mockRemoveConversationFromList,
+      setExportReady: jest.fn(),
+      clearExportReady: jest.fn(),
+      getExportReady: jest.fn(() => null),
+      appendComponentToLastAssistantMessage: jest.fn(),
+    });
+
+    // Mock getState for useChatStore (for questionnaire methods)
+    (useChatStore as any).getState = jest.fn().mockReturnValue({
+      setQuestionnaireUIState: jest.fn(),
+      setPendingQuestionnaire: jest.fn(),
+      setQuestionnaireError: jest.fn(),
+      setGenerating: jest.fn(),
+      resetGenerationStep: jest.fn(),
     });
 
     // Default useWebSocketAdapter mock
@@ -189,6 +202,8 @@ describe('useChatController', () => {
       abortStream: mockAdapterAbortStream,
       deleteConversation: mockAdapterDeleteConversation,
       updateConversationMode: mockAdapterUpdateConversationMode,
+      requestExportStatus: jest.fn(),
+      generateQuestionnaire: jest.fn(),
       connect: jest.fn(),
       disconnect: jest.fn(),
     });
@@ -214,6 +229,7 @@ describe('useChatController', () => {
       mode: 'consult',
       changeMode: mockChangeMode,
       isChanging: false,
+      setModeFromConversation: jest.fn(),
     });
 
     // Default useHistoryManager mock
@@ -312,6 +328,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       const { result } = renderHook(() => useChatController());
@@ -334,6 +354,8 @@ describe('useChatController', () => {
         startNewConversation: mockAdapterStartNewConversation,
         abortStream: mockAdapterAbortStream,
         deleteConversation: mockAdapterDeleteConversation,
+        requestExportStatus: jest.fn(),
+        generateQuestionnaire: jest.fn(),
         connect: jest.fn(),
         disconnect: jest.fn(),
       });
@@ -374,6 +396,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       mockChatServiceSendMessage.mockImplementation(() => {
@@ -419,6 +445,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       const { result } = renderHook(() => useChatController());
@@ -467,6 +497,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       const { result } = renderHook(() => useChatController());
@@ -511,6 +545,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       const { result } = renderHook(() => useChatController());
@@ -553,6 +591,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       const { result } = renderHook(() => useChatController());
@@ -637,6 +679,8 @@ describe('useChatController', () => {
         startNewConversation: mockAdapterStartNewConversation,
         abortStream: mockAdapterAbortStream,
         deleteConversation: mockAdapterDeleteConversation,
+        requestExportStatus: jest.fn(),
+        generateQuestionnaire: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -666,6 +710,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -697,6 +743,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -726,6 +774,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -764,6 +816,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -793,6 +847,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -848,6 +906,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -885,6 +947,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -925,6 +991,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -961,6 +1031,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -995,6 +1069,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1035,6 +1113,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1072,6 +1154,10 @@ describe('useChatController', () => {
         deleteConversationRequested: 'conv-to-delete',
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1111,6 +1197,10 @@ describe('useChatController', () => {
         deleteConversationRequested: 'conv-error',
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1139,6 +1229,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1175,6 +1267,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1203,6 +1297,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1230,6 +1328,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1261,6 +1361,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1287,6 +1391,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1315,6 +1421,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1344,6 +1454,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1375,6 +1487,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1409,6 +1523,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1453,6 +1569,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1482,6 +1600,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1515,6 +1635,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1551,6 +1673,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1579,6 +1703,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1608,6 +1734,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1637,6 +1765,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1663,6 +1793,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1693,6 +1825,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1718,6 +1854,7 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
         };
       });
 
@@ -1748,6 +1885,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       renderHook(() => useChatController());
@@ -1783,6 +1924,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1817,6 +1960,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1849,6 +1994,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1878,6 +2025,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -1921,6 +2070,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       // First render - should create
@@ -1949,6 +2102,8 @@ describe('useChatController', () => {
           startNewConversation: mockAdapterStartNewConversation,
           abortStream: mockAdapterAbortStream,
           deleteConversation: mockAdapterDeleteConversation,
+          requestExportStatus: jest.fn(),
+          generateQuestionnaire: jest.fn(),
         };
       });
 
@@ -2000,6 +2155,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       rerender();
@@ -2030,6 +2189,10 @@ describe('useChatController', () => {
         deleteConversationRequested: null,
         clearDeleteConversationRequest: mockClearDeleteConversationRequest,
         removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
       });
 
       rerender();

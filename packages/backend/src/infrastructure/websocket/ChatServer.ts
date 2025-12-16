@@ -83,6 +83,7 @@ export class ChatServer {
     this.setupNamespace();
 
     // Clean up stale pending creations every 5 seconds
+    // .unref() allows Node.js to exit even if interval is running (for tests)
     setInterval(() => {
       const now = Date.now();
       for (const [userId, { timestamp }] of this.pendingConversationCreations.entries()) {
@@ -90,7 +91,7 @@ export class ChatServer {
           this.pendingConversationCreations.delete(userId);
         }
       }
-    }, 5000);
+    }, 5000).unref();
   }
 
   /**

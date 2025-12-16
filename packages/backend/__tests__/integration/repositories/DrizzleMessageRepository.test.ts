@@ -278,8 +278,12 @@ describe('DrizzleMessageRepository Integration Tests', () => {
     it('should respect offset parameter', async () => {
       const history = await repository.getHistory(testConversationId, 5, 5)
 
+      // offset=5 skips 5 newest messages (M10, M9, M8, M7, M6)
+      // Returns next 5: M5, M4, M3, M2, M1 (newest to oldest)
+      // Then reversed to chronological: M1, M2, M3, M4, M5
       expect(history).toHaveLength(5)
-      expect(history[0].content.text).toBe('Message 6')
+      expect(history[0].content.text).toBe('Message 1')
+      expect(history[4].content.text).toBe('Message 5')
     })
 
     it('should return messages in chronological order (oldest first)', async () => {

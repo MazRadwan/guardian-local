@@ -41,6 +41,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'How does your solution handle personal health information?',
+          questionType: 'text',
           questionMetadata: {
             required: true,
             helpText: 'Describe your PHI handling processes',
@@ -52,6 +53,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 2,
           questionText: 'Do you have a Data Protection Agreement in place?',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -59,6 +61,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: 2,
           questionNumber: 1,
           questionText: 'What encryption standards do you use?',
+          questionType: 'text',
           questionMetadata: {
             required: true,
           },
@@ -102,6 +105,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Test question?',
+          questionType: 'text',
         }),
       ]
 
@@ -137,6 +141,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: Math.floor(i / 3) + 1,
           questionNumber: (i % 3) + 1,
           questionText: `Question ${i + 1}: What is your policy on ${i + 1}?`,
+          questionType: 'text',
         })
       )
 
@@ -171,6 +176,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Security question with metadata?',
+          questionType: 'text',
           questionMetadata: {
             required: true,
             helpText: 'This is helpful information for the question',
@@ -216,6 +222,7 @@ describe('PDFExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Test question for PDF?',
+          questionType: 'text',
         }),
       ]
 

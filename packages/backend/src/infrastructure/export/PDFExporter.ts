@@ -8,23 +8,31 @@ import puppeteer, { Browser } from 'puppeteer'
 import * as fs from 'fs/promises'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
-import { dirname } from 'path'
 import {
   IPDFExporter,
   QuestionnaireData,
 } from '../../application/interfaces/IPDFExporter'
 import { Question } from '../../domain/entities/Question'
 
-// ES module equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+// Get __dirname equivalent for both ESM (runtime) and CommonJS (Jest)
+// In ESM: compute from import.meta.url
+// In CommonJS (Jest): __dirname is globally available
+const getCurrentDir = (): string => {
+  // @ts-expect-error - __dirname exists in CommonJS (Jest) but not in ESM
+  if (typeof __dirname !== 'undefined') {
+    // @ts-expect-error - __dirname exists in CommonJS (Jest)
+    return __dirname
+  }
+  // ESM path - import.meta.url is available
+  return path.dirname(fileURLToPath(import.meta.url))
+}
 
 export class PDFExporter implements IPDFExporter {
   private templatePath: string
 
   constructor() {
     this.templatePath = path.join(
-      __dirname,
+      getCurrentDir(),
       'templates',
       'questionnaire-template.html'
     )

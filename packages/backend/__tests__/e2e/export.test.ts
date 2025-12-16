@@ -33,7 +33,7 @@ describe('Export API E2E Tests', () => {
       role: 'analyst',
     })
 
-    testUserId = testUser.id
+    testUserId = testUser.user.id
     authToken = testUser.token
 
     // Create test vendor

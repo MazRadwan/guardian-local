@@ -5,8 +5,12 @@
 
 import { DrizzleConversationRepository } from '../../../src/infrastructure/database/repositories/DrizzleConversationRepository'
 import { DrizzleUserRepository } from '../../../src/infrastructure/database/repositories/DrizzleUserRepository'
+import { DrizzleVendorRepository } from '../../../src/infrastructure/database/repositories/DrizzleVendorRepository'
+import { DrizzleAssessmentRepository } from '../../../src/infrastructure/database/repositories/DrizzleAssessmentRepository'
 import { Conversation } from '../../../src/domain/entities/Conversation'
 import { User } from '../../../src/domain/entities/User'
+import { Vendor } from '../../../src/domain/entities/Vendor'
+import { Assessment } from '../../../src/domain/entities/Assessment'
 import { testDb, closeTestDb } from '../../setup/test-db'
 import { sql } from 'drizzle-orm'
 import bcrypt from 'bcrypt'
@@ -14,11 +18,15 @@ import bcrypt from 'bcrypt'
 describe('DrizzleConversationRepository Integration Tests', () => {
   let repository: DrizzleConversationRepository
   let userRepository: DrizzleUserRepository
+  let vendorRepository: DrizzleVendorRepository
+  let assessmentRepository: DrizzleAssessmentRepository
   let testUserId: string
 
   beforeAll(async () => {
     repository = new DrizzleConversationRepository(testDb)
     userRepository = new DrizzleUserRepository(testDb)
+    vendorRepository = new DrizzleVendorRepository()
+    assessmentRepository = new DrizzleAssessmentRepository()
 
     // Create a test user for conversations
     const passwordHash = await bcrypt.hash('password123', 10)
@@ -244,12 +252,25 @@ describe('DrizzleConversationRepository Integration Tests', () => {
 
       const created = await repository.create(conversation)
 
-      const assessmentId = '12345678-1234-1234-1234-123456789012'
-      await repository.linkAssessment(created.id, assessmentId)
+      // Create full FK chain: vendor → assessment
+      const vendor = Vendor.create({
+        name: 'Test Vendor for Assessment',
+      })
+      const createdVendor = await vendorRepository.create(vendor)
+
+      const assessment = Assessment.create({
+        vendorId: createdVendor.id,
+        assessmentType: 'comprehensive',
+        solutionName: 'Test Solution',
+        createdBy: testUserId,
+      })
+      const createdAssessment = await assessmentRepository.create(assessment)
+
+      await repository.linkAssessment(created.id, createdAssessment.id)
 
       const found = await repository.findById(created.id)
 
-      expect(found!.assessmentId).toBe(assessmentId)
+      expect(found!.assessmentId).toBe(createdAssessment.id)
     })
   })
 

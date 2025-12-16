@@ -90,7 +90,7 @@ describe('DrizzleVendorRepository Integration Tests', () => {
     })
 
     it('should return null for non-existent ID', async () => {
-      const found = await repository.findById('non-existent-id')
+      const found = await repository.findById('00000000-0000-0000-0000-000000000000')
       expect(found).toBeNull()
     })
   })
@@ -191,7 +191,7 @@ describe('DrizzleVendorRepository Integration Tests', () => {
 
     it('should not throw error when deleting non-existent vendor', async () => {
       await expect(
-        repository.delete('non-existent-id')
+        repository.delete('00000000-0000-0000-0000-000000000000')
       ).resolves.not.toThrow()
     })
   })

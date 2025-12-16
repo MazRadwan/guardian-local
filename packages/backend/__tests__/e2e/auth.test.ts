@@ -128,7 +128,10 @@ describe('Auth API E2E Tests', () => {
 
       expect(response.status).toBe(400)
       expect(response.body.success).toBe(false)
-      expect(response.body.error).toContain('at least 8 characters')
+      expect(response.body.error).toBe('Validation failed')
+      expect(response.body.details).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining('8 characters') })
+      )
     })
 
     it('should return 400 for password without letters', async () => {
@@ -140,7 +143,10 @@ describe('Auth API E2E Tests', () => {
 
       expect(response.status).toBe(400)
       expect(response.body.success).toBe(false)
-      expect(response.body.error).toContain('at least one letter')
+      expect(response.body.error).toBe('Validation failed')
+      expect(response.body.details).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining('letter') })
+      )
     })
 
     it('should return 400 for password without numbers', async () => {
@@ -152,7 +158,10 @@ describe('Auth API E2E Tests', () => {
 
       expect(response.status).toBe(400)
       expect(response.body.success).toBe(false)
-      expect(response.body.error).toContain('at least one number')
+      expect(response.body.error).toBe('Validation failed')
+      expect(response.body.details).toContainEqual(
+        expect.objectContaining({ message: expect.stringContaining('number') })
+      )
     })
 
     it('should return 400 for invalid role', async () => {

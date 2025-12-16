@@ -225,9 +225,9 @@ describe('questionnaireToMarkdown', () => {
       });
       const markdown = questionnaireToMarkdown(schema);
 
-      expect(markdown).toContain('1. First question here?');
-      expect(markdown).toContain('2. Second question here?');
-      expect(markdown).toContain('3. Third question here?');
+      expect(markdown).toContain('**1.** First question here?');
+      expect(markdown).toContain('**2.** Second question here?');
+      expect(markdown).toContain('**3.** Third question here?');
     });
 
     it('includes guidance when present', () => {
@@ -242,7 +242,7 @@ describe('questionnaireToMarkdown', () => {
       });
       const markdown = questionnaireToMarkdown(schema);
 
-      expect(markdown).toContain('*Guidance: Consider HIPAA requirements.*');
+      expect(markdown).toContain('> *Guidance: Consider HIPAA requirements.*');
     });
 
     it('omits guidance when not present', () => {
@@ -255,7 +255,7 @@ describe('questionnaireToMarkdown', () => {
       });
       const markdown = questionnaireToMarkdown(schema);
 
-      expect(markdown).not.toContain('*Guidance:');
+      expect(markdown).not.toContain('> *Guidance:');
     });
 
     it('formats multiple choice options', () => {
@@ -303,8 +303,8 @@ describe('questionnaireToMarkdown', () => {
       });
       const markdown = questionnaireToMarkdown(schema);
 
-      // Count numbered questions (lines starting with digit + period)
-      const questionMatches = markdown.match(/^\d+\./gm) || [];
+      // Count numbered questions (bold numbers: **1.**, **2.**, etc.)
+      const questionMatches = markdown.match(/\*\*\d+\.\*\*/gm) || [];
       expect(questionMatches.length).toBe(35);
     });
   });

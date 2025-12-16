@@ -304,18 +304,25 @@ describe('WebSocket Chat E2E Tests', () => {
         },
       })
 
-      // Capture the conversationId from connection_ready event
-      clientSocket.on('connection_ready', (data) => {
-        socketConversationId = data.conversationId
+      clientSocket.on('connect', () => {
+        // Explicitly create conversation
+        clientSocket.emit('start_new_conversation', { mode: 'consult' })
+      })
+
+      clientSocket.on('conversation_created', (data) => {
+        socketConversationId = data.conversation.id
         done()
       })
+
+      clientSocket.on('error', (err) => done(new Error(err.message)))
     })
 
     it('should send message and receive confirmation', (done) => {
       const messageText = 'Hello, I need help with vendor assessment'
 
       clientSocket.emit('send_message', {
-        text: messageText, // Use socket's auto-created conversation
+        conversationId: socketConversationId,
+        text: messageText,
       })
 
       clientSocket.on('message_sent', (data) => {
@@ -330,6 +337,7 @@ describe('WebSocket Chat E2E Tests', () => {
       const messageText = 'Test message for database'
 
       clientSocket.emit('send_message', {
+        conversationId: socketConversationId,
         text: messageText,
       })
 
@@ -357,6 +365,7 @@ describe('WebSocket Chat E2E Tests', () => {
       ]
 
       clientSocket.emit('send_message', {
+        conversationId: socketConversationId,
         text: messageText,
         components,
       })
@@ -392,16 +401,15 @@ describe('WebSocket Chat E2E Tests', () => {
       const messageText = 'Test message for Claude response'
 
       clientSocket.emit('send_message', {
+        conversationId: socketConversationId,
         text: messageText,
       })
 
-      // Should receive assistant response via message event
-      clientSocket.on('message', (data) => {
-        expect(data.id).toBeDefined()
+      // Should receive assistant response via assistant_done event (not 'message')
+      clientSocket.on('assistant_done', (data) => {
+        expect(data.messageId).toBeDefined()
         expect(data.conversationId).toBe(socketConversationId)
-        expect(data.role).toBe('assistant')
-        expect(data.content.text).toContain('mocked') // From MockClaudeClient
-        expect(data.createdAt).toBeDefined()
+        expect(data.fullText).toContain('mocked') // From MockClaudeClient
         done()
       })
     })
@@ -628,17 +636,17 @@ describe('WebSocket Chat E2E Tests', () => {
     it('should update socket conversationId to new conversation', (done) => {
       let newConversationId: string
 
-      // Listen for conversation_created to capture the new conversation ID
-      clientSocket.on('conversation_created', (data) => {
-        newConversationId = data.conversation.id
-      })
-
       // Start new conversation
       clientSocket.emit('start_new_conversation', { mode: 'consult' })
 
-      // After new conversation is created, send a message
-      clientSocket.on('conversation_created', () => {
-        clientSocket.emit('send_message', { text: 'Test message in new conversation' })
+      // Listen for conversation_created and send message with the new conversationId
+      clientSocket.on('conversation_created', (data) => {
+        newConversationId = data.conversation.id
+        // send_message requires conversationId explicitly
+        clientSocket.emit('send_message', {
+          conversationId: newConversationId,
+          text: 'Test message in new conversation',
+        })
       })
 
       // Verify message is sent to the new conversation
