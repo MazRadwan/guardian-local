@@ -14,7 +14,7 @@ import { useHistoryManager } from '@/hooks/useHistoryManager';
 import { useConversationSync } from '@/hooks/useConversationSync';
 import { useWebSocketEvents } from '@/hooks/useWebSocketEvents';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
-import { ChatMessage as ChatMessageType, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
+import { ChatMessage as ChatMessageType, ExportStatusNotFoundPayload, ExportStatusErrorPayload, MessageAttachment } from '@/lib/websocket';
 
 const WEBSOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || 'http://localhost:8000';
 
@@ -40,7 +40,8 @@ export interface UseChatControllerReturn {
   messageListRef: React.RefObject<HTMLDivElement | null>;
 
   // Handlers
-  handleSendMessage: (content: string) => void;
+  /** Epic 16.6.8: Send message with optional attachments */
+  handleSendMessage: (content: string, attachments?: MessageAttachment[]) => void;
   handleModeChange: (newMode: ConversationMode) => Promise<void>;
   handleRegenerate: (messageIndex: number) => void;
   abortStream: () => void;
@@ -210,7 +211,13 @@ export function useChatController(): UseChatControllerReturn {
   // Story 13.9.2: Handler for export_status_error
   const handleExportStatusError = useCallback((data: ExportStatusErrorPayload) => {
     pendingExportStatusRequests.delete(data.conversationId);
-    console.error('[useChatController] Export status error:', data.error);
+    // "Conversation not found" is expected when user deletes a conversation
+    // while an export status request is in flight - don't log as error
+    if (data.error === 'Conversation not found') {
+      console.log('[useChatController] Export status: conversation was deleted');
+    } else {
+      console.error('[useChatController] Export status error:', data.error);
+    }
     // Don't disrupt UX - user can still generate if needed
   }, []);
 
@@ -445,6 +452,10 @@ export function useChatController(): UseChatControllerReturn {
     if (deleteConversationRequested && isConnected) {
       console.log('[ChatInterface] Processing delete conversation request:', deleteConversationRequested);
 
+      // Clean up any pending export status request for this conversation
+      // (prevents "Conversation not found" error when server responds after deletion)
+      pendingExportStatusRequests.delete(deleteConversationRequested);
+
       try {
         // Delegate to conversation service
         conversationService.deleteConversation(deleteConversationRequested);
@@ -459,9 +470,9 @@ export function useChatController(): UseChatControllerReturn {
   }, [deleteConversationRequested, isConnected, conversationService, clearDeleteConversationRequest]);
 
   const handleSendMessage = useCallback(
-    (content: string) => {
-      // Delegate to chat service
-      chatService.sendMessage(content, activeConversationId);
+    (content: string, attachments?: MessageAttachment[]) => {
+      // Epic 16.6.8: Delegate to chat service with optional attachments
+      chatService.sendMessage(content, activeConversationId, attachments);
     },
     [chatService, activeConversationId]
   );

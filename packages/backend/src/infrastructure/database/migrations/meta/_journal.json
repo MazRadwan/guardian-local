@@ -8,6 +8,20 @@
       "when": 1762466130380,
       "tag": "0000_lively_the_fallen",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1734451200000,
+      "tag": "0001_add_message_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765995386925,
+      "tag": "0002_curved_spot",
+      "breakpoints": true
     }
   ]
 }

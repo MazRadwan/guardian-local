@@ -8,7 +8,7 @@ import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
-import type { QuestionnaireReadyPayload } from '@/lib/websocket';
+import type { QuestionnaireReadyPayload, MessageAttachment } from '@/lib/websocket';
 
 export function ChatInterface() {
   const {
@@ -231,6 +231,52 @@ export function ChatInterface() {
     }
   }, [exportData, token]);
 
+  /**
+   * Epic 16.6.9: Download file attachment from chat message
+   * Uses fileId-based endpoint (no storagePath exposure)
+   */
+  const handleDownloadAttachment = useCallback(async (attachment: MessageAttachment) => {
+    if (!token) {
+      console.error('[ChatInterface] Cannot download attachment: not authenticated');
+      return;
+    }
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+      // Epic 16.6.9: Use fileId-based endpoint (no storagePath exposure)
+      const downloadUrl = `${apiUrl}/api/documents/${attachment.fileId}/download`;
+
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      // Create download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.filename;
+
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      console.log(`[ChatInterface] Successfully downloaded attachment: ${attachment.filename}`);
+    } catch (err) {
+      console.error('[ChatInterface] Attachment download error:', err);
+      setError(`Failed to download ${attachment.filename}`);
+    }
+  }, [token, setError]);
+
   return (
     <div className="flex h-full flex-col relative">
       {/* Error banner */}
@@ -263,6 +309,8 @@ export function ChatInterface() {
               isStreaming={isStreaming}
               isLoading={isLoading}
               onStopStream={abortStream}
+              wsAdapter={adapter}
+              conversationId={activeConversationId ?? undefined}
             />
           </div>
         </div>
@@ -277,6 +325,7 @@ export function ChatInterface() {
               isStreaming={isStreaming}
               onRegenerate={handleRegenerate}
               regeneratingMessageIndex={regeneratingMessageIndex}
+              onDownloadAttachment={handleDownloadAttachment}
               questionnaire={
                 pendingQuestionnaire &&
                 pendingQuestionnaire.conversationId === activeConversationId &&
@@ -310,6 +359,8 @@ export function ChatInterface() {
                 isStreaming={isStreaming}
                 isLoading={isLoading}
                 onStopStream={abortStream}
+                wsAdapter={adapter}
+                conversationId={activeConversationId ?? undefined}
               />
             </div>
             <div className="text-center text-xs text-gray-400 py-2 pb-4">

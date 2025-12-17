@@ -30,6 +30,7 @@ describe('ExportService', () => {
       findById: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateStatus: jest.fn(),
       delete: jest.fn(),
       findByVendorId: jest.fn(),
       list: jest.fn(),
@@ -43,11 +44,13 @@ describe('ExportService', () => {
       update: jest.fn(),
       delete: jest.fn(),
       deleteByAssessmentId: jest.fn(),
+      replaceAllForAssessment: jest.fn(),
     } as jest.Mocked<IQuestionRepository>
 
     mockVendorRepo = {
       findById: jest.fn(),
       findByName: jest.fn(),
+      searchByName: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
@@ -147,6 +150,7 @@ describe('ExportService', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Test question?',
+          questionType: 'text',
         }),
       ]
 
@@ -200,6 +204,7 @@ describe('ExportService', () => {
           sectionNumber: 2,
           questionNumber: 1,
           questionText: 'Security question?',
+          questionType: 'text',
         }),
       ]
 
@@ -251,6 +256,7 @@ describe('ExportService', () => {
           sectionNumber: 3,
           questionNumber: 1,
           questionText: 'Compliance question?',
+          questionType: 'text',
         }),
       ]
 

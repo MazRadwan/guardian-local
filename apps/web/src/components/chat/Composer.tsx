@@ -1,12 +1,30 @@
 'use client';
 
-import React, { useState, useRef, useEffect, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect, useCallback, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Send, Paperclip, Square } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
+import { FileChip } from './FileChip';
+import { useFileUpload, UploadMode, IntakeContextResult, FileMetadata } from '@/hooks/useFileUpload';
+import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
+import type { MessageAttachment } from '@/lib/websocket';
+
+// Stable fallback adapter for when wsAdapter is not provided
+// Module-level constant prevents new object identity on each render
+const DISCONNECTED_UPLOAD_ADAPTER = {
+  isConnected: false as boolean,
+  subscribeUploadProgress: () => () => {},
+  subscribeIntakeContextReady: () => () => {},
+  subscribeScoringParseReady: () => () => {},
+};
 
 export interface ComposerProps {
-  onSendMessage: (message: string) => void;
+  /**
+   * Epic 16.6.8: Send message with optional attachments
+   * If attachments provided, they will be saved with the message
+   */
+  onSendMessage: (message: string, attachments?: MessageAttachment[]) => void;
   disabled?: boolean;
   placeholder?: string;
   currentMode?: ConversationMode;
@@ -15,6 +33,9 @@ export interface ComposerProps {
   isStreaming?: boolean;
   isLoading?: boolean;
   onStopStream?: () => void;
+  // Epic 16: Upload support
+  wsAdapter?: WebSocketAdapterInterface;
+  conversationId?: string;
 }
 
 export interface ComposerRef {
@@ -33,11 +54,62 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       isStreaming = false,
       isLoading = false,
       onStopStream,
+      // Epic 16 props
+      wsAdapter,
+      conversationId,
     },
     ref
   ) => {
     const [message, setMessage] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    // Epic 16: File upload (only enabled when wsAdapter and conversationId are provided)
+    const uploadEnabled = !!wsAdapter && !!conversationId;
+
+    // MVP: Always use 'intake' mode for document parsing (extracts vendor context)
+    // Future: Wire 'scoring' mode when assessment mode needs to parse completed questionnaires
+    // See: packages/backend/src/application/interfaces/IScoringDocumentParser.ts
+    const uploadMode: UploadMode = 'intake';
+
+    // Use stable fallback adapter when wsAdapter not provided
+    // Module-level constant prevents subscription thrashing from object identity changes
+    const uploadAdapter = wsAdapter ?? DISCONNECTED_UPLOAD_ADAPTER;
+
+    // Memoize callbacks to prevent unnecessary re-renders
+    // Note: useFileUpload also uses refs internally for extra stability
+    const handleContextReady = useCallback((context: IntakeContextResult) => {
+      // Epic 16.6.1: Show success toast when document is processed
+      const vendorName = context.context?.vendorName;
+      toast.success(
+        vendorName
+          ? `Document processed: ${vendorName}`
+          : 'Document processed successfully',
+        { duration: 3000 }
+      );
+    }, []);
+
+    const handleUploadError = useCallback((error: string) => {
+      // Epic 16.6.1: Show error toast when upload fails
+      toast.error(`Upload failed: ${error}`, { duration: 5000 });
+    }, []);
+
+    const {
+      uploadProgress,
+      selectedFilename,
+      fileMetadata,
+      fileInputRef,
+      openFilePicker,
+      handleFileChange,
+      isUploading,
+      acceptedTypes,
+      reset,
+    } = useFileUpload({
+      conversationId: conversationId ?? '',
+      mode: uploadMode,
+      wsAdapter: uploadAdapter,
+      onContextReady: handleContextReady,
+      onError: handleUploadError,
+    });
 
     // Expose focus method to parent
     useImperativeHandle(ref, () => ({
@@ -61,10 +133,33 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
     const handleSend = () => {
       const trimmedMessage = message.trim();
-      if (!trimmedMessage || disabled) return;
 
-      onSendMessage(trimmedMessage);
+      // Epic 16.6.9: Check if we have file ready to attach (complete stage with fileId)
+      const hasFile = uploadProgress.stage === 'complete' && fileMetadata?.fileId;
+
+      // Need either text or file to send
+      if (!trimmedMessage && !hasFile) return;
+      if (disabled) return;
+
+      // Epic 16.6.9: Build attachments from file metadata if available
+      // Only send fileId, filename, mimeType, size - NO storagePath (security)
+      const attachments: MessageAttachment[] | undefined = hasFile && fileMetadata
+        ? [{
+            fileId: fileMetadata.fileId,
+            filename: fileMetadata.filename,
+            mimeType: fileMetadata.mimeType,
+            size: fileMetadata.size,
+          }]
+        : undefined;
+
+      // Send message with attachments
+      onSendMessage(trimmedMessage || '', attachments);
       setMessage('');
+
+      // Epic 16.6.8: Clear file state after sending (moves chip to chat stream)
+      if (hasFile) {
+        reset();
+      }
 
       // Reset textarea height after sending
       if (textareaRef.current) {
@@ -81,16 +176,41 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       // Shift+Enter creates new line (default behavior, no action needed)
     };
 
-    const isSendEnabled = message.trim().length > 0 && !disabled;
+    // Epic 16.6.9: Enable send if we have text OR a completed file upload (check fileId)
+    const hasFileReady = uploadProgress.stage === 'complete' && fileMetadata?.fileId;
+    const isSendEnabled = (message.trim().length > 0 || hasFileReady) && !disabled;
     const isBusy = isStreaming || isLoading;
 
     return (
       <div className="bg-white p-2">
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={acceptedTypes}
+          onChange={handleFileChange}
+          className="hidden"
+          aria-hidden="true"
+        />
+
         {/* Centered composer container */}
         <div className="max-w-3xl mx-auto">
           {/* Elevated composer box */}
           <div className="border border-gray-200 rounded-2xl shadow-lg bg-white overflow-hidden">
-            {/* Textarea section (top) */}
+            {/* Epic 16.6.1: File chip - INSIDE composer, above textarea */}
+            {uploadProgress.stage !== 'idle' && selectedFilename && (
+              <div className="px-4 pt-3">
+                <FileChip
+                  filename={selectedFilename}
+                  stage={uploadProgress.stage === 'selecting' ? 'uploading' : uploadProgress.stage as 'uploading' | 'storing' | 'parsing' | 'complete' | 'error'}
+                  progress={uploadProgress.progress}
+                  error={uploadProgress.error}
+                  onRemove={reset}
+                />
+              </div>
+            )}
+
+            {/* Textarea section */}
             <textarea
               ref={textareaRef}
               value={message}
@@ -122,18 +242,15 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                       />
                     )}
 
-                    {/* File upload button (stub for now) */}
+                    {/* File upload button - only enabled when upload is available */}
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
-                      disabled={disabled}
+                      disabled={disabled || !uploadEnabled || isUploading}
                       aria-label="Attach file"
-                      onClick={() => {
-                        // Stub - file upload functionality deferred
-                        console.log('File upload clicked (not yet implemented)');
-                      }}
+                      onClick={openFilePicker}
                     >
                       <Paperclip className="h-5 w-5" />
                     </Button>

@@ -3,9 +3,12 @@
  *
  * Wraps Anthropic SDK with retry logic, error handling, and streaming support
  * Model: claude-sonnet-4-5-20250929 (latest Sonnet 4.5)
+ *
+ * Epic 16: Extended with Vision API support for document parsing
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { PDFParse } from 'pdf-parse';
 import type {
   IClaudeClient,
   ClaudeMessage,
@@ -15,8 +18,14 @@ import type {
   ClaudeTool,
   ToolUseBlock,
 } from '../../application/interfaces/IClaudeClient.js';
+import type {
+  IVisionClient,
+  VisionContent,
+  VisionRequest,
+  VisionResponse,
+} from '../../application/interfaces/IVisionClient.js';
 
-export class ClaudeClient implements IClaudeClient {
+export class ClaudeClient implements IClaudeClient, IVisionClient {
   private client: Anthropic;
   private readonly model = 'claude-sonnet-4-5-20250929';
   private readonly maxTokens = 4096;
@@ -232,6 +241,126 @@ export class ClaudeClient implements IClaudeClient {
     }
 
     return systemPrompt;
+  }
+
+  // =========================================================================
+  // IVisionClient Implementation (Epic 16)
+  // =========================================================================
+
+  /**
+   * Analyze images with Claude Vision
+   */
+  async analyzeImages(request: VisionRequest): Promise<VisionResponse> {
+    const messages: Anthropic.MessageParam[] = [
+      {
+        role: 'user',
+        content: [
+          ...request.images.map((img) => ({
+            type: 'image' as const,
+            source: img.source,
+          })),
+          { type: 'text' as const, text: request.prompt },
+        ],
+      },
+    ];
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: request.maxTokens || 4096,
+      system: request.systemPrompt || 'You are a document analysis assistant.',
+      messages,
+    });
+
+    // Join all text blocks (consistent with sendMessage behavior)
+    const content = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+
+    return {
+      content,
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+      },
+      stopReason: response.stop_reason || 'end_turn',
+    };
+  }
+
+  /**
+   * Convert document buffer to vision-ready images
+   *
+   * For PDFs: Extract text (Vision API reserved for actual images/scans)
+   * For images: Encode as base64
+   * For DOCX: Return empty (handled via mammoth text extraction)
+   */
+  async prepareDocument(
+    buffer: Buffer,
+    mimeType: string
+  ): Promise<VisionContent[]> {
+    if (mimeType === 'application/pdf') {
+      return this.preparePdfDocument(buffer);
+    }
+
+    if (mimeType.startsWith('image/')) {
+      return this.prepareImageDocument(buffer, mimeType);
+    }
+
+    // DOCX text extraction handled by DocumentParserService (not here)
+    // Vision API is only for images; PDFs/DOCX use text extraction path
+    if (mimeType.includes('wordprocessingml')) {
+      // Return empty - DOCX handled via mammoth text extraction in DocumentParserService
+      console.log('[ClaudeClient] DOCX detected, will use text extraction');
+      return [];
+    }
+
+    throw new Error(`Unsupported MIME type for vision: ${mimeType}`);
+  }
+
+  private async preparePdfDocument(buffer: Buffer): Promise<VisionContent[]> {
+    // For MVP: Use pdf-parse to get text, skip image conversion
+    // Future: Convert PDF pages to images using pdf2pic for scanned docs
+
+    // Simple approach: Return text extracted from PDF
+    // Claude can process this directly without vision
+    // pdf-parse v2 uses class-based API
+    const parser = new PDFParse({ data: buffer });
+    try {
+      const result = await parser.getText();
+
+      // For now, we'll handle PDF text extraction separately
+      // Vision is primarily for scanned docs and images
+      console.log(
+        '[ClaudeClient] PDF detected, extracted text:',
+        result.total,
+        'pages'
+      );
+
+      // Return empty for now - PDFs handled via text extraction
+      // In production, use pdf2pic for image-based PDFs (scans)
+      return [];
+    } finally {
+      await parser.destroy();
+    }
+  }
+
+  private prepareImageDocument(
+    buffer: Buffer,
+    mimeType: string
+  ): VisionContent[] {
+    const base64 = buffer.toString('base64');
+    const mediaType = mimeType as VisionContent['source']['media_type'];
+
+    return [
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: base64,
+        },
+      },
+    ];
   }
 }
 

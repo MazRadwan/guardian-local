@@ -38,6 +38,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'How do you protect patient data?',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -45,6 +46,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 2,
           questionNumber: 1,
           questionText: 'What security measures are in place?',
+          questionType: 'text',
         }),
       ]
 
@@ -84,6 +86,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: Math.floor(i / 5) + 1,
           questionNumber: (i % 5) + 1,
           questionText: `Question ${i + 1}: Describe your approach to ${i + 1}`,
+          questionType: 'text',
         })
       )
 
@@ -118,6 +121,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Do you comply with financial regulations?',
+          questionType: 'text',
           questionMetadata: {
             required: true,
             helpText: 'Include details about regulatory compliance',
@@ -156,6 +160,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'How do you handle customer data?',
+          questionType: 'text',
           // No metadata
         }),
       ]
@@ -191,6 +196,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 2,
           questionNumber: 2,
           questionText: 'Security Q2',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -198,6 +204,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Privacy Q1',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -205,6 +212,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 2,
           questionNumber: 1,
           questionText: 'Security Q1',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -212,6 +220,7 @@ describe('WordExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 2,
           questionText: 'Privacy Q2',
+          questionType: 'text',
         }),
       ]
 

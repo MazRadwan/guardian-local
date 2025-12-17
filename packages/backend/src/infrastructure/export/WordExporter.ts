@@ -22,6 +22,8 @@ import {
   QuestionnaireData,
 } from '../../application/interfaces/IWordExporter'
 import { Question } from '../../domain/entities/Question'
+import { Vendor } from '../../domain/entities/Vendor'
+import { Assessment } from '../../domain/entities/Assessment'
 
 export class WordExporter implements IWordExporter {
   /**

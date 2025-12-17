@@ -47,6 +47,7 @@ export async function closeTestDb() {
 export async function truncateAllTables() {
   await testDb.execute(sql`
     TRUNCATE TABLE
+      files,
       messages,
       conversations,
       questions,

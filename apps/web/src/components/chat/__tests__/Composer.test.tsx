@@ -94,7 +94,8 @@ describe('Composer', () => {
       await userEvent.type(textarea, 'Test message');
       await userEvent.click(sendButton);
 
-      expect(mockOnSendMessage).toHaveBeenCalledWith('Test message');
+      // Epic 16.6.9: onSendMessage now accepts optional attachments param
+      expect(mockOnSendMessage).toHaveBeenCalledWith('Test message', undefined);
       expect(mockOnSendMessage).toHaveBeenCalledTimes(1);
     });
 
@@ -107,7 +108,7 @@ describe('Composer', () => {
       await userEvent.type(textarea, '  Hello world  ');
       await userEvent.click(sendButton);
 
-      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello world');
+      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello world', undefined);
     });
 
     it('clears textarea after sending', async () => {
@@ -156,7 +157,7 @@ describe('Composer', () => {
       await userEvent.type(textarea, 'Hello');
       fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
-      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello');
+      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello', undefined);
     });
 
     it('creates new line when Shift+Enter pressed', async () => {
@@ -298,19 +299,23 @@ describe('Composer', () => {
     });
   });
 
-  // File upload (stub)
-  describe('File Upload (Stub)', () => {
-    it('file upload button logs to console (stub implementation)', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-
+  // File upload (Epic 16)
+  describe('File Upload', () => {
+    it('file upload button is disabled when wsAdapter or conversationId not provided', async () => {
+      // Without wsAdapter and conversationId, upload should be disabled
       render(<Composer onSendMessage={mockOnSendMessage} />);
 
       const uploadButton = screen.getByLabelText('Attach file');
-      await userEvent.click(uploadButton);
+      expect(uploadButton).toBeDisabled();
+    });
 
-      expect(consoleSpy).toHaveBeenCalledWith('File upload clicked (not yet implemented)');
+    it('has hidden file input for upload', () => {
+      render(<Composer onSendMessage={mockOnSendMessage} />);
 
-      consoleSpy.mockRestore();
+      // File input should exist but be hidden
+      const fileInput = document.querySelector('input[type="file"]');
+      expect(fileInput).toBeTruthy();
+      expect(fileInput).toHaveClass('hidden');
     });
   });
 

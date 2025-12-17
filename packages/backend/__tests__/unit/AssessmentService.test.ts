@@ -32,6 +32,7 @@ describe('AssessmentService', () => {
       findByVendorId: jest.fn(),
       findByCreatedBy: jest.fn(),
       update: jest.fn(),
+      updateStatus: jest.fn(),
       delete: jest.fn(),
       list: jest.fn(),
     }

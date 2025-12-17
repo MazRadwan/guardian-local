@@ -21,6 +21,7 @@ const mockMessageRepo: jest.Mocked<IMessageRepository> = {
   create: jest.fn(),
   findById: jest.fn(),
   findByConversationId: jest.fn(),
+  findFirstUserMessage: jest.fn(),
   getHistory: jest.fn(),
   count: jest.fn(),
   delete: jest.fn(),

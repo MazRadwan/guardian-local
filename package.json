@@ -35,5 +35,8 @@
   "dependencies": {
     "date-fns": "^4.1.0",
     "socket.io-client": "^4.8.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["bcrypt"]
   }
 }

@@ -30,12 +30,26 @@ export interface EmbeddedComponent {
   };
 }
 
+/**
+ * Epic 16.6.8: File attachment metadata for chat messages
+ * Epic 16.6.9: storagePath removed - never exposed to client
+ *              (files table stores it, resolved via fileId for downloads)
+ */
+export interface MessageAttachment {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface ChatMessage {
   id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   components?: EmbeddedComponent[];
   timestamp?: Date;
+  /** Epic 16.6.8: File attachments sent with this message */
+  attachments?: MessageAttachment[];
 }
 
 export interface StreamEvent {
@@ -72,6 +86,53 @@ export interface ExportStatusErrorPayload {
   error: string;
 }
 
+// Epic 16: Document upload event payloads
+export interface UploadProgressEvent {
+  conversationId: string;
+  uploadId: string;
+  progress: number;
+  stage: 'storing' | 'parsing' | 'complete' | 'error';
+  message: string;
+  error?: string;
+}
+
+export interface IntakeContextResult {
+  conversationId: string;
+  uploadId: string;
+  success: boolean;
+  context: {
+    vendorName: string | null;
+    solutionName: string | null;
+    solutionType: string | null;
+    industry: string | null;
+    features: string[];
+    claims: string[];
+    complianceMentions: string[];
+  } | null;
+  suggestedQuestions: string[];
+  coveredCategories: string[];
+  gapCategories: string[];
+  confidence: number;
+  error?: string;
+  /** Epic 16.6.8: File metadata for message attachment display */
+  fileMetadata?: MessageAttachment;
+}
+
+export interface ScoringParseResult {
+  conversationId: string;
+  uploadId: string;
+  success: boolean;
+  assessmentId: string | null;
+  vendorName: string | null;
+  responseCount: number;
+  expectedCount: number | null;
+  isComplete: boolean;
+  confidence: number;
+  error?: string;
+  /** Epic 16.6.8: File metadata for message attachment display */
+  fileMetadata?: MessageAttachment;
+}
+
 /**
  * Payload for questionnaire_ready event from backend
  */
@@ -104,6 +165,8 @@ interface BackendMessage {
   content: string | { text: string; components?: any[] };
   createdAt: string;
   components?: any[];
+  // Epic 16.6.8: Attachments from backend
+  attachments?: MessageAttachment[];
 }
 
 // Backend error format
@@ -128,6 +191,7 @@ function normalizeComponents(components?: any[]): EmbeddedComponent[] | undefine
 
 /**
  * Normalize message from backend format to UI format
+ * Epic 16.6.8: Now includes attachments passthrough
  */
 function normalizeMessage(backendMessage: BackendMessage): ChatMessage {
   // Handle content as string OR { text, components }
@@ -150,6 +214,8 @@ function normalizeMessage(backendMessage: BackendMessage): ChatMessage {
     content: contentText,
     components,
     timestamp: new Date(backendMessage.createdAt),
+    // Epic 16.6.8: Pass through attachments for file display in chat
+    attachments: backendMessage.attachments,
   };
 }
 
@@ -231,7 +297,13 @@ export class WebSocketClient {
     }
   }
 
-  sendMessage(content: string, conversationId: string): void {
+  /**
+   * Epic 16.6.8: Send message with optional attachments
+   * @param content - Message text content (can be empty if attachments present)
+   * @param conversationId - Target conversation ID
+   * @param attachments - Optional file attachments (from document upload)
+   */
+  sendMessage(content: string, conversationId: string, attachments?: MessageAttachment[]): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
@@ -240,7 +312,9 @@ export class WebSocketClient {
     }
     this.socket.emit('send_message', {
       conversationId,
-      content
+      content,
+      // Epic 16.6.8: Include attachments if provided
+      ...(attachments && attachments.length > 0 && { attachments }),
     });
   }
 
@@ -627,12 +701,62 @@ export class WebSocketClient {
     if (!this.socket) throw new Error('WebSocket not initialized');
 
     const handler = (data: ExportStatusErrorPayload) => {
-      console.error('[WebSocket] Export status error:', data);
+      // Let callback decide logging level (e.g., "Conversation not found" is expected during deletion)
       callback(data);
     };
 
     this.socket.on('export_status_error', handler);
     return () => this.socket?.off('export_status_error', handler);
+  }
+
+  // Epic 16: Document upload event handlers
+
+  /**
+   * Subscribe to upload_progress events
+   * Emitted by backend during document upload processing
+   */
+  onUploadProgress(callback: (data: UploadProgressEvent) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: UploadProgressEvent) => {
+      console.log('[WebSocket] Upload progress:', data.stage, data.progress + '%');
+      callback(data);
+    };
+
+    this.socket.on('upload_progress', handler);
+    return () => this.socket?.off('upload_progress', handler);
+  }
+
+  /**
+   * Subscribe to intake_context_ready events
+   * Emitted when intake document parsing completes
+   */
+  onIntakeContextReady(callback: (data: IntakeContextResult) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: IntakeContextResult) => {
+      console.log('[WebSocket] Intake context ready:', data.success ? 'success' : 'failed');
+      callback(data);
+    };
+
+    this.socket.on('intake_context_ready', handler);
+    return () => this.socket?.off('intake_context_ready', handler);
+  }
+
+  /**
+   * Subscribe to scoring_parse_ready events
+   * Emitted when scoring document parsing completes
+   */
+  onScoringParseReady(callback: (data: ScoringParseResult) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringParseResult) => {
+      console.log('[WebSocket] Scoring parse ready:', data.success ? 'success' : 'failed');
+      callback(data);
+    };
+
+    this.socket.on('scoring_parse_ready', handler);
+    return () => this.socket?.off('scoring_parse_ready', handler);
   }
 
 }

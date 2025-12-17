@@ -1,6 +1,7 @@
 import { pgTable, uuid, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { assessments } from './assessments'
+import type { ConversationContext } from '../../../domain/entities/Conversation.js'
 
 export const conversations = pgTable(
   'conversations',
@@ -18,10 +19,8 @@ export const conversations = pgTable(
 
     // Session state
     status: text('status').notNull().$type<'active' | 'completed'>().default('active'),
-    context: jsonb('context').$type<{
-      lastIntent?: string
-      currentStep?: string
-    }>(),
+    // Domain type is source of truth for context structure (Epic 16: includes intakeContext)
+    context: jsonb('context').$type<ConversationContext>(),
 
     // Timestamps
     startedAt: timestamp('started_at').defaultNow().notNull(),

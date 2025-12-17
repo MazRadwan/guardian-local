@@ -66,7 +66,7 @@ describe('QuestionnaireReadyService', () => {
       expect(result.emitEvent).toBeDefined();
       expect(result.emitEvent?.event).toBe('questionnaire_ready');
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.assessmentType).toBe('quick');
       expect(payload.estimatedQuestions).toBe(35); // Default for quick
     });
@@ -80,7 +80,7 @@ describe('QuestionnaireReadyService', () => {
       const result = await service.handle(input, baseContext);
 
       expect(result.handled).toBe(true);
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.assessmentType).toBe('comprehensive');
       expect(payload.estimatedQuestions).toBe(90); // Default for comprehensive
     });
@@ -97,7 +97,7 @@ describe('QuestionnaireReadyService', () => {
       const result = await service.handle(input, baseContext);
 
       expect(result.handled).toBe(true);
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.assessmentType).toBe('category_focused');
       expect(payload.selectedCategories).toEqual(['Security', 'Privacy']);
     });
@@ -117,7 +117,7 @@ describe('QuestionnaireReadyService', () => {
       const result = await service.handle(input, baseContext);
 
       expect(result.handled).toBe(true);
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.vendorName).toBe('Acme AI');
       expect(payload.solutionName).toBe('AI Assistant Pro');
       expect(payload.contextSummary).toBe('Healthcare AI solution for diagnostics');
@@ -132,7 +132,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.vendorName).toBeNull();
       expect(payload.solutionName).toBeNull();
       expect(payload.contextSummary).toBeNull();
@@ -234,7 +234,7 @@ describe('QuestionnaireReadyService', () => {
     it('should include conversationId in payload', async () => {
       const result = await service.handle(baseInput, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.conversationId).toBe('conv-123');
     });
 
@@ -262,7 +262,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(42);
     });
 
@@ -274,7 +274,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(35);
     });
 
@@ -286,7 +286,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(90);
     });
 
@@ -298,7 +298,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(50);
     });
   });
@@ -315,7 +315,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.vendorName).toBeNull();
     });
 
@@ -331,7 +331,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.vendorName).toBeNull();
       expect(payload.solutionName).toBeNull();
     });
@@ -347,7 +347,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.vendorName).toBe('Acme Corp');
     });
 
@@ -362,7 +362,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.selectedCategories).toBeNull();
     });
 
@@ -377,7 +377,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.selectedCategories).toEqual(['Security', 'Privacy', 'Data']);
     });
 
@@ -392,7 +392,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.selectedCategories).toBeNull();
     });
 
@@ -407,7 +407,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(35); // Default for quick
     });
 
@@ -422,7 +422,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(90); // Default for comprehensive
     });
 
@@ -437,7 +437,7 @@ describe('QuestionnaireReadyService', () => {
 
       const result = await service.handle(input, baseContext);
 
-      const payload = result.emitEvent?.payload as QuestionnaireReadyPayload;
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
       expect(payload.estimatedQuestions).toBe(35); // Default for quick
     });
   });

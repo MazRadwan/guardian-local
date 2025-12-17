@@ -7,27 +7,32 @@
 import puppeteer, { Browser } from 'puppeteer'
 import * as fs from 'fs/promises'
 import * as path from 'path'
-import { fileURLToPath } from 'url'
-import { dirname } from 'path'
 import {
   IPDFExporter,
   QuestionnaireData,
 } from '../../application/interfaces/IPDFExporter'
 import { Question } from '../../domain/entities/Question'
 
-// ES module equivalent of __dirname
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
 export class PDFExporter implements IPDFExporter {
   private templatePath: string
 
-  constructor() {
-    this.templatePath = path.join(
-      __dirname,
-      'templates',
-      'questionnaire-template.html'
-    )
+  /**
+   * Creates a PDFExporter instance.
+   *
+   * @param templatePath - Absolute path to the HTML template file.
+   *   In production (ESM), compute this from import.meta.url at the composition root.
+   *   In tests, compute from process.cwd() or pass a known test fixture path.
+   *
+   * @throws Error if templatePath is not provided
+   */
+  constructor(templatePath: string) {
+    if (!templatePath) {
+      throw new Error(
+        'PDFExporter requires templatePath. ' +
+          'Compute it from import.meta.url at the composition root (src/index.ts).'
+      )
+    }
+    this.templatePath = templatePath
   }
 
   /**

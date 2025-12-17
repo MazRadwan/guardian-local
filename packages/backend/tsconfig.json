@@ -20,7 +20,7 @@
     "composite": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@guardian/shared": ["../shared/src"]
+      "@guardian/shared": ["../shared/dist"]
     }
   },
   "include": ["src/**/*"],

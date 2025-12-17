@@ -7,6 +7,18 @@ export type AssessmentType = 'quick' | 'comprehensive' | 'category_focused'
 export type AssessmentStatus = 'draft' | 'questions_generated' | 'exported' | 'cancelled'
 export type QuestionType = 'text' | 'enum' | 'boolean'
 
+/**
+ * Message attachment metadata (Epic 16.6.8)
+ * Used for file uploads displayed in chat stream
+ */
+export interface MessageAttachment {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+}
+
 // Generation phase types (Story 13.5.1)
 // Used by backend to emit phase events and frontend to track progress
 

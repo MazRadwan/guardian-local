@@ -63,6 +63,10 @@ GUARDIAN_Training_Guide_v1.0.md
 apps/web/playwright-report/
 apps/web/test-results/
 
+# File uploads (Epic 16 - may contain PHI)
+packages/backend/uploads/
+uploads/
+
 # TypeScript build output in shared package
 packages/shared/src/**/*.js
 packages/shared/src/**/*.d.ts

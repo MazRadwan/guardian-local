@@ -6,6 +6,18 @@ import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
 import { DownloadButton } from './DownloadButton';
+import { FileChipInChat } from './FileChipInChat';
+
+/**
+ * Epic 16.6.8: File attachment metadata for chat messages
+ */
+export interface MessageAttachment {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+}
 
 export interface MessageComponent {
   type: 'button' | 'link' | 'form' | 'download' | 'error';
@@ -21,6 +33,10 @@ export interface ChatMessageProps {
   messageIndex?: number;
   onRegenerate?: (messageIndex: number) => void;
   isRegenerating?: boolean;
+  /** Epic 16.6.8: File attachments to display in message */
+  attachments?: MessageAttachment[];
+  /** Epic 16.6.8: Callback when user clicks attachment to download */
+  onDownloadAttachment?: (attachment: MessageAttachment) => void;
 }
 
 export function ChatMessage({
@@ -32,6 +48,8 @@ export function ChatMessage({
   messageIndex,
   onRegenerate,
   isRegenerating = false,
+  attachments = [],
+  onDownloadAttachment,
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const isSystem = role === 'system';
@@ -117,6 +135,21 @@ export function ChatMessage({
             {content}
           </ReactMarkdown>
         </div>
+
+        {/* Epic 16.6.8: File attachments */}
+        {attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2" data-testid="message-attachments">
+            {attachments.map((attachment) => (
+              <FileChipInChat
+                key={attachment.fileId}
+                filename={attachment.filename}
+                fileId={attachment.fileId}
+                mimeType={attachment.mimeType}
+                onClick={() => onDownloadAttachment?.(attachment)}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Embedded components */}
         {components.length > 0 && (

@@ -5,12 +5,15 @@ import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
+import type { IFileRepository } from '../../application/interfaces/IFileRepository.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
 import { QuestionnaireReadyService } from '../../application/services/QuestionnaireReadyService.js';
 import { assessmentModeTools } from '../ai/tools/index.js';
 import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
+import type { IntakeDocumentContext } from '../../domain/entities/Conversation.js';
+import type { MessageAttachment } from '../../domain/entities/Message.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -33,6 +36,8 @@ interface SendMessagePayload {
     type: 'button' | 'link' | 'code' | 'form';
     data: unknown;
   }>;
+  // Epic 16.6.9: File attachments now only send fileId (server validates and enriches)
+  attachments?: Array<{ fileId: string }>;
 }
 
 interface GetHistoryPayload {
@@ -71,7 +76,8 @@ export class ChatServer {
     private readonly vendorService: VendorService,
     private readonly questionnaireReadyService: QuestionnaireReadyService,
     private readonly questionnaireGenerationService: QuestionnaireGenerationService,
-    private readonly questionService: QuestionService
+    private readonly questionService: QuestionService,
+    private readonly fileRepository: IFileRepository
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -83,6 +89,7 @@ export class ChatServer {
     this.setupNamespace();
 
     // Clean up stale pending creations every 5 seconds
+    // .unref() allows Node.js to exit even if interval is running (for tests)
     setInterval(() => {
       const now = Date.now();
       for (const [userId, { timestamp }] of this.pendingConversationCreations.entries()) {
@@ -90,12 +97,15 @@ export class ChatServer {
           this.pendingConversationCreations.delete(userId);
         }
       }
-    }, 5000);
+    }, 5000).unref();
   }
 
   /**
    * Build conversation context for Claude API
    * Loads recent message history and selects appropriate system prompt
+   *
+   * Epic 16.6.1: Injects stored intake context as synthetic assistant message
+   * This ensures Claude sees uploaded document context without a visible chat message
    */
   private async buildConversationContext(
     conversationId: string
@@ -123,6 +133,21 @@ export class ChatServer {
         content: typeof msg.content === 'string' ? msg.content : msg.content.text || '',
       }));
 
+    // Epic 16.6.1: Inject stored intake context as synthetic assistant message
+    // This preserves base system prompt for caching while giving Claude document knowledge
+    // The synthetic message is prepended so Claude "remembers" analyzing the document
+    if (conversation.context?.intakeContext) {
+      const contextMessage = this.formatIntakeContextForClaude(
+        conversation.context.intakeContext,
+        conversation.context.intakeGapCategories
+      );
+      // Prepend as first assistant message (Claude sees it, user doesn't)
+      messages.unshift({
+        role: 'assistant',
+        content: contextMessage,
+      });
+    }
+
     // Get system prompt (and cache metadata) based on conversation mode
     // Always include tool instructions (tool-based trigger is now the only path)
     const promptCache = this.promptCacheManager.ensureCached(conversation.mode, {
@@ -138,6 +163,33 @@ export class ChatServer {
         cachedPromptId: promptCache.cachedPromptId,
       },
     };
+  }
+
+  /**
+   * Format stored intake context as synthetic assistant message for Claude
+   *
+   * Epic 16.6.1: This is NOT displayed to users - it's injected into Claude's message history
+   * so Claude "remembers" having analyzed the uploaded document.
+   */
+  private formatIntakeContextForClaude(
+    ctx: IntakeDocumentContext,
+    gapCategories?: string[]
+  ): string {
+    const parts: string[] = [
+      'I have analyzed the uploaded document and extracted the following context:',
+    ];
+
+    if (ctx.vendorName) parts.push(`- Vendor: ${ctx.vendorName}`);
+    if (ctx.solutionName) parts.push(`- Solution: ${ctx.solutionName}`);
+    if (ctx.solutionType) parts.push(`- Type: ${ctx.solutionType}`);
+    if (ctx.industry) parts.push(`- Industry: ${ctx.industry}`);
+    if (ctx.features?.length) parts.push(`- Key Features: ${ctx.features.slice(0, 5).join(', ')}`);
+    if (ctx.claims?.length) parts.push(`- Claims: ${ctx.claims.slice(0, 3).join(', ')}`);
+    if (ctx.complianceMentions?.length) parts.push(`- Compliance Mentions: ${ctx.complianceMentions.join(', ')}`);
+    if (gapCategories?.length) parts.push(`- Areas Needing Clarification: ${gapCategories.join(', ')}`);
+
+    parts.push('', 'I will use this context to assist with the assessment.');
+    return parts.join('\n');
   }
 
   /**
@@ -186,6 +238,14 @@ export class ChatServer {
     // Connection handler
     chatNamespace.on('connection', async (socket: AuthenticatedSocket) => {
       console.log(`[ChatServer] Client connected: ${socket.id} (User: ${socket.userId})`);
+
+      // Join user-specific room for receiving document upload progress events
+      // This room is used by DocumentUploadController to emit upload_progress,
+      // intake_context_ready, and scoring_parse_ready events
+      if (socket.userId) {
+        socket.join(`user:${socket.userId}`);
+        console.log(`[ChatServer] Socket ${socket.id} joined room user:${socket.userId}`);
+      }
 
       // Check if client wants to resume an existing conversation
       const resumeConversationId = socket.handshake.auth.conversationId;
@@ -245,6 +305,7 @@ export class ChatServer {
           // CRITICAL: conversationId MUST be provided by client
           const conversationId = payload.conversationId;
           const messageText = payload.text || payload.content; // Support both formats
+          const attachments = payload.attachments; // Epic 16.6.8
 
           // Validate conversationId is provided
           if (!conversationId) {
@@ -255,11 +316,15 @@ export class ChatServer {
             return;
           }
 
-          // Validate message text
-          if (!messageText || typeof messageText !== 'string' || messageText.trim().length === 0) {
+          // Epic 16.6.8: Allow file-only messages (no text, but has attachments)
+          const hasAttachments = attachments && attachments.length > 0;
+          const hasText = messageText && typeof messageText === 'string' && messageText.trim().length > 0;
+
+          // Validate: must have text OR attachments (or both)
+          if (!hasText && !hasAttachments) {
             socket.emit('error', {
               event: 'send_message',
-              message: 'Message text required',
+              message: 'Message text or attachments required',
             });
             return;
           }
@@ -298,21 +363,61 @@ export class ChatServer {
             `[ChatServer] Message received from ${socket.userId} for conversation ${conversationId}`
           );
 
-          // Save user message
+          // Epic 16.6.9: Validate and enrich attachments
+          let enrichedAttachments: MessageAttachment[] | undefined;
+          if (hasAttachments) {
+            enrichedAttachments = [];
+            for (const att of attachments) {
+              // Validate: file exists AND belongs to this user AND this conversation
+              const file = await this.fileRepository.findByIdAndConversation(att.fileId, conversationId);
+
+              if (!file) {
+                socket.emit('error', {
+                  event: 'send_message',
+                  message: `Invalid attachment: file ${att.fileId} not found or not authorized`,
+                });
+                return;
+              }
+
+              // Verify user owns the file
+              if (file.userId !== socket.userId) {
+                socket.emit('error', {
+                  event: 'send_message',
+                  message: 'Attachment not authorized',
+                });
+                return;
+              }
+
+              // Enrich with server-side metadata (don't trust client)
+              // Epic 16.6.9: storagePath intentionally NOT persisted in messages
+              // (it stays in files table, resolved via fileId for downloads)
+              enrichedAttachments.push({
+                fileId: file.id,
+                filename: file.filename,
+                mimeType: file.mimeType,
+                size: file.size,
+              });
+            }
+          }
+
+          // Save user message with enriched attachments (not client-supplied)
           const message = await this.conversationService.sendMessage({
             conversationId,
             role: 'user',
             content: {
-              text: messageText,
+              text: messageText || '', // Allow empty text for file-only messages
               components: payload.components,
             },
+            attachments: enrichedAttachments,
           });
 
-          // Emit confirmation only (frontend already added user message to UI)
+          // Emit confirmation with attachments
+          // Epic 16.6.9: enrichedAttachments already excludes storagePath (never persisted)
           socket.emit('message_sent', {
             messageId: message.id,
             conversationId: message.conversationId,
             timestamp: message.createdAt,
+            attachments: enrichedAttachments,
           });
 
           // Check if this is the first user message and emit title update
@@ -494,6 +599,16 @@ export class ChatServer {
               role: msg.role,
               content: msg.content,
               createdAt: msg.createdAt,
+              // Epic 16.6.9: Pass through attachments (storagePath no longer stored,
+              // but strip defensively for backward compat with old messages)
+              ...(msg.attachments && msg.attachments.length > 0 && {
+                attachments: msg.attachments.map(att => ({
+                  fileId: att.fileId,
+                  filename: att.filename,
+                  mimeType: att.mimeType,
+                  size: att.size,
+                })),
+              }),
             })),
           });
         } catch (error) {

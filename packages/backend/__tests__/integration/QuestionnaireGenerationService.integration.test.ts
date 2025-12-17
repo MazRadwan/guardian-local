@@ -112,11 +112,11 @@ describe('QuestionnaireGenerationService Integration', () => {
       .insert(conversations)
       .values({
         userId: testUserId,
-        title: 'Test Conversation',
         mode: 'assessment',
-        metadata: {
-          vendorName: 'Test Vendor',
-          solutionName: 'Test Solution',
+        status: 'active',
+        context: {
+          lastIntent: 'assessment',
+          currentStep: 'questionnaire_generation',
         },
       })
       .returning();
@@ -211,8 +211,8 @@ describe('QuestionnaireGenerationService Integration', () => {
         0
       );
 
-      // Count questions in markdown (numbered list items)
-      const markdownQuestionMatches = result.markdown.match(/^\d+\./gm) || [];
+      // Count questions in markdown (bold numbered format: **1.** etc.)
+      const markdownQuestionMatches = result.markdown.match(/^\*\*\d+\.\*\*/gm) || [];
       const markdownQuestionCount = markdownQuestionMatches.length;
 
       // They should match exactly

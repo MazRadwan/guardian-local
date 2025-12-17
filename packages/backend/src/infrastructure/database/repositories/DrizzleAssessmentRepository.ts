@@ -17,14 +17,7 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
     const [created] = await db
       .insert(assessments)
       .values({
-        id: persistence.id,
-        vendorId: persistence.vendorId,
-        assessmentType: persistence.assessmentType,
-        solutionName: persistence.solutionName,
-        solutionType: persistence.solutionType,
-        status: persistence.status,
-        assessmentMetadata: persistence.assessmentMetadata,
-        createdBy: persistence.createdBy,
+        ...persistence
       })
       .returning()
 

@@ -106,10 +106,10 @@ export class Assessment {
   toPersistence(): {
     id: string
     vendorId: string
-    assessmentType: string
+    assessmentType: AssessmentTypeValue
     solutionName: string | null
     solutionType: string | null
-    status: string
+    status: AssessmentStatusValue
     assessmentMetadata: AssessmentMetadata | null
     createdAt: Date
     updatedAt: Date

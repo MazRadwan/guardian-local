@@ -382,7 +382,7 @@ describe('QuestionnaireGenerationService', () => {
     });
 
     it('handles quick assessment type', async () => {
-      const schema = fixtureQuestionnaireSchema({ assessmentType: 'quick', questionCount: 30 });
+      const schema = fixtureQuestionnaireSchema({ assessmentType: 'quick' });
       mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
 
       const result = await service.generate({
@@ -395,7 +395,7 @@ describe('QuestionnaireGenerationService', () => {
     });
 
     it('handles category_focused assessment type', async () => {
-      const schema = fixtureQuestionnaireSchema({ assessmentType: 'category_focused', questionCount: 50 });
+      const schema = fixtureQuestionnaireSchema({ assessmentType: 'category_focused' });
       mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
 
       const result = await service.generate({
@@ -468,7 +468,7 @@ describe('QuestionnaireGenerationService', () => {
   describe('assessment creation', () => {
     it('uses default vendor name if schema lacks one', async () => {
       const schema = createValidSchema();
-      schema.metadata.vendorName = undefined;
+      schema.metadata.vendorName = null;
       mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
 
       await service.generate({
@@ -486,7 +486,7 @@ describe('QuestionnaireGenerationService', () => {
 
     it('uses default solution name if schema lacks one', async () => {
       const schema = createValidSchema();
-      schema.metadata.solutionName = undefined;
+      schema.metadata.solutionName = null;
       mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
 
       await service.generate({
@@ -509,6 +509,8 @@ describe('QuestionnaireGenerationService', () => {
         version: '1.0',
         metadata: {
           assessmentType: 'comprehensive',
+          vendorName: 'Test Vendor',
+          solutionName: 'Test Solution',
           generatedAt: new Date().toISOString(),
           questionCount: 4,
         },
@@ -517,6 +519,7 @@ describe('QuestionnaireGenerationService', () => {
             id: 'privacy_risk',
             title: 'Privacy Risk',
             riskDimension: 'privacy_risk',
+            description: 'Privacy risk assessment section',
             questions: [
               {
                 id: 'q1',
@@ -580,6 +583,8 @@ describe('QuestionnaireGenerationService', () => {
         version: '1.0',
         metadata: {
           assessmentType: 'comprehensive',
+          vendorName: 'Test Vendor',
+          solutionName: 'Test Solution',
           generatedAt: new Date().toISOString(),
           questionCount: 2,
         },
@@ -588,6 +593,7 @@ describe('QuestionnaireGenerationService', () => {
             id: 'clinical_risk',
             title: 'Clinical Risk',
             riskDimension: 'clinical_risk',
+            description: 'Clinical risk section',
             questions: [
               {
                 id: 'q1',
@@ -603,6 +609,7 @@ describe('QuestionnaireGenerationService', () => {
             id: 'security_risk',
             title: 'Security Risk',
             riskDimension: 'security_risk',
+            description: 'Security risk section',
             questions: [
               {
                 id: 'q2',

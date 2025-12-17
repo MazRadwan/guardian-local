@@ -24,7 +24,8 @@ export class RateLimiter {
     this.windowMs = windowMs;
 
     // Cleanup expired entries every minute
-    setInterval(() => this.cleanup(), 60000);
+    // .unref() allows Jest to exit without waiting for this timer
+    setInterval(() => this.cleanup(), 60000).unref();
   }
 
   /**

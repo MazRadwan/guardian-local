@@ -31,6 +31,7 @@ import { DrizzleMessageRepository } from './infrastructure/database/repositories
 import { DrizzleVendorRepository } from './infrastructure/database/repositories/DrizzleVendorRepository.js';
 import { DrizzleAssessmentRepository } from './infrastructure/database/repositories/DrizzleAssessmentRepository.js';
 import { DrizzleQuestionRepository } from './infrastructure/database/repositories/DrizzleQuestionRepository.js';
+import { DrizzleFileRepository } from './infrastructure/database/repositories/DrizzleFileRepository.js';
 import { ClaudeClient } from './infrastructure/ai/ClaudeClient.js';
 import { JWTProvider } from './infrastructure/auth/JWTProvider.js';
 import { AuthController } from './infrastructure/http/controllers/AuthController.js';
@@ -38,12 +39,17 @@ import { VendorController } from './infrastructure/http/controllers/VendorContro
 import { AssessmentController } from './infrastructure/http/controllers/AssessmentController.js';
 import { QuestionController } from './infrastructure/http/controllers/QuestionController.js';
 import { ExportController } from './infrastructure/http/controllers/ExportController.js';
+import { DocumentUploadController } from './infrastructure/http/controllers/DocumentUploadController.js';
 import { createAuthRoutes } from './infrastructure/http/routes/auth.routes.js';
 import { createVendorRoutes } from './infrastructure/http/routes/vendor.routes.js';
 import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.routes.js';
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
 import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
+import { createDocumentRoutes } from './infrastructure/http/routes/document.routes.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
+import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
+import { createFileStorage } from './infrastructure/storage/index.js';
+import { FileValidationService } from './application/services/FileValidationService.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
@@ -70,6 +76,7 @@ const messageRepo = new DrizzleMessageRepository();
 const vendorRepo = new DrizzleVendorRepository();
 const assessmentRepo = new DrizzleAssessmentRepository();
 const questionRepo = new DrizzleQuestionRepository();
+const fileRepo = new DrizzleFileRepository();
 
 // Initialize providers
 const jwtProvider = new JWTProvider(JWT_SECRET);
@@ -82,7 +89,13 @@ const promptCacheManager = new PromptCacheManager(
 );
 
 // Initialize exporters
-const pdfExporter = new PDFExporter();
+// Compute template path from __dirname (derived from import.meta.url at top of file)
+// This works in ESM and the template will be copied to dist/ during build
+const pdfTemplatePath = resolve(
+  __dirname,
+  'infrastructure/export/templates/questionnaire-template.html'
+);
+const pdfExporter = new PDFExporter(pdfTemplatePath);
 const wordExporter = new WordExporter();
 const excelExporter = new ExcelExporter();
 
@@ -111,6 +124,14 @@ const exportService = new ExportService(
   excelExporter
 );
 
+// Initialize file storage and validation (Epic 16)
+const fileStorage = createFileStorage();
+const fileValidationService = new FileValidationService();
+const documentParserService = new DocumentParserService(
+  claudeClient,  // IClaudeClient
+  claudeClient   // IVisionClient - ClaudeClient implements both
+);
+
 // Initialize controllers
 const authController = new AuthController(authService);
 const vendorController = new VendorController(assessmentService);
@@ -131,9 +152,6 @@ server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentContr
 server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
 server.registerRoutes('/api', createQuestionRoutes(questionController, authService));
 
-// Finalize 404 handler (after all routes)
-server.finalize404Handler();
-
 // Initialize rate limiter (10 messages per user per minute)
 const rateLimiter = new RateLimiter(
   parseInt(process.env.RATE_LIMIT_MAX_MESSAGES || '10', 10),
@@ -152,11 +170,32 @@ const chatServer = new ChatServer(
   vendorService,
   questionnaireReadyService,
   questionnaireGenerationService,
-  questionService
+  questionService,
+  fileRepo
 );
 
 console.log('[App] ChatServer initialized');
-console.log('[App] Vendor, Assessment, and Question routes registered');
+
+// Initialize DocumentUploadController (Epic 16)
+// Must be after ChatServer to access the /chat namespace
+const chatNamespace = server.getIO().of('/chat');
+const documentUploadController = new DocumentUploadController(
+  fileStorage,
+  fileValidationService,
+  documentParserService,  // IIntakeDocumentParser
+  documentParserService,  // IScoringDocumentParser (same implementation)
+  conversationService,    // Ownership validation + save assistant messages
+  chatNamespace,
+  fileRepo                // Epic 16.6.9: File registration in database
+);
+
+// Register document routes (Epic 16)
+server.registerRoutes('/api/documents', createDocumentRoutes(documentUploadController, authService));
+
+// Finalize 404 handler (MUST be after all routes are registered)
+server.finalize404Handler();
+
+console.log('[App] Vendor, Assessment, Question, and Document routes registered');
 
 // Graceful shutdown handlers
 const shutdown = async (signal: string) => {

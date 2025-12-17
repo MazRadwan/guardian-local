@@ -177,6 +177,25 @@ export function useWebSocketEvents({
   // Handler 3: Handle WebSocket errors
   const handleError = useCallback(
     (errorMessage: string) => {
+      // "Conversation X not found" is expected when returning to a deleted/stale conversation
+      // This can happen when localStorage has a conversationId that no longer exists
+      const isConversationNotFound = /Conversation .+ not found/i.test(errorMessage);
+
+      if (isConversationNotFound) {
+        console.log('[useWebSocketEvents] Conversation not found (stale reference) - clearing and requesting new chat');
+        // Clear the stale activeConversationId
+        setActiveConversation(null);
+        // Clear localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('guardian_conversation_id');
+        }
+        // Request a new chat to be created
+        requestNewChat();
+        // Don't set error state - this is an expected recovery scenario
+        setLoading(false);
+        return;
+      }
+
       console.error('[useWebSocketEvents] Error received:', errorMessage);
       setError(errorMessage);
       finishStreaming();
@@ -191,7 +210,7 @@ export function useWebSocketEvents({
       useChatStore.getState().setQuestionnaireUIState('error');
       useChatStore.getState().setQuestionnaireError(errorMessage);
     },
-    [setError, finishStreaming, setLoading, setRegeneratingMessageIndex]
+    [setError, finishStreaming, setLoading, setRegeneratingMessageIndex, setActiveConversation, requestNewChat]
   );
 
   // Handler 4: Handle connection initialization/resume

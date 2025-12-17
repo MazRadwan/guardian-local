@@ -10,10 +10,13 @@
 
 *Assess privacy and data protection practices.*
 
-1. Does the vendor have a documented data protection policy?
+**1.** Does the vendor have a documented data protection policy?
 
-2. How is PHI encrypted at rest?
-   *Guidance: Look for AES-256 or equivalent.*
+
+**2.** How is PHI encrypted at rest?
+
+> *Guidance: Look for AES-256 or equivalent.*
+
 
 ---
 

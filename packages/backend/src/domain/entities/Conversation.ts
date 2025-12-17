@@ -1,9 +1,27 @@
 export type ConversationMode = 'consult' | 'assessment';
 export type ConversationStatus = 'active' | 'completed';
 
+/**
+ * Epic 16: Intake document context (silently stored, not displayed)
+ * Extracted from uploaded vendor documents for Claude's context
+ */
+export interface IntakeDocumentContext {
+  vendorName: string | null;
+  solutionName: string | null;
+  solutionType: string | null;
+  industry: string | null;
+  features: string[];
+  claims: string[];
+  complianceMentions: string[];
+}
+
 export interface ConversationContext {
   lastIntent?: string;
   currentStep?: string;
+  // Epic 16: Intake document context (silent storage)
+  intakeContext?: IntakeDocumentContext;
+  intakeGapCategories?: string[];
+  intakeParsedAt?: string;
 }
 
 export interface CreateConversationData {

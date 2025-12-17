@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
@@ -59,7 +59,8 @@ export interface WebSocketAdapterInterface {
   disconnect: () => void;
 
   // Messaging operations
-  sendMessage: (content: string, conversationId: string) => void;
+  /** Epic 16.6.8: Send message with optional attachments */
+  sendMessage: (content: string, conversationId: string, attachments?: MessageAttachment[]) => void;
   requestHistory: (conversationId: string, limit?: number) => void;
 
   // Conversation operations
@@ -76,6 +77,11 @@ export interface WebSocketAdapterInterface {
 
   // Story 13.9.2: Export status resume
   requestExportStatus: (conversationId: string) => void;
+
+  // Epic 16: Upload event subscriptions (return unsubscribe functions)
+  subscribeUploadProgress: (handler: (data: UploadProgressEvent) => void) => () => void;
+  subscribeIntakeContextReady: (handler: (data: IntakeContextResult) => void) => () => void;
+  subscribeScoringParseReady: (handler: (data: ScoringParseResult) => void) => () => void;
 }
 
 /**
@@ -159,8 +165,9 @@ export function useWebSocketAdapter({
     disconnect: wsHook.disconnect,
 
     // Messaging operations
-    sendMessage: (content: string, conversationId: string) => {
-      wsHook.sendMessage(content, conversationId);
+    // Epic 16.6.8: Pass attachments to underlying hook
+    sendMessage: (content: string, conversationId: string, attachments?: MessageAttachment[]) => {
+      wsHook.sendMessage(content, conversationId, attachments);
     },
 
     requestHistory: (conversationId: string, limit?: number) => {
@@ -198,6 +205,11 @@ export function useWebSocketAdapter({
     requestExportStatus: (conversationId: string) => {
       wsHook.requestExportStatus(conversationId);
     },
+
+    // Epic 16: Upload event subscriptions (delegate to wsHook)
+    subscribeUploadProgress: wsHook.subscribeUploadProgress,
+    subscribeIntakeContextReady: wsHook.subscribeIntakeContextReady,
+    subscribeScoringParseReady: wsHook.subscribeScoringParseReady,
   }), [
     wsHook.isConnected,
     wsHook.isConnecting,
@@ -212,5 +224,8 @@ export function useWebSocketAdapter({
     wsHook.requestExportStatus,
     wsHook.connect,
     wsHook.disconnect,
+    wsHook.subscribeUploadProgress,
+    wsHook.subscribeIntakeContextReady,
+    wsHook.subscribeScoringParseReady,
   ]);
 }

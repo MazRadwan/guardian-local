@@ -2,20 +2,19 @@ import { renderHook } from '@testing-library/react';
 import type { ExportReadyPayload } from '@/lib/websocket';
 import { useChatController } from '../useChatController';
 
-const mockUseChatStore = jest.fn();
-(mockUseChatStore as any).getState = jest.fn();
-jest.mock('@/stores/chatStore', () => ({
-  useChatStore: mockUseChatStore,
-}));
+// Fix TDZ: Define mocks inside factory, get references via requireMock
+jest.mock('@/stores/chatStore', () => {
+  const mock = jest.fn();
+  (mock as any).getState = jest.fn();
+  return { useChatStore: mock };
+});
 
-const mockUseQuestionnairePersistence = jest.fn();
 jest.mock('@/hooks/useQuestionnairePersistence', () => ({
-  useQuestionnairePersistence: mockUseQuestionnairePersistence,
+  useQuestionnairePersistence: jest.fn(),
 }));
 
-const mockUseWebSocketAdapter = jest.fn();
 jest.mock('@/hooks/useWebSocketAdapter', () => ({
-  useWebSocketAdapter: mockUseWebSocketAdapter,
+  useWebSocketAdapter: jest.fn(),
 }));
 
 jest.mock('@/hooks/useWebSocketEvents', () => ({
@@ -96,6 +95,11 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   useSearchParams: () => ({ get: jest.fn() }),
 }));
+
+// Get references via requireMock (after all mocks are defined)
+const mockUseChatStore = jest.requireMock('@/stores/chatStore').useChatStore;
+const mockUseQuestionnairePersistence = jest.requireMock('@/hooks/useQuestionnairePersistence').useQuestionnairePersistence;
+const mockUseWebSocketAdapter = jest.requireMock('@/hooks/useWebSocketAdapter').useWebSocketAdapter;
 
 describe('useChatController export persistence', () => {
   const mockRequestExportStatus = jest.fn();

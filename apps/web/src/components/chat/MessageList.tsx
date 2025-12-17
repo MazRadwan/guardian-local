@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, forwardRef, useState, useCallback } from 'react';
-import { ChatMessage } from './ChatMessage';
+import { ChatMessage, MessageAttachment } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { QuestionnaireMessage } from './QuestionnaireMessage';
 import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload } from '@/lib/websocket';
@@ -15,6 +15,8 @@ export interface MessageListProps {
   isStreaming?: boolean;
   onRegenerate?: (messageIndex: number) => void;
   regeneratingMessageIndex?: number | null;
+  /** Epic 16.6.8: Handler for downloading file attachments */
+  onDownloadAttachment?: (attachment: MessageAttachment) => void;
   /** Story 14.1.2: Inline questionnaire rendering props */
   questionnaire?: {
     payload: QuestionnaireReadyPayload;
@@ -33,7 +35,7 @@ export interface MessageListProps {
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, questionnaire }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -41,6 +43,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
 
     // Story 14.1.3: Track previous questionnaire visibility to detect appearance
     const prevQuestionnaireVisibleRef = useRef<boolean>(false);
+    // Track previous isLoading state to detect when typing indicator appears
+    const prevIsLoadingRef = useRef<boolean>(false);
 
     // Merged ref callback to ensure both parent ref and local ref point to same DOM node
     const mergedRef = useCallback((node: HTMLDivElement | null) => {
@@ -82,6 +86,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
 
     // Use useLayoutEffect for synchronous scroll updates to prevent visual lag (text going behind composer)
     // Story 14.1.3: Include questionnaire in deps so scroll fires when bubble appears (not just messages)
+    // Fix: Also scroll when typing indicator (isLoading) appears to prevent it from hiding behind composer
     React.useLayoutEffect(() => {
       const container = scrollContainerRef.current;
       if (!container) return;
@@ -91,12 +96,16 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       const questionnaireJustAppeared = isQuestionnaireVisible && !prevQuestionnaireVisibleRef.current;
       prevQuestionnaireVisibleRef.current = isQuestionnaireVisible;
 
-      // If streaming OR near bottom OR questionnaire just became visible, force scroll to bottom
-      // This ensures the questionnaire bubble scrolls into view when it first appears
-      if (isStreaming || isNearBottom || questionnaireJustAppeared) {
+      // Detect when typing indicator appears (isLoading transitions false → true)
+      const typingIndicatorJustAppeared = !!isLoading && !prevIsLoadingRef.current;
+      prevIsLoadingRef.current = !!isLoading;
+
+      // If streaming OR near bottom OR questionnaire just became visible OR typing indicator appeared, force scroll to bottom
+      // This ensures new content (questionnaire bubble, typing indicator) scrolls into view
+      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared) {
         container.scrollTop = container.scrollHeight;
       }
-    }, [messages, isStreaming, isNearBottom, questionnaire?.uiState, questionnaire?.insertIndex]);
+    }, [messages, isStreaming, isNearBottom, isLoading, questionnaire?.uiState, questionnaire?.insertIndex]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
@@ -174,6 +183,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                   messageIndex={index}
                   onRegenerate={onRegenerate}
                   isRegenerating={regeneratingMessageIndex === index}
+                  attachments={message.attachments as MessageAttachment[] | undefined}
+                  onDownloadAttachment={onDownloadAttachment}
                 />
               </React.Fragment>
             ))}

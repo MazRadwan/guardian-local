@@ -41,10 +41,8 @@ describe('ConversationService', () => {
       const adapter = createMockAdapter();
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
-      const focusComposer = jest.fn();
 
-      service.createConversation('consult', focusComposer);
+      service.createConversation('consult');
 
       // Should clear messages
       expect(store.clearMessages).toHaveBeenCalledTimes(1);
@@ -56,56 +54,16 @@ describe('ConversationService', () => {
       // Should request new conversation
       expect(adapter.startNewConversation).toHaveBeenCalledWith('consult');
 
-      // Should clear request flag
-      expect(clearRequestFlag).toHaveBeenCalledTimes(1);
-
-      // Should focus composer after delay
-      jest.advanceTimersByTime(100);
-      expect(focusComposer).toHaveBeenCalledTimes(1);
-
       // Should not set error
       expect(store.setError).not.toHaveBeenCalled();
     });
 
-    it('should abort streaming before creating new conversation', () => {
-      const adapter = createMockAdapter();
-      const store = createMockStore();
-      const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
-
-      service.createConversation('consult');
-
-      // Should finish streaming
-      expect(store.finishStreaming).toHaveBeenCalledTimes(1);
-
-      // Should abort stream
-      expect(adapter.abortStream).toHaveBeenCalledTimes(1);
-
-      // Should still create conversation
-      expect(adapter.startNewConversation).toHaveBeenCalledWith('consult');
-    });
-
-    it('should not abort streaming if not streaming', () => {
-      const adapter = createMockAdapter();
-      const store = createMockStore();
-      const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
-
-      service.createConversation('consult');
-
-      // Should not abort
-      expect(store.finishStreaming).not.toHaveBeenCalled();
-      expect(adapter.abortStream).not.toHaveBeenCalled();
-
-      // Should still create conversation
-      expect(adapter.startNewConversation).toHaveBeenCalledWith('consult');
-    });
+    // Note: Streaming abort logic moved to useChatController (not service responsibility)
 
     it('should create assessment mode conversation', () => {
       const adapter = createMockAdapter();
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       service.createConversation('assessment');
 
@@ -116,7 +74,6 @@ describe('ConversationService', () => {
       const adapter = createMockAdapter({ isConnected: false });
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       service.createConversation('consult');
 
@@ -126,7 +83,6 @@ describe('ConversationService', () => {
       // Should not create conversation
       expect(adapter.startNewConversation).not.toHaveBeenCalled();
       expect(store.clearMessages).not.toHaveBeenCalled();
-      expect(clearRequestFlag).not.toHaveBeenCalled();
     });
 
     it('should handle adapter errors', () => {
@@ -136,7 +92,6 @@ describe('ConversationService', () => {
       });
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       // Spy on console.error
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -154,32 +109,17 @@ describe('ConversationService', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should work without focusComposer callback', () => {
-      const adapter = createMockAdapter();
-      const store = createMockStore();
-      const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
-
-      // Should not throw
-      expect(() => {
-        service.createConversation('consult');
-      }).not.toThrow();
-
-      // Should still create conversation
-      expect(adapter.startNewConversation).toHaveBeenCalledWith('consult');
-    });
+    // Note: focusComposer callback removed from API (now handled in useChatController)
 
     it('should handle multiple create requests', () => {
       const adapter = createMockAdapter();
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       service.createConversation('consult');
       service.createConversation('assessment');
 
       expect(adapter.startNewConversation).toHaveBeenCalledTimes(2);
-      expect(clearRequestFlag).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -188,7 +128,6 @@ describe('ConversationService', () => {
       const adapter = createMockAdapter();
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       service.deleteConversation('conv-123');
 
@@ -224,7 +163,6 @@ describe('ConversationService', () => {
       });
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       // Spy on console.error
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -236,9 +174,6 @@ describe('ConversationService', () => {
       // Should set error
       expect(store.setError).toHaveBeenCalledWith('Failed to delete conversation');
 
-      // Should clear request flag on error
-      expect(clearRequestFlag).toHaveBeenCalledTimes(1);
-
       // Should log error
       expect(consoleErrorSpy).toHaveBeenCalled();
 
@@ -249,7 +184,6 @@ describe('ConversationService', () => {
       const adapter = createMockAdapter();
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       service.deleteConversation('conv-1');
       service.deleteConversation('conv-2');
@@ -430,7 +364,6 @@ describe('ConversationService', () => {
       const adapter = createMockAdapter();
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       // Delete conversation
       service.deleteConversation('conv-old');
@@ -456,22 +389,7 @@ describe('ConversationService', () => {
       expect(store.clearMessages).toHaveBeenCalledTimes(1);
     });
 
-    it('should handle create with streaming abort', () => {
-      const adapter = createMockAdapter();
-      const store = createMockStore();
-      const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
-
-      // Create while streaming
-      service.createConversation('consult');
-
-      // Should abort first
-      expect(store.finishStreaming).toHaveBeenCalledTimes(1);
-      expect(adapter.abortStream).toHaveBeenCalledTimes(1);
-
-      // Then create
-      expect(adapter.startNewConversation).toHaveBeenCalledWith('consult');
-    });
+    // Note: Streaming abort logic moved to useChatController (tested separately)
   });
 
   describe('Error Recovery', () => {
@@ -488,7 +406,6 @@ describe('ConversationService', () => {
 
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       // Spy on console.error
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -523,7 +440,6 @@ describe('ConversationService', () => {
 
       const store = createMockStore();
       const service = new ConversationService(adapter, store);
-      const clearRequestFlag = jest.fn();
 
       // Spy on console.error
       const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
@@ -534,7 +450,6 @@ describe('ConversationService', () => {
       }).toThrow('Network error');
 
       expect(store.setError).toHaveBeenCalledWith('Failed to delete conversation');
-      expect(clearRequestFlag).toHaveBeenCalledTimes(1);
 
       // Retry succeeds
       expect(() => {

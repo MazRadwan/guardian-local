@@ -87,11 +87,12 @@ export class ConversationService {
       throw new Error('Cannot send message to completed conversation');
     }
 
-    // Create message
+    // Create message (Epic 16.6.8: include attachments)
     const messageData = Message.create({
       conversationId: dto.conversationId,
       role: dto.role,
       content: dto.content,
+      attachments: dto.attachments,
     });
 
     const message = await this.messageRepo.create(messageData);

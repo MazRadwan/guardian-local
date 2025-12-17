@@ -51,8 +51,8 @@ describe('ChatService', () => {
       // Should set loading state
       expect(store.setLoading).toHaveBeenCalledWith(true);
 
-      // Should send via adapter
-      expect(adapter.sendMessage).toHaveBeenCalledWith('Hello!', 'conv-123');
+      // Should send via adapter (third arg is optional attachments)
+      expect(adapter.sendMessage).toHaveBeenCalledWith('Hello!', 'conv-123', undefined);
 
       // Should not set error
       expect(store.setError).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe('ChatService', () => {
       // Should set loading
       expect(store.setLoading).toHaveBeenCalledWith(true);
 
-      // Should resend previous user message (index 2)
+      // Should resend previous user message (index 2) - regenerateMessage doesn't pass attachments
       expect(adapter.sendMessage).toHaveBeenCalledWith('How are you?', 'conv-123');
 
       // Should not set error
@@ -330,7 +330,7 @@ describe('ChatService', () => {
         service.regenerateMessage(1, 'conv-123', messages);
       }).not.toThrow();
 
-      // Should still regenerate
+      // Should still regenerate - regenerateMessage doesn't pass attachments
       expect(adapter.sendMessage).toHaveBeenCalledWith('Hello', 'conv-123');
     });
 
@@ -360,7 +360,7 @@ describe('ChatService', () => {
         messages[5],
       ]);
 
-      // Should resend user message at index 2
+      // Should resend user message at index 2 - regenerateMessage doesn't pass attachments
       expect(adapter.sendMessage).toHaveBeenCalledWith('Second', 'conv-123');
     });
   });
@@ -412,7 +412,7 @@ describe('ChatService', () => {
 
       // Send message
       service.sendMessage('Hello', 'conv-123');
-      expect(adapter.sendMessage).toHaveBeenCalledWith('Hello', 'conv-123');
+      expect(adapter.sendMessage).toHaveBeenCalledWith('Hello', 'conv-123', undefined);
 
       // Abort stream
       service.abortStream();

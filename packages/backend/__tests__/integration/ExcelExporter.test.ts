@@ -39,6 +39,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'How do you ensure HIPAA compliance?',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -46,6 +47,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 2,
           questionNumber: 1,
           questionText: 'What encryption methods do you use?',
+          questionType: 'text',
         }),
       ]
 
@@ -85,6 +87,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: Math.floor(i / 5) + 1,
           questionNumber: (i % 5) + 1,
           questionText: `Question ${i + 1}: What is your policy on ${i + 1}?`,
+          questionType: 'text',
         })
       )
 
@@ -96,10 +99,12 @@ describe('ExcelExporter Integration Tests', () => {
 
       // Parse the Excel file to verify content
       const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
       await workbook.xlsx.load(excelBuffer)
 
       const worksheet = workbook.getWorksheet('Assessment Questionnaire')
       expect(worksheet).toBeDefined()
+      if (!worksheet) throw new Error('Worksheet not found')
 
       // Should have header row + metadata rows + questions + footer
       // Header (2 rows) + Metadata (2 rows) + Blank (1) + Table Header (1) + Questions (20) + Blank + Footer (2)
@@ -128,6 +133,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Are you compliant?',
+          questionType: 'text',
         }),
       ]
 
@@ -139,9 +145,11 @@ describe('ExcelExporter Integration Tests', () => {
 
       // Parse Excel to verify columns
       const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
       await workbook.xlsx.load(excelBuffer)
 
       const worksheet = workbook.getWorksheet('Assessment Questionnaire')
+      if (!worksheet) throw new Error('Worksheet not found')
 
       // Find the header row (should contain "Section", "Question #", "Question Text", "Response")
       let headerRow: ExcelJS.Row | undefined
@@ -180,6 +188,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'Question 1',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -187,6 +196,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 2,
           questionText: 'Question 2',
+          questionType: 'text',
         }),
         Question.create({
           assessmentId: assessment.id,
@@ -194,6 +204,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 2,
           questionNumber: 1,
           questionText: 'Question 3',
+          questionType: 'text',
         }),
       ]
 
@@ -205,10 +216,12 @@ describe('ExcelExporter Integration Tests', () => {
 
       // Parse Excel to verify colors
       const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
       await workbook.xlsx.load(excelBuffer)
 
       const worksheet = workbook.getWorksheet('Assessment Questionnaire')
       expect(worksheet).toBeDefined()
+      if (!worksheet) throw new Error('Worksheet not found')
 
       // Verify that rows have fill colors (section color-coding)
       let coloredRows = 0
@@ -244,6 +257,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'How do you manage inventory?',
+          questionType: 'text',
           questionMetadata: {
             required: true,
             helpText: 'Describe your inventory management system',
@@ -259,9 +273,11 @@ describe('ExcelExporter Integration Tests', () => {
 
       // Parse Excel to verify comments/notes
       const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
       await workbook.xlsx.load(excelBuffer)
 
       const worksheet = workbook.getWorksheet('Assessment Questionnaire')
+      if (!worksheet) throw new Error('Worksheet not found')
 
       // Look for cells with notes
       let hasNotes = false
@@ -298,6 +314,7 @@ describe('ExcelExporter Integration Tests', () => {
           sectionNumber: 1,
           questionNumber: 1,
           questionText: 'What quality controls do you have?',
+          questionType: 'text',
         }),
       ]
 
@@ -309,15 +326,17 @@ describe('ExcelExporter Integration Tests', () => {
 
       // Parse Excel to verify frozen rows
       const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
       await workbook.xlsx.load(excelBuffer)
 
       const worksheet = workbook.getWorksheet('Assessment Questionnaire')
+      if (!worksheet) throw new Error('Worksheet not found')
 
       // Check for frozen panes
       const views = worksheet.views
       expect(views).toBeDefined()
-      expect(views!.length).toBeGreaterThan(0)
-      expect(views![0].state).toBe('frozen')
+      expect(views.length).toBeGreaterThan(0)
+      expect(views[0].state).toBe('frozen')
     })
   })
 })
