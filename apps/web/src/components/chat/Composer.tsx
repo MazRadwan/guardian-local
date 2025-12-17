@@ -1,12 +1,21 @@
 'use client';
 
-import React, { useState, useRef, useEffect, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect, useCallback, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 import { Button } from '@/components/ui/button';
 import { Send, Paperclip, Square } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
 import { UploadProgress } from './UploadProgress';
-import { useFileUpload, UploadMode } from '@/hooks/useFileUpload';
+import { useFileUpload, UploadMode, IntakeContextResult } from '@/hooks/useFileUpload';
 import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
+
+// Stable fallback adapter for when wsAdapter is not provided
+// Module-level constant prevents new object identity on each render
+const DISCONNECTED_UPLOAD_ADAPTER = {
+  isConnected: false as boolean,
+  subscribeUploadProgress: () => () => {},
+  subscribeIntakeContextReady: () => () => {},
+  subscribeScoringParseReady: () => () => {},
+};
 
 export interface ComposerProps {
   onSendMessage: (message: string) => void;
@@ -56,13 +65,21 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // See: packages/backend/src/application/interfaces/IScoringDocumentParser.ts
     const uploadMode: UploadMode = 'intake';
 
-    // Build adapter stub for useFileUpload when not connected
-    const uploadAdapter = wsAdapter ?? {
-      isConnected: false,
-      subscribeUploadProgress: () => () => {},
-      subscribeIntakeContextReady: () => () => {},
-      subscribeScoringParseReady: () => () => {},
-    };
+    // Use stable fallback adapter when wsAdapter not provided
+    // Module-level constant prevents subscription thrashing from object identity changes
+    const uploadAdapter = wsAdapter ?? DISCONNECTED_UPLOAD_ADAPTER;
+
+    // Memoize callbacks to prevent unnecessary re-renders
+    // Note: useFileUpload also uses refs internally for extra stability
+    const handleContextReady = useCallback((context: IntakeContextResult) => {
+      // Context ready - assistant message already appears in chat via WS 'message' event
+      console.log('[Composer] Intake context ready:', context.context?.vendorName);
+    }, []);
+
+    const handleUploadError = useCallback((error: string) => {
+      // TODO: Show error toast
+      console.error('[Composer] Upload error:', error);
+    }, []);
 
     const {
       uploadProgress,
@@ -77,14 +94,8 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       conversationId: conversationId ?? '',
       mode: uploadMode,
       wsAdapter: uploadAdapter,
-      onContextReady: (context) => {
-        // Context ready - assistant message already appears in chat via WS 'message' event
-        console.log('[Composer] Intake context ready:', context.context?.vendorName);
-      },
-      onError: (error) => {
-        // TODO: Show error toast
-        console.error('[Composer] Upload error:', error);
-      },
+      onContextReady: handleContextReady,
+      onError: handleUploadError,
     });
 
     // Expose focus method to parent

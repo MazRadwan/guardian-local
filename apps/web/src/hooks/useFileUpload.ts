@@ -79,8 +79,21 @@ export function useFileUpload(options: UseFileUploadOptions) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentUploadIdRef = useRef<string | null>(null);
 
+  // Store callbacks in refs to decouple subscription lifecycle from callback identity
+  // This prevents subscription thrashing when callbacks change (e.g., on every render)
+  const onContextReadyRef = useRef(onContextReady);
+  const onScoringReadyRef = useRef(onScoringReady);
+  const onErrorRef = useRef(onError);
+
+  // Keep refs updated with latest callbacks
+  onContextReadyRef.current = onContextReady;
+  onScoringReadyRef.current = onScoringReady;
+  onErrorRef.current = onError;
+
   // Register WebSocket event listeners (filter by uploadId)
   // IMPORTANT: Gate on isConnected to avoid no-op subscriptions before WS ready
+  // IMPORTANT: Callbacks are accessed via refs to prevent subscription thrashing
+  // when callback identity changes (e.g., inline lambdas that change every render)
   useEffect(() => {
     // Don't subscribe until WebSocket is connected
     if (!wsAdapter.isConnected) {
@@ -109,8 +122,8 @@ export function useFileUpload(options: UseFileUploadOptions) {
         error: data.error,
       });
 
-      if (data.stage === 'error' && onError) {
-        onError(data.error || 'Upload failed');
+      if (data.stage === 'error') {
+        onErrorRef.current?.(data.error || 'Upload failed');
       }
     });
 
@@ -128,7 +141,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
           stage: 'complete',
           message: 'Document processed',
         });
-        onContextReady?.(data);
+        onContextReadyRef.current?.(data);
       } else {
         setUploadProgress({
           uploadId: data.uploadId,
@@ -137,7 +150,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
           message: 'Failed to extract context',
           error: data.error,
         });
-        onError?.(data.error || 'Failed to extract context');
+        onErrorRef.current?.(data.error || 'Failed to extract context');
       }
     });
 
@@ -155,7 +168,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
           stage: 'complete',
           message: 'Questionnaire parsed',
         });
-        onScoringReady?.(data);
+        onScoringReadyRef.current?.(data);
       } else {
         setUploadProgress({
           uploadId: data.uploadId,
@@ -164,7 +177,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
           message: 'Failed to parse questionnaire',
           error: data.error,
         });
-        onError?.(data.error || 'Failed to parse questionnaire');
+        onErrorRef.current?.(data.error || 'Failed to parse questionnaire');
       }
     });
 
@@ -173,7 +186,9 @@ export function useFileUpload(options: UseFileUploadOptions) {
       unsubIntake();
       unsubScoring();
     };
-  }, [wsAdapter.isConnected, wsAdapter, conversationId, onContextReady, onScoringReady, onError]);
+    // Dependencies: Only resubscribe on connection state or conversationId change
+    // Callbacks are accessed via refs to prevent thrashing on callback identity changes
+  }, [wsAdapter.isConnected, wsAdapter.subscribeUploadProgress, wsAdapter.subscribeIntakeContextReady, wsAdapter.subscribeScoringParseReady, conversationId]);
 
   // Validate file (type + size limits aligned with backend)
   const validateFile = useCallback((file: File): string | null => {
@@ -204,7 +219,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
         message: 'Validation failed',
         error: validationError,
       });
-      onError?.(validationError);
+      onErrorRef.current?.(validationError);
       return;
     }
 
@@ -216,7 +231,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
         message: 'Authentication required',
         error: 'Not authenticated',
       });
-      onError?.('Not authenticated');
+      onErrorRef.current?.('Not authenticated');
       return;
     }
 
@@ -271,9 +286,9 @@ export function useFileUpload(options: UseFileUploadOptions) {
         message: 'Upload failed',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
-      onError?.(error instanceof Error ? error.message : 'Upload failed');
+      onErrorRef.current?.(error instanceof Error ? error.message : 'Upload failed');
     }
-  }, [token, conversationId, mode, validateFile, onError]);
+  }, [token, conversationId, mode, validateFile]);
 
   // Open file picker
   const openFilePicker = useCallback(() => {
