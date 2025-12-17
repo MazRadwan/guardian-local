@@ -9,7 +9,7 @@ import { VerticalStepper } from './VerticalStepper';
 import type { Step } from '@/types/stepper';
 import { useChatStore } from '@/stores/chatStore';
 
-export type QuestionnaireUIState = 'ready' | 'generating' | 'download' | 'error';
+export type QuestionnaireUIState = 'hidden' | 'ready' | 'generating' | 'download' | 'error';
 
 interface QuestionnairePromptCardProps {
   /** Payload from questionnaire_ready event */

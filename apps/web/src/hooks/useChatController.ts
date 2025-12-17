@@ -210,7 +210,13 @@ export function useChatController(): UseChatControllerReturn {
   // Story 13.9.2: Handler for export_status_error
   const handleExportStatusError = useCallback((data: ExportStatusErrorPayload) => {
     pendingExportStatusRequests.delete(data.conversationId);
-    console.error('[useChatController] Export status error:', data.error);
+    // "Conversation not found" is expected when user deletes a conversation
+    // while an export status request is in flight - don't log as error
+    if (data.error === 'Conversation not found') {
+      console.log('[useChatController] Export status: conversation was deleted');
+    } else {
+      console.error('[useChatController] Export status error:', data.error);
+    }
     // Don't disrupt UX - user can still generate if needed
   }, []);
 
@@ -444,6 +450,10 @@ export function useChatController(): UseChatControllerReturn {
   useEffect(() => {
     if (deleteConversationRequested && isConnected) {
       console.log('[ChatInterface] Processing delete conversation request:', deleteConversationRequested);
+
+      // Clean up any pending export status request for this conversation
+      // (prevents "Conversation not found" error when server responds after deletion)
+      pendingExportStatusRequests.delete(deleteConversationRequested);
 
       try {
         // Delegate to conversation service

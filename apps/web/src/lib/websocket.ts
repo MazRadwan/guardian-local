@@ -670,7 +670,7 @@ export class WebSocketClient {
     if (!this.socket) throw new Error('WebSocket not initialized');
 
     const handler = (data: ExportStatusErrorPayload) => {
-      console.error('[WebSocket] Export status error:', data);
+      // Let callback decide logging level (e.g., "Conversation not found" is expected during deletion)
       callback(data);
     };
 

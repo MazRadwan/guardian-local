@@ -809,5 +809,43 @@ describe('MessageList', () => {
       expect(screen.getByTestId('questionnaire-message')).toBeInTheDocument();
       expect(scrollContainer).toContainElement(screen.getByTestId('questionnaire-message'));
     });
+
+    it('auto-scrolls when typing indicator appears (isLoading regression)', async () => {
+      const messages = [
+        { role: 'user' as const, content: 'Hello, can you help me?', timestamp: new Date() },
+        { role: 'assistant' as const, content: 'Sure, I can help!', timestamp: new Date() },
+      ];
+
+      const { container, rerender } = render(
+        <MessageList messages={messages} isLoading={false} />
+      );
+
+      const scrollContainer = container.querySelector('.overflow-y-auto') as HTMLDivElement;
+      expect(scrollContainer).toBeInTheDocument();
+
+      // Mock scroll dimensions - content overflows
+      Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1000, configurable: true });
+      Object.defineProperty(scrollContainer, 'clientHeight', { value: 400, configurable: true });
+      Object.defineProperty(scrollContainer, 'scrollTop', { value: 100, writable: true, configurable: true });
+
+      // Simulate NOT being near bottom (IntersectionObserver reports not intersecting)
+      // This is the key scenario: user has scrolled up, but typing indicator should still scroll into view
+      await triggerIntersection(false);
+
+      // Verify we're not near bottom before typing indicator appears
+      expect(scrollContainer.scrollTop).toBe(100);
+
+      // Rerender with isLoading=true (typing indicator appears)
+      rerender(
+        <MessageList messages={messages} isLoading={true} />
+      );
+
+      // The typing indicator should be rendered and visible
+      expect(screen.getByTestId('typing-indicator')).toBeInTheDocument();
+
+      // Scroll should have been triggered because typing indicator just appeared
+      // Even though isNearBottom is false, the typing indicator appearance forces scroll
+      expect(scrollContainer.scrollTop).toBe(1000); // scrollTop set to scrollHeight
+    });
   });
 });
