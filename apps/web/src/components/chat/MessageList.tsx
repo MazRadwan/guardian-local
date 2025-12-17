@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, forwardRef, useState, useCallback } from 'react';
-import { ChatMessage } from './ChatMessage';
+import { ChatMessage, MessageAttachment } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { QuestionnaireMessage } from './QuestionnaireMessage';
 import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload } from '@/lib/websocket';
@@ -15,6 +15,8 @@ export interface MessageListProps {
   isStreaming?: boolean;
   onRegenerate?: (messageIndex: number) => void;
   regeneratingMessageIndex?: number | null;
+  /** Epic 16.6.8: Handler for downloading file attachments */
+  onDownloadAttachment?: (attachment: MessageAttachment) => void;
   /** Story 14.1.2: Inline questionnaire rendering props */
   questionnaire?: {
     payload: QuestionnaireReadyPayload;
@@ -33,7 +35,7 @@ export interface MessageListProps {
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, questionnaire }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -181,6 +183,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                   messageIndex={index}
                   onRegenerate={onRegenerate}
                   isRegenerating={regeneratingMessageIndex === index}
+                  attachments={message.attachments as MessageAttachment[] | undefined}
+                  onDownloadAttachment={onDownloadAttachment}
                 />
               </React.Fragment>
             ))}

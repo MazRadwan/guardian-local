@@ -5,6 +5,17 @@ export interface MessageComponent {
   data: unknown;
 }
 
+/**
+ * Epic 16.6.8: File attachment metadata stored with messages
+ */
+export interface MessageAttachment {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+}
+
 export interface MessageContent {
   text: string;
   components?: MessageComponent[];
@@ -14,6 +25,7 @@ export interface CreateMessageData {
   conversationId: string;
   role: MessageRole;
   content: MessageContent;
+  attachments?: MessageAttachment[];
 }
 
 export class Message {
@@ -22,7 +34,8 @@ export class Message {
     public readonly conversationId: string,
     public readonly role: MessageRole,
     public readonly content: MessageContent,
-    public readonly createdAt: Date
+    public readonly createdAt: Date,
+    public readonly attachments?: MessageAttachment[]
   ) {}
 
   /**
@@ -42,14 +55,17 @@ export class Message {
       throw new Error(`Invalid message role: ${data.role}`);
     }
 
-    if (!data.content || !data.content.text) {
-      throw new Error('Message content text is required');
+    // Epic 16.6.8: Allow empty text if attachments are present (file-only messages)
+    const hasAttachments = data.attachments && data.attachments.length > 0;
+    if (!data.content || (!data.content.text && !hasAttachments)) {
+      throw new Error('Message content text is required (unless attachments are provided)');
     }
 
     return {
       conversationId: data.conversationId,
       role: data.role,
       content: data.content,
+      attachments: data.attachments,
     } as Omit<Message, 'id' | 'createdAt'>;
   }
 
@@ -62,8 +78,9 @@ export class Message {
     role: MessageRole;
     content: MessageContent;
     createdAt: Date;
+    attachments?: MessageAttachment[];
   }): Message {
-    return new Message(data.id, data.conversationId, data.role, data.content, data.createdAt);
+    return new Message(data.id, data.conversationId, data.role, data.content, data.createdAt, data.attachments);
   }
 
   /**
@@ -85,5 +102,19 @@ export class Message {
    */
   getComponents(): MessageComponent[] {
     return this.content.components || [];
+  }
+
+  /**
+   * Epic 16.6.8: Check if message has file attachments
+   */
+  hasAttachments(): boolean {
+    return !!this.attachments && this.attachments.length > 0;
+  }
+
+  /**
+   * Epic 16.6.8: Get message attachments
+   */
+  getAttachments(): MessageAttachment[] {
+    return this.attachments || [];
   }
 }

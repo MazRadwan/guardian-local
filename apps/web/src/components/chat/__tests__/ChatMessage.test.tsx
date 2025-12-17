@@ -290,4 +290,120 @@ describe('ChatMessage', () => {
       expect(screen.getByRole('button', { name: 'Regenerate response' })).toBeInTheDocument();
     });
   });
+
+  // Epic 16.6.8: Attachment Rendering Tests
+  describe('File Attachments', () => {
+    const mockAttachment = {
+      fileId: 'file-123',
+      filename: 'test-document.pdf',
+      mimeType: 'application/pdf',
+      size: 1024,
+      storagePath: 'uploads/user-1/test-document.pdf',
+    };
+
+    it('renders attachments for user messages', () => {
+      render(
+        <ChatMessage
+          role="user"
+          content="Here is my document"
+          attachments={[mockAttachment]}
+        />
+      );
+
+      expect(screen.getByTestId('message-attachments')).toBeInTheDocument();
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+    });
+
+    it('renders attachments for assistant messages', () => {
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Here is the report"
+          attachments={[mockAttachment]}
+        />
+      );
+
+      expect(screen.getByTestId('message-attachments')).toBeInTheDocument();
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+    });
+
+    it('renders multiple attachments', () => {
+      const attachments = [
+        mockAttachment,
+        {
+          fileId: 'file-456',
+          filename: 'report.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 2048,
+          storagePath: 'uploads/user-1/report.docx',
+        },
+      ];
+
+      render(
+        <ChatMessage
+          role="user"
+          content="Two documents"
+          attachments={attachments}
+        />
+      );
+
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+      expect(screen.getByText('report.docx')).toBeInTheDocument();
+    });
+
+    it('does not render attachments section when empty', () => {
+      render(<ChatMessage role="user" content="No attachments" attachments={[]} />);
+
+      expect(screen.queryByTestId('message-attachments')).not.toBeInTheDocument();
+    });
+
+    it('calls onDownloadAttachment when attachment clicked', async () => {
+      const onDownload = jest.fn();
+      render(
+        <ChatMessage
+          role="user"
+          content="Download this"
+          attachments={[mockAttachment]}
+          onDownloadAttachment={onDownload}
+        />
+      );
+
+      const attachmentButton = screen.getByRole('button', { name: /download/i });
+      await userEvent.click(attachmentButton);
+
+      expect(onDownload).toHaveBeenCalledWith(mockAttachment);
+      expect(onDownload).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows PDF type label for PDF attachments', () => {
+      render(
+        <ChatMessage
+          role="user"
+          content="PDF file"
+          attachments={[mockAttachment]}
+        />
+      );
+
+      expect(screen.getByText('PDF')).toBeInTheDocument();
+    });
+
+    it('shows Word type label for Word documents', () => {
+      const wordAttachment = {
+        ...mockAttachment,
+        fileId: 'word-123',
+        filename: 'document.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
+
+      render(
+        <ChatMessage
+          role="user"
+          content="Word file"
+          attachments={[wordAttachment]}
+        />
+      );
+
+      expect(screen.getByText('Word')).toBeInTheDocument();
+    });
+  });
 });

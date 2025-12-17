@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Send, Paperclip, Square } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
-import { UploadProgress } from './UploadProgress';
-import { useFileUpload, UploadMode, IntakeContextResult } from '@/hooks/useFileUpload';
+import { FileChip } from './FileChip';
+import { useFileUpload, UploadMode, IntakeContextResult, FileMetadata } from '@/hooks/useFileUpload';
 import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
+import type { MessageAttachment } from '@/lib/websocket';
 
 // Stable fallback adapter for when wsAdapter is not provided
 // Module-level constant prevents new object identity on each render
@@ -18,7 +20,11 @@ const DISCONNECTED_UPLOAD_ADAPTER = {
 };
 
 export interface ComposerProps {
-  onSendMessage: (message: string) => void;
+  /**
+   * Epic 16.6.8: Send message with optional attachments
+   * If attachments provided, they will be saved with the message
+   */
+  onSendMessage: (message: string, attachments?: MessageAttachment[]) => void;
   disabled?: boolean;
   placeholder?: string;
   currentMode?: ConversationMode;
@@ -72,18 +78,25 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Memoize callbacks to prevent unnecessary re-renders
     // Note: useFileUpload also uses refs internally for extra stability
     const handleContextReady = useCallback((context: IntakeContextResult) => {
-      // Context ready - assistant message already appears in chat via WS 'message' event
-      console.log('[Composer] Intake context ready:', context.context?.vendorName);
+      // Epic 16.6.1: Show success toast when document is processed
+      const vendorName = context.context?.vendorName;
+      toast.success(
+        vendorName
+          ? `Document processed: ${vendorName}`
+          : 'Document processed successfully',
+        { duration: 3000 }
+      );
     }, []);
 
     const handleUploadError = useCallback((error: string) => {
-      // TODO: Show error toast
-      console.error('[Composer] Upload error:', error);
+      // Epic 16.6.1: Show error toast when upload fails
+      toast.error(`Upload failed: ${error}`, { duration: 5000 });
     }, []);
 
     const {
       uploadProgress,
       selectedFilename,
+      fileMetadata,
       fileInputRef,
       openFilePicker,
       handleFileChange,
@@ -120,10 +133,33 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
     const handleSend = () => {
       const trimmedMessage = message.trim();
-      if (!trimmedMessage || disabled) return;
 
-      onSendMessage(trimmedMessage);
+      // Epic 16.6.8: Check if we have file ready to attach (complete stage with metadata)
+      const hasFile = uploadProgress.stage === 'complete' && fileMetadata?.storagePath;
+
+      // Need either text or file to send
+      if (!trimmedMessage && !hasFile) return;
+      if (disabled) return;
+
+      // Epic 16.6.8: Build attachments from file metadata if available
+      const attachments: MessageAttachment[] | undefined = hasFile && fileMetadata
+        ? [{
+            fileId: fileMetadata.fileId,
+            filename: fileMetadata.filename,
+            mimeType: fileMetadata.mimeType,
+            size: fileMetadata.size,
+            storagePath: fileMetadata.storagePath!,
+          }]
+        : undefined;
+
+      // Send message with attachments
+      onSendMessage(trimmedMessage || '', attachments);
       setMessage('');
+
+      // Epic 16.6.8: Clear file state after sending (moves chip to chat stream)
+      if (hasFile) {
+        reset();
+      }
 
       // Reset textarea height after sending
       if (textareaRef.current) {
@@ -140,7 +176,9 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       // Shift+Enter creates new line (default behavior, no action needed)
     };
 
-    const isSendEnabled = message.trim().length > 0 && !disabled;
+    // Epic 16.6.8: Enable send if we have text OR a completed file upload
+    const hasFileReady = uploadProgress.stage === 'complete' && fileMetadata?.storagePath;
+    const isSendEnabled = (message.trim().length > 0 || hasFileReady) && !disabled;
     const isBusy = isStreaming || isLoading;
 
     return (
@@ -157,20 +195,22 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
         {/* Centered composer container */}
         <div className="max-w-3xl mx-auto">
-          {/* Upload progress indicator */}
-          {uploadProgress.stage !== 'idle' && (
-            <div className="mb-2">
-              <UploadProgress
-                progress={uploadProgress}
-                filename={selectedFilename ?? undefined}
-                onDismiss={reset}
-              />
-            </div>
-          )}
-
           {/* Elevated composer box */}
           <div className="border border-gray-200 rounded-2xl shadow-lg bg-white overflow-hidden">
-            {/* Textarea section (top) */}
+            {/* Epic 16.6.1: File chip - INSIDE composer, above textarea */}
+            {uploadProgress.stage !== 'idle' && selectedFilename && (
+              <div className="px-4 pt-3">
+                <FileChip
+                  filename={selectedFilename}
+                  stage={uploadProgress.stage === 'selecting' ? 'uploading' : uploadProgress.stage as 'uploading' | 'storing' | 'parsing' | 'complete' | 'error'}
+                  progress={uploadProgress.progress}
+                  error={uploadProgress.error}
+                  onRemove={reset}
+                />
+              </div>
+            )}
+
+            {/* Textarea section */}
             <textarea
               ref={textareaRef}
               value={message}

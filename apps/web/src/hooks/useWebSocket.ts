@@ -92,12 +92,13 @@ export function useWebSocket({
     }
   }, []);
 
+  // Epic 16.6.8: Import MessageAttachment type for attachments
   const sendMessage = useCallback(
-    (content: string, conversationId: string) => {
+    (content: string, conversationId: string, attachments?: import('@/lib/websocket').MessageAttachment[]) => {
       if (!clientRef.current || !isConnected) {
         throw new Error('WebSocket not connected');
       }
-      clientRef.current.sendMessage(content, conversationId);
+      clientRef.current.sendMessage(content, conversationId, attachments);
     },
     [isConnected]
   );

@@ -7,6 +7,11 @@
  * - HTTP POST multipart for upload (matches backend POST /api/documents/upload)
  * - WebSocket for progress events (reuses existing /chat connection)
  * - uploadId correlation to filter events for this specific upload
+ *
+ * Epic 16.6.1: Race condition protection
+ * - "Never adopt" pattern: Only process WS events for uploadId returned by HTTP response
+ * - AbortController for cancelling in-flight uploads
+ * - Prevents chip resurrection after cancel
  */
 
 'use client';
@@ -19,6 +24,17 @@ import type { UploadProgressEvent, IntakeContextResult, ScoringParseResult } fro
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export type UploadMode = 'intake' | 'scoring';
+
+/**
+ * Epic 16.6.8: File metadata for attachments
+ */
+export interface FileMetadata {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath?: string; // Only available after file is stored
+}
 
 export interface UploadProgress {
   uploadId: string | null;
@@ -76,8 +92,14 @@ export function useFileUpload(options: UseFileUploadOptions) {
   // Track selected filename for UI display (Story 4.2 needs this)
   const [selectedFilename, setSelectedFilename] = useState<string | null>(null);
 
+  // Epic 16.6.8: Track file metadata for attachments (populated on context ready)
+  const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currentUploadIdRef = useRef<string | null>(null);
+
+  // Epic 16.6.1: AbortController for cancelling in-flight uploads
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Store callbacks in refs to decouple subscription lifecycle from callback identity
   // This prevents subscription thrashing when callbacks change (e.g., on every render)
@@ -94,6 +116,9 @@ export function useFileUpload(options: UseFileUploadOptions) {
   // IMPORTANT: Gate on isConnected to avoid no-op subscriptions before WS ready
   // IMPORTANT: Callbacks are accessed via refs to prevent subscription thrashing
   // when callback identity changes (e.g., inline lambdas that change every render)
+  //
+  // Epic 16.6.1: "Never adopt" pattern - all handlers MUST require uploadId match
+  // This prevents race conditions where cancel is followed by late WS events
   useEffect(() => {
     // Don't subscribe until WebSocket is connected
     if (!wsAdapter.isConnected) {
@@ -105,14 +130,10 @@ export function useFileUpload(options: UseFileUploadOptions) {
       // Filter: only handle events for our current upload
       if (data.conversationId !== conversationId) return;
 
-      // Upload correlation: once we have an uploadId, only accept matching events
-      // This prevents cross-upload event bleed if multiple uploads overlap
-      if (currentUploadIdRef.current) {
-        if (data.uploadId !== currentUploadIdRef.current) return;
-      } else {
-        // First event - adopt this uploadId (handles race where WS arrives before HTTP response)
-        currentUploadIdRef.current = data.uploadId;
-      }
+      // Epic 16.6.1: "Never adopt" - only accept events for known uploadId
+      // If uploadId is null (HTTP in flight or cancelled), ignore all events
+      if (!currentUploadIdRef.current) return;
+      if (data.uploadId !== currentUploadIdRef.current) return;
 
       setUploadProgress({
         uploadId: data.uploadId,
@@ -131,8 +152,10 @@ export function useFileUpload(options: UseFileUploadOptions) {
     const unsubIntake = wsAdapter.subscribeIntakeContextReady((data) => {
       if (data.conversationId !== conversationId) return;
 
-      // Upload correlation: require uploadId match (should be set by progress events)
-      if (currentUploadIdRef.current && data.uploadId !== currentUploadIdRef.current) return;
+      // Epic 16.6.1: "Never adopt" - only accept events for known uploadId
+      // This prevents chip resurrection after cancel
+      if (!currentUploadIdRef.current) return;
+      if (data.uploadId !== currentUploadIdRef.current) return;
 
       if (data.success) {
         setUploadProgress({
@@ -141,6 +164,16 @@ export function useFileUpload(options: UseFileUploadOptions) {
           stage: 'complete',
           message: 'Document processed',
         });
+        // Epic 16.6.8: Capture file metadata for attachment
+        if (data.fileMetadata) {
+          setFileMetadata({
+            fileId: data.fileMetadata.fileId,
+            filename: data.fileMetadata.filename,
+            mimeType: data.fileMetadata.mimeType,
+            size: data.fileMetadata.size,
+            storagePath: data.fileMetadata.storagePath,
+          });
+        }
         onContextReadyRef.current?.(data);
       } else {
         setUploadProgress({
@@ -158,8 +191,10 @@ export function useFileUpload(options: UseFileUploadOptions) {
     const unsubScoring = wsAdapter.subscribeScoringParseReady((data) => {
       if (data.conversationId !== conversationId) return;
 
-      // Upload correlation: require uploadId match (should be set by progress events)
-      if (currentUploadIdRef.current && data.uploadId !== currentUploadIdRef.current) return;
+      // Epic 16.6.1: "Never adopt" - only accept events for known uploadId
+      // This prevents chip resurrection after cancel
+      if (!currentUploadIdRef.current) return;
+      if (data.uploadId !== currentUploadIdRef.current) return;
 
       if (data.success) {
         setUploadProgress({
@@ -168,6 +203,16 @@ export function useFileUpload(options: UseFileUploadOptions) {
           stage: 'complete',
           message: 'Questionnaire parsed',
         });
+        // Epic 16.6.8: Capture file metadata for attachment
+        if (data.fileMetadata) {
+          setFileMetadata({
+            fileId: data.fileMetadata.fileId,
+            filename: data.fileMetadata.filename,
+            mimeType: data.fileMetadata.mimeType,
+            size: data.fileMetadata.size,
+            storagePath: data.fileMetadata.storagePath,
+          });
+        }
         onScoringReadyRef.current?.(data);
       } else {
         setUploadProgress({
@@ -206,6 +251,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
   }, []);
 
   // Upload file via HTTP POST multipart
+  // Epic 16.6.1: Uses AbortController for cancellation + race condition protection
   const uploadFile = useCallback(async (file: File) => {
     // Track filename for UI display
     setSelectedFilename(file.name);
@@ -235,6 +281,13 @@ export function useFileUpload(options: UseFileUploadOptions) {
       return;
     }
 
+    // Epic 16.6.1: Clear any previous upload state
+    // This ensures WS events from previous uploads are ignored
+    currentUploadIdRef.current = null;
+
+    // Epic 16.6.1: Create AbortController for cancellation
+    abortControllerRef.current = new AbortController();
+
     setUploadProgress({
       uploadId: null,
       progress: 10,
@@ -258,6 +311,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
           // Note: Don't set Content-Type for FormData - browser sets multipart boundary
         },
         body: formData,
+        signal: abortControllerRef.current.signal,
       });
 
       if (!response.ok) {
@@ -265,8 +319,15 @@ export function useFileUpload(options: UseFileUploadOptions) {
         throw new Error(errorData.error || `Upload failed: ${response.status}`);
       }
 
+      // Check if aborted during response parsing
+      if (abortControllerRef.current?.signal.aborted) {
+        return; // Cancelled, don't set uploadId
+      }
+
       // 202 Accepted - get uploadId for event correlation
       const { uploadId } = await response.json();
+
+      // Epic 16.6.1: Set uploadId - now WS events for this ID will be accepted
       currentUploadIdRef.current = uploadId;
 
       setUploadProgress({
@@ -279,6 +340,18 @@ export function useFileUpload(options: UseFileUploadOptions) {
       // Progress continues via WebSocket events (filtered by uploadId)
 
     } catch (error) {
+      // Epic 16.6.1: Handle abort gracefully (user cancelled)
+      if (error instanceof Error && error.name === 'AbortError') {
+        // User cancelled - reset quietly, don't set error state
+        setUploadProgress({
+          uploadId: null,
+          progress: 0,
+          stage: 'idle',
+          message: '',
+        });
+        return;
+      }
+
       setUploadProgress({
         uploadId: null,
         progress: 0,
@@ -312,9 +385,18 @@ export function useFileUpload(options: UseFileUploadOptions) {
   }, [uploadFile]);
 
   // Reset state (named 'reset' to match Story 4.2 usage)
+  // Epic 16.6.1: Also aborts in-flight upload and clears uploadId to prevent race conditions
+  // Epic 16.6.8: Also clears fileMetadata
   const reset = useCallback(() => {
+    // Cancel in-progress HTTP request
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    // Clear uploadId - any incoming WS events will be ignored
     currentUploadIdRef.current = null;
+
     setSelectedFilename(null);
+    setFileMetadata(null);
     setUploadProgress({
       uploadId: null,
       progress: 0,
@@ -326,6 +408,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
   return {
     uploadProgress,
     selectedFilename,  // For UploadProgress component (Story 4.2)
+    fileMetadata,      // Epic 16.6.8: For attaching file to message
     fileInputRef,
     openFilePicker,
     handleFileChange,

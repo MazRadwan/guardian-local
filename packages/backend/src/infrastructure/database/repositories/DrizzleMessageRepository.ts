@@ -3,7 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { db } from '../client.js';
 import { messages } from '../schema/index.js';
 import { IMessageRepository } from '../../../application/interfaces/IMessageRepository.js';
-import { Message, MessageRole, MessageContent } from '../../../domain/entities/Message.js';
+import { Message, MessageRole, MessageContent, MessageAttachment } from '../../../domain/entities/Message.js';
 import * as schema from '../schema/index.js';
 
 export class DrizzleMessageRepository implements IMessageRepository {
@@ -23,6 +23,8 @@ export class DrizzleMessageRepository implements IMessageRepository {
         conversationId: message.conversationId,
         role: message.role,
         content: message.content as any,
+        // Epic 16.6.8: Include attachments if present
+        attachments: message.attachments as MessageAttachment[] | undefined,
       })
       .returning();
 
@@ -98,6 +100,8 @@ export class DrizzleMessageRepository implements IMessageRepository {
       role: row.role as MessageRole,
       content: row.content as MessageContent,
       createdAt: row.createdAt,
+      // Epic 16.6.8: Include attachments if present
+      attachments: row.attachments as MessageAttachment[] | undefined,
     });
   }
 }

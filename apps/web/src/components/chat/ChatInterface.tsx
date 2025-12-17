@@ -8,7 +8,7 @@ import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
-import type { QuestionnaireReadyPayload } from '@/lib/websocket';
+import type { QuestionnaireReadyPayload, MessageAttachment } from '@/lib/websocket';
 
 export function ChatInterface() {
   const {
@@ -231,6 +231,53 @@ export function ChatInterface() {
     }
   }, [exportData, token]);
 
+  /**
+   * Epic 16.6.8: Download file attachment from chat message
+   * Uses the /api/documents/download endpoint with base64-encoded path
+   */
+  const handleDownloadAttachment = useCallback(async (attachment: MessageAttachment) => {
+    if (!token) {
+      console.error('[ChatInterface] Cannot download attachment: not authenticated');
+      return;
+    }
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+      // Build download URL with base64-encoded path and filename
+      const encodedPath = btoa(attachment.storagePath);
+      const downloadUrl = `${apiUrl}/api/documents/download?path=${encodeURIComponent(encodedPath)}&filename=${encodeURIComponent(attachment.filename)}`;
+
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      // Create download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = attachment.filename;
+
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      console.log(`[ChatInterface] Successfully downloaded attachment: ${attachment.filename}`);
+    } catch (err) {
+      console.error('[ChatInterface] Attachment download error:', err);
+      setError(`Failed to download ${attachment.filename}`);
+    }
+  }, [token, setError]);
+
   return (
     <div className="flex h-full flex-col relative">
       {/* Error banner */}
@@ -279,6 +326,7 @@ export function ChatInterface() {
               isStreaming={isStreaming}
               onRegenerate={handleRegenerate}
               regeneratingMessageIndex={regeneratingMessageIndex}
+              onDownloadAttachment={handleDownloadAttachment}
               questionnaire={
                 pendingQuestionnaire &&
                 pendingQuestionnaire.conversationId === activeConversationId &&

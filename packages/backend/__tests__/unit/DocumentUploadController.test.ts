@@ -40,19 +40,14 @@ describe('DocumentUploadController', () => {
       parseForResponses: jest.fn(),
     };
 
-    // ConversationService for ownership validation + saving assistant message
+    // ConversationService for ownership validation + silent context storage (Epic 16.6.1)
     mockConversationService = {
       getConversation: jest.fn().mockResolvedValue({
         id: 'conv-123',
         userId: 'user-123',
       }),
-      sendMessage: jest.fn().mockResolvedValue({
-        id: 'msg-123',
-        conversationId: 'conv-123',
-        role: 'assistant',
-        content: { text: 'Document Context Extracted' },
-        createdAt: new Date(),
-      }),
+      // Epic 16.6.1: updateContext used instead of sendMessage (silent storage)
+      updateContext: jest.fn().mockResolvedValue(undefined),
     };
 
     // Mock the /chat namespace (not base io)
@@ -202,32 +197,32 @@ describe('DocumentUploadController', () => {
       );
     });
 
-    // Story 4.3: Verify assistant message is saved and emitted
-    it('should save context as assistant message on successful intake parse', async () => {
+    // Epic 16.6.1: Context stored silently (no visible assistant message)
+    it('should store context silently via updateContext on successful intake parse', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify conversationService.sendMessage was called with assistant role
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith(
+      // Verify conversationService.updateContext was called with intake context
+      expect(mockConversationService.updateContext).toHaveBeenCalledWith(
+        'conv-123',
         expect.objectContaining({
-          conversationId: 'conv-123',
-          role: 'assistant',
-          content: expect.objectContaining({
-            text: expect.stringContaining('Document Context Extracted'),
+          intakeContext: expect.objectContaining({
+            vendorName: 'Test Vendor',
+            features: [],
+            complianceMentions: [],
           }),
+          intakeGapCategories: ['privacy_risk'],
+          intakeParsedAt: expect.any(String),
         })
       );
 
-      // Verify 'message' event emitted (so it appears in chat UI)
-      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'message',
-        expect.objectContaining({
-          role: 'assistant',
-          conversationId: 'conv-123',
-        })
+      // Verify NO 'message' event emitted (silent storage, not visible in chat)
+      const messageCall = mockChatNamespace.emit.mock.calls.find(
+        (call: any[]) => call[0] === 'message'
       );
+      expect(messageCall).toBeUndefined();
     });
 
     it('should emit upload_progress with stage "complete" on successful parse', async () => {

@@ -30,12 +30,25 @@ export interface EmbeddedComponent {
   };
 }
 
+/**
+ * Epic 16.6.8: File attachment metadata for chat messages
+ */
+export interface MessageAttachment {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  storagePath: string;
+}
+
 export interface ChatMessage {
   id?: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   components?: EmbeddedComponent[];
   timestamp?: Date;
+  /** Epic 16.6.8: File attachments sent with this message */
+  attachments?: MessageAttachment[];
 }
 
 export interface StreamEvent {
@@ -100,6 +113,8 @@ export interface IntakeContextResult {
   gapCategories: string[];
   confidence: number;
   error?: string;
+  /** Epic 16.6.8: File metadata for message attachment display */
+  fileMetadata?: MessageAttachment;
 }
 
 export interface ScoringParseResult {
@@ -113,6 +128,8 @@ export interface ScoringParseResult {
   isComplete: boolean;
   confidence: number;
   error?: string;
+  /** Epic 16.6.8: File metadata for message attachment display */
+  fileMetadata?: MessageAttachment;
 }
 
 /**
@@ -147,6 +164,8 @@ interface BackendMessage {
   content: string | { text: string; components?: any[] };
   createdAt: string;
   components?: any[];
+  // Epic 16.6.8: Attachments from backend
+  attachments?: MessageAttachment[];
 }
 
 // Backend error format
@@ -171,6 +190,7 @@ function normalizeComponents(components?: any[]): EmbeddedComponent[] | undefine
 
 /**
  * Normalize message from backend format to UI format
+ * Epic 16.6.8: Now includes attachments passthrough
  */
 function normalizeMessage(backendMessage: BackendMessage): ChatMessage {
   // Handle content as string OR { text, components }
@@ -193,6 +213,8 @@ function normalizeMessage(backendMessage: BackendMessage): ChatMessage {
     content: contentText,
     components,
     timestamp: new Date(backendMessage.createdAt),
+    // Epic 16.6.8: Pass through attachments for file display in chat
+    attachments: backendMessage.attachments,
   };
 }
 
@@ -274,7 +296,13 @@ export class WebSocketClient {
     }
   }
 
-  sendMessage(content: string, conversationId: string): void {
+  /**
+   * Epic 16.6.8: Send message with optional attachments
+   * @param content - Message text content (can be empty if attachments present)
+   * @param conversationId - Target conversation ID
+   * @param attachments - Optional file attachments (from document upload)
+   */
+  sendMessage(content: string, conversationId: string, attachments?: MessageAttachment[]): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
@@ -283,7 +311,9 @@ export class WebSocketClient {
     }
     this.socket.emit('send_message', {
       conversationId,
-      content
+      content,
+      // Epic 16.6.8: Include attachments if provided
+      ...(attachments && attachments.length > 0 && { attachments }),
     });
   }
 

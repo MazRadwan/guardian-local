@@ -1,5 +1,6 @@
 import { pgTable, uuid, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core'
 import { conversations } from './conversations'
+import type { MessageAttachment } from '../../../domain/entities/Message.js'
 
 export const messages = pgTable(
   'messages',
@@ -20,6 +21,9 @@ export const messages = pgTable(
           data: any
         }>
       }>(),
+
+    // Epic 16.6.8: File attachments
+    attachments: jsonb('attachments').$type<MessageAttachment[]>(),
 
     // Audit
     createdAt: timestamp('created_at').defaultNow().notNull(),

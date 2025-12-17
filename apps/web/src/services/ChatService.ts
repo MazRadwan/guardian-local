@@ -1,5 +1,5 @@
 import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
-import type { ChatMessage } from '@/lib/websocket';
+import type { ChatMessage, MessageAttachment } from '@/lib/websocket';
 
 /**
  * Store actions required by ChatService
@@ -55,11 +55,14 @@ export class ChatService {
    * 4. Send message via WebSocket adapter
    * 5. Handle errors by setting error state
    *
+   * Epic 16.6.8: Now accepts optional attachments for file uploads
+   *
    * @param content - Message content
    * @param conversationId - Active conversation ID
+   * @param attachments - Optional file attachments
    * @throws Error if not connected or no active conversation
    */
-  sendMessage(content: string, conversationId: string | null): void {
+  sendMessage(content: string, conversationId: string | null, attachments?: MessageAttachment[]): void {
     // Guard: Connection check
     if (!this.adapter.isConnected) {
       this.store.setError('Not connected to server');
@@ -72,19 +75,21 @@ export class ChatService {
       return;
     }
 
-    // Add user message to UI immediately (optimistic update)
+    // Epic 16.6.8: Add user message to UI immediately (optimistic update)
+    // Include attachments if provided
     this.store.addMessage({
       role: 'user',
       content,
       timestamp: new Date(),
+      attachments,
     });
 
     // Set loading state (show typing indicator)
     this.store.setLoading(true);
 
-    // Send to server with conversationId
+    // Send to server with conversationId and attachments
     try {
-      this.adapter.sendMessage(content, conversationId);
+      this.adapter.sendMessage(content, conversationId, attachments);
     } catch (err) {
       this.store.setError('Failed to send message');
       this.store.setLoading(false);

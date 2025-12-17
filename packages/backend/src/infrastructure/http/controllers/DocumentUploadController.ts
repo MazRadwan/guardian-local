@@ -106,22 +106,36 @@ export class DocumentUploadController {
     }
 
     // 5. Return upload accepted, process async
+    // Epic 16.6.8: Generate fileId upfront for correlation
+    // Full file metadata (including storagePath) will be sent via intake_context_ready event
     const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const fileId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     res.status(202).json({
       message: 'Upload accepted, processing started',
       uploadId,
       conversationId,
+      // Epic 16.6.8: Partial file metadata (storagePath comes via WS event after store)
+      fileMetadata: {
+        fileId,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+      },
     });
 
     // 6. Process async with WebSocket progress events
-    this.processUpload(uploadId, userId, conversationId, mode, file, validation.documentType!);
+    // Epic 16.6.8: Pass fileId for correlation in intake_context_ready event
+    this.processUpload(uploadId, fileId, userId, conversationId, mode, file, validation.documentType!);
   };
 
   /**
    * Process upload asynchronously with WebSocket progress updates
+   * Epic 16.6.8: Now includes fileId for attachment metadata correlation
    */
   private async processUpload(
     uploadId: string,
+    fileId: string,
     userId: string,
     conversationId: string,
     mode: 'intake' | 'scoring',
@@ -157,11 +171,12 @@ export class DocumentUploadController {
       this.emitProgress(socketRoom, conversationId, uploadId, 50, 'parsing', 'Analyzing document...');
 
       // Parse based on mode - track success and error for correct stage emission
+      // Epic 16.6.8: Pass fileId and storagePath for attachment metadata
       let parseResult: { success: boolean; error?: string };
       if (mode === 'intake') {
-        parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId);
+        parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId, storagePath);
       } else {
-        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId);
+        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId, storagePath);
       }
 
       // Emit final stage based on parse result
@@ -221,10 +236,12 @@ export class DocumentUploadController {
   /**
    * Parse document for intake context
    *
-   * Story 4.3: When parsing succeeds:
-   * 1. Save context as ASSISTANT message (so Claude sees it)
-   * 2. Emit 'message' event (so it appears in chat UI)
-   * 3. Emit 'intake_context_ready' (for UI state updates)
+   * Epic 16.6.1: Silent context storage (no visible assistant message)
+   * - Store context in conversation.context using existing updateContext()
+   * - Emit 'intake_context_ready' for UI state updates only
+   * - Claude sees context via synthetic message injection in ChatServer
+   *
+   * Epic 16.6.8: Include file metadata in event for attachment display
    *
    * @returns { success: boolean, error?: string } - parse result with error details
    */
@@ -233,37 +250,33 @@ export class DocumentUploadController {
     buffer: Buffer,
     metadata: DocumentMetadata,
     conversationId: string,
-    uploadId: string
+    uploadId: string,
+    fileId: string,
+    storagePath: string
   ): Promise<{ success: boolean; error?: string }> {
     const result = await this.intakeParser.parseForContext(buffer, metadata, {
       conversationId,
     });
 
     if (result.success && result.context) {
-      // 1. Format context as assistant message
-      const contextMessage = this.formatIntakeContextMessage(
-        result.context,
-        result.gapCategories
-      );
-
-      // 2. Save as ASSISTANT message (not system!) so Claude sees it
-      // ChatServer.buildConversationContext filters to user/assistant only
-      const savedMessage = await this.conversationService.sendMessage({
-        conversationId,
-        role: 'assistant',
-        content: { text: contextMessage },
+      // Epic 16.6.1: Store context silently (NOT as a visible message)
+      // Uses existing ConversationService.updateContext() - merges with existing context
+      await this.conversationService.updateContext(conversationId, {
+        intakeContext: {
+          vendorName: result.context.vendorName,
+          solutionName: result.context.solutionName,
+          solutionType: result.context.solutionType,
+          industry: result.context.industry,
+          features: result.context.features,
+          claims: result.context.claims,
+          complianceMentions: result.context.complianceMentions,
+        },
+        intakeGapCategories: result.gapCategories,
+        intakeParsedAt: new Date().toISOString(),
       });
 
-      // 3. Emit 'message' event so it appears in chat UI
-      this.chatNamespace.to(socketRoom).emit('message', {
-        id: savedMessage.id,
-        conversationId,
-        role: 'assistant',
-        content: savedMessage.content,
-        createdAt: savedMessage.createdAt,
-      });
-
-      // 4. Emit 'intake_context_ready' for UI state updates
+      // Emit 'intake_context_ready' for UI state updates
+      // Epic 16.6.8: Include file metadata for attachment display
       this.chatNamespace.to(socketRoom).emit('intake_context_ready', {
         conversationId,
         uploadId,
@@ -281,6 +294,14 @@ export class DocumentUploadController {
         coveredCategories: result.coveredCategories,
         gapCategories: result.gapCategories,
         confidence: result.confidence,
+        // Epic 16.6.8: File metadata for message attachment
+        fileMetadata: {
+          fileId,
+          filename: metadata.filename,
+          mimeType: metadata.mimeType,
+          size: metadata.sizeBytes,
+          storagePath,
+        },
       });
       return { success: true };
     } else {
@@ -297,52 +318,8 @@ export class DocumentUploadController {
   }
 
   /**
-   * Format intake context as assistant message for conversation history
-   *
-   * @param context - IntakeContext with vendor/solution info
-   * @param gapCategories - From IntakeParseResult (not on IntakeContext per Story 1.2)
-   */
-  private formatIntakeContextMessage(
-    context: IntakeContext,
-    gapCategories: string[]
-  ): string {
-    const parts: string[] = [
-      '📄 **Document Context Extracted**',
-      '',
-    ];
-
-    if (context.vendorName) {
-      parts.push(`**Vendor:** ${context.vendorName}`);
-    }
-    if (context.solutionName) {
-      parts.push(`**Solution:** ${context.solutionName}`);
-    }
-    if (context.solutionType) {
-      parts.push(`**Type:** ${context.solutionType}`);
-    }
-
-    if (context.features.length > 0) {
-      parts.push('', '**Key Features:**');
-      context.features.slice(0, 5).forEach(f => parts.push(`- ${f}`));
-      if (context.features.length > 5) {
-        parts.push(`- ... and ${context.features.length - 5} more`);
-      }
-    }
-
-    if (context.complianceMentions.length > 0) {
-      parts.push('', `**Compliance Mentions:** ${context.complianceMentions.join(', ')}`);
-    }
-
-    // gapCategories comes from IntakeParseResult, not IntakeContext
-    if (gapCategories && gapCategories.length > 0) {
-      parts.push('', `**Areas Needing Clarification:** ${gapCategories.join(', ')}`);
-    }
-
-    return parts.join('\n');
-  }
-
-  /**
    * Parse document for scoring responses
+   * Epic 16.6.8: Include file metadata in event for attachment display
    * @returns { success: boolean, error?: string } - parse result with error details
    */
   private async parseForScoring(
@@ -350,7 +327,9 @@ export class DocumentUploadController {
     buffer: Buffer,
     metadata: DocumentMetadata,
     conversationId: string,
-    uploadId: string
+    uploadId: string,
+    fileId: string,
+    storagePath: string
   ): Promise<{ success: boolean; error?: string }> {
     const result = await this.scoringParser.parseForResponses(buffer, metadata, {
       conversationId,
@@ -367,6 +346,14 @@ export class DocumentUploadController {
         expectedCount: result.expectedQuestionCount,
         isComplete: result.isComplete,
         confidence: result.confidence,
+        // Epic 16.6.8: File metadata for message attachment
+        fileMetadata: {
+          fileId,
+          filename: metadata.filename,
+          mimeType: metadata.mimeType,
+          size: metadata.sizeBytes,
+          storagePath,
+        },
       });
       return { success: true };
     } else {
@@ -403,4 +390,87 @@ export class DocumentUploadController {
       error,
     });
   }
+
+  /**
+   * GET /api/documents/download
+   * Download a previously uploaded file
+   *
+   * Epic 16.6.8: File download endpoint for chat attachments
+   *
+   * Query params:
+   * - path: Base64-encoded storage path
+   * - filename: Original filename for Content-Disposition header
+   *
+   * Security: Only allows downloading files from the authenticated user's directory
+   */
+  download = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+    const encodedPath = req.query.path as string;
+    const filename = req.query.filename as string;
+
+    // 1. Validate authentication
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    // 2. Validate required params
+    if (!encodedPath) {
+      res.status(400).json({ error: 'Missing required parameter: path' });
+      return;
+    }
+
+    // 3. Decode and validate path
+    let storagePath: string;
+    try {
+      storagePath = Buffer.from(encodedPath, 'base64').toString('utf-8');
+    } catch {
+      res.status(400).json({ error: 'Invalid path encoding' });
+      return;
+    }
+
+    // 4. SECURITY: Verify path belongs to authenticated user
+    // Path format: uploads/{userId}/{filename}
+    // This prevents users from downloading other users' files
+    const expectedPrefix = `uploads/${userId}/`;
+    if (!storagePath.startsWith(expectedPrefix)) {
+      console.warn(`[DocumentUploadController] SECURITY: User ${userId} attempted to access unauthorized path: ${storagePath}`);
+      res.status(403).json({ error: 'Access denied' });
+      return;
+    }
+
+    // 5. Check file exists
+    const exists = await this.fileStorage.exists(storagePath);
+    if (!exists) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    // 6. Retrieve file
+    try {
+      const buffer = await this.fileStorage.retrieve(storagePath);
+
+      // Determine MIME type from extension
+      const ext = storagePath.split('.').pop()?.toLowerCase();
+      const mimeTypes: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        png: 'image/png',
+        jpg: 'image/jpeg',
+        jpeg: 'image/jpeg',
+      };
+      const contentType = mimeTypes[ext || ''] || 'application/octet-stream';
+
+      // Set headers for download
+      const downloadFilename = filename || storagePath.split('/').pop() || 'download';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+      res.setHeader('Content-Length', buffer.length);
+
+      res.send(buffer);
+    } catch (error) {
+      console.error('[DocumentUploadController] Download error:', error);
+      res.status(500).json({ error: 'Failed to retrieve file' });
+    }
+  };
 }
