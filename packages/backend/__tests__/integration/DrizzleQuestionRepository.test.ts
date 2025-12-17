@@ -64,12 +64,14 @@ describe('DrizzleQuestionRepository Integration Tests', () => {
 
   describe('bulkCreate', () => {
     it('should bulk insert 87 questions', async () => {
+      // 87 questions spread across 10 sections (max allowed)
+      // ~9 questions per section
       const questionEntities = Array.from({ length: 87 }, (_, i) =>
         Question.create({
           assessmentId: testAssessmentId,
-          sectionName: `Section ${Math.floor(i / 8) + 1}`,
-          sectionNumber: Math.floor(i / 8) + 1,
-          questionNumber: (i % 8) + 1,
+          sectionName: `Section ${(i % 10) + 1}`,
+          sectionNumber: (i % 10) + 1, // Keep within 1-10 range
+          questionNumber: Math.floor(i / 10) + 1,
           questionText: `Test question ${i + 1}?`,
           questionType: 'text',
         })

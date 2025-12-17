@@ -2,19 +2,32 @@
  * PDF Exporter Integration Tests
  *
  * Tests PDF generation functionality
+ *
+ * NOTE: These tests reuse a single PDFExporter instance to avoid
+ * spawning multiple Puppeteer/Chromium processes which causes
+ * severe resource exhaustion (each Chromium instance ~200-500MB RAM)
  */
 
+import path from 'path'
 import { PDFExporter } from '../../src/infrastructure/export/PDFExporter'
 import { Assessment } from '../../src/domain/entities/Assessment'
 import { Vendor } from '../../src/domain/entities/Vendor'
 import { Question } from '../../src/domain/entities/Question'
 import * as pdf from 'pdf-parse'
 
+// Compute template path from process.cwd() (reliable in Jest)
+// Jest runs from packages/backend, so path is relative to that
+const TEST_TEMPLATE_PATH = path.join(
+  process.cwd(),
+  'src/infrastructure/export/templates/questionnaire-template.html'
+)
+
 describe('PDFExporter Integration Tests', () => {
+  // Shared instance to avoid spawning multiple Chromium browsers
   let pdfExporter: PDFExporter
 
-  beforeEach(() => {
-    pdfExporter = new PDFExporter()
+  beforeAll(() => {
+    pdfExporter = new PDFExporter(TEST_TEMPLATE_PATH)
   })
 
   describe('generatePDF', () => {
@@ -197,10 +210,7 @@ describe('PDFExporter Integration Tests', () => {
 
     it('should throw error if template not found', async () => {
       // Create an exporter with invalid template path
-      const badExporter = new PDFExporter()
-
-      // Override template path to invalid location
-      ;(badExporter as any).templatePath = '/invalid/path/template.html'
+      const badExporter = new PDFExporter('/invalid/path/template.html')
 
       const vendor = Vendor.create({
         name: 'Test',

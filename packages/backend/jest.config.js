@@ -7,6 +7,18 @@ export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+
+  // Performance: Prevent resource exhaustion from parallel tests
+  // E2E tests spawn servers, databases, and Puppeteer browsers
+  maxWorkers: 1, // Run sequentially to prevent resource exhaustion
+  testTimeout: 30000, // 30 second default timeout
+
+  // Memory management
+  workerIdleMemoryLimit: '512MB',
+
+  // NOTE: Do NOT use forceExit/detectOpenHandles here - they mask real leaks
+  // Use --detectOpenHandles CLI flag when debugging handle leaks
+
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     // Mock ESM-only packages

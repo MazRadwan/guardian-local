@@ -12,10 +12,13 @@ if (!DATABASE_URL) {
   throw new Error('DATABASE_URL environment variable is not set')
 }
 
+// Narrow to string after the guard (TS doesn't persist narrowing for module-level vars)
+const databaseUrl: string = DATABASE_URL
+
 async function runMigrations(): Promise<void> {
   console.log('Running database migrations...')
 
-  const migrationClient = postgres(DATABASE_URL, { max: 1 })
+  const migrationClient = postgres(databaseUrl, { max: 1 })
   const db = drizzle(migrationClient)
 
   try {

@@ -7,35 +7,32 @@
 import puppeteer, { Browser } from 'puppeteer'
 import * as fs from 'fs/promises'
 import * as path from 'path'
-import { fileURLToPath } from 'url'
 import {
   IPDFExporter,
   QuestionnaireData,
 } from '../../application/interfaces/IPDFExporter'
 import { Question } from '../../domain/entities/Question'
 
-// Get __dirname equivalent for both ESM (runtime) and CommonJS (Jest)
-// In ESM: compute from import.meta.url
-// In CommonJS (Jest): __dirname is globally available
-const getCurrentDir = (): string => {
-  // @ts-expect-error - __dirname exists in CommonJS (Jest) but not in ESM
-  if (typeof __dirname !== 'undefined') {
-    // @ts-expect-error - __dirname exists in CommonJS (Jest)
-    return __dirname
-  }
-  // ESM path - import.meta.url is available
-  return path.dirname(fileURLToPath(import.meta.url))
-}
-
 export class PDFExporter implements IPDFExporter {
   private templatePath: string
 
-  constructor() {
-    this.templatePath = path.join(
-      getCurrentDir(),
-      'templates',
-      'questionnaire-template.html'
-    )
+  /**
+   * Creates a PDFExporter instance.
+   *
+   * @param templatePath - Absolute path to the HTML template file.
+   *   In production (ESM), compute this from import.meta.url at the composition root.
+   *   In tests, compute from process.cwd() or pass a known test fixture path.
+   *
+   * @throws Error if templatePath is not provided
+   */
+  constructor(templatePath: string) {
+    if (!templatePath) {
+      throw new Error(
+        'PDFExporter requires templatePath. ' +
+          'Compute it from import.meta.url at the composition root (src/index.ts).'
+      )
+    }
+    this.templatePath = templatePath
   }
 
   /**

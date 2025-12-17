@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && npm run build:copy-templates",
+    "build:copy-templates": "mkdir -p dist/infrastructure/export/templates && cp -r src/infrastructure/export/templates/* dist/infrastructure/export/templates/",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
+    "test": "jest --testPathIgnorePatterns=e2e-external",
+    "test:e2e": "jest --testPathPattern=e2e --testPathIgnorePatterns=e2e-external",
+    "test:e2e:external": "jest --testPathPattern=e2e-external",
+    "test:all": "jest",
+    "test:coverage": "jest --coverage --testPathIgnorePatterns=e2e-external",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
     "db:studio": "drizzle-kit studio"

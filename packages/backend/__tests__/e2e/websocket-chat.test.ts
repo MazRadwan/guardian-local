@@ -304,17 +304,23 @@ describe('WebSocket Chat E2E Tests', () => {
         },
       })
 
+      // Temporary error handler for setup only - removed after conversation_created
+      const onSetupError = (err: { message: string }) => {
+        done(new Error(`Setup error: ${err.message}`))
+      }
+      clientSocket.once('error', onSetupError)
+
       clientSocket.on('connect', () => {
         // Explicitly create conversation
         clientSocket.emit('start_new_conversation', { mode: 'consult' })
       })
 
-      clientSocket.on('conversation_created', (data) => {
+      clientSocket.once('conversation_created', (data) => {
+        // Remove the setup error handler so it doesn't interfere with tests
+        clientSocket.off('error', onSetupError)
         socketConversationId = data.conversation.id
         done()
       })
-
-      clientSocket.on('error', (err) => done(new Error(err.message)))
     })
 
     it('should send message and receive confirmation', (done) => {
@@ -406,7 +412,7 @@ describe('WebSocket Chat E2E Tests', () => {
       })
 
       // Should receive assistant response via assistant_done event (not 'message')
-      clientSocket.on('assistant_done', (data) => {
+      clientSocket.once('assistant_done', (data) => {
         expect(data.messageId).toBeDefined()
         expect(data.conversationId).toBe(socketConversationId)
         expect(data.fullText).toContain('mocked') // From MockClaudeClient
@@ -456,7 +462,7 @@ describe('WebSocket Chat E2E Tests', () => {
         conversationId: testConversationId,
       })
 
-      clientSocket.on('history', (data) => {
+      clientSocket.once('history', (data) => {
         expect(data.conversationId).toBe(testConversationId)
         expect(data.messages).toHaveLength(3)
         expect(data.messages[0].content.text).toBe('Message 1')
@@ -472,23 +478,25 @@ describe('WebSocket Chat E2E Tests', () => {
         limit: 2,
       })
 
-      clientSocket.on('history', (data) => {
+      clientSocket.once('history', (data) => {
         expect(data.messages).toHaveLength(2)
         done()
       })
     })
 
     it('should get history with offset', (done) => {
+      // Repo uses DESC + offset + limit, then reverses to chronological
+      // For messages 1,2,3: DESC=[3,2,1], offset:1 skip newest, limit:2 → [2,1], reverse → [1,2]
       clientSocket.emit('get_history', {
         conversationId: testConversationId,
         limit: 2,
         offset: 1,
       })
 
-      clientSocket.on('history', (data) => {
+      clientSocket.once('history', (data) => {
         expect(data.messages).toHaveLength(2)
-        expect(data.messages[0].content.text).toBe('Message 2')
-        expect(data.messages[1].content.text).toBe('Message 3')
+        expect(data.messages[0].content.text).toBe('Message 1')
+        expect(data.messages[1].content.text).toBe('Message 2')
         done()
       })
     })
@@ -519,7 +527,7 @@ describe('WebSocket Chat E2E Tests', () => {
         conversationId: '00000000-0000-0000-0000-000000000000',
       })
 
-      clientSocket.on('history', (data) => {
+      clientSocket.once('history', (data) => {
         expect(data.messages).toEqual([])
         done()
       })
@@ -530,7 +538,7 @@ describe('WebSocket Chat E2E Tests', () => {
         conversationId: testConversationId,
       })
 
-      clientSocket.on('history', (data) => {
+      clientSocket.once('history', (data) => {
         const messages = data.messages
         for (let i = 1; i < messages.length; i++) {
           const prevDate = new Date(messages[i - 1].createdAt)

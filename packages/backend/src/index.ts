@@ -87,7 +87,13 @@ const promptCacheManager = new PromptCacheManager(
 );
 
 // Initialize exporters
-const pdfExporter = new PDFExporter();
+// Compute template path from __dirname (derived from import.meta.url at top of file)
+// This works in ESM and the template will be copied to dist/ during build
+const pdfTemplatePath = resolve(
+  __dirname,
+  'infrastructure/export/templates/questionnaire-template.html'
+);
+const pdfExporter = new PDFExporter(pdfTemplatePath);
 const wordExporter = new WordExporter();
 const excelExporter = new ExcelExporter();
 
