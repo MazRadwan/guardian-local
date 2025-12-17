@@ -134,21 +134,21 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     const handleSend = () => {
       const trimmedMessage = message.trim();
 
-      // Epic 16.6.8: Check if we have file ready to attach (complete stage with metadata)
-      const hasFile = uploadProgress.stage === 'complete' && fileMetadata?.storagePath;
+      // Epic 16.6.9: Check if we have file ready to attach (complete stage with fileId)
+      const hasFile = uploadProgress.stage === 'complete' && fileMetadata?.fileId;
 
       // Need either text or file to send
       if (!trimmedMessage && !hasFile) return;
       if (disabled) return;
 
-      // Epic 16.6.8: Build attachments from file metadata if available
+      // Epic 16.6.9: Build attachments from file metadata if available
+      // Only send fileId, filename, mimeType, size - NO storagePath (security)
       const attachments: MessageAttachment[] | undefined = hasFile && fileMetadata
         ? [{
             fileId: fileMetadata.fileId,
             filename: fileMetadata.filename,
             mimeType: fileMetadata.mimeType,
             size: fileMetadata.size,
-            storagePath: fileMetadata.storagePath!,
           }]
         : undefined;
 
@@ -176,8 +176,8 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       // Shift+Enter creates new line (default behavior, no action needed)
     };
 
-    // Epic 16.6.8: Enable send if we have text OR a completed file upload
-    const hasFileReady = uploadProgress.stage === 'complete' && fileMetadata?.storagePath;
+    // Epic 16.6.9: Enable send if we have text OR a completed file upload (check fileId)
+    const hasFileReady = uploadProgress.stage === 'complete' && fileMetadata?.fileId;
     const isSendEnabled = (message.trim().length > 0 || hasFileReady) && !disabled;
     const isBusy = isStreaming || isLoading;
 

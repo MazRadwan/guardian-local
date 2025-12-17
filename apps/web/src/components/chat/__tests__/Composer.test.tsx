@@ -94,7 +94,8 @@ describe('Composer', () => {
       await userEvent.type(textarea, 'Test message');
       await userEvent.click(sendButton);
 
-      expect(mockOnSendMessage).toHaveBeenCalledWith('Test message');
+      // Epic 16.6.9: onSendMessage now accepts optional attachments param
+      expect(mockOnSendMessage).toHaveBeenCalledWith('Test message', undefined);
       expect(mockOnSendMessage).toHaveBeenCalledTimes(1);
     });
 
@@ -107,7 +108,7 @@ describe('Composer', () => {
       await userEvent.type(textarea, '  Hello world  ');
       await userEvent.click(sendButton);
 
-      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello world');
+      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello world', undefined);
     });
 
     it('clears textarea after sending', async () => {
@@ -156,7 +157,7 @@ describe('Composer', () => {
       await userEvent.type(textarea, 'Hello');
       fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
-      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello');
+      expect(mockOnSendMessage).toHaveBeenCalledWith('Hello', undefined);
     });
 
     it('creates new line when Shift+Enter pressed', async () => {

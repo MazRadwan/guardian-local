@@ -31,6 +31,7 @@ import { DrizzleMessageRepository } from './infrastructure/database/repositories
 import { DrizzleVendorRepository } from './infrastructure/database/repositories/DrizzleVendorRepository.js';
 import { DrizzleAssessmentRepository } from './infrastructure/database/repositories/DrizzleAssessmentRepository.js';
 import { DrizzleQuestionRepository } from './infrastructure/database/repositories/DrizzleQuestionRepository.js';
+import { DrizzleFileRepository } from './infrastructure/database/repositories/DrizzleFileRepository.js';
 import { ClaudeClient } from './infrastructure/ai/ClaudeClient.js';
 import { JWTProvider } from './infrastructure/auth/JWTProvider.js';
 import { AuthController } from './infrastructure/http/controllers/AuthController.js';
@@ -75,6 +76,7 @@ const messageRepo = new DrizzleMessageRepository();
 const vendorRepo = new DrizzleVendorRepository();
 const assessmentRepo = new DrizzleAssessmentRepository();
 const questionRepo = new DrizzleQuestionRepository();
+const fileRepo = new DrizzleFileRepository();
 
 // Initialize providers
 const jwtProvider = new JWTProvider(JWT_SECRET);
@@ -168,7 +170,8 @@ const chatServer = new ChatServer(
   vendorService,
   questionnaireReadyService,
   questionnaireGenerationService,
-  questionService
+  questionService,
+  fileRepo
 );
 
 console.log('[App] ChatServer initialized');
@@ -182,7 +185,8 @@ const documentUploadController = new DocumentUploadController(
   documentParserService,  // IIntakeDocumentParser
   documentParserService,  // IScoringDocumentParser (same implementation)
   conversationService,    // Ownership validation + save assistant messages
-  chatNamespace
+  chatNamespace,
+  fileRepo                // Epic 16.6.9: File registration in database
 );
 
 // Register document routes (Epic 16)

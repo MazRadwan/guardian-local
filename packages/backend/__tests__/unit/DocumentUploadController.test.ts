@@ -1,4 +1,4 @@
-import { DocumentUploadController } from '../../src/infrastructure/http/controllers/DocumentUploadController';
+import { DocumentUploadController, buildContentDisposition } from '../../src/infrastructure/http/controllers/DocumentUploadController';
 import { Request, Response } from 'express';
 
 describe('DocumentUploadController', () => {
@@ -9,12 +9,14 @@ describe('DocumentUploadController', () => {
   let mockScoringParser: jest.Mocked<any>;
   let mockConversationService: jest.Mocked<any>;
   let mockChatNamespace: jest.Mocked<any>;
+  let mockFileRepository: jest.Mocked<any>;
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
 
   beforeEach(() => {
     mockFileStorage = {
       store: jest.fn().mockResolvedValue('/uploads/test.pdf'),
+      retrieve: jest.fn().mockResolvedValue(Buffer.from('test')),
     };
 
     mockFileValidator = {
@@ -56,13 +58,38 @@ describe('DocumentUploadController', () => {
       emit: jest.fn(),
     };
 
+    // Epic 16.6.9: Mock FileRepository for file registration
+    mockFileRepository = {
+      create: jest.fn().mockResolvedValue({
+        id: 'file-uuid-123',
+        userId: 'user-123',
+        conversationId: 'conv-123',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }),
+      findByIdAndUser: jest.fn().mockResolvedValue({
+        id: 'file-uuid-123',
+        userId: 'user-123',
+        conversationId: 'conv-123',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }),
+    };
+
     controller = new DocumentUploadController(
       mockFileStorage,
       mockFileValidator,
       mockIntakeParser,
       mockScoringParser,
       mockConversationService, // Ownership validation + assistant messages
-      mockChatNamespace        // /chat namespace
+      mockChatNamespace,       // /chat namespace
+      mockFileRepository       // Epic 16.6.9: File registration
     );
 
     // Auth middleware sets req.user (full User object), not req.userId
@@ -318,6 +345,298 @@ describe('DocumentUploadController', () => {
           error: 'Not a Guardian questionnaire', // Parser error included
         })
       );
+    });
+
+    // Epic 16.6.9: File registration tests
+    it('should register file in database after storage', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Verify file was registered in database
+      expect(mockFileRepository.create).toHaveBeenCalledWith({
+        userId: 'user-123',
+        conversationId: 'conv-123',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+      });
+    });
+
+    it('should include fileId in intake_context_ready event', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Verify intake_context_ready includes fileId from database
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'intake_context_ready',
+        expect.objectContaining({
+          fileMetadata: {
+            fileId: 'file-uuid-123',
+            filename: 'test.pdf',
+            mimeType: 'application/pdf',
+            size: 1024,
+          },
+        })
+      );
+    });
+
+    it('should NOT include storagePath in intake_context_ready event', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Verify storagePath is NOT in fileMetadata
+      const intakeReadyCall = mockChatNamespace.emit.mock.calls.find(
+        (call: any[]) => call[0] === 'intake_context_ready'
+      );
+      expect(intakeReadyCall).toBeDefined();
+      expect(intakeReadyCall![1].fileMetadata).not.toHaveProperty('storagePath');
+    });
+
+    it('should NOT include storagePath in HTTP 202 response', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Verify response does not include storagePath
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fileMetadata: expect.not.objectContaining({
+            storagePath: expect.anything(),
+          }),
+        })
+      );
+    });
+
+    it('should include fileId in scoring_parse_ready event', async () => {
+      // Switch to scoring mode
+      mockReq.body = {
+        conversationId: 'conv-123',
+        mode: 'scoring',
+      };
+
+      mockScoringParser.parseForResponses.mockResolvedValue({
+        success: true,
+        assessmentId: 'assess-123',
+        vendorName: 'Test Vendor',
+        responses: [],
+        expectedQuestionCount: 0,
+        isComplete: true,
+        confidence: 0.9,
+      });
+
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Verify scoring_parse_ready includes fileId
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'scoring_parse_ready',
+        expect.objectContaining({
+          fileMetadata: {
+            fileId: 'file-uuid-123',
+            filename: 'test.pdf',
+            mimeType: 'application/pdf',
+            size: 1024,
+          },
+        })
+      );
+    });
+  });
+
+  describe('download', () => {
+    beforeEach(() => {
+      mockReq = {
+        user: { id: 'user-123', email: 'test@example.com', role: 'user' } as any,
+        params: { fileId: 'file-uuid-123' },
+      };
+
+      mockRes = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      };
+    });
+
+    it('should reject unauthenticated request', async () => {
+      mockReq.user = undefined;
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Not authenticated' });
+    });
+
+    it('should reject missing fileId', async () => {
+      mockReq.params = {};
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Missing required parameter: fileId' });
+    });
+
+    it('should return 404 if file not found', async () => {
+      mockFileRepository.findByIdAndUser.mockResolvedValue(null);
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'File not found' });
+    });
+
+    it('should return 404 if file belongs to different user', async () => {
+      mockFileRepository.findByIdAndUser.mockResolvedValue(null);
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockFileRepository.findByIdAndUser).toHaveBeenCalledWith('file-uuid-123', 'user-123');
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+    });
+
+    it('should stream file with correct headers on success', async () => {
+      const fileBuffer = Buffer.from('test');
+      mockFileStorage.retrieve.mockResolvedValue(fileBuffer);
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockFileRepository.findByIdAndUser).toHaveBeenCalledWith('file-uuid-123', 'user-123');
+      expect(mockFileStorage.retrieve).toHaveBeenCalledWith('/uploads/test.pdf');
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'application/pdf');
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="test.pdf"');
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Length', fileBuffer.length);
+      expect(mockRes.send).toHaveBeenCalledWith(fileBuffer);
+    });
+
+    it('should handle DOCX files with correct MIME type', async () => {
+      const docxBuffer = Buffer.from('docx content');
+      mockFileRepository.findByIdAndUser.mockResolvedValue({
+        id: 'file-uuid-123',
+        userId: 'user-123',
+        conversationId: 'conv-123',
+        filename: 'document.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 2048,
+        storagePath: '/uploads/document.docx',
+        createdAt: new Date(),
+      });
+      mockFileStorage.retrieve.mockResolvedValue(docxBuffer);
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      );
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="document.docx"');
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Length', docxBuffer.length);
+      expect(mockRes.send).toHaveBeenCalledWith(docxBuffer);
+    });
+
+    it('should return 500 on storage retrieval error', async () => {
+      mockFileStorage.retrieve.mockRejectedValue(new Error('Storage error'));
+
+      await controller.download(mockReq as any, mockRes as any);
+
+      expect(mockRes.status).toHaveBeenCalledWith(500);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Failed to retrieve file' });
+    });
+  });
+});
+
+describe('buildContentDisposition', () => {
+  describe('header injection prevention', () => {
+    it('should strip newline characters', () => {
+      const result = buildContentDisposition('file\nname.pdf');
+      expect(result).toBe('attachment; filename="filename.pdf"');
+      expect(result).not.toContain('\n');
+    });
+
+    it('should strip carriage return characters', () => {
+      const result = buildContentDisposition('file\rname.pdf');
+      expect(result).toBe('attachment; filename="filename.pdf"');
+      expect(result).not.toContain('\r');
+    });
+
+    it('should strip CRLF injection attempts', () => {
+      const result = buildContentDisposition('file\r\nX-Injected: header\r\n.pdf');
+      // Colons are preserved (safe), only control chars stripped
+      expect(result).toBe('attachment; filename="fileX-Injected: header.pdf"');
+      expect(result).not.toMatch(/\r|\n/);
+    });
+
+    it('should strip tab characters', () => {
+      const result = buildContentDisposition('file\tname.pdf');
+      expect(result).toBe('attachment; filename="filename.pdf"');
+      expect(result).not.toContain('\t');
+    });
+  });
+
+  describe('special character handling', () => {
+    it('should replace double quotes with underscore', () => {
+      const result = buildContentDisposition('file"name.pdf');
+      expect(result).toBe('attachment; filename="file_name.pdf"');
+    });
+
+    it('should replace backslashes with underscore', () => {
+      const result = buildContentDisposition('file\\name.pdf');
+      expect(result).toBe('attachment; filename="file_name.pdf"');
+    });
+
+    it('should handle multiple special characters', () => {
+      const result = buildContentDisposition('file"with\\quotes.pdf');
+      expect(result).toBe('attachment; filename="file_with_quotes.pdf"');
+    });
+  });
+
+  describe('non-ASCII character handling', () => {
+    it('should use RFC 5987 encoding for non-ASCII filenames', () => {
+      const result = buildContentDisposition('文档.pdf');
+      // Should have both ASCII fallback and UTF-8 encoded version
+      expect(result).toContain('filename="');
+      expect(result).toContain("filename*=UTF-8''");
+      expect(result).toContain('%E6%96%87%E6%A1%A3.pdf');
+    });
+
+    it('should handle mixed ASCII and non-ASCII', () => {
+      const result = buildContentDisposition('report_日本語.pdf');
+      expect(result).toContain("filename*=UTF-8''");
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle empty filename', () => {
+      const result = buildContentDisposition('');
+      expect(result).toBe('attachment; filename="download"');
+    });
+
+    it('should handle filename with only dots', () => {
+      const result = buildContentDisposition('.');
+      expect(result).toBe('attachment; filename="download"');
+    });
+
+    it('should truncate very long filenames', () => {
+      const longName = 'a'.repeat(250) + '.pdf';
+      const result = buildContentDisposition(longName);
+      // Should be truncated to ~200 chars + extension
+      expect(result.length).toBeLessThan(250);
+      expect(result).toContain('.pdf');
+    });
+
+    it('should preserve normal filenames unchanged', () => {
+      const result = buildContentDisposition('normal-file_name.pdf');
+      expect(result).toBe('attachment; filename="normal-file_name.pdf"');
+    });
+
+    it('should preserve spaces in filenames', () => {
+      const result = buildContentDisposition('my document.pdf');
+      expect(result).toBe('attachment; filename="my document.pdf"');
     });
   });
 });

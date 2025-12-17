@@ -18,6 +18,60 @@ import { IScoringDocumentParser } from '../../../application/interfaces/IScoring
 import { ConversationService } from '../../../application/services/ConversationService.js';
 import { DocumentMetadata } from '../../../application/interfaces/IDocumentParser.js';
 import { User } from '../../../domain/entities/User.js';
+import { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
+
+/**
+ * Sanitize filename for use in Content-Disposition header.
+ * Prevents header injection attacks and handles special characters.
+ *
+ * @param filename - Original filename from database
+ * @returns Sanitized filename safe for HTTP headers
+ */
+function sanitizeFilenameForHeader(filename: string): string {
+  // 1. Remove control characters (prevents header injection)
+  //    Includes: \r, \n, \t, and other ASCII control chars (0x00-0x1F, 0x7F)
+  let sanitized = filename.replace(/[\x00-\x1F\x7F]/g, '');
+
+  // 2. Remove/escape characters that break Content-Disposition syntax
+  //    Double quotes and backslashes need escaping or removal
+  sanitized = sanitized.replace(/["\\]/g, '_');
+
+  // 3. Limit length to prevent header overflow (255 is common filesystem limit)
+  if (sanitized.length > 200) {
+    const ext = sanitized.slice(sanitized.lastIndexOf('.'));
+    const base = sanitized.slice(0, 200 - ext.length);
+    sanitized = base + ext;
+  }
+
+  // 4. Fallback if filename becomes empty
+  if (!sanitized || sanitized === '.') {
+    sanitized = 'download';
+  }
+
+  return sanitized;
+}
+
+/**
+ * Build Content-Disposition header value with proper encoding.
+ * Uses RFC 5987 filename* for non-ASCII characters.
+ *
+ * @param filename - Original filename
+ * @returns Header value string
+ */
+export function buildContentDisposition(filename: string): string {
+  const sanitized = sanitizeFilenameForHeader(filename);
+
+  // Check if filename contains non-ASCII characters
+  const hasNonAscii = /[^\x20-\x7E]/.test(sanitized);
+
+  if (hasNonAscii) {
+    // RFC 5987: Use filename* with UTF-8 encoding for non-ASCII
+    const encoded = encodeURIComponent(sanitized).replace(/'/g, '%27');
+    return `attachment; filename="${sanitized.replace(/[^\x20-\x7E]/g, '_')}"; filename*=UTF-8''${encoded}`;
+  }
+
+  return `attachment; filename="${sanitized}"`;
+}
 
 /**
  * Authenticated request - matches existing auth middleware pattern
@@ -37,7 +91,9 @@ export class DocumentUploadController {
     /** ConversationService for ownership validation + saving assistant messages */
     private readonly conversationService: ConversationService,
     /** Must be the /chat namespace, not base io - clients connect to /chat */
-    private readonly chatNamespace: Namespace
+    private readonly chatNamespace: Namespace,
+    /** FileRepository for registering uploaded files (Epic 16.6.9) */
+    private readonly fileRepository: IFileRepository
   ) {}
 
   /**
@@ -106,18 +162,15 @@ export class DocumentUploadController {
     }
 
     // 5. Return upload accepted, process async
-    // Epic 16.6.8: Generate fileId upfront for correlation
-    // Full file metadata (including storagePath) will be sent via intake_context_ready event
+    // Epic 16.6.9: Generate uploadId for progress tracking
     const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const fileId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
     res.status(202).json({
       message: 'Upload accepted, processing started',
       uploadId,
       conversationId,
-      // Epic 16.6.8: Partial file metadata (storagePath comes via WS event after store)
+      // Epic 16.6.9: Partial file metadata (fileId comes from database after storage)
       fileMetadata: {
-        fileId,
         filename: file.originalname,
         mimeType: file.mimetype,
         size: file.size,
@@ -125,17 +178,16 @@ export class DocumentUploadController {
     });
 
     // 6. Process async with WebSocket progress events
-    // Epic 16.6.8: Pass fileId for correlation in intake_context_ready event
-    this.processUpload(uploadId, fileId, userId, conversationId, mode, file, validation.documentType!);
+    // Epic 16.6.9: fileId generated after file is stored and registered in database
+    this.processUpload(uploadId, userId, conversationId, mode, file, validation.documentType!);
   };
 
   /**
    * Process upload asynchronously with WebSocket progress updates
-   * Epic 16.6.8: Now includes fileId for attachment metadata correlation
+   * Epic 16.6.9: Creates file record in database after storage, uses UUID as fileId
    */
   private async processUpload(
     uploadId: string,
-    fileId: string,
     userId: string,
     conversationId: string,
     mode: 'intake' | 'scoring',
@@ -156,6 +208,19 @@ export class DocumentUploadController {
         conversationId,
       });
 
+      // Epic 16.6.9: Register file in database after storage
+      const fileRecord = await this.fileRepository.create({
+        userId,
+        conversationId,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        storagePath,
+      });
+
+      // Use database UUID as fileId
+      const fileId = fileRecord.id;
+
       // Build metadata (storagePath is internal-only, never emitted to client)
       const metadata: DocumentMetadata = {
         filename: file.originalname,
@@ -171,12 +236,12 @@ export class DocumentUploadController {
       this.emitProgress(socketRoom, conversationId, uploadId, 50, 'parsing', 'Analyzing document...');
 
       // Parse based on mode - track success and error for correct stage emission
-      // Epic 16.6.8: Pass fileId and storagePath for attachment metadata
+      // Epic 16.6.9: Pass fileId (database UUID) for attachment metadata
       let parseResult: { success: boolean; error?: string };
       if (mode === 'intake') {
-        parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId, storagePath);
+        parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId);
       } else {
-        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId, storagePath);
+        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId);
       }
 
       // Emit final stage based on parse result
@@ -241,7 +306,7 @@ export class DocumentUploadController {
    * - Emit 'intake_context_ready' for UI state updates only
    * - Claude sees context via synthetic message injection in ChatServer
    *
-   * Epic 16.6.8: Include file metadata in event for attachment display
+   * Epic 16.6.9: File metadata includes fileId (database UUID), NOT storagePath
    *
    * @returns { success: boolean, error?: string } - parse result with error details
    */
@@ -251,8 +316,7 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string,
-    fileId: string,
-    storagePath: string
+    fileId: string
   ): Promise<{ success: boolean; error?: string }> {
     const result = await this.intakeParser.parseForContext(buffer, metadata, {
       conversationId,
@@ -276,7 +340,7 @@ export class DocumentUploadController {
       });
 
       // Emit 'intake_context_ready' for UI state updates
-      // Epic 16.6.8: Include file metadata for attachment display
+      // Epic 16.6.9: File metadata includes fileId (database UUID), NOT storagePath
       this.chatNamespace.to(socketRoom).emit('intake_context_ready', {
         conversationId,
         uploadId,
@@ -294,13 +358,12 @@ export class DocumentUploadController {
         coveredCategories: result.coveredCategories,
         gapCategories: result.gapCategories,
         confidence: result.confidence,
-        // Epic 16.6.8: File metadata for message attachment
+        // Epic 16.6.9: File metadata for message attachment (NO storagePath)
         fileMetadata: {
           fileId,
           filename: metadata.filename,
           mimeType: metadata.mimeType,
           size: metadata.sizeBytes,
-          storagePath,
         },
       });
       return { success: true };
@@ -319,7 +382,7 @@ export class DocumentUploadController {
 
   /**
    * Parse document for scoring responses
-   * Epic 16.6.8: Include file metadata in event for attachment display
+   * Epic 16.6.9: File metadata includes fileId (database UUID), NOT storagePath
    * @returns { success: boolean, error?: string } - parse result with error details
    */
   private async parseForScoring(
@@ -328,8 +391,7 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string,
-    fileId: string,
-    storagePath: string
+    fileId: string
   ): Promise<{ success: boolean; error?: string }> {
     const result = await this.scoringParser.parseForResponses(buffer, metadata, {
       conversationId,
@@ -346,13 +408,12 @@ export class DocumentUploadController {
         expectedCount: result.expectedQuestionCount,
         isComplete: result.isComplete,
         confidence: result.confidence,
-        // Epic 16.6.8: File metadata for message attachment
+        // Epic 16.6.9: File metadata for message attachment (NO storagePath)
         fileMetadata: {
           fileId,
           filename: metadata.filename,
           mimeType: metadata.mimeType,
           size: metadata.sizeBytes,
-          storagePath,
         },
       });
       return { success: true };
@@ -392,21 +453,19 @@ export class DocumentUploadController {
   }
 
   /**
-   * GET /api/documents/download
+   * GET /api/documents/:fileId/download
    * Download a previously uploaded file
    *
-   * Epic 16.6.8: File download endpoint for chat attachments
+   * Epic 16.6.9: Secure download endpoint using fileId and database lookup
    *
-   * Query params:
-   * - path: Base64-encoded storage path
-   * - filename: Original filename for Content-Disposition header
+   * Path params:
+   * - fileId: Database UUID of the file
    *
-   * Security: Only allows downloading files from the authenticated user's directory
+   * Security: Validates file exists and belongs to authenticated user via database lookup
    */
   download = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     const userId = req.user?.id;
-    const encodedPath = req.query.path as string;
-    const filename = req.query.filename as string;
+    const { fileId } = req.params;
 
     // 1. Validate authentication
     if (!userId) {
@@ -415,56 +474,25 @@ export class DocumentUploadController {
     }
 
     // 2. Validate required params
-    if (!encodedPath) {
-      res.status(400).json({ error: 'Missing required parameter: path' });
+    if (!fileId) {
+      res.status(400).json({ error: 'Missing required parameter: fileId' });
       return;
     }
 
-    // 3. Decode and validate path
-    let storagePath: string;
-    try {
-      storagePath = Buffer.from(encodedPath, 'base64').toString('utf-8');
-    } catch {
-      res.status(400).json({ error: 'Invalid path encoding' });
-      return;
-    }
-
-    // 4. SECURITY: Verify path belongs to authenticated user
-    // Path format: uploads/{userId}/{filename}
-    // This prevents users from downloading other users' files
-    const expectedPrefix = `uploads/${userId}/`;
-    if (!storagePath.startsWith(expectedPrefix)) {
-      console.warn(`[DocumentUploadController] SECURITY: User ${userId} attempted to access unauthorized path: ${storagePath}`);
-      res.status(403).json({ error: 'Access denied' });
-      return;
-    }
-
-    // 5. Check file exists
-    const exists = await this.fileStorage.exists(storagePath);
-    if (!exists) {
+    // 3. Look up file by ID and user (authorization check)
+    const file = await this.fileRepository.findByIdAndUser(fileId, userId);
+    if (!file) {
       res.status(404).json({ error: 'File not found' });
       return;
     }
 
-    // 6. Retrieve file
+    // 4. Retrieve file from storage
     try {
-      const buffer = await this.fileStorage.retrieve(storagePath);
+      const buffer = await this.fileStorage.retrieve(file.storagePath);
 
-      // Determine MIME type from extension
-      const ext = storagePath.split('.').pop()?.toLowerCase();
-      const mimeTypes: Record<string, string> = {
-        pdf: 'application/pdf',
-        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        png: 'image/png',
-        jpg: 'image/jpeg',
-        jpeg: 'image/jpeg',
-      };
-      const contentType = mimeTypes[ext || ''] || 'application/octet-stream';
-
-      // Set headers for download
-      const downloadFilename = filename || storagePath.split('/').pop() || 'download';
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"`);
+      // Set headers for download (sanitized to prevent header injection)
+      res.setHeader('Content-Type', file.mimeType);
+      res.setHeader('Content-Disposition', buildContentDisposition(file.filename));
       res.setHeader('Content-Length', buffer.length);
 
       res.send(buffer);

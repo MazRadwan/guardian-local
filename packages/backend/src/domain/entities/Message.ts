@@ -7,13 +7,14 @@ export interface MessageComponent {
 
 /**
  * Epic 16.6.8: File attachment metadata stored with messages
+ * Epic 16.6.9: storagePath intentionally excluded - never persisted in messages
+ *              (stored only in files table, resolved via fileId for downloads)
  */
 export interface MessageAttachment {
   fileId: string;
   filename: string;
   mimeType: string;
   size: number;
-  storagePath: string;
 }
 
 export interface MessageContent {

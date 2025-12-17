@@ -249,7 +249,7 @@ describe('useWebSocketAdapter', () => {
 
       result.current.sendMessage('Hello!', 'conv-123');
 
-      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello!', 'conv-123');
+      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello!', 'conv-123', undefined);
     });
 
     it('should request history with conversation ID', () => {
@@ -450,7 +450,7 @@ describe('useWebSocketAdapter', () => {
 
       // Should be able to send message
       result.current.sendMessage('Test', 'conv-123');
-      expect(mockWs.sendMessage).toHaveBeenCalledWith('Test', 'conv-123');
+      expect(mockWs.sendMessage).toHaveBeenCalledWith('Test', 'conv-123', undefined);
 
       // Should be able to request history
       result.current.requestHistory('conv-123');
@@ -498,7 +498,7 @@ describe('useWebSocketAdapter', () => {
 
       // Verify all operations called
       expect(mockWs.fetchConversations).toHaveBeenCalledTimes(1);
-      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello', 'conv-1');
+      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello', 'conv-1', undefined);
       expect(mockWs.startNewConversation).toHaveBeenCalledWith('assessment');
       expect(mockWs.abortStream).toHaveBeenCalledTimes(1);
       expect(mockWs.deleteConversation).toHaveBeenCalledWith('conv-2');

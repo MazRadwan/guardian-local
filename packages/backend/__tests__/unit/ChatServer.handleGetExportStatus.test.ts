@@ -18,6 +18,7 @@ describe('ChatServer.handleGetExportStatus (Story 13.9.1)', () => {
   let mockQuestionnaireReadyService: any;
   let mockQuestionnaireGenerationService: any;
   let mockQuestionService: any;
+  let mockFileRepository: any;
   let mockIo: any;
   let mockRateLimiter: any;
   let mockPromptCacheManager: any;
@@ -79,6 +80,14 @@ describe('ChatServer.handleGetExportStatus (Story 13.9.1)', () => {
       getQuestions: jest.fn(),
     };
 
+    // Mock FileRepository
+    mockFileRepository = {
+      create: jest.fn(),
+      findById: jest.fn(),
+      findByIdAndUser: jest.fn(),
+      findByIdAndConversation: jest.fn(),
+    };
+
     // Mock IO
     mockIo = {
       of: jest.fn().mockReturnValue({
@@ -114,7 +123,8 @@ describe('ChatServer.handleGetExportStatus (Story 13.9.1)', () => {
       mockVendorService,
       mockQuestionnaireReadyService,
       mockQuestionnaireGenerationService,
-      mockQuestionService
+      mockQuestionService,
+      mockFileRepository
     );
   });
 

@@ -340,8 +340,8 @@ describe('useChatController', () => {
         result.current.handleSendMessage('Hello, world!');
       });
 
-      // Now delegated to ChatService
-      expect(mockChatServiceSendMessage).toHaveBeenCalledWith('Hello, world!', 'conv-123');
+      // Now delegated to ChatService (third arg is optional attachments)
+      expect(mockChatServiceSendMessage).toHaveBeenCalledWith('Hello, world!', 'conv-123', undefined);
     });
 
     it('delegates to chat service (validation is service responsibility)', () => {
@@ -367,7 +367,7 @@ describe('useChatController', () => {
       });
 
       // Controller delegates to service - validation happens in service layer
-      expect(mockChatServiceSendMessage).toHaveBeenCalledWith('Hello', null);
+      expect(mockChatServiceSendMessage).toHaveBeenCalledWith('Hello', null, undefined);
     });
 
     it('handles sendMessage error gracefully', () => {

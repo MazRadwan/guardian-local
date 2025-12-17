@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from 'express'
 import { ExportService } from '../../../application/services/ExportService'
 import { IAssessmentRepository } from '../../../application/interfaces/IAssessmentRepository'
+import { buildContentDisposition } from './DocumentUploadController.js'
 
 export class ExportController {
   constructor(
@@ -40,9 +41,9 @@ export class ExportController {
         'pdf'
       )
 
-      // Set headers for file download
+      // Set headers for file download (sanitized to prevent header injection)
       res.setHeader('Content-Type', 'application/pdf')
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('Content-Disposition', buildContentDisposition(filename))
       res.setHeader('Content-Length', pdfBuffer.length)
 
       // Send file
@@ -77,12 +78,12 @@ export class ExportController {
         'docx'
       )
 
-      // Set headers for file download
+      // Set headers for file download (sanitized to prevent header injection)
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       )
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('Content-Disposition', buildContentDisposition(filename))
       res.setHeader('Content-Length', wordBuffer.length)
 
       // Send file
@@ -117,12 +118,12 @@ export class ExportController {
         'xlsx'
       )
 
-      // Set headers for file download
+      // Set headers for file download (sanitized to prevent header injection)
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       )
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('Content-Disposition', buildContentDisposition(filename))
       res.setHeader('Content-Length', excelBuffer.length)
 
       // Send file

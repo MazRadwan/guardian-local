@@ -61,18 +61,17 @@ export function createDocumentRoutes(
   );
 
   /**
-   * GET /api/documents/download
+   * GET /api/documents/:fileId/download
    * Download a previously uploaded file
    *
-   * Epic 16.6.8: File download for chat attachments
+   * Epic 16.6.9: Secure file download using fileId
    *
-   * Query params:
-   * - path: Base64-encoded storage path
-   * - filename: Original filename for Content-Disposition header
+   * Path params:
+   * - fileId: Database UUID of the file
    *
    * Returns: File binary with appropriate Content-Type
    */
-  router.get('/download', authMiddleware(authService), controller.download);
+  router.get('/:fileId/download', authMiddleware(authService), controller.download);
 
   return router;
 }

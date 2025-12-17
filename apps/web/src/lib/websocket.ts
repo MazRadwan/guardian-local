@@ -32,13 +32,14 @@ export interface EmbeddedComponent {
 
 /**
  * Epic 16.6.8: File attachment metadata for chat messages
+ * Epic 16.6.9: storagePath removed - never exposed to client
+ *              (files table stores it, resolved via fileId for downloads)
  */
 export interface MessageAttachment {
   fileId: string;
   filename: string;
   mimeType: string;
   size: number;
-  storagePath: string;
 }
 
 export interface ChatMessage {

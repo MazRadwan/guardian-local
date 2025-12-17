@@ -232,8 +232,8 @@ export function ChatInterface() {
   }, [exportData, token]);
 
   /**
-   * Epic 16.6.8: Download file attachment from chat message
-   * Uses the /api/documents/download endpoint with base64-encoded path
+   * Epic 16.6.9: Download file attachment from chat message
+   * Uses fileId-based endpoint (no storagePath exposure)
    */
   const handleDownloadAttachment = useCallback(async (attachment: MessageAttachment) => {
     if (!token) {
@@ -244,9 +244,8 @@ export function ChatInterface() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-      // Build download URL with base64-encoded path and filename
-      const encodedPath = btoa(attachment.storagePath);
-      const downloadUrl = `${apiUrl}/api/documents/download?path=${encodeURIComponent(encodedPath)}&filename=${encodeURIComponent(attachment.filename)}`;
+      // Epic 16.6.9: Use fileId-based endpoint (no storagePath exposure)
+      const downloadUrl = `${apiUrl}/api/documents/${attachment.fileId}/download`;
 
       const response = await fetch(downloadUrl, {
         method: 'GET',

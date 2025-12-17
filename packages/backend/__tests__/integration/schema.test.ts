@@ -6,7 +6,7 @@ describe('Database Schema', () => {
     await queryClient.end()
   })
 
-  it('should have all 6 MVP tables', async () => {
+  it('should have all 7 tables (6 MVP + files)', async () => {
     const result = await db.execute<{ tablename: string }>(
       sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
     )
@@ -20,9 +20,11 @@ describe('Database Schema', () => {
     expect(tableNames).toContain('questions')
     expect(tableNames).toContain('conversations')
     expect(tableNames).toContain('messages')
+    // Epic 16.6.9: Files table for attachment security
+    expect(tableNames).toContain('files')
 
-    // Should have exactly 6 tables
-    expect(tableNames).toHaveLength(6)
+    // Should have exactly 7 tables
+    expect(tableNames).toHaveLength(7)
   })
 
   it('should have users table with correct columns', async () => {
@@ -105,5 +107,22 @@ describe('Database Schema', () => {
     expect(columns.find((c) => c.name === 'content')?.type).toBe('jsonb')
     expect(columns.some((c) => c.name === 'conversation_id')).toBe(true)
     expect(columns.some((c) => c.name === 'role')).toBe(true)
+  })
+
+  it('should have files table with correct columns and foreign keys', async () => {
+    const result = await db.execute<{ column_name: string }>(
+      sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'files'`
+    )
+
+    const columnNames = result.map((row) => row.column_name)
+
+    expect(columnNames).toContain('id')
+    expect(columnNames).toContain('user_id')
+    expect(columnNames).toContain('conversation_id')
+    expect(columnNames).toContain('filename')
+    expect(columnNames).toContain('mime_type')
+    expect(columnNames).toContain('size')
+    expect(columnNames).toContain('storage_path')
+    expect(columnNames).toContain('created_at')
   })
 })

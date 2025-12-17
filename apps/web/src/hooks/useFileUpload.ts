@@ -27,13 +27,13 @@ export type UploadMode = 'intake' | 'scoring';
 
 /**
  * Epic 16.6.8: File metadata for attachments
+ * Epic 16.6.9: storagePath removed - never exposed to client
  */
 export interface FileMetadata {
   fileId: string;
   filename: string;
   mimeType: string;
   size: number;
-  storagePath?: string; // Only available after file is stored
 }
 
 export interface UploadProgress {
@@ -165,13 +165,13 @@ export function useFileUpload(options: UseFileUploadOptions) {
           message: 'Document processed',
         });
         // Epic 16.6.8: Capture file metadata for attachment
+        // Epic 16.6.9: storagePath no longer sent by backend
         if (data.fileMetadata) {
           setFileMetadata({
             fileId: data.fileMetadata.fileId,
             filename: data.fileMetadata.filename,
             mimeType: data.fileMetadata.mimeType,
             size: data.fileMetadata.size,
-            storagePath: data.fileMetadata.storagePath,
           });
         }
         onContextReadyRef.current?.(data);
@@ -204,13 +204,13 @@ export function useFileUpload(options: UseFileUploadOptions) {
           message: 'Questionnaire parsed',
         });
         // Epic 16.6.8: Capture file metadata for attachment
+        // Epic 16.6.9: storagePath no longer sent by backend
         if (data.fileMetadata) {
           setFileMetadata({
             fileId: data.fileMetadata.fileId,
             filename: data.fileMetadata.filename,
             mimeType: data.fileMetadata.mimeType,
             size: data.fileMetadata.size,
-            storagePath: data.fileMetadata.storagePath,
           });
         }
         onScoringReadyRef.current?.(data);

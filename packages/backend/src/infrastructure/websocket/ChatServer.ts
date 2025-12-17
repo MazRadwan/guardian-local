@@ -5,6 +5,7 @@ import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
+import type { IFileRepository } from '../../application/interfaces/IFileRepository.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
@@ -35,8 +36,8 @@ interface SendMessagePayload {
     type: 'button' | 'link' | 'code' | 'form';
     data: unknown;
   }>;
-  // Epic 16.6.8: File attachments for file-with-message sends
-  attachments?: MessageAttachment[];
+  // Epic 16.6.9: File attachments now only send fileId (server validates and enriches)
+  attachments?: Array<{ fileId: string }>;
 }
 
 interface GetHistoryPayload {
@@ -75,7 +76,8 @@ export class ChatServer {
     private readonly vendorService: VendorService,
     private readonly questionnaireReadyService: QuestionnaireReadyService,
     private readonly questionnaireGenerationService: QuestionnaireGenerationService,
-    private readonly questionService: QuestionService
+    private readonly questionService: QuestionService,
+    private readonly fileRepository: IFileRepository
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -361,7 +363,44 @@ export class ChatServer {
             `[ChatServer] Message received from ${socket.userId} for conversation ${conversationId}`
           );
 
-          // Save user message (Epic 16.6.8: include attachments)
+          // Epic 16.6.9: Validate and enrich attachments
+          let enrichedAttachments: MessageAttachment[] | undefined;
+          if (hasAttachments) {
+            enrichedAttachments = [];
+            for (const att of attachments) {
+              // Validate: file exists AND belongs to this user AND this conversation
+              const file = await this.fileRepository.findByIdAndConversation(att.fileId, conversationId);
+
+              if (!file) {
+                socket.emit('error', {
+                  event: 'send_message',
+                  message: `Invalid attachment: file ${att.fileId} not found or not authorized`,
+                });
+                return;
+              }
+
+              // Verify user owns the file
+              if (file.userId !== socket.userId) {
+                socket.emit('error', {
+                  event: 'send_message',
+                  message: 'Attachment not authorized',
+                });
+                return;
+              }
+
+              // Enrich with server-side metadata (don't trust client)
+              // Epic 16.6.9: storagePath intentionally NOT persisted in messages
+              // (it stays in files table, resolved via fileId for downloads)
+              enrichedAttachments.push({
+                fileId: file.id,
+                filename: file.filename,
+                mimeType: file.mimeType,
+                size: file.size,
+              });
+            }
+          }
+
+          // Save user message with enriched attachments (not client-supplied)
           const message = await this.conversationService.sendMessage({
             conversationId,
             role: 'user',
@@ -369,15 +408,16 @@ export class ChatServer {
               text: messageText || '', // Allow empty text for file-only messages
               components: payload.components,
             },
-            attachments: hasAttachments ? attachments : undefined,
+            attachments: enrichedAttachments,
           });
 
-          // Emit confirmation with attachments (Epic 16.6.8)
+          // Emit confirmation with attachments
+          // Epic 16.6.9: enrichedAttachments already excludes storagePath (never persisted)
           socket.emit('message_sent', {
             messageId: message.id,
             conversationId: message.conversationId,
             timestamp: message.createdAt,
-            attachments: message.attachments, // Include for frontend rendering
+            attachments: enrichedAttachments,
           });
 
           // Check if this is the first user message and emit title update
@@ -559,8 +599,16 @@ export class ChatServer {
               role: msg.role,
               content: msg.content,
               createdAt: msg.createdAt,
-              // Epic 16.6.8: Include attachments for file display in chat history
-              ...(msg.attachments && msg.attachments.length > 0 && { attachments: msg.attachments }),
+              // Epic 16.6.9: Pass through attachments (storagePath no longer stored,
+              // but strip defensively for backward compat with old messages)
+              ...(msg.attachments && msg.attachments.length > 0 && {
+                attachments: msg.attachments.map(att => ({
+                  fileId: att.fileId,
+                  filename: att.filename,
+                  mimeType: att.mimeType,
+                  size: att.size,
+                })),
+              }),
             })),
           });
         } catch (error) {

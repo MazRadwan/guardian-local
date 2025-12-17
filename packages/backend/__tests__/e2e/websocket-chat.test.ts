@@ -78,6 +78,13 @@ const mockQuestionRepository = {
   bulkCreate: jest.fn(),
 }
 
+const mockFileRepository = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByIdAndUser: jest.fn(),
+  findByIdAndConversation: jest.fn(),
+}
+
 describe('WebSocket Chat E2E Tests', () => {
   let httpServer: HTTPServer
   let ioServer: SocketIOServer
@@ -153,7 +160,8 @@ describe('WebSocket Chat E2E Tests', () => {
       vendorService,
       questionnaireReadyService,
       questionnaireGenerationService,
-      questionService
+      questionService,
+      mockFileRepository as any
     )
 
     // Start server
