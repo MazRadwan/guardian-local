@@ -86,6 +86,8 @@ describe('ChatServer.handleGetExportStatus (Story 13.9.1)', () => {
       findById: jest.fn(),
       findByIdAndUser: jest.fn(),
       findByIdAndConversation: jest.fn(),
+      findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      updateIntakeContext: jest.fn().mockResolvedValue(undefined),
     };
 
     // Mock IO

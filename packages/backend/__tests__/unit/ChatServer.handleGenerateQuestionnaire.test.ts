@@ -141,6 +141,8 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
       findById: jest.fn(),
       findByIdAndUser: jest.fn(),
       findByIdAndConversation: jest.fn(),
+      findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      updateIntakeContext: jest.fn().mockResolvedValue(undefined),
     };
 
     // Mock IO

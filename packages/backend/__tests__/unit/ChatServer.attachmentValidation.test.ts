@@ -138,6 +138,8 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
         storagePath: '/uploads/test.pdf',
         createdAt: new Date(),
       }),
+      findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      updateIntakeContext: jest.fn().mockResolvedValue(undefined),
     };
 
     // Mock namespace to capture event handlers

@@ -83,6 +83,9 @@ const mockFileRepository = {
   findById: jest.fn(),
   findByIdAndUser: jest.fn(),
   findByIdAndConversation: jest.fn(),
+  // Sprint 17.3: Multi-document context methods
+  findByConversationWithContext: jest.fn().mockResolvedValue([]),
+  updateIntakeContext: jest.fn().mockResolvedValue(undefined),
 }
 
 describe('WebSocket Chat E2E Tests', () => {

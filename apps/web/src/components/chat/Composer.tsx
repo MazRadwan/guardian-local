@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect, useCallback, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Send, Paperclip, Square } from 'lucide-react';
+import { Send, Paperclip, Square, Loader2 } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
 import { FileChip } from './FileChip';
-import { useFileUpload, UploadMode, IntakeContextResult, FileMetadata } from '@/hooks/useFileUpload';
+import { useMultiFileUpload, UploadMode } from '@/hooks/useMultiFileUpload';
 import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
 import type { MessageAttachment } from '@/lib/websocket';
 
@@ -62,6 +62,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
   ) => {
     const [message, setMessage] = useState('');
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Epic 16: File upload (only enabled when wsAdapter and conversationId are provided)
     const uploadEnabled = !!wsAdapter && !!conversationId;
@@ -75,40 +76,34 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Module-level constant prevents subscription thrashing from object identity changes
     const uploadAdapter = wsAdapter ?? DISCONNECTED_UPLOAD_ADAPTER;
 
-    // Memoize callbacks to prevent unnecessary re-renders
-    // Note: useFileUpload also uses refs internally for extra stability
-    const handleContextReady = useCallback((context: IntakeContextResult) => {
-      // Epic 16.6.1: Show success toast when document is processed
-      const vendorName = context.context?.vendorName;
-      toast.success(
-        vendorName
-          ? `Document processed: ${vendorName}`
-          : 'Document processed successfully',
-        { duration: 3000 }
-      );
-    }, []);
-
-    const handleUploadError = useCallback((error: string) => {
-      // Epic 16.6.1: Show error toast when upload fails
-      toast.error(`Upload failed: ${error}`, { duration: 5000 });
-    }, []);
-
+    // Epic 17: Multi-file upload hook
     const {
-      uploadProgress,
-      selectedFilename,
-      fileMetadata,
-      fileInputRef,
-      openFilePicker,
-      handleFileChange,
+      files,
       isUploading,
-      acceptedTypes,
-      reset,
-    } = useFileUpload({
-      conversationId: conversationId ?? '',
-      mode: uploadMode,
+      // aggregateProgress removed from UI - per-file chips provide progress
+      addFiles,
+      removeFile,
+      clearAll,
+      uploadAll,
+      waitForCompletion,
+      hasFiles,
+      hasPendingFiles,
+    } = useMultiFileUpload({
+      maxFiles: 10,
       wsAdapter: uploadAdapter,
-      onContextReady: handleContextReady,
-      onError: handleUploadError,
+      onError: (error: string) => {
+        toast.error(error, { duration: 5000 });
+      },
+      onContextReady: (context) => {
+        // Show success toast when document is processed
+        const vendorName = context.context?.vendorName;
+        toast.success(
+          vendorName
+            ? `Document processed: ${vendorName}`
+            : 'Document processed successfully',
+          { duration: 3000 }
+        );
+      },
     });
 
     // Expose focus method to parent
@@ -131,35 +126,60 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       textarea.style.height = `${newHeight}px`;
     }, [message]);
 
-    const handleSend = () => {
+    // Epic 17 UX Fix: Auto-upload when pending files exist and conversationId is available
+    // This useEffect is necessary because React batches state updates - calling uploadAll()
+    // immediately after addFiles() in the same handler would read stale state.
+    // The effect runs after state is committed, ensuring latest files state is used.
+    useEffect(() => {
+      if (hasPendingFiles && conversationId && uploadEnabled) {
+        uploadAll(conversationId, uploadMode);
+      }
+    }, [hasPendingFiles, conversationId, uploadEnabled, uploadAll, uploadMode]);
+
+    const handleSend = async () => {
       const trimmedMessage = message.trim();
 
-      // Epic 16.6.9: Check if we have file ready to attach (complete stage with fileId)
-      const hasFile = uploadProgress.stage === 'complete' && fileMetadata?.fileId;
+      // Need either text or files to send
+      if (!trimmedMessage && !hasFiles) return;
+      if (disabled || isUploading) return; // Prevent send during upload
 
-      // Need either text or file to send
-      if (!trimmedMessage && !hasFile) return;
-      if (disabled) return;
+      // Sprint 2 Fix: Use attachments returned directly from waitForCompletion()
+      // This avoids stale closure - the returned value is read from latest state
+      let attachments: MessageAttachment[] | undefined;
 
-      // Epic 16.6.9: Build attachments from file metadata if available
-      // Only send fileId, filename, mimeType, size - NO storagePath (security)
-      const attachments: MessageAttachment[] | undefined = hasFile && fileMetadata
-        ? [{
-            fileId: fileMetadata.fileId,
-            filename: fileMetadata.filename,
-            mimeType: fileMetadata.mimeType,
-            size: fileMetadata.size,
-          }]
-        : undefined;
+      // Epic 17: Upload pending files first, then wait for WS completion
+      if (hasPendingFiles && conversationId) {
+        try {
+          await uploadAll(conversationId, uploadMode);
+          // CRITICAL: waitForCompletion() returns attachments from LATEST state
+          // This avoids the stale closure issue - we don't read from captured `files`
+          attachments = await waitForCompletion();
+        } catch (error) {
+          // Timeout or other error - show toast and abort send
+          const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+          toast.error(errorMsg, { duration: 5000 });
+          return;
+        }
+      } else if (hasFiles) {
+        // Files already uploaded, get attachments from current state
+        // Still use waitForCompletion() to get latest state (returns immediately if nothing in-flight)
+        attachments = await waitForCompletion();
+      }
 
-      // Send message with attachments
-      onSendMessage(trimmedMessage || '', attachments);
+      // Sprint 2 Fix: Don't send empty message if all files failed
+      const hasCompletedFiles = attachments && attachments.length > 0;
+      if (!trimmedMessage && !hasCompletedFiles) {
+        // All files failed, no text - nothing to send
+        toast.error('All files failed to upload. Please try again.', { duration: 5000 });
+        return;
+      }
+
+      // Send message with attachments (only if we have some)
+      onSendMessage(trimmedMessage || '', hasCompletedFiles ? attachments : undefined);
       setMessage('');
 
-      // Epic 16.6.8: Clear file state after sending (moves chip to chat stream)
-      if (hasFile) {
-        reset();
-      }
+      // Epic 17: Clear all files after sending
+      clearAll();
 
       // Reset textarea height after sending
       if (textareaRef.current) {
@@ -176,9 +196,26 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       // Shift+Enter creates new line (default behavior, no action needed)
     };
 
-    // Epic 16.6.9: Enable send if we have text OR a completed file upload (check fileId)
-    const hasFileReady = uploadProgress.stage === 'complete' && fileMetadata?.fileId;
-    const isSendEnabled = (message.trim().length > 0 || hasFileReady) && !disabled;
+    // Epic 17: Handle file selection
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+        addFiles(e.target.files);
+      }
+      // Reset input to allow re-selecting same files
+      e.target.value = '';
+    };
+
+    // Open file picker
+    const openFilePicker = () => {
+      fileInputRef.current?.click();
+    };
+
+    // Epic 17: Determine layout variant based on file count
+    const useCompactChips = files.length > 3;
+
+    // Epic 17: Enable send if we have text OR files (including pending)
+    // Sprint 2 Fix: Disable send during upload to prevent double-click
+    const isSendEnabled = (message.trim().length > 0 || hasFiles) && !disabled && !isUploading;
     const isBusy = isStreaming || isLoading;
 
     return (
@@ -187,7 +224,8 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
         <input
           ref={fileInputRef}
           type="file"
-          accept={acceptedTypes}
+          accept=".pdf,.docx,.png,.jpg,.jpeg"
+          multiple
           onChange={handleFileChange}
           className="hidden"
           aria-hidden="true"
@@ -197,16 +235,28 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
         <div className="max-w-3xl mx-auto">
           {/* Elevated composer box */}
           <div className="border border-gray-200 rounded-2xl shadow-lg bg-white overflow-hidden">
-            {/* Epic 16.6.1: File chip - INSIDE composer, above textarea */}
-            {uploadProgress.stage !== 'idle' && selectedFilename && (
+            {/* Epic 17: File chips - INSIDE composer, above textarea */}
+            {hasFiles && (
               <div className="px-4 pt-3">
-                <FileChip
-                  filename={selectedFilename}
-                  stage={uploadProgress.stage === 'selecting' ? 'uploading' : uploadProgress.stage as 'uploading' | 'storing' | 'parsing' | 'complete' | 'error'}
-                  progress={uploadProgress.progress}
-                  error={uploadProgress.error}
-                  onRemove={reset}
-                />
+                <div className="flex flex-wrap gap-2">
+                  {files.map((file) => {
+                    // Epic 17 UX Fix: Per-file disable for remove button
+                    // Only disable on files currently in-flight, not globally
+                    const isFileInFlight = ['uploading', 'storing', 'parsing'].includes(file.stage);
+                    return (
+                      <FileChip
+                        key={file.localIndex}
+                        filename={file.filename}
+                        stage={file.stage}
+                        progress={file.progress}
+                        error={file.error}
+                        onRemove={() => removeFile(file.localIndex)}
+                        disabled={isFileInFlight}
+                        variant={useCompactChips ? 'compact' : 'default'}
+                      />
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -248,7 +298,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                       variant="ghost"
                       size="icon"
                       className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
-                      disabled={disabled || !uploadEnabled || isUploading}
+                      disabled={disabled || !uploadEnabled || isUploading || files.length >= 10}
                       aria-label="Attach file"
                       onClick={openFilePicker}
                     >
@@ -275,12 +325,18 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                   onClick={handleSend}
                   disabled={!isSendEnabled}
                   className="h-8 w-8 rounded-full p-0 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-700 text-white"
-                  aria-label="Send message"
+                  aria-label={isUploading ? 'Uploading files...' : 'Send message'}
                 >
-                  <Send className="h-4 w-4" />
+                  {/* Sprint 2 Fix: Show loader during upload */}
+                  {isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
                 </Button>
               )}
             </div>
+            {/* Epic 17 UX Fix: Removed aggregate progress bar (redundant with per-file chips) */}
           </div>
         </div>
       </div>

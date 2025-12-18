@@ -80,6 +80,9 @@ describe('DocumentUploadController', () => {
         storagePath: '/uploads/test.pdf',
         createdAt: new Date(),
       }),
+      // Epic 17.3.3: Mock updateIntakeContext for storing context in file row
+      updateIntakeContext: jest.fn().mockResolvedValue(undefined),
+      findByConversationWithContext: jest.fn().mockResolvedValue([]),
     };
 
     controller = new DocumentUploadController(
@@ -93,18 +96,28 @@ describe('DocumentUploadController', () => {
     );
 
     // Auth middleware sets req.user (full User object), not req.userId
+    // Epic 17: Route uses upload.fields() so files come in req.files as { fieldname: File[] }
     mockReq = {
       user: { id: 'user-123', email: 'test@example.com', role: 'user' } as any,
       body: {
         conversationId: 'conv-123',
         mode: 'intake',
       },
-      file: {
-        buffer: Buffer.from('test'),
-        originalname: 'test.pdf',
-        mimetype: 'application/pdf',
-        size: 1024,
-      } as Express.Multer.File,
+      // upload.fields() format: { 'file': [File] } for single, { 'files': [...] } for multi
+      files: {
+        file: [{
+          buffer: Buffer.from('test'),
+          originalname: 'test.pdf',
+          mimetype: 'application/pdf',
+          size: 1024,
+          fieldname: 'file',
+          encoding: '7bit',
+          stream: null as any,
+          destination: '',
+          filename: '',
+          path: '',
+        } as Express.Multer.File],
+      },
     };
 
     mockRes = {
@@ -114,6 +127,20 @@ describe('DocumentUploadController', () => {
   });
 
   describe('upload', () => {
+    // Helper to create mock files for multi-file tests
+    const createMockFile = (name: string, type: string, size = 1024): Express.Multer.File => ({
+      originalname: name,
+      mimetype: type,
+      buffer: Buffer.alloc(size),
+      size,
+      fieldname: 'files',
+      encoding: '7bit',
+      stream: null as any,
+      destination: '',
+      filename: '',
+      path: '',
+    });
+
     it('should reject unauthenticated request', async () => {
       // No user means not authenticated
       mockReq.user = undefined;
@@ -163,17 +190,30 @@ describe('DocumentUploadController', () => {
       expect(mockRes.status).toHaveBeenCalledWith(404);
     });
 
-    it('should accept valid upload and return 202', async () => {
+    it('should accept valid upload and return 202 with top-level uploadId', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       expect(mockRes.status).toHaveBeenCalledWith(202);
+      // Epic 17: Response includes both legacy `uploadId` and `files[]` for backward compat
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          message: 'Upload accepted, processing started',
+          message: 'Upload accepted',
+          // BACKWARD COMPAT: Top-level uploadId for Epic 16 single-file clients
           uploadId: expect.any(String),
-          conversationId: 'conv-123',
+          totalFiles: 1,
+          acceptedCount: 1,
+          files: expect.arrayContaining([
+            expect.objectContaining({
+              uploadId: expect.any(String),
+              status: 'accepted',
+            }),
+          ]),
         })
       );
+
+      // Verify top-level uploadId matches first file's uploadId
+      const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+      expect(response.uploadId).toBe(response.files[0].uploadId);
     });
 
     it('should validate file before accepting', async () => {
@@ -187,7 +227,18 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid file type' });
+      // Epic 17: All files rejected returns 400 with files array
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'All files rejected',
+          files: expect.arrayContaining([
+            expect.objectContaining({
+              status: 'rejected',
+              error: 'Invalid file type',
+            }),
+          ]),
+        })
+      );
     });
 
     it('should emit progress events on successful processing', async () => {
@@ -224,26 +275,26 @@ describe('DocumentUploadController', () => {
       );
     });
 
-    // Epic 16.6.1: Context stored silently (no visible assistant message)
-    it('should store context silently via updateContext on successful intake parse', async () => {
+    // Epic 17.3.3: Context stored in file row (not conversation row)
+    it('should store context in file row via updateIntakeContext on successful intake parse', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify conversationService.updateContext was called with intake context
-      expect(mockConversationService.updateContext).toHaveBeenCalledWith(
-        'conv-123',
+      // Verify fileRepository.updateIntakeContext was called with intake context
+      expect(mockFileRepository.updateIntakeContext).toHaveBeenCalledWith(
+        'file-uuid-123', // fileId from create mock
         expect.objectContaining({
-          intakeContext: expect.objectContaining({
-            vendorName: 'Test Vendor',
-            features: [],
-            complianceMentions: [],
-          }),
-          intakeGapCategories: ['privacy_risk'],
-          intakeParsedAt: expect.any(String),
-        })
+          vendorName: 'Test Vendor',
+          features: [],
+          complianceMentions: [],
+        }),
+        ['privacy_risk'] // gapCategories as third argument
       );
+
+      // Verify conversationService.updateContext was NOT called
+      expect(mockConversationService.updateContext).not.toHaveBeenCalled();
 
       // Verify NO 'message' event emitted (silent storage, not visible in chat)
       const messageCall = mockChatNamespace.emit.mock.calls.find(
@@ -402,14 +453,12 @@ describe('DocumentUploadController', () => {
     it('should NOT include storagePath in HTTP 202 response', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
-      // Verify response does not include storagePath
-      expect(mockRes.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          fileMetadata: expect.not.objectContaining({
-            storagePath: expect.anything(),
-          }),
-        })
-      );
+      // Epic 17: Response doesn't include fileMetadata anymore (only files array with uploadIds)
+      // storagePath is never exposed in HTTP responses
+      const jsonMock = mockRes.json as jest.Mock;
+      const response = jsonMock.mock.calls[0][0];
+      expect(response).not.toHaveProperty('storagePath');
+      expect(response.files[0]).not.toHaveProperty('storagePath');
     });
 
     it('should include fileId in scoring_parse_ready event', async () => {
@@ -446,6 +495,188 @@ describe('DocumentUploadController', () => {
           },
         })
       );
+    });
+
+    // Epic 17.1.4: Multi-file upload tests
+    describe('Multi-file upload', () => {
+      it('should accept multiple valid files', async () => {
+        const fileList = [
+          createMockFile('doc1.pdf', 'application/pdf'),
+          createMockFile('doc2.pdf', 'application/pdf'),
+        ];
+
+        mockFileValidator.validate.mockResolvedValue({ valid: true, documentType: 'pdf' });
+        // Epic 17: Multi-file via 'files' field name in upload.fields() format
+        mockReq.files = { files: fileList };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        expect(mockRes.status).toHaveBeenCalledWith(202);
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Upload accepted',
+            totalFiles: 2,
+            acceptedCount: 2,
+            rejectedCount: 0,
+            files: expect.arrayContaining([
+              expect.objectContaining({ status: 'accepted', filename: 'doc1.pdf' }),
+              expect.objectContaining({ status: 'accepted', filename: 'doc2.pdf' }),
+            ]),
+          })
+        );
+      });
+
+      it('should handle partial failures (some files rejected)', async () => {
+        const fileList = [
+          createMockFile('valid.pdf', 'application/pdf'),
+          createMockFile('invalid.exe', 'application/x-msdownload'),
+        ];
+
+        mockFileValidator.validate
+          .mockResolvedValueOnce({ valid: true, documentType: 'pdf' })
+          .mockResolvedValueOnce({ valid: false, error: 'Invalid type' });
+
+        // Epic 17: Multi-file via 'files' field name in upload.fields() format
+        mockReq.files = { files: fileList };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        expect(mockRes.status).toHaveBeenCalledWith(202); // Partial success = 202
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            acceptedCount: 1,
+            rejectedCount: 1,
+            files: expect.arrayContaining([
+              expect.objectContaining({ status: 'accepted' }),
+              expect.objectContaining({ status: 'rejected', error: 'Invalid type' }),
+            ]),
+          })
+        );
+      });
+
+      it('should return 400 if all files rejected', async () => {
+        const fileList = [
+          createMockFile('bad1.exe', 'application/x-msdownload'),
+          createMockFile('bad2.exe', 'application/x-msdownload'),
+        ];
+
+        mockFileValidator.validate.mockResolvedValue({ valid: false, error: 'Invalid type' });
+        // Epic 17: Multi-file via 'files' field name in upload.fields() format
+        mockReq.files = { files: fileList };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        expect(mockRes.status).toHaveBeenCalledWith(400);
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: 'All files rejected',
+          })
+        );
+      });
+
+      it('should generate unique uploadId per file', async () => {
+        const fileList = [
+          createMockFile('doc1.pdf', 'application/pdf'),
+          createMockFile('doc2.pdf', 'application/pdf'),
+          createMockFile('doc3.pdf', 'application/pdf'),
+        ];
+
+        mockFileValidator.validate.mockResolvedValue({ valid: true, documentType: 'pdf' });
+        // Epic 17: Multi-file via 'files' field name in upload.fields() format
+        mockReq.files = { files: fileList };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        const jsonMock = mockRes.json as jest.Mock;
+        const response = jsonMock.mock.calls[0][0];
+        const uploadIds = response.files.map((f: any) => f.uploadId);
+
+        // All uploadIds should be unique
+        expect(new Set(uploadIds).size).toBe(uploadIds.length);
+        expect(uploadIds.length).toBe(3);
+      });
+
+      it('should maintain backward compatibility with single file (using "file" field name)', async () => {
+        mockFileValidator.validate.mockResolvedValue({ valid: true, documentType: 'pdf' });
+        // Epic 17: Backward compat - single file via 'file' field name in upload.fields() format
+        mockReq.files = {
+          file: [createMockFile('single.pdf', 'application/pdf')],
+        };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        expect(mockRes.status).toHaveBeenCalledWith(202);
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            // CRITICAL: Top-level uploadId for Epic 16 clients
+            uploadId: expect.any(String),
+            totalFiles: 1,
+            acceptedCount: 1,
+          })
+        );
+
+        // Epic 16 clients read response.uploadId directly
+        const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+        expect(response.uploadId).toBeDefined();
+        expect(typeof response.uploadId).toBe('string');
+      });
+
+      it('should reject request when both "file" and "files" fields are provided', async () => {
+        mockFileValidator.validate.mockResolvedValue({ valid: true, documentType: 'pdf' });
+        // Both field names provided - ambiguous intent, should reject
+        mockReq.files = {
+          file: [createMockFile('single.pdf', 'application/pdf')],
+          files: [createMockFile('multi1.pdf', 'application/pdf')],
+        };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        expect(mockRes.status).toHaveBeenCalledWith(400);
+        expect(mockRes.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.stringContaining('Cannot use both'),
+          })
+        );
+      });
+
+      it('should validate conversation ownership once, not per-file', async () => {
+        const fileList = [
+          createMockFile('doc1.pdf', 'application/pdf'),
+          createMockFile('doc2.pdf', 'application/pdf'),
+          createMockFile('doc3.pdf', 'application/pdf'),
+        ];
+
+        mockFileValidator.validate.mockResolvedValue({ valid: true, documentType: 'pdf' });
+        // Epic 17: Multi-file via 'files' field name in upload.fields() format
+        mockReq.files = { files: fileList };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        await controller.upload(mockReq as any, mockRes as any);
+
+        // Conversation lookup should happen exactly once
+        expect(mockConversationService.getConversation).toHaveBeenCalledTimes(1);
+      });
+
+      it('should return 202 immediately without waiting for parsing', async () => {
+        const fileList = [createMockFile('slow.pdf', 'application/pdf')];
+
+        mockFileValidator.validate.mockResolvedValue({ valid: true, documentType: 'pdf' });
+        // Epic 17: Multi-file via 'files' field name in upload.fields() format
+        mockReq.files = { files: fileList };
+        mockReq.body = { conversationId: 'conv-123', mode: 'intake' };
+
+        // Response should be sent before async processing completes
+        await controller.upload(mockReq as any, mockRes as any);
+
+        expect(mockRes.status).toHaveBeenCalledWith(202);
+        // The async processing happens after this point (fire-and-forget)
+      });
     });
   });
 
