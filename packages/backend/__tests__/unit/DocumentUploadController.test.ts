@@ -80,6 +80,9 @@ describe('DocumentUploadController', () => {
         storagePath: '/uploads/test.pdf',
         createdAt: new Date(),
       }),
+      // Epic 17.3.3: Mock updateIntakeContext for storing context in file row
+      updateIntakeContext: jest.fn().mockResolvedValue(undefined),
+      findByConversationWithContext: jest.fn().mockResolvedValue([]),
     };
 
     controller = new DocumentUploadController(
@@ -272,26 +275,26 @@ describe('DocumentUploadController', () => {
       );
     });
 
-    // Epic 16.6.1: Context stored silently (no visible assistant message)
-    it('should store context silently via updateContext on successful intake parse', async () => {
+    // Epic 17.3.3: Context stored in file row (not conversation row)
+    it('should store context in file row via updateIntakeContext on successful intake parse', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify conversationService.updateContext was called with intake context
-      expect(mockConversationService.updateContext).toHaveBeenCalledWith(
-        'conv-123',
+      // Verify fileRepository.updateIntakeContext was called with intake context
+      expect(mockFileRepository.updateIntakeContext).toHaveBeenCalledWith(
+        'file-uuid-123', // fileId from create mock
         expect.objectContaining({
-          intakeContext: expect.objectContaining({
-            vendorName: 'Test Vendor',
-            features: [],
-            complianceMentions: [],
-          }),
-          intakeGapCategories: ['privacy_risk'],
-          intakeParsedAt: expect.any(String),
-        })
+          vendorName: 'Test Vendor',
+          features: [],
+          complianceMentions: [],
+        }),
+        ['privacy_risk'] // gapCategories as third argument
       );
+
+      // Verify conversationService.updateContext was NOT called
+      expect(mockConversationService.updateContext).not.toHaveBeenCalled();
 
       // Verify NO 'message' event emitted (silent storage, not visible in chat)
       const messageCall = mockChatNamespace.emit.mock.calls.find(

@@ -14,7 +14,7 @@
     "test:e2e:external": "jest --testPathPattern=e2e-external",
     "test:all": "jest",
     "test:coverage": "jest --coverage --testPathIgnorePatterns=e2e-external",
-    "db:generate": "drizzle-kit generate",
+    "db:generate": "cd ../.. && drizzle-kit generate",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
     "db:studio": "drizzle-kit studio"
   },

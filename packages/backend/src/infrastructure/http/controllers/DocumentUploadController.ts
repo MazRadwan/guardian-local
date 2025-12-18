@@ -414,10 +414,11 @@ export class DocumentUploadController {
     });
 
     if (result.success && result.context) {
-      // Epic 16.6.1: Store context silently (NOT as a visible message)
-      // Uses existing ConversationService.updateContext() - merges with existing context
-      await this.conversationService.updateContext(conversationId, {
-        intakeContext: {
+      // Epic 17.3.3: Store context in file row (NOT conversation row)
+      // This allows multiple documents per conversation without overwriting
+      await this.fileRepository.updateIntakeContext(
+        fileId,
+        {
           vendorName: result.context.vendorName,
           solutionName: result.context.solutionName,
           solutionType: result.context.solutionType,
@@ -426,9 +427,8 @@ export class DocumentUploadController {
           claims: result.context.claims,
           complianceMentions: result.context.complianceMentions,
         },
-        intakeGapCategories: result.gapCategories,
-        intakeParsedAt: new Date().toISOString(),
-      });
+        result.gapCategories
+      );
 
       // Emit 'intake_context_ready' for UI state updates
       // Epic 16.6.9: File metadata includes fileId (database UUID), NOT storagePath

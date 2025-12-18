@@ -1,3 +1,5 @@
+import type { IntakeDocumentContext } from '../../domain/entities/Conversation.js'
+
 export interface FileRecord {
   id: string
   userId: string
@@ -7,6 +9,17 @@ export interface FileRecord {
   size: number
   storagePath: string
   createdAt: Date
+}
+
+export interface FileWithIntakeContext {
+  id: string
+  conversationId: string
+  filename: string
+  mimeType: string
+  size: number
+  intakeContext: IntakeDocumentContext | null
+  intakeGapCategories: string[] | null
+  intakeParsedAt: Date | null
 }
 
 export interface IFileRepository {
@@ -29,4 +42,18 @@ export interface IFileRepository {
    * Find file by ID and conversation (for authorization)
    */
   findByIdAndConversation(fileId: string, conversationId: string): Promise<FileRecord | null>
+
+  /**
+   * Update intake context for a file after parsing
+   */
+  updateIntakeContext(
+    fileId: string,
+    context: IntakeDocumentContext,
+    gapCategories?: string[]
+  ): Promise<void>
+
+  /**
+   * Find all files in a conversation that have intake context
+   */
+  findByConversationWithContext(conversationId: string): Promise<FileWithIntakeContext[]>
 }

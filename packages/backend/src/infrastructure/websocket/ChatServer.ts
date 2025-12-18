@@ -5,7 +5,7 @@ import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
-import type { IFileRepository } from '../../application/interfaces/IFileRepository.js';
+import type { IFileRepository, FileWithIntakeContext } from '../../application/interfaces/IFileRepository.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
@@ -133,14 +133,21 @@ export class ChatServer {
         content: typeof msg.content === 'string' ? msg.content : msg.content.text || '',
       }));
 
-    // Epic 16.6.1: Inject stored intake context as synthetic assistant message
-    // This preserves base system prompt for caching while giving Claude document knowledge
-    // The synthetic message is prepended so Claude "remembers" analyzing the document
-    if (conversation.context?.intakeContext) {
-      const contextMessage = this.formatIntakeContextForClaude(
-        conversation.context.intakeContext,
-        conversation.context.intakeGapCategories
-      );
+    // Epic 17.3: Inject stored intake context(s) as synthetic assistant message
+    // Query per-file contexts (sorted by parse time, oldest first)
+    const filesWithContext = await this.fileRepository.findByConversationWithContext(conversationId);
+    const contextsFromFiles = filesWithContext.filter(f => f.intakeContext);
+
+    // Get legacy context from conversation
+    const legacyContext = conversation.context?.intakeContext;
+    const legacyGapCategories = conversation.context?.intakeGapCategories;
+
+    // Inject combined context message if any contexts exist
+    if (contextsFromFiles.length > 0 || legacyContext) {
+      const contextMessage = contextsFromFiles.length > 0
+        ? this.formatMultiDocContextForClaude(contextsFromFiles, legacyContext, legacyGapCategories)
+        : this.formatIntakeContextForClaude(legacyContext!, legacyGapCategories);
+
       // Prepend as first assistant message (Claude sees it, user doesn't)
       messages.unshift({
         role: 'assistant',
@@ -166,10 +173,150 @@ export class ChatServer {
   }
 
   /**
+   * Sanitize string for use in Claude prompts
+   * Removes control characters, normalizes whitespace, and truncates to max length
+   */
+  private sanitizeForPrompt(str: string | null, maxLength: number = 200): string {
+    if (!str) return '';
+    const cleaned = str
+      .replace(/[\x00-\x1F\x7F]/g, '') // Remove control chars
+      .replace(/\s+/g, ' ')            // Normalize whitespace
+      .trim();
+    return cleaned.slice(0, maxLength);
+  }
+
+  /**
+   * Sanitize error message for client
+   * Prevents SQL queries and internal details from leaking to clients
+   *
+   * Sprint 17.3 Security Fix: Raw SQL was being sent to clients in error messages
+   */
+  private sanitizeErrorForClient(error: unknown, fallbackMessage: string): string {
+    if (!(error instanceof Error)) {
+      return fallbackMessage;
+    }
+
+    const message = error.message;
+
+    // Detect SQL/database errors (contains SQL keywords or query patterns)
+    const sqlPatterns = [
+      /\bSELECT\b/i,
+      /\bINSERT\b/i,
+      /\bUPDATE\b/i,
+      /\bDELETE\b/i,
+      /\bFROM\b.*\bWHERE\b/i,
+      /\$\d+/,  // PostgreSQL parameter placeholders
+      /params:/i,
+      /Failed query:/i,
+      /ECONNREFUSED/,
+      /ETIMEDOUT/,
+      /duplicate key/i,
+      /violates.*constraint/i,
+    ];
+
+    for (const pattern of sqlPatterns) {
+      if (pattern.test(message)) {
+        // Log the full error server-side, return generic message to client
+        console.error('[ChatServer] Suppressed SQL error from client:', message);
+        return fallbackMessage;
+      }
+    }
+
+    // Safe to return (but still truncate for safety)
+    return message.slice(0, 200);
+  }
+
+  /**
+   * Format multiple document contexts as synthetic assistant message for Claude
+   *
+   * Epic 17.3: Multi-document support - aggregates context from all uploaded files
+   * plus legacy context for backward compatibility.
+   *
+   * This is NOT displayed to users - it's injected into Claude's message history
+   * so Claude "remembers" having analyzed all uploaded documents.
+   */
+  private formatMultiDocContextForClaude(
+    files: FileWithIntakeContext[],
+    legacyContext?: IntakeDocumentContext | null,
+    legacyGapCategories?: string[] | null
+  ): string {
+    const parts: string[] = [
+      `I have analyzed ${files.length} uploaded document(s) and extracted the following context:`,
+    ];
+
+    // Per-document summary
+    files.forEach((file, i) => {
+      const ctx = file.intakeContext!;
+      parts.push(`\n**Document ${i + 1}: ${this.sanitizeForPrompt(file.filename, 100)}**`);
+      if (ctx.vendorName) parts.push(`- Vendor: ${this.sanitizeForPrompt(ctx.vendorName)}`);
+      if (ctx.solutionName) parts.push(`- Solution: ${this.sanitizeForPrompt(ctx.solutionName)}`);
+      if (ctx.solutionType) parts.push(`- Type: ${this.sanitizeForPrompt(ctx.solutionType)}`);
+      if (ctx.industry) parts.push(`- Industry: ${this.sanitizeForPrompt(ctx.industry)}`);
+    });
+
+    // Include legacy context if present AND not duplicate
+    if (legacyContext && !files.some(f =>
+      f.intakeContext?.vendorName === legacyContext.vendorName &&
+      f.intakeContext?.solutionName === legacyContext.solutionName
+    )) {
+      parts.push(`\n**Prior Document (legacy):**`);
+      if (legacyContext.vendorName) parts.push(`- Vendor: ${this.sanitizeForPrompt(legacyContext.vendorName)}`);
+      if (legacyContext.solutionName) parts.push(`- Solution: ${this.sanitizeForPrompt(legacyContext.solutionName)}`);
+    }
+
+    // Sprint 17.3 Fix: Sanitize BEFORE dedup (prevents distinct raw strings collapsing to same sanitized value)
+    const allFeatures = [...new Set(
+      [
+        ...files.flatMap(f => f.intakeContext?.features || []),
+        ...(legacyContext?.features || []),
+      ].map(f => this.sanitizeForPrompt(f, 100)).filter(Boolean)
+    )];
+
+    const allClaims = [...new Set(
+      [
+        ...files.flatMap(f => f.intakeContext?.claims || []),
+        ...(legacyContext?.claims || []),
+      ].map(c => this.sanitizeForPrompt(c, 100)).filter(Boolean)
+    )];
+
+    const allCompliance = [...new Set(
+      [
+        ...files.flatMap(f => f.intakeContext?.complianceMentions || []),
+        ...(legacyContext?.complianceMentions || []),
+      ].map(c => this.sanitizeForPrompt(c, 50)).filter(Boolean)
+    )];
+
+    const allGaps = [...new Set(
+      [
+        ...files.flatMap(f => f.intakeGapCategories || []),
+        ...(legacyGapCategories || []),
+      ].map(g => this.sanitizeForPrompt(g, 50)).filter(Boolean)
+    )];
+
+    if (allFeatures.length > 0) {
+      parts.push(`\n**Combined Features:** ${allFeatures.slice(0, 10).join(', ')}`);
+    }
+    if (allClaims.length > 0) {
+      parts.push(`**Combined Claims:** ${allClaims.slice(0, 5).join(', ')}`);
+    }
+    if (allCompliance.length > 0) {
+      parts.push(`**Compliance Mentions:** ${allCompliance.join(', ')}`);
+    }
+    if (allGaps.length > 0) {
+      parts.push(`**Areas Needing Clarification:** ${allGaps.join(', ')}`);
+    }
+
+    parts.push('', 'I will use this combined context to assist with the assessment.');
+    return parts.join('\n');
+  }
+
+  /**
    * Format stored intake context as synthetic assistant message for Claude
    *
    * Epic 16.6.1: This is NOT displayed to users - it's injected into Claude's message history
    * so Claude "remembers" having analyzed the uploaded document.
+   *
+   * Sprint 17.3 Fix: Now uses sanitizeForPrompt for security (matches multi-doc path)
    */
   private formatIntakeContextForClaude(
     ctx: IntakeDocumentContext,
@@ -179,14 +326,26 @@ export class ChatServer {
       'I have analyzed the uploaded document and extracted the following context:',
     ];
 
-    if (ctx.vendorName) parts.push(`- Vendor: ${ctx.vendorName}`);
-    if (ctx.solutionName) parts.push(`- Solution: ${ctx.solutionName}`);
-    if (ctx.solutionType) parts.push(`- Type: ${ctx.solutionType}`);
-    if (ctx.industry) parts.push(`- Industry: ${ctx.industry}`);
-    if (ctx.features?.length) parts.push(`- Key Features: ${ctx.features.slice(0, 5).join(', ')}`);
-    if (ctx.claims?.length) parts.push(`- Claims: ${ctx.claims.slice(0, 3).join(', ')}`);
-    if (ctx.complianceMentions?.length) parts.push(`- Compliance Mentions: ${ctx.complianceMentions.join(', ')}`);
-    if (gapCategories?.length) parts.push(`- Areas Needing Clarification: ${gapCategories.join(', ')}`);
+    if (ctx.vendorName) parts.push(`- Vendor: ${this.sanitizeForPrompt(ctx.vendorName)}`);
+    if (ctx.solutionName) parts.push(`- Solution: ${this.sanitizeForPrompt(ctx.solutionName)}`);
+    if (ctx.solutionType) parts.push(`- Type: ${this.sanitizeForPrompt(ctx.solutionType)}`);
+    if (ctx.industry) parts.push(`- Industry: ${this.sanitizeForPrompt(ctx.industry)}`);
+    if (ctx.features?.length) {
+      const sanitizedFeatures = ctx.features.slice(0, 5).map(f => this.sanitizeForPrompt(f, 100)).filter(Boolean);
+      if (sanitizedFeatures.length) parts.push(`- Key Features: ${sanitizedFeatures.join(', ')}`);
+    }
+    if (ctx.claims?.length) {
+      const sanitizedClaims = ctx.claims.slice(0, 3).map(c => this.sanitizeForPrompt(c, 100)).filter(Boolean);
+      if (sanitizedClaims.length) parts.push(`- Claims: ${sanitizedClaims.join(', ')}`);
+    }
+    if (ctx.complianceMentions?.length) {
+      const sanitizedCompliance = ctx.complianceMentions.map(c => this.sanitizeForPrompt(c, 50)).filter(Boolean);
+      if (sanitizedCompliance.length) parts.push(`- Compliance Mentions: ${sanitizedCompliance.join(', ')}`);
+    }
+    if (gapCategories?.length) {
+      const sanitizedGaps = gapCategories.map(g => this.sanitizeForPrompt(g, 50)).filter(Boolean);
+      if (sanitizedGaps.length) parts.push(`- Areas Needing Clarification: ${sanitizedGaps.join(', ')}`);
+    }
 
     parts.push('', 'I will use this context to assist with the assessment.');
     return parts.join('\n');
@@ -548,7 +707,7 @@ export class ChatServer {
           console.error('[ChatServer] Error sending message:', error);
           socket.emit('error', {
             event: 'send_message',
-            message: error instanceof Error ? error.message : 'Failed to send message',
+            message: this.sanitizeErrorForClient(error, 'Failed to send message'),
           });
         }
       });
@@ -615,7 +774,7 @@ export class ChatServer {
           console.error('[ChatServer] Error getting history:', error);
           socket.emit('error', {
             event: 'get_history',
-            message: error instanceof Error ? error.message : 'Failed to get history',
+            message: this.sanitizeErrorForClient(error, 'Failed to get history'),
           });
         }
       });
@@ -661,7 +820,7 @@ export class ChatServer {
           console.error('[ChatServer] Error fetching conversations:', error);
           socket.emit('error', {
             event: 'get_conversations',
-            message: error instanceof Error ? error.message : 'Failed to fetch conversations',
+            message: this.sanitizeErrorForClient(error, 'Failed to fetch conversations'),
           });
         }
       });
@@ -742,7 +901,7 @@ export class ChatServer {
 
           socket.emit('error', {
             event: 'start_new_conversation',
-            message: error instanceof Error ? error.message : 'Failed to create conversation',
+            message: this.sanitizeErrorForClient(error, 'Failed to create conversation'),
           });
         }
       });
@@ -798,7 +957,7 @@ export class ChatServer {
           console.error('[ChatServer] Error deleting conversation:', error);
           socket.emit('error', {
             event: 'delete_conversation',
-            message: error instanceof Error ? error.message : 'Failed to delete conversation',
+            message: this.sanitizeErrorForClient(error, 'Failed to delete conversation'),
           });
         }
       });

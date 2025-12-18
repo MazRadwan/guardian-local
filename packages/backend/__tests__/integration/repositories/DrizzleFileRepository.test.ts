@@ -306,4 +306,304 @@ describe('DrizzleFileRepository Integration Tests', () => {
       expect(found).toBeNull()
     })
   })
+
+  describe('updateIntakeContext', () => {
+    it('should store intake context correctly', async () => {
+      const file = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'vendor-doc.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/vendor-doc.pdf',
+      })
+
+      const intakeContext = {
+        vendorName: 'Acme AI',
+        solutionName: 'Smart Assistant',
+        solutionType: 'chatbot',
+        industry: 'healthcare',
+        features: ['NLP', 'voice recognition'],
+        claims: ['HIPAA compliant', 'SOC 2 certified'],
+        complianceMentions: ['HIPAA', 'SOC 2'],
+      }
+
+      const gapCategories = ['data_privacy', 'security']
+
+      await repository.updateIntakeContext(file.id, intakeContext, gapCategories)
+
+      // Verify by fetching with context
+      const filesWithContext = await repository.findByConversationWithContext(testConversationId)
+
+      expect(filesWithContext).toHaveLength(1)
+      expect(filesWithContext[0].id).toBe(file.id)
+      expect(filesWithContext[0].intakeContext).toEqual(intakeContext)
+      expect(filesWithContext[0].intakeGapCategories).toEqual(gapCategories)
+      expect(filesWithContext[0].intakeParsedAt).toBeInstanceOf(Date)
+    })
+
+    it('should handle null gap categories gracefully', async () => {
+      const file = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'simple-doc.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/simple-doc.pdf',
+      })
+
+      const intakeContext = {
+        vendorName: 'Simple Vendor',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      }
+
+      await repository.updateIntakeContext(file.id, intakeContext)
+
+      const filesWithContext = await repository.findByConversationWithContext(testConversationId)
+
+      expect(filesWithContext).toHaveLength(1)
+      expect(filesWithContext[0].intakeContext).toEqual(intakeContext)
+      expect(filesWithContext[0].intakeGapCategories).toBeNull()
+    })
+
+    it('should update existing intake context', async () => {
+      const file = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'vendor-doc.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/vendor-doc.pdf',
+      })
+
+      const firstContext = {
+        vendorName: 'First Vendor',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      }
+
+      await repository.updateIntakeContext(file.id, firstContext)
+
+      // Update with new context
+      const secondContext = {
+        vendorName: 'Updated Vendor',
+        solutionName: 'Updated Solution',
+        solutionType: 'AI platform',
+        industry: 'finance',
+        features: ['fraud detection'],
+        claims: ['PCI DSS compliant'],
+        complianceMentions: ['PCI DSS'],
+      }
+
+      await repository.updateIntakeContext(file.id, secondContext, ['compliance'])
+
+      const filesWithContext = await repository.findByConversationWithContext(testConversationId)
+
+      expect(filesWithContext).toHaveLength(1)
+      expect(filesWithContext[0].intakeContext).toEqual(secondContext)
+      expect(filesWithContext[0].intakeGapCategories).toEqual(['compliance'])
+    })
+  })
+
+  describe('findByConversationWithContext', () => {
+    it('should return files sorted by parse time', async () => {
+      const file1 = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'doc1.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/doc1.pdf',
+      })
+
+      const file2 = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'doc2.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/doc2.pdf',
+      })
+
+      const file3 = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'doc3.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/doc3.pdf',
+      })
+
+      // Add context in reverse order
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      await repository.updateIntakeContext(file3.id, {
+        vendorName: 'Vendor 3',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      await repository.updateIntakeContext(file1.id, {
+        vendorName: 'Vendor 1',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      await repository.updateIntakeContext(file2.id, {
+        vendorName: 'Vendor 2',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      })
+
+      const filesWithContext = await repository.findByConversationWithContext(testConversationId)
+
+      expect(filesWithContext).toHaveLength(3)
+      expect(filesWithContext[0].id).toBe(file3.id) // First parsed
+      expect(filesWithContext[1].id).toBe(file1.id) // Second parsed
+      expect(filesWithContext[2].id).toBe(file2.id) // Third parsed
+    })
+
+    it('should exclude files without context', async () => {
+      const file1 = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'with-context.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/with-context.pdf',
+      })
+
+      const file2 = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'without-context.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/without-context.pdf',
+      })
+
+      // Only add context to file1
+      await repository.updateIntakeContext(file1.id, {
+        vendorName: 'Test Vendor',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      })
+
+      const filesWithContext = await repository.findByConversationWithContext(testConversationId)
+
+      expect(filesWithContext).toHaveLength(1)
+      expect(filesWithContext[0].id).toBe(file1.id)
+    })
+
+    it('should return empty array when no files have context', async () => {
+      await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'no-context.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/no-context.pdf',
+      })
+
+      const filesWithContext = await repository.findByConversationWithContext(testConversationId)
+
+      expect(filesWithContext).toHaveLength(0)
+    })
+
+    it('should return empty array for conversation with no files', async () => {
+      const filesWithContext = await repository.findByConversationWithContext(
+        '00000000-0000-0000-0000-000000000000'
+      )
+
+      expect(filesWithContext).toHaveLength(0)
+    })
+
+    it('should only return files from specified conversation', async () => {
+      // Create another conversation
+      const conversation2 = Conversation.create({
+        userId: testUserId,
+        mode: 'consult',
+      })
+      const createdConversation2 = await conversationRepository.create(conversation2)
+
+      // Create file in first conversation
+      const file1 = await repository.create({
+        userId: testUserId,
+        conversationId: testConversationId,
+        filename: 'conv1-file.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/conv1-file.pdf',
+      })
+
+      // Create file in second conversation
+      const file2 = await repository.create({
+        userId: testUserId,
+        conversationId: createdConversation2.id,
+        filename: 'conv2-file.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/conv2-file.pdf',
+      })
+
+      // Add context to both
+      await repository.updateIntakeContext(file1.id, {
+        vendorName: 'Vendor 1',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      })
+
+      await repository.updateIntakeContext(file2.id, {
+        vendorName: 'Vendor 2',
+        solutionName: null,
+        solutionType: null,
+        industry: null,
+        features: [],
+        claims: [],
+        complianceMentions: [],
+      })
+
+      // Query first conversation
+      const conv1Files = await repository.findByConversationWithContext(testConversationId)
+
+      expect(conv1Files).toHaveLength(1)
+      expect(conv1Files[0].id).toBe(file1.id)
+
+      // Query second conversation
+      const conv2Files = await repository.findByConversationWithContext(createdConversation2.id)
+
+      expect(conv2Files).toHaveLength(1)
+      expect(conv2Files[0].id).toBe(file2.id)
+    })
+  })
 })
