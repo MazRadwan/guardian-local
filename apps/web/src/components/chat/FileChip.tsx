@@ -12,6 +12,10 @@
  * - Story 17.2.1: `disabled` prop to hide X button during batch operations
  * - Story 17.2.2: `variant` prop with compact mode for multi-file layouts
  *
+ * Epic 17 UX Fix: Added 'pending' stage for queued files (before upload starts)
+ * - Shows Clock icon with "Queued" status text
+ * - Allows removal while waiting
+ *
  * Features:
  * - Light background with subtle border
  * - Truncated filename with progress bar
@@ -20,12 +24,12 @@
  * - Compact variant: smaller padding/icons, hides progress/error text
  */
 
-import { Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface FileChipProps {
   filename: string;
-  stage: 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
+  stage: 'pending' | 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
   progress: number; // 0-100
   error?: string;
   onRemove: () => void;
@@ -42,6 +46,7 @@ export function FileChip({
   disabled = false,
   variant = 'default',
 }: FileChipProps) {
+  const isPending = stage === 'pending';
   const isActive = ['uploading', 'storing', 'parsing'].includes(stage);
   const isError = stage === 'error';
   const isComplete = stage === 'complete';
@@ -50,6 +55,8 @@ export function FileChip({
   // Get status text based on stage
   const getStatusText = () => {
     switch (stage) {
+      case 'pending':
+        return 'Queued';
       case 'uploading':
         return `${progress}%`;
       case 'storing':
@@ -78,6 +85,15 @@ export function FileChip({
       {/* Top row: Icon + Filename + X button */}
       <div className="flex items-center gap-2">
         {/* Icon based on state - smaller in compact */}
+        {isPending && (
+          <Clock
+            className={cn(
+              'text-gray-400 flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
+            aria-hidden="true"
+          />
+        )}
         {isActive && (
           <Loader2
             className={cn(
@@ -160,6 +176,11 @@ export function FileChip({
         <span className="text-xs text-red-600 truncate" title={error}>
           {error}
         </span>
+      )}
+
+      {/* Pending indicator - only when queued, hidden in compact (icon remains) */}
+      {isPending && !isCompact && (
+        <span className="text-xs text-gray-500">Queued</span>
       )}
 
       {/* Success indicator - only when complete, hidden in compact (icon remains) */}

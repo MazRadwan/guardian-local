@@ -80,7 +80,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     const {
       files,
       isUploading,
-      aggregateProgress,
+      // aggregateProgress removed from UI - per-file chips provide progress
       addFiles,
       removeFile,
       clearAll,
@@ -125,6 +125,16 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       const newHeight = Math.min(Math.max(textarea.scrollHeight, 60), 200);
       textarea.style.height = `${newHeight}px`;
     }, [message]);
+
+    // Epic 17 UX Fix: Auto-upload when pending files exist and conversationId is available
+    // This useEffect is necessary because React batches state updates - calling uploadAll()
+    // immediately after addFiles() in the same handler would read stale state.
+    // The effect runs after state is committed, ensuring latest files state is used.
+    useEffect(() => {
+      if (hasPendingFiles && conversationId && uploadEnabled) {
+        uploadAll(conversationId, uploadMode);
+      }
+    }, [hasPendingFiles, conversationId, uploadEnabled, uploadAll, uploadMode]);
 
     const handleSend = async () => {
       const trimmedMessage = message.trim();
@@ -229,18 +239,23 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
             {hasFiles && (
               <div className="px-4 pt-3">
                 <div className="flex flex-wrap gap-2">
-                  {files.map((file) => (
-                    <FileChip
-                      key={file.localIndex}
-                      filename={file.filename}
-                      stage={file.stage === 'pending' ? 'complete' : file.stage}
-                      progress={file.progress}
-                      error={file.error}
-                      onRemove={() => removeFile(file.localIndex)}
-                      disabled={isUploading}
-                      variant={useCompactChips ? 'compact' : 'default'}
-                    />
-                  ))}
+                  {files.map((file) => {
+                    // Epic 17 UX Fix: Per-file disable for remove button
+                    // Only disable on files currently in-flight, not globally
+                    const isFileInFlight = ['uploading', 'storing', 'parsing'].includes(file.stage);
+                    return (
+                      <FileChip
+                        key={file.localIndex}
+                        filename={file.filename}
+                        stage={file.stage}
+                        progress={file.progress}
+                        error={file.error}
+                        onRemove={() => removeFile(file.localIndex)}
+                        disabled={isFileInFlight}
+                        variant={useCompactChips ? 'compact' : 'default'}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -321,23 +336,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                 </Button>
               )}
             </div>
-
-            {/* Epic 17: Aggregate progress bar during upload */}
-            {isUploading && (
-              <div className="px-4 pb-2">
-                <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-600 transition-all duration-300"
-                    style={{ width: `${aggregateProgress}%` }}
-                    role="progressbar"
-                    aria-valuenow={aggregateProgress}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label="Upload progress"
-                  />
-                </div>
-              </div>
-            )}
+            {/* Epic 17 UX Fix: Removed aggregate progress bar (redundant with per-file chips) */}
           </div>
         </div>
       </div>

@@ -749,37 +749,8 @@ describe('Composer', () => {
       expect(sendButton).not.toBeDisabled();
     });
 
-    it('should show aggregate progress bar when uploading', async () => {
-      // The progress bar should be visible when isUploading is true
-      // We need to mock the hook behavior to test this properly
-      render(
-        <Composer
-          onSendMessage={mockOnSendMessage}
-          wsAdapter={mockWsAdapter}
-          conversationId="test-123"
-        />
-      );
-
-      // Verify progress bar container exists in the DOM
-      // It will be hidden when not uploading (via conditional rendering)
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' });
-
-      Object.defineProperty(fileInput, 'files', {
-        value: [file],
-        writable: false,
-      });
-
-      fireEvent.change(fileInput);
-
-      await waitFor(() => {
-        expect(screen.getByText('doc.pdf')).toBeInTheDocument();
-      });
-
-      // Progress bar should NOT be visible when files are pending (not uploading)
-      const progressBar = screen.queryByRole('progressbar', { name: /upload progress/i });
-      expect(progressBar).not.toBeInTheDocument();
-    });
+    // Epic 17 UX Fix: Removed aggregate progress bar (per-file chips show progress)
+    // This test removed since the UI element no longer exists
 
     it('should have correct aria-label on send button when uploading files', () => {
       // The send button aria-label changes when uploading
@@ -842,11 +813,20 @@ describe('Composer', () => {
 
     it('should call onSendMessage with attachments ONLY after WS completion (not immediately after HTTP)', async () => {
       // This test verifies the stale closure fix:
-      // - Click Send with pending file + text
+      // - Add file → auto-upload starts (Epic 17 UX Fix)
       // - HTTP returns 202 with uploadId
       // - onSendMessage should NOT be called yet (waiting for WS)
       // - WS intake_context_ready arrives with fileId
+      // - Type text and click Send
       // - onSendMessage called WITH complete attachments
+
+      // Mock fetch FIRST (auto-upload will call it)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ index: 0, uploadId: 'upload-xyz-123', status: 'accepted' }],
+        }),
+      });
 
       render(
         <Composer
@@ -856,11 +836,7 @@ describe('Composer', () => {
         />
       );
 
-      // 1. Type some text
-      const textarea = screen.getByPlaceholderText('Type a message...');
-      await userEvent.type(textarea, 'Test with attachment');
-
-      // 2. Add a file
+      // 1. Add a file (auto-upload will trigger via useEffect)
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['test content'], 'test-doc.pdf', { type: 'application/pdf' });
 
@@ -875,31 +851,16 @@ describe('Composer', () => {
         expect(screen.getByText('test-doc.pdf')).toBeInTheDocument();
       });
 
-      // 3. Mock fetch to return accepted with uploadId
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [{ index: 0, uploadId: 'upload-xyz-123', status: 'accepted' }],
-        }),
-      });
-
-      // 4. Click send button
-      const sendButton = screen.getByLabelText('Send message');
-      expect(sendButton).not.toBeDisabled();
-
-      // Start the send (don't await yet)
-      const sendPromise = userEvent.click(sendButton);
-
-      // 5. Wait for fetch to be called
+      // 2. Wait for auto-upload fetch to be called
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalled();
       });
 
-      // 6. CRITICAL: onSendMessage should NOT have been called yet!
-      // (The stale closure bug would have called it immediately with empty attachments)
+      // 3. CRITICAL: onSendMessage should NOT have been called yet!
+      // (No send triggered - just upload)
       expect(mockOnSendMessage).not.toHaveBeenCalled();
 
-      // 7. Simulate WS intake_context_ready event with fileId
+      // 4. Simulate WS intake_context_ready event with fileId
       await waitFor(() => {
         expect(intakeContextHandler).not.toBeNull();
       });
@@ -918,10 +879,24 @@ describe('Composer', () => {
         },
       });
 
-      // Wait for send to complete
-      await sendPromise;
+      // 5. Wait for file to show as complete (Ready status)
+      await waitFor(() => {
+        // After WS completion, file should be complete - chip shows checkmark
+        const chip = screen.getByText('test-doc.pdf').closest('[role="status"]');
+        expect(chip).toHaveAttribute('aria-label', expect.stringContaining('Ready'));
+      });
 
-      // 8. NOW onSendMessage should be called WITH correct attachments
+      // 6. Type some text
+      const textarea = screen.getByPlaceholderText('Type a message...');
+      await userEvent.type(textarea, 'Test with attachment');
+
+      // 7. Now click send - file is already complete
+      const sendButton = screen.getByLabelText('Send message');
+      expect(sendButton).not.toBeDisabled();
+
+      await userEvent.click(sendButton);
+
+      // 8. onSendMessage should be called WITH correct attachments
       await waitFor(() => {
         expect(mockOnSendMessage).toHaveBeenCalledTimes(1);
       });
@@ -941,6 +916,14 @@ describe('Composer', () => {
     });
 
     it('should show error toast and not send if all files fail', async () => {
+      // Mock fetch FIRST (auto-upload will call it immediately)
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ index: 0, status: 'rejected', error: 'Invalid file format' }],
+        }),
+      });
+
       render(
         <Composer
           onSendMessage={mockOnSendMessage}
@@ -949,7 +932,7 @@ describe('Composer', () => {
         />
       );
 
-      // Add a file (no text)
+      // Add a file (no text) - auto-upload triggers immediately
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['test content'], 'test-doc.pdf', { type: 'application/pdf' });
 
@@ -964,22 +947,20 @@ describe('Composer', () => {
         expect(screen.getByText('test-doc.pdf')).toBeInTheDocument();
       });
 
-      // Mock fetch to return rejected
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [{ index: 0, status: 'rejected', error: 'Invalid file format' }],
-        }),
-      });
-
-      // Click send
-      const sendButton = screen.getByLabelText('Send message');
-      await userEvent.click(sendButton);
-
-      // Wait for fetch
+      // Wait for auto-upload fetch (rejected)
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalled();
       });
+
+      // Wait for file to show as error
+      await waitFor(() => {
+        const chip = screen.getByText('test-doc.pdf').closest('[role="status"]');
+        expect(chip).toHaveAttribute('aria-label', expect.stringContaining('Error'));
+      });
+
+      // Click send (file is in error state, no text)
+      const sendButton = screen.getByLabelText('Send message');
+      await userEvent.click(sendButton);
 
       // onSendMessage should NOT be called (no text + all files failed)
       await waitFor(() => {

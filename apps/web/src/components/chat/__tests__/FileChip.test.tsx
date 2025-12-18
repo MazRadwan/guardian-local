@@ -4,6 +4,7 @@
  * Epic 16.6.1: Tests for the compact file upload indicator component.
  * Epic 16.6.8: Updated for light theme styling.
  * Epic 17.2.3: Tests for disabled prop and variant prop (compact mode).
+ * Epic 17 UX Fix: Tests for 'pending' stage (Queued status).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -375,7 +376,8 @@ describe('FileChip', () => {
     });
 
     it('should maintain X button visibility for all stages by default', () => {
-      const stages: Array<'uploading' | 'storing' | 'parsing' | 'complete' | 'error'> = [
+      const stages: Array<'pending' | 'uploading' | 'storing' | 'parsing' | 'complete' | 'error'> = [
+        'pending',
         'uploading',
         'storing',
         'parsing',
@@ -402,6 +404,54 @@ describe('FileChip', () => {
         expect(screen.getByRole('progressbar')).toBeInTheDocument();
         unmount();
       });
+    });
+  });
+
+  describe('Epic 17 UX Fix: pending stage', () => {
+    it('shows X button during pending stage', () => {
+      render(<FileChip {...defaultProps} stage="pending" />);
+      expect(screen.getByRole('button', { name: /remove file/i })).toBeInTheDocument();
+    });
+
+    it('shows clock icon during pending stage', () => {
+      const { container } = render(<FileChip {...defaultProps} stage="pending" />);
+      // Clock icon has text-gray-400 class
+      expect(container.querySelector('.text-gray-400')).toBeInTheDocument();
+    });
+
+    it('shows "Queued" status text during pending stage', () => {
+      render(<FileChip {...defaultProps} stage="pending" />);
+      expect(screen.getByText('Queued')).toBeInTheDocument();
+    });
+
+    it('hides progress bar during pending stage', () => {
+      render(<FileChip {...defaultProps} stage="pending" />);
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    });
+
+    it('has correct aria-label during pending stage', () => {
+      render(<FileChip {...defaultProps} stage="pending" />);
+      expect(screen.getByRole('status')).toHaveAttribute(
+        'aria-label',
+        'File test-document.pdf: Queued'
+      );
+    });
+
+    it('has light background during pending stage (not error)', () => {
+      const { container } = render(<FileChip {...defaultProps} stage="pending" />);
+      const chip = container.firstChild;
+      expect(chip).toHaveClass('bg-gray-100');
+      expect(chip).not.toHaveClass('bg-red-50');
+    });
+
+    it('hides "Queued" text in compact variant', () => {
+      render(<FileChip {...defaultProps} stage="pending" variant="compact" />);
+      expect(screen.queryByText('Queued')).not.toBeInTheDocument();
+    });
+
+    it('shows filename in compact pending state', () => {
+      render(<FileChip {...defaultProps} stage="pending" variant="compact" />);
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
     });
   });
 });
