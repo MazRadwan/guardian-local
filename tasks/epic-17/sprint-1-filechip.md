@@ -10,7 +10,15 @@
 
 ## Context
 
-The FileChip component displays file metadata in the Composer. Currently it shows a single file with no removal capability. This track adds an `onRemove` callback and a compact variant for multi-file display.
+The FileChip component displays file metadata in the Composer during upload. It already has:
+- Filename display with truncation
+- Stage-based progress indicator
+- X button with `onRemove` callback (ALWAYS visible, can cancel at any stage)
+- Error state display
+
+This track adds two new props for multi-file support:
+- `disabled` prop to prevent removal during batch operations
+- `variant` prop for compact display when showing multiple files
 
 **Key Files:**
 - `apps/web/src/components/chat/FileChip.tsx`
@@ -18,38 +26,44 @@ The FileChip component displays file metadata in the Composer. Currently it show
 
 ---
 
-## Story 17.2.1: Add onRemove Callback
+## Current Implementation (Actual)
 
-### Objective
-Add an optional `onRemove` prop that renders an X button to remove the file.
-
-### Current Props
 ```typescript
-interface FileChipProps {
+// FileChip.tsx - ACTUAL current props
+export interface FileChipProps {
   filename: string;
-  size: number;
-  mimeType: string;
-  progress?: {
-    stage: 'uploading' | 'parsing' | 'complete' | 'error';
-    percent: number;
-  };
+  stage: 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
+  progress: number; // 0-100
   error?: string;
+  onRemove: () => void; // REQUIRED - X button always visible
 }
 ```
 
+**Current behavior:**
+- X button is ALWAYS visible and clickable (can cancel at any stage)
+- Progress bar shown during `uploading`, `storing`, `parsing` stages
+- Error message shown in `error` stage
+- "Ready" indicator shown in `complete` stage
+
+---
+
+## Story 17.2.1: Add disabled Prop
+
+### Objective
+Add `disabled` prop to prevent removal during batch upload operations.
+
+### Rationale
+For multi-file uploads, when one file is uploading we may want to prevent removing OTHER files (or all files). The `disabled` prop gives the parent component control over whether removal is allowed.
+
 ### Target Props
 ```typescript
-interface FileChipProps {
+export interface FileChipProps {
   filename: string;
-  size: number;
-  mimeType: string;
-  progress?: {
-    stage: 'uploading' | 'parsing' | 'complete' | 'error';
-    percent: number;
-  };
+  stage: 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
+  progress: number;
   error?: string;
-  onRemove?: () => void;  // NEW: Optional remove callback
-  disabled?: boolean;     // NEW: Disable during upload
+  onRemove: () => void;
+  disabled?: boolean;  // NEW: When true, X button is hidden/disabled
 }
 ```
 
@@ -57,87 +71,58 @@ interface FileChipProps {
 
 ```tsx
 // FileChip.tsx
-import { X } from 'lucide-react';
-
 export function FileChip({
   filename,
-  size,
-  mimeType,
+  stage,
   progress,
   error,
   onRemove,
-  disabled = false,
+  disabled = false,  // NEW
 }: FileChipProps) {
-  const isUploading = progress && progress.stage !== 'complete' && progress.stage !== 'error';
+  const isActive = ['uploading', 'storing', 'parsing'].includes(stage);
+  const isError = stage === 'error';
+  const isComplete = stage === 'complete';
 
   return (
-    <div className="relative flex items-center gap-2 px-3 py-2 bg-muted rounded-lg border">
-      {/* File icon */}
-      <FileIcon mimeType={mimeType} className="w-4 h-4 text-muted-foreground" />
+    <div className={cn(/* existing classes */)}>
+      {/* ... existing icon + filename ... */}
 
-      {/* File info */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{filename}</p>
-        <p className="text-xs text-muted-foreground">
-          {formatFileSize(size)}
-          {progress && progress.stage !== 'complete' && (
-            <span className="ml-2">{progress.stage}... {progress.percent}%</span>
-          )}
-        </p>
-      </div>
-
-      {/* Error indicator */}
-      {error && (
-        <span className="text-xs text-destructive">{error}</span>
-      )}
-
-      {/* Remove button */}
-      {onRemove && !disabled && (
+      {/* X button - only show if not disabled */}
+      {!disabled && (
         <button
           type="button"
           onClick={onRemove}
-          disabled={isUploading}
-          className="p-1 rounded-full hover:bg-muted-foreground/20 transition-colors
-                     disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label={`Remove ${filename}`}
+          className="p-0.5 text-gray-400 hover:text-gray-600 rounded flex-shrink-0 transition-colors"
+          aria-label="Remove file"
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
       )}
 
-      {/* Upload progress bar */}
-      {isUploading && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted-foreground/20 rounded-b-lg overflow-hidden">
-          <div
-            className="h-full bg-primary transition-all duration-300"
-            style={{ width: `${progress.percent}%` }}
-          />
-        </div>
-      )}
+      {/* ... rest of component ... */}
     </div>
   );
 }
 ```
 
 ### Acceptance Criteria
-- [ ] `onRemove` prop is optional
-- [ ] X button only renders when `onRemove` provided
-- [ ] X button disabled during upload (stage !== 'complete')
-- [ ] `disabled` prop prevents removal entirely
-- [ ] Accessible: has `aria-label` for screen readers
-- [ ] Keyboard accessible: button is focusable
+- [ ] `disabled` prop is optional, defaults to `false`
+- [ ] When `disabled=true`, X button is not rendered
+- [ ] When `disabled=false` (default), X button works as before
+- [ ] Existing behavior unchanged (backward compatible)
 
 ---
 
 ## Story 17.2.2: Compact Variant
 
 ### Objective
-Add a `compact` variant for tighter layouts when displaying multiple files.
+Add `variant` prop with compact mode for tighter layouts when displaying multiple files.
 
 ### Target Props Addition
 ```typescript
-interface FileChipProps {
+export interface FileChipProps {
   // ... existing props
+  disabled?: boolean;
   variant?: 'default' | 'compact';  // NEW
 }
 ```
@@ -147,8 +132,7 @@ interface FileChipProps {
 ```tsx
 export function FileChip({
   filename,
-  size,
-  mimeType,
+  stage,
   progress,
   error,
   onRemove,
@@ -156,79 +140,117 @@ export function FileChip({
   variant = 'default',
 }: FileChipProps) {
   const isCompact = variant === 'compact';
-  const isUploading = progress && progress.stage !== 'complete' && progress.stage !== 'error';
+  const isActive = ['uploading', 'storing', 'parsing'].includes(stage);
+  const isError = stage === 'error';
+  const isComplete = stage === 'complete';
 
   return (
     <div
       className={cn(
-        'relative flex items-center gap-2 bg-muted rounded-lg border',
-        isCompact ? 'px-2 py-1' : 'px-3 py-2'
+        'inline-flex flex-col gap-1 rounded-lg border',
+        isCompact ? 'px-2 py-1' : 'px-3 py-2',
+        isError ? 'bg-red-50 border-red-200' : 'bg-gray-100 border-gray-200'
       )}
+      role="status"
+      aria-label={`File ${filename}: ${getStatusText()}`}
     >
-      {/* File icon - smaller in compact */}
-      <FileIcon
-        mimeType={mimeType}
-        className={cn(
-          'text-muted-foreground',
-          isCompact ? 'w-3 h-3' : 'w-4 h-4'
-        )}
-      />
-
-      {/* File info */}
-      <div className="flex-1 min-w-0">
-        <p className={cn(
-          'font-medium truncate',
-          isCompact ? 'text-xs' : 'text-sm'
-        )}>
-          {filename}
-        </p>
-        {!isCompact && (
-          <p className="text-xs text-muted-foreground">
-            {formatFileSize(size)}
-            {progress && progress.stage !== 'complete' && (
-              <span className="ml-2">{progress.stage}...</span>
+      {/* Top row: Icon + Filename + X button */}
+      <div className="flex items-center gap-2">
+        {/* Icon - smaller in compact */}
+        {isActive && (
+          <Loader2
+            className={cn(
+              'text-blue-500 animate-spin flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
             )}
-          </p>
+            aria-hidden="true"
+          />
+        )}
+        {isComplete && (
+          <CheckCircle
+            className={cn(
+              'text-green-600 flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
+            aria-hidden="true"
+          />
+        )}
+        {isError && (
+          <AlertCircle
+            className={cn(
+              'text-red-500 flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
+            aria-hidden="true"
+          />
+        )}
+
+        {/* Filename - narrower max-width in compact */}
+        <span
+          className={cn(
+            'text-gray-900 truncate',
+            isCompact ? 'text-xs max-w-[120px]' : 'text-sm max-w-[180px]'
+          )}
+          title={filename}
+        >
+          {filename}
+        </span>
+
+        {/* X button - smaller in compact */}
+        {!disabled && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className={cn(
+              'text-gray-400 hover:text-gray-600 rounded flex-shrink-0 transition-colors',
+              isCompact ? 'p-0' : 'p-0.5'
+            )}
+            aria-label="Remove file"
+          >
+            <X className={isCompact ? 'h-3 w-3' : 'h-4 w-4'} />
+          </button>
         )}
       </div>
 
-      {/* Error indicator - icon only in compact */}
-      {error && (
-        isCompact ? (
-          <AlertCircle className="w-3 h-3 text-destructive" />
-        ) : (
-          <span className="text-xs text-destructive">{error}</span>
+      {/* Progress bar - thinner in compact, hide percentage text */}
+      {isActive && (
+        <div className="flex items-center gap-2">
+          <div
+            className={cn(
+              'flex-1 bg-gray-300 rounded-full overflow-hidden',
+              isCompact ? 'h-0.5' : 'h-0.5'
+            )}
+          >
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+              role="progressbar"
+              aria-valuenow={progress}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            />
+          </div>
+          {/* Hide progress text in compact mode */}
+          {!isCompact && (
+            <span className="text-xs text-gray-500 min-w-[60px] text-right">
+              {getStatusText()}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Error message - icon only in compact */}
+      {isError && error && (
+        isCompact ? null : (
+          <span className="text-xs text-red-600 truncate" title={error}>
+            {error}
+          </span>
         )
       )}
 
-      {/* Remove button - smaller in compact */}
-      {onRemove && !disabled && (
-        <button
-          type="button"
-          onClick={onRemove}
-          disabled={isUploading}
-          className={cn(
-            'rounded-full hover:bg-muted-foreground/20 transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            isCompact ? 'p-0.5' : 'p-1'
-          )}
-          aria-label={`Remove ${filename}`}
-        >
-          <X className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-        </button>
-      )}
-
-      {/* Progress bar - thinner in compact */}
-      {isUploading && (
-        <div className={cn(
-          'absolute bottom-0 left-0 right-0 bg-muted-foreground/20 rounded-b-lg overflow-hidden',
-          isCompact ? 'h-0.5' : 'h-1'
-        )}>
-          <div
-            className="h-full bg-primary transition-all duration-300"
-            style={{ width: `${progress?.percent ?? 0}%` }}
-          />
-        </div>
+      {/* Success indicator - hide in compact */}
+      {isComplete && !isCompact && (
+        <span className="text-xs text-green-600">Ready</span>
       )}
     </div>
   );
@@ -240,26 +262,26 @@ export function FileChip({
 **Default variant:**
 ```
 ┌─────────────────────────────────────┐
-│ 📄 document.pdf                   ✕ │
-│    1.2 MB · uploading... 45%        │
-│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░ │
+│ ⟳ document.pdf                    ✕ │
+│ ▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░   45% │
 └─────────────────────────────────────┘
 ```
 
 **Compact variant:**
 ```
-┌────────────────────────┐
-│ 📄 document.pdf      ✕ │
-│ ▓▓▓▓▓▓░░░░░░░░░░░░░░░░ │
-└────────────────────────┘
+┌──────────────────────┐
+│ ⟳ document.pdf     ✕ │
+│ ▓▓▓▓▓▓░░░░░░░░░░░░░░ │
+└──────────────────────┘
 ```
 
 ### Acceptance Criteria
 - [ ] `variant` prop defaults to `'default'`
 - [ ] Compact: smaller padding, font, icons
-- [ ] Compact: hides file size text
-- [ ] Compact: shows error as icon only
-- [ ] Both variants maintain functionality
+- [ ] Compact: hides progress percentage text
+- [ ] Compact: hides error text (icon remains)
+- [ ] Compact: hides "Ready" text (icon remains)
+- [ ] Both variants maintain full functionality
 - [ ] Tailwind `cn()` helper used for conditional classes
 
 ---
@@ -267,7 +289,7 @@ export function FileChip({
 ## Story 17.2.3: FileChip Unit Tests
 
 ### Objective
-Add tests for new functionality.
+Add tests for new `disabled` and `variant` props.
 
 ### Test Cases
 
@@ -279,25 +301,29 @@ import { FileChip } from '../FileChip';
 describe('FileChip', () => {
   const defaultProps = {
     filename: 'document.pdf',
-    size: 1024 * 1024, // 1MB
-    mimeType: 'application/pdf',
+    stage: 'complete' as const,
+    progress: 100,
+    onRemove: jest.fn(),
   };
 
-  describe('onRemove callback', () => {
-    it('should not render X button when onRemove not provided', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('disabled prop', () => {
+    it('should render X button by default (disabled=false)', () => {
       render(<FileChip {...defaultProps} />);
+
+      expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument();
+    });
+
+    it('should hide X button when disabled=true', () => {
+      render(<FileChip {...defaultProps} disabled />);
 
       expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
     });
 
-    it('should render X button when onRemove provided', () => {
-      const onRemove = jest.fn();
-      render(<FileChip {...defaultProps} onRemove={onRemove} />);
-
-      expect(screen.getByRole('button', { name: /remove document\.pdf/i })).toBeInTheDocument();
-    });
-
-    it('should call onRemove when X button clicked', () => {
+    it('should call onRemove when X clicked and not disabled', () => {
       const onRemove = jest.fn();
       render(<FileChip {...defaultProps} onRemove={onRemove} />);
 
@@ -306,58 +332,40 @@ describe('FileChip', () => {
       expect(onRemove).toHaveBeenCalledTimes(1);
     });
 
-    it('should disable X button during upload', () => {
-      const onRemove = jest.fn();
-      render(
-        <FileChip
-          {...defaultProps}
-          onRemove={onRemove}
-          progress={{ stage: 'uploading', percent: 50 }}
-        />
-      );
+    it('should default disabled to false', () => {
+      render(<FileChip {...defaultProps} />);
 
-      const button = screen.getByRole('button', { name: /remove/i });
-      expect(button).toBeDisabled();
-
-      fireEvent.click(button);
-      expect(onRemove).not.toHaveBeenCalled();
-    });
-
-    it('should enable X button when upload complete', () => {
-      const onRemove = jest.fn();
-      render(
-        <FileChip
-          {...defaultProps}
-          onRemove={onRemove}
-          progress={{ stage: 'complete', percent: 100 }}
-        />
-      );
-
-      const button = screen.getByRole('button', { name: /remove/i });
-      expect(button).not.toBeDisabled();
-    });
-
-    it('should not render X button when disabled prop is true', () => {
-      const onRemove = jest.fn();
-      render(<FileChip {...defaultProps} onRemove={onRemove} disabled />);
-
-      expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument();
+      // X button should be present (default is not disabled)
+      expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument();
     });
   });
 
-  describe('compact variant', () => {
+  describe('variant prop', () => {
     it('should render default variant by default', () => {
-      render(<FileChip {...defaultProps} />);
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="uploading"
+          progress={45}
+        />
+      );
 
-      // File size should be visible in default
-      expect(screen.getByText(/1.*MB/i)).toBeInTheDocument();
+      // Default shows progress percentage text
+      expect(screen.getByText('45%')).toBeInTheDocument();
     });
 
-    it('should hide file size in compact variant', () => {
-      render(<FileChip {...defaultProps} variant="compact" />);
+    it('should hide progress text in compact variant', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="uploading"
+          progress={45}
+          variant="compact"
+        />
+      );
 
-      // File size should NOT be visible in compact
-      expect(screen.queryByText(/1.*MB/i)).not.toBeInTheDocument();
+      // Compact hides progress text
+      expect(screen.queryByText('45%')).not.toBeInTheDocument();
     });
 
     it('should render filename in both variants', () => {
@@ -368,23 +376,77 @@ describe('FileChip', () => {
       expect(screen.getByText('document.pdf')).toBeInTheDocument();
     });
 
-    it('should show error icon instead of text in compact variant', () => {
-      render(<FileChip {...defaultProps} variant="compact" error="Upload failed" />);
+    it('should hide error text in compact variant', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="error"
+          progress={0}
+          error="Upload failed"
+          variant="compact"
+        />
+      );
 
-      // Should NOT show error text
+      // Error text hidden in compact (icon still shows via AlertCircle)
       expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
-      // Should show error icon (AlertCircle has role="img" or similar)
+    });
+
+    it('should show error text in default variant', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="error"
+          progress={0}
+          error="Upload failed"
+        />
+      );
+
+      expect(screen.getByText('Upload failed')).toBeInTheDocument();
+    });
+
+    it('should hide Ready text in compact variant', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="complete"
+          progress={100}
+          variant="compact"
+        />
+      );
+
+      expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+    });
+
+    it('should show Ready text in default variant', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="complete"
+          progress={100}
+        />
+      );
+
+      expect(screen.getByText('Ready')).toBeInTheDocument();
     });
   });
 
   describe('accessibility', () => {
     it('should have accessible remove button label', () => {
-      render(<FileChip {...defaultProps} onRemove={() => {}} />);
+      render(<FileChip {...defaultProps} />);
 
-      expect(screen.getByRole('button', { name: 'Remove document.pdf' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Remove file' })).toBeInTheDocument();
     });
 
-    it('should be keyboard accessible', () => {
+    it('should have status role with file info', () => {
+      render(<FileChip {...defaultProps} />);
+
+      expect(screen.getByRole('status')).toHaveAttribute(
+        'aria-label',
+        expect.stringContaining('document.pdf')
+      );
+    });
+
+    it('should be keyboard accessible when not disabled', () => {
       const onRemove = jest.fn();
       render(<FileChip {...defaultProps} onRemove={onRemove} />);
 
@@ -392,20 +454,40 @@ describe('FileChip', () => {
       button.focus();
 
       fireEvent.keyDown(button, { key: 'Enter' });
-      expect(onRemove).toHaveBeenCalled();
+      // Note: fireEvent.keyDown on button doesn't trigger click
+      // but the button is focusable which is the accessibility requirement
+      expect(document.activeElement).toBe(button);
+    });
+  });
+
+  describe('backward compatibility', () => {
+    it('should work with minimal props (existing usage)', () => {
+      // This test ensures existing Composer code still works
+      render(
+        <FileChip
+          filename="test.pdf"
+          stage="uploading"
+          progress={50}
+          onRemove={() => {}}
+        />
+      );
+
+      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByText('50%')).toBeInTheDocument();
     });
   });
 });
 ```
 
 ### Acceptance Criteria
-- [ ] Test: X button renders conditionally
-- [ ] Test: onRemove callback fires on click
-- [ ] Test: X button disabled during upload
-- [ ] Test: X button enabled when complete
-- [ ] Test: disabled prop hides X button
-- [ ] Test: compact variant hides file size
-- [ ] Test: accessibility labels present
+- [ ] Test: disabled hides X button
+- [ ] Test: disabled=false (default) shows X button
+- [ ] Test: onRemove fires when enabled
+- [ ] Test: compact hides progress text
+- [ ] Test: compact hides error text
+- [ ] Test: compact hides Ready text
+- [ ] Test: default shows all text
+- [ ] Test: backward compatibility (existing usage works)
 - [ ] All existing tests still pass
 
 ---
@@ -415,16 +497,16 @@ describe('FileChip', () => {
 Before requesting code review:
 
 - [ ] All 3 stories implemented
-- [ ] `npm test` passes in `apps/web`
+- [ ] `pnpm --filter @guardian/web test` passes
 - [ ] No TypeScript errors
 - [ ] Component renders correctly in both variants
-- [ ] Existing FileChip usage unaffected (backward compatible)
+- [ ] Existing Composer usage unaffected (backward compatible)
 
 ---
 
 ## Handoff Notes
 
 After this track completes:
-- Composer (Sprint 2) will use `onRemove` to let users remove files
-- Composer will use `variant="compact"` when displaying multiple files
-- No changes needed to FileChipInChat (chat message display)
+- Composer (Sprint 2) will use `disabled` to prevent removal during batch upload
+- Composer will use `variant="compact"` when displaying 4+ files
+- Existing single-file usage continues to work unchanged

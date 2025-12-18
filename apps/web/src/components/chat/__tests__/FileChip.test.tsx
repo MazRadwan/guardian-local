@@ -3,6 +3,7 @@
  *
  * Epic 16.6.1: Tests for the compact file upload indicator component.
  * Epic 16.6.8: Updated for light theme styling.
+ * Epic 17.2.3: Tests for disabled prop and variant prop (compact mode).
  */
 
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -186,6 +187,221 @@ describe('FileChip', () => {
       const { container } = render(<FileChip {...defaultProps} stage="error" error="Failed" />);
       // Has red icon
       expect(container.querySelector('.text-red-500')).toBeInTheDocument();
+    });
+  });
+
+  describe('Epic 17.2.1: disabled prop', () => {
+    it('should render X button by default (disabled=false)', () => {
+      render(<FileChip {...defaultProps} stage="complete" progress={100} />);
+      expect(screen.getByRole('button', { name: /remove file/i })).toBeInTheDocument();
+    });
+
+    it('should hide X button when disabled=true', () => {
+      render(<FileChip {...defaultProps} stage="complete" progress={100} disabled />);
+      expect(screen.queryByRole('button', { name: /remove file/i })).not.toBeInTheDocument();
+    });
+
+    it('should call onRemove when X clicked and not disabled', () => {
+      const onRemove = jest.fn();
+      render(<FileChip {...defaultProps} onRemove={onRemove} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /remove file/i }));
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
+
+    it('should default disabled to false', () => {
+      render(<FileChip {...defaultProps} />);
+      // X button should be present (default is not disabled)
+      expect(screen.getByRole('button', { name: /remove file/i })).toBeInTheDocument();
+    });
+
+    it('should hide X button when disabled during uploading', () => {
+      render(<FileChip {...defaultProps} stage="uploading" progress={50} disabled />);
+      expect(screen.queryByRole('button', { name: /remove file/i })).not.toBeInTheDocument();
+    });
+
+    it('should hide X button when disabled during error state', () => {
+      render(<FileChip {...defaultProps} stage="error" error="Upload failed" disabled />);
+      expect(screen.queryByRole('button', { name: /remove file/i })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Epic 17.2.2: variant prop', () => {
+    it('should render default variant by default', () => {
+      render(<FileChip {...defaultProps} stage="uploading" progress={45} />);
+      // Default shows progress percentage text
+      expect(screen.getByText('45%')).toBeInTheDocument();
+    });
+
+    it('should hide progress text in compact variant', () => {
+      render(
+        <FileChip {...defaultProps} stage="uploading" progress={45} variant="compact" />
+      );
+      // Compact hides progress text
+      expect(screen.queryByText('45%')).not.toBeInTheDocument();
+    });
+
+    it('should render filename in both variants', () => {
+      const { rerender } = render(<FileChip {...defaultProps} />);
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+
+      rerender(<FileChip {...defaultProps} variant="compact" />);
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+    });
+
+    it('should hide error text in compact variant', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="error"
+          progress={0}
+          error="Upload failed"
+          variant="compact"
+        />
+      );
+      // Error text hidden in compact (icon still shows via AlertCircle)
+      expect(screen.queryByText('Upload failed')).not.toBeInTheDocument();
+    });
+
+    it('should show error text in default variant', () => {
+      render(
+        <FileChip {...defaultProps} stage="error" progress={0} error="Upload failed" />
+      );
+      expect(screen.getByText('Upload failed')).toBeInTheDocument();
+    });
+
+    it('should hide Ready text in compact variant', () => {
+      render(
+        <FileChip {...defaultProps} stage="complete" progress={100} variant="compact" />
+      );
+      expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+    });
+
+    it('should show Ready text in default variant', () => {
+      render(<FileChip {...defaultProps} stage="complete" progress={100} />);
+      expect(screen.getByText('Ready')).toBeInTheDocument();
+    });
+
+    it('should show Storing... in default variant', () => {
+      render(<FileChip {...defaultProps} stage="storing" progress={60} />);
+      expect(screen.getByText('Storing...')).toBeInTheDocument();
+    });
+
+    it('should hide Storing... text in compact variant', () => {
+      render(
+        <FileChip {...defaultProps} stage="storing" progress={60} variant="compact" />
+      );
+      expect(screen.queryByText('Storing...')).not.toBeInTheDocument();
+    });
+
+    it('should show Analyzing... in default variant', () => {
+      render(<FileChip {...defaultProps} stage="parsing" progress={80} />);
+      expect(screen.getByText('Analyzing...')).toBeInTheDocument();
+    });
+
+    it('should hide Analyzing... text in compact variant', () => {
+      render(
+        <FileChip {...defaultProps} stage="parsing" progress={80} variant="compact" />
+      );
+      expect(screen.queryByText('Analyzing...')).not.toBeInTheDocument();
+    });
+
+    it('should render progressbar in both variants', () => {
+      const { rerender } = render(
+        <FileChip {...defaultProps} stage="uploading" progress={50} />
+      );
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+
+      rerender(
+        <FileChip {...defaultProps} stage="uploading" progress={50} variant="compact" />
+      );
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    });
+  });
+
+  describe('Epic 17.2: Combined props', () => {
+    it('should support disabled + compact together', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="uploading"
+          progress={50}
+          disabled
+          variant="compact"
+        />
+      );
+
+      // No X button (disabled)
+      expect(screen.queryByRole('button', { name: /remove file/i })).not.toBeInTheDocument();
+      // No progress text (compact)
+      expect(screen.queryByText('50%')).not.toBeInTheDocument();
+      // Filename still shows
+      expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
+    });
+
+    it('should support disabled=false + compact together', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          stage="complete"
+          progress={100}
+          disabled={false}
+          variant="compact"
+        />
+      );
+
+      // X button shows (not disabled)
+      expect(screen.getByRole('button', { name: /remove file/i })).toBeInTheDocument();
+      // No Ready text (compact)
+      expect(screen.queryByText('Ready')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Epic 17.2: Backward compatibility', () => {
+    it('should work with minimal props (existing usage)', () => {
+      // This test ensures existing Composer code still works
+      render(
+        <FileChip
+          filename="test.pdf"
+          stage="uploading"
+          progress={50}
+          onRemove={() => {}}
+        />
+      );
+
+      expect(screen.getByText('test.pdf')).toBeInTheDocument();
+      expect(screen.getByText('50%')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /remove file/i })).toBeInTheDocument();
+    });
+
+    it('should maintain X button visibility for all stages by default', () => {
+      const stages: Array<'uploading' | 'storing' | 'parsing' | 'complete' | 'error'> = [
+        'uploading',
+        'storing',
+        'parsing',
+        'complete',
+        'error',
+      ];
+
+      stages.forEach((stage) => {
+        const { unmount } = render(<FileChip {...defaultProps} stage={stage} />);
+        expect(screen.getByRole('button', { name: /remove file/i })).toBeInTheDocument();
+        unmount();
+      });
+    });
+
+    it('should maintain progress bar for active stages', () => {
+      const activeStages: Array<'uploading' | 'storing' | 'parsing'> = [
+        'uploading',
+        'storing',
+        'parsing',
+      ];
+
+      activeStages.forEach((stage) => {
+        const { unmount } = render(<FileChip {...defaultProps} stage={stage} />);
+        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        unmount();
+      });
     });
   });
 });

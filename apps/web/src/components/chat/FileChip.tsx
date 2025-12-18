@@ -8,11 +8,16 @@
  *
  * Epic 16.6.8: Restyled to light theme to match app aesthetic.
  *
+ * Epic 17.2: Multi-file support enhancements
+ * - Story 17.2.1: `disabled` prop to hide X button during batch operations
+ * - Story 17.2.2: `variant` prop with compact mode for multi-file layouts
+ *
  * Features:
  * - Light background with subtle border
  * - Truncated filename with progress bar
- * - X button ALWAYS visible (can cancel at any stage)
+ * - X button (visible unless disabled, can cancel at any stage)
  * - State-specific icons (spinner, checkmark, alert)
+ * - Compact variant: smaller padding/icons, hides progress/error text
  */
 
 import { Loader2, CheckCircle, AlertCircle, X } from 'lucide-react';
@@ -24,12 +29,23 @@ export interface FileChipProps {
   progress: number; // 0-100
   error?: string;
   onRemove: () => void;
+  disabled?: boolean; // Story 17.2.1: When true, X button is hidden
+  variant?: 'default' | 'compact'; // Story 17.2.2: Compact mode for multi-file layouts
 }
 
-export function FileChip({ filename, stage, progress, error, onRemove }: FileChipProps) {
+export function FileChip({
+  filename,
+  stage,
+  progress,
+  error,
+  onRemove,
+  disabled = false,
+  variant = 'default',
+}: FileChipProps) {
   const isActive = ['uploading', 'storing', 'parsing'].includes(stage);
   const isError = stage === 'error';
   const isComplete = stage === 'complete';
+  const isCompact = variant === 'compact';
 
   // Get status text based on stage
   const getStatusText = () => {
@@ -52,7 +68,8 @@ export function FileChip({ filename, stage, progress, error, onRemove }: FileChi
   return (
     <div
       className={cn(
-        'inline-flex flex-col gap-1 px-3 py-2 rounded-lg max-w-xs border',
+        'inline-flex flex-col gap-1 rounded-lg max-w-xs border',
+        isCompact ? 'px-2 py-1' : 'px-3 py-2',
         isError ? 'bg-red-50 border-red-200' : 'bg-gray-100 border-gray-200'
       )}
       role="status"
@@ -60,43 +77,63 @@ export function FileChip({ filename, stage, progress, error, onRemove }: FileChi
     >
       {/* Top row: Icon + Filename + X button */}
       <div className="flex items-center gap-2">
-        {/* Icon based on state */}
+        {/* Icon based on state - smaller in compact */}
         {isActive && (
           <Loader2
-            className="h-4 w-4 text-blue-500 animate-spin flex-shrink-0"
+            className={cn(
+              'text-blue-500 animate-spin flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
             aria-hidden="true"
           />
         )}
         {isComplete && (
           <CheckCircle
-            className="h-4 w-4 text-green-600 flex-shrink-0"
+            className={cn(
+              'text-green-600 flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
             aria-hidden="true"
           />
         )}
         {isError && (
           <AlertCircle
-            className="h-4 w-4 text-red-500 flex-shrink-0"
+            className={cn(
+              'text-red-500 flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
             aria-hidden="true"
           />
         )}
 
-        {/* Filename (truncated) */}
-        <span className="text-sm text-gray-900 truncate max-w-[180px]" title={filename}>
+        {/* Filename (truncated) - narrower in compact */}
+        <span
+          className={cn(
+            'text-gray-900 truncate',
+            isCompact ? 'text-xs max-w-[120px]' : 'text-sm max-w-[180px]'
+          )}
+          title={filename}
+        >
           {filename}
         </span>
 
-        {/* X button - ALWAYS visible */}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="p-0.5 text-gray-400 hover:text-gray-600 rounded flex-shrink-0 transition-colors"
-          aria-label="Remove file"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {/* X button - only show if not disabled, smaller in compact */}
+        {!disabled && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className={cn(
+              'text-gray-400 hover:text-gray-600 rounded flex-shrink-0 transition-colors',
+              isCompact ? 'p-0' : 'p-0.5'
+            )}
+            aria-label="Remove file"
+          >
+            <X className={isCompact ? 'h-3 w-3' : 'h-4 w-4'} />
+          </button>
+        )}
       </div>
 
-      {/* Progress bar - only during active stages */}
+      {/* Progress bar - only during active stages, hide percentage text in compact */}
       {isActive && (
         <div className="flex items-center gap-2">
           <div className="flex-1 h-0.5 bg-gray-300 rounded-full overflow-hidden">
@@ -109,21 +146,24 @@ export function FileChip({ filename, stage, progress, error, onRemove }: FileChi
               aria-valuemax={100}
             />
           </div>
-          <span className="text-xs text-gray-500 min-w-[60px] text-right">
-            {getStatusText()}
-          </span>
+          {/* Hide progress text in compact mode */}
+          {!isCompact && (
+            <span className="text-xs text-gray-500 min-w-[60px] text-right">
+              {getStatusText()}
+            </span>
+          )}
         </div>
       )}
 
-      {/* Error message - only in error state */}
-      {isError && error && (
+      {/* Error message - only in error state, hidden in compact (icon remains) */}
+      {isError && error && !isCompact && (
         <span className="text-xs text-red-600 truncate" title={error}>
           {error}
         </span>
       )}
 
-      {/* Success indicator - only when complete */}
-      {isComplete && (
+      {/* Success indicator - only when complete, hidden in compact (icon remains) */}
+      {isComplete && !isCompact && (
         <span className="text-xs text-green-600">Ready</span>
       )}
     </div>

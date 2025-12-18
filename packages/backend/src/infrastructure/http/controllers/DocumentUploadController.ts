@@ -76,10 +76,24 @@ export function buildContentDisposition(filename: string): string {
 /**
  * Authenticated request - matches existing auth middleware pattern
  * Auth middleware sets req.user (full User object), not req.userId
+ * Epic 17: Support both single file (req.file) and multi-file (req.files)
  */
 interface AuthenticatedRequest extends Request {
   user?: User;
-  file?: Express.Multer.File;
+  file?: Express.Multer.File; // Backward compatibility (single file)
+  // Multer can return files as array or object, we use array via upload.array()
+  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
+}
+
+/**
+ * Epic 17.1.2: Per-file upload result for HTTP response
+ */
+interface FileUploadResult {
+  index: number;
+  filename: string;
+  uploadId: string;
+  status: 'accepted' | 'rejected';
+  error?: string;
 }
 
 export class DocumentUploadController {
@@ -98,9 +112,10 @@ export class DocumentUploadController {
 
   /**
    * POST /api/documents/upload
+   * Epic 17.1.2: Multi-file upload with non-blocking processing
    *
    * Body (multipart/form-data):
-   * - file: The document file
+   * - files: The document file(s) - max 10
    * - conversationId: Associated conversation
    * - mode: 'intake' | 'scoring'
    */
@@ -108,7 +123,38 @@ export class DocumentUploadController {
     // Auth middleware sets req.user (full User object)
     const userId = req.user?.id;
     const { conversationId, mode } = req.body;
-    const file = req.file;
+
+    // Epic 17.1.2: Support both single and multi-file (backward compatible)
+    // Route uses upload.fields() with both 'file' (single) and 'files' (multi) field names
+    let filesArray: Express.Multer.File[] = [];
+    let usedLegacyFieldName = false; // Track if Epic 16 client (uses 'file' field)
+
+    if (req.files && !Array.isArray(req.files)) {
+      // upload.fields() returns { [fieldname]: File[] }
+      const reqFiles = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const singleFile = reqFiles['file'] || [];
+      const multiFiles = reqFiles['files'] || [];
+
+      // Reject if both field names are provided (ambiguous intent)
+      if (singleFile.length > 0 && multiFiles.length > 0) {
+        res.status(400).json({
+          error: 'Cannot use both "file" and "files" field names. Use "file" for single upload or "files" for multiple.',
+        });
+        return;
+      }
+
+      // Use whichever field was provided
+      if (multiFiles.length > 0) {
+        filesArray = multiFiles;
+      } else {
+        filesArray = singleFile;
+        usedLegacyFieldName = singleFile.length > 0;
+      }
+    } else if (Array.isArray(req.files)) {
+      // Fallback for upload.array() (shouldn't happen with current route config)
+      filesArray = req.files;
+    }
+    const files = filesArray;
 
     // 1. Validate authentication (should be set by authMiddleware)
     if (!userId) {
@@ -117,9 +163,9 @@ export class DocumentUploadController {
     }
 
     // 2. Validate required fields
-    if (!conversationId || !mode || !file) {
+    if (!conversationId || !mode || files.length === 0) {
       res.status(400).json({
-        error: 'Missing required fields: conversationId, mode, file',
+        error: 'Missing required fields: conversationId, mode, files',
       });
       return;
     }
@@ -129,7 +175,7 @@ export class DocumentUploadController {
       return;
     }
 
-    // 3. SECURITY: Validate conversation ownership (via service layer)
+    // 3. SECURITY: Validate conversation ownership once (not per-file)
     try {
       const conversation = await this.conversationService.getConversation(conversationId);
       if (!conversation) {
@@ -149,37 +195,82 @@ export class DocumentUploadController {
       return;
     }
 
-    // 4. Validate file (full validation with magic bytes)
-    const validation = await this.fileValidator.validate(
-      file.buffer,
-      file.mimetype,
-      file.originalname
-    );
+    // 4. Validate all files synchronously (fast - no parsing, just magic bytes)
+    // Store documentType from first validation to avoid validating twice
+    const results: FileUploadResult[] = [];
+    const validFiles: {
+      file: Express.Multer.File;
+      uploadId: string;
+      index: number;
+      documentType: string;
+    }[] = [];
 
-    if (!validation.valid) {
-      res.status(400).json({ error: validation.error });
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Epic 17.1.2: Generate unique uploadId per file (includes index for uniqueness)
+      const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${i}`;
+
+      const validation = await this.fileValidator.validate(
+        file.buffer,
+        file.mimetype,
+        file.originalname
+      );
+
+      if (validation.valid && validation.documentType) {
+        // Store documentType to avoid re-validating in async processing
+        validFiles.push({ file, uploadId, index: i, documentType: validation.documentType });
+        results.push({
+          index: i,
+          filename: file.originalname,
+          uploadId,
+          status: 'accepted',
+        });
+      } else {
+        results.push({
+          index: i,
+          filename: file.originalname,
+          uploadId,
+          status: 'rejected',
+          error: validation.error,
+        });
+      }
+    }
+
+    // 5. Return 202 immediately (even if some rejected)
+    const acceptedCount = results.filter((r) => r.status === 'accepted').length;
+    const firstAcceptedUploadId = results.find((r) => r.status === 'accepted')?.uploadId;
+
+    if (acceptedCount === 0) {
+      res.status(400).json({
+        error: 'All files rejected',
+        files: results,
+      });
       return;
     }
 
-    // 5. Return upload accepted, process async
-    // Epic 16.6.9: Generate uploadId for progress tracking
-    const uploadId = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
+    // Epic 17: Response includes both legacy `uploadId` (for Epic 16 clients) and `files[]` (for Epic 17)
+    // Legacy clients read `uploadId`, new clients read `files[].uploadId`
     res.status(202).json({
-      message: 'Upload accepted, processing started',
-      uploadId,
-      conversationId,
-      // Epic 16.6.9: Partial file metadata (fileId comes from database after storage)
-      fileMetadata: {
-        filename: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-      },
+      message: 'Upload accepted',
+      // BACKWARD COMPAT: Top-level uploadId for Epic 16 single-file clients
+      // Always present when at least one file accepted (first accepted file's uploadId)
+      uploadId: firstAcceptedUploadId,
+      totalFiles: files.length,
+      acceptedCount,
+      rejectedCount: files.length - acceptedCount,
+      files: results,
     });
 
-    // 6. Process async with WebSocket progress events
-    // Epic 16.6.9: fileId generated after file is stored and registered in database
-    this.processUpload(uploadId, userId, conversationId, mode, file, validation.documentType!);
+    // 6. Process valid files async (fire-and-forget, NOT blocking)
+    // CRITICAL: This happens AFTER response is sent
+    // documentType is already validated and stored - no need to validate again
+    for (const { file, uploadId, documentType } of validFiles) {
+      this.processUpload(uploadId, userId, conversationId, mode, file, documentType)
+        .catch((err) => {
+          console.error(`[Upload] Async processing failed for ${file.originalname}:`, err);
+          // Error already emitted via WS in processUpload
+        });
+    }
   };
 
   /**

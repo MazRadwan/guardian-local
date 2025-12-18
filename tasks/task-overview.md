@@ -54,10 +54,12 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | Epic 13: Observability & E2E | 9 stories | ✅ Complete | 2025-12-09 | Logging, E2E tests, export resume logic |
 | Epic 14: Inline Questionnaire Bubble | 6 stories | ✅ Complete | 2025-12-11 | Inline chat bubble, button styling, auto-scroll |
 | Epic 15: Conversation Rename | - | 📋 Planned | - | See `tasks/epic-15/rename-conversation-plan.md` |
+| Epic 16: Document Parser | 6 stories | 🔄 In Progress | - | Single-file upload, parsing, attachments |
+| Epic 17: Multi-File Upload | 16 stories | 📋 Planned | - | See `tasks/epic-17/overview.md` |
 
-**Progress:** 13 of 14 epics complete (~95%), Epic 8 (Integration & Polish) and Epic 15 (Rename) pending
+**Progress:** 13 of 16 epics complete (~81%), Epic 8 (Polish), Epic 15 (Rename), Epic 16 (Parser), Epic 17 (Multi-File) pending
 
-**Critical Path:** Epic 1-7 ✅ → Epic 9-14 ✅ → Epic 8 (Polish) → Epic 15 (Rename)
+**Critical Path:** Epic 1-7 ✅ → Epic 9-14 ✅ → Epic 16 (Parser) → Epic 17 (Multi-File) → Epic 8 (Polish)
 
 ### Active Sidequests
 
@@ -126,3 +128,4 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | 1.4 | 2025-11-09 | code-reviewer | Epic 7 complete after architecture fix. 24 export tests passing, clean architecture verified. |
 | 1.5 | 2025-11-13 | code-reviewer | Epic 9 Story 9.1 complete after fixes. 36 new tests, 81.48% coverage for components/chat. |
 | 2.0 | 2025-12-11 | cleanup | Major update: Epics 9-14 marked complete, Epic 15 planned, sidequests complete, progress updated to 95%. |
+| 2.1 | 2025-12-18 | update | Added Epic 16 (Document Parser - in progress) and Epic 17 (Multi-File Upload - planned). Updated critical path. |

@@ -1,224 +1,313 @@
-# Sprint 1 - Track C: Multi-File Upload Hook
+# Sprint 1 - Track C: useMultiFileUpload Hook
 
 **Track:** C (Hook)
 **Stories:** 17.3.1 - 17.3.5
-**Estimated Effort:** ~4 hours
+**Estimated Effort:** ~3 hours
 **Parallel With:** Track A (Backend), Track B (FileChip)
-**Dependencies:** None (uses existing WebSocket infrastructure)
+**Dependencies:** None (can develop against mock API)
 
 ---
 
 ## Context
 
-The current `useFileUpload` hook manages single-file state. This track creates a new `useMultiFileUpload` hook with multi-file state management. The old hook remains for backward compatibility.
+The existing `useFileUpload` hook handles single-file uploads with:
+- HTTP POST multipart upload
+- WebSocket progress events correlated by `uploadId`
+- "Never adopt" pattern to prevent race conditions
+- AbortController for cancellation
+
+This track creates a NEW `useMultiFileUpload` hook that extends this pattern for multiple files.
 
 **Key Files:**
 - `apps/web/src/hooks/useMultiFileUpload.ts` (NEW)
 - `apps/web/src/hooks/__tests__/useMultiFileUpload.test.tsx` (NEW)
 
-**Reference Files (read-only):**
-- `apps/web/src/hooks/useFileUpload.ts` (existing pattern)
-- `apps/web/src/hooks/useWebSocket.ts` (WebSocket integration)
+---
+
+## Current Implementation (useFileUpload - Actual)
+
+### Key Patterns to Preserve
+
+```typescript
+// From useFileUpload.ts - patterns we MUST maintain
+
+// 1. "Never adopt" pattern via uploadId ref
+const currentUploadIdRef = useRef<string | null>(null);
+
+// Only accept WS events for known uploadId
+if (!currentUploadIdRef.current) return;
+if (data.uploadId !== currentUploadIdRef.current) return;
+
+// 2. AbortController for HTTP cancellation
+const abortControllerRef = useRef<AbortController | null>(null);
+
+// 3. Reset clears uploadId to prevent late event adoption
+const reset = useCallback(() => {
+  abortControllerRef.current?.abort();
+  currentUploadIdRef.current = null;  // Ignore future WS events
+  // ... clear state
+}, []);
+```
+
+### Current WS Event Contract (MUST PRESERVE)
+```typescript
+interface UploadProgressEvent {
+  conversationId: string;
+  uploadId: string;        // Server-generated correlation ID
+  progress: number;
+  stage: 'storing' | 'parsing' | 'complete' | 'error';
+  message: string;
+  error?: string;
+}
+```
+
+---
+
+## ID Lifecycle (Critical Understanding)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         ID LIFECYCLE                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  CLIENT                           SERVER                                    │
+│  ──────                           ──────                                    │
+│                                                                             │
+│  1. User selects file[0], file[1], file[2]                                  │
+│     → Use array index as local identifier: 0, 1, 2                          │
+│                                                                             │
+│  2. POST /api/documents/upload (multipart FormData)                         │
+│                                   ──────────────────                        │
+│                                   3. Server generates uploadId per file     │
+│                                      upload-abc-0, upload-abc-1, upload-abc-2│
+│                                                                             │
+│  4. HTTP 202 Response:                                                      │
+│     { files: [                                                              │
+│       { index: 0, uploadId: 'upload-abc-0', status: 'accepted' },           │
+│       { index: 1, uploadId: 'upload-abc-1', status: 'accepted' },           │
+│       { index: 2, uploadId: 'upload-abc-2', status: 'accepted' },           │
+│     ]}                                                                      │
+│                                                                             │
+│  5. Client builds uploadIdMap:                                              │
+│     Map { 'upload-abc-0' → 0, 'upload-abc-1' → 1, 'upload-abc-2' → 2 }      │
+│                                                                             │
+│  6. WS events arrive with uploadId                                          │
+│     → Look up localIndex via uploadIdMap                                    │
+│     → Update files[localIndex] state                                        │
+│                                                                             │
+│  7. On complete, server sends fileId (database UUID)                        │
+│     → Store in files[localIndex].fileId                                     │
+│     → Use for message attachments                                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key insight:** We do NOT need client-generated tempId. The array index serves as local identifier, and uploadId (server-generated) correlates WS events.
 
 ---
 
 ## Story 17.3.1: Multi-File State Interface
 
 ### Objective
-Define TypeScript interfaces for multi-file state management.
+Define state structure for tracking multiple files.
 
-### Interface Definitions
+### State Design
 
 ```typescript
 // useMultiFileUpload.ts
 
-/**
- * Unique identifier for tracking files before they have a server-assigned fileId.
- * Generated client-side when file is selected.
- */
-type TempFileId = string;
-
-/**
- * Individual file state
- */
-interface FileState {
-  tempId: TempFileId;
-  file: File;                         // Original File object
+/** Per-file state */
+export interface FileState {
+  /** Local array index (stable identifier for this session) */
+  localIndex: number;
+  /** Original File object (for upload) */
+  file: File;
+  /** Original filename */
   filename: string;
+  /** File size in bytes */
   size: number;
+  /** MIME type */
   mimeType: string;
-  status: 'pending' | 'uploading' | 'parsing' | 'complete' | 'error';
-  progress: number;                   // 0-100
-  fileId?: string;                    // Server-assigned ID (set on complete)
-  error?: string;                     // Error message if failed
+  /** Server-generated correlation ID (set after HTTP 202) */
+  uploadId: string | null;
+  /** Database UUID (set on complete) */
+  fileId: string | null;
+  /** Current stage */
+  stage: 'pending' | 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
+  /** Progress 0-100 */
+  progress: number;
+  /** Error message if failed */
+  error?: string;
 }
 
-/**
- * Aggregate upload state
- */
-interface MultiFileUploadState {
-  files: Map<TempFileId, FileState>;
-  isUploading: boolean;               // Any file currently uploading
-  aggregateProgress: number;          // Overall progress 0-100
-  completedCount: number;
-  failedCount: number;
-  totalCount: number;
+/** Hook options */
+export interface UseMultiFileUploadOptions {
+  /** Max files allowed (default: 10) */
+  maxFiles?: number;
+  /** WebSocket adapter for progress events */
+  wsAdapter: {
+    isConnected: boolean;
+    subscribeUploadProgress: (handler: (data: UploadProgressEvent) => void) => () => void;
+    subscribeIntakeContextReady: (handler: (data: IntakeContextResult) => void) => () => void;
+    subscribeScoringParseReady: (handler: (data: ScoringParseResult) => void) => () => void;
+  };
+  /** Called on validation/upload errors */
+  onError?: (message: string) => void;
+  /** Called when intake context ready */
+  onContextReady?: (data: IntakeContextResult, localIndex: number) => void;
+  /** Called when scoring parse ready */
+  onScoringReady?: (data: ScoringParseResult, localIndex: number) => void;
 }
 
-/**
- * Hook return type
- */
-interface UseMultiFileUploadReturn {
-  // State
-  files: FileState[];                 // Array for easy iteration
+/** Hook return value */
+export interface UseMultiFileUploadReturn {
+  /** Array of file states */
+  files: FileState[];
+  /** True if any file is uploading/storing/parsing */
   isUploading: boolean;
+  /** Aggregate progress (0-100) across all files */
   aggregateProgress: number;
-  completedCount: number;
-  failedCount: number;
-
-  // Actions
-  addFiles: (files: FileList | File[]) => void;
-  removeFile: (tempId: TempFileId) => void;
-  retryFile: (tempId: TempFileId) => void;
+  /** Add files to queue (validates, doesn't upload yet) */
+  addFiles: (fileList: FileList) => void;
+  /** Remove file by localIndex */
+  removeFile: (localIndex: number) => void;
+  /** Clear all files */
   clearAll: () => void;
-  uploadAll: (conversationId: string, mode: 'intake' | 'scoring') => Promise<void>;
-
-  // Getters
-  getCompletedFileIds: () => string[];  // For sending with message
+  /** Upload all pending files */
+  uploadAll: (conversationId: string, mode: UploadMode) => Promise<void>;
+  /** Get completed file IDs for message attachments */
+  getCompletedFileIds: () => string[];
+  /** True if any files added */
   hasFiles: boolean;
+  /** True if any files pending upload */
   hasPendingFiles: boolean;
-  hasErrors: boolean;
-}
-
-/**
- * Hook options
- */
-interface UseMultiFileUploadOptions {
-  maxFiles?: number;                  // Default: 10
-  maxFileSize?: number;               // Default: 20MB
-  maxTotalSize?: number;              // Default: 50MB
-  allowedTypes?: string[];            // MIME types, default: all supported
-  onUploadComplete?: (fileIds: string[]) => void;
-  onError?: (error: string) => void;
 }
 ```
 
 ### Acceptance Criteria
-- [ ] All interfaces exported from hook file
-- [ ] TempFileId is string type (UUID)
-- [ ] FileState tracks all necessary metadata
-- [ ] Hook return type includes all actions and getters
-- [ ] Options allow customization of limits
+- [ ] FileState interface defined with all required fields
+- [ ] Options interface matches existing useFileUpload pattern
+- [ ] Return interface provides all needed operations
+- [ ] Types exported for consumers
 
 ---
 
 ## Story 17.3.2: Core Operations
 
 ### Objective
-Implement `addFiles`, `removeFile`, `retryFile`, and `clearAll` operations.
+Implement addFiles, removeFile, clearAll.
 
 ### Implementation
 
 ```typescript
-import { useState, useCallback, useMemo } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+// useMultiFileUpload.ts
 
-const DEFAULT_MAX_FILES = 10;
-const DEFAULT_MAX_FILE_SIZE = 20 * 1024 * 1024;  // 20MB
-const DEFAULT_MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-export function useMultiFileUpload(
-  options: UseMultiFileUploadOptions = {}
-): UseMultiFileUploadReturn {
+/** Valid file types (matches backend) */
+const VALID_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/png',
+  'image/jpeg',
+];
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB per file
+
+export function useMultiFileUpload(options: UseMultiFileUploadOptions): UseMultiFileUploadReturn {
   const {
-    maxFiles = DEFAULT_MAX_FILES,
-    maxFileSize = DEFAULT_MAX_FILE_SIZE,
-    maxTotalSize = DEFAULT_MAX_TOTAL_SIZE,
+    maxFiles = 10,
+    wsAdapter,
     onError,
+    onContextReady,
+    onScoringReady,
   } = options;
 
-  const [filesMap, setFilesMap] = useState<Map<TempFileId, FileState>>(new Map());
+  const { token } = useAuth();
 
-  // Convert Map to array for easy iteration
-  const files = useMemo(() => Array.from(filesMap.values()), [filesMap]);
+  // File state array
+  const [files, setFiles] = useState<FileState[]>([]);
+
+  // Counter for generating stable localIndex
+  const nextIndexRef = useRef(0);
+
+  // Refs for callback stability
+  const onErrorRef = useRef(onError);
+  const onContextReadyRef = useRef(onContextReady);
+  const onScoringReadyRef = useRef(onScoringReady);
+  onErrorRef.current = onError;
+  onContextReadyRef.current = onContextReady;
+  onScoringReadyRef.current = onScoringReady;
+
+  // Track known uploadIds for "never adopt" pattern
+  const knownUploadIdsRef = useRef<Set<string>>(new Set());
+
+  // AbortController for batch upload
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   /**
-   * Add files to the queue
+   * Add files to queue (validates but doesn't upload)
    */
-  const addFiles = useCallback((newFiles: FileList | File[]) => {
-    const fileArray = Array.from(newFiles);
+  const addFiles = useCallback((fileList: FileList) => {
+    const currentCount = files.length;
 
-    setFilesMap((prev) => {
-      const updated = new Map(prev);
-      let currentTotalSize = Array.from(prev.values())
-        .reduce((sum, f) => sum + f.size, 0);
-
-      for (const file of fileArray) {
-        // Check max files
-        if (updated.size >= maxFiles) {
-          onError?.(`Maximum ${maxFiles} files allowed`);
-          break;
-        }
-
-        // Check individual file size
-        if (file.size > maxFileSize) {
-          onError?.(`${file.name} exceeds ${maxFileSize / 1024 / 1024}MB limit`);
-          continue;
-        }
-
-        // Check total size
-        if (currentTotalSize + file.size > maxTotalSize) {
-          onError?.(`Total size would exceed ${maxTotalSize / 1024 / 1024}MB limit`);
-          break;
-        }
-
-        const tempId = uuidv4();
-        updated.set(tempId, {
-          tempId,
-          file,
-          filename: file.name,
-          size: file.size,
-          mimeType: file.type || 'application/octet-stream',
-          status: 'pending',
-          progress: 0,
-        });
-
-        currentTotalSize += file.size;
+    for (let i = 0; i < fileList.length; i++) {
+      if (currentCount + i >= maxFiles) {
+        onErrorRef.current?.(`Maximum ${maxFiles} files allowed`);
+        break;
       }
 
-      return updated;
-    });
-  }, [maxFiles, maxFileSize, maxTotalSize, onError]);
+      const file = fileList[i];
 
-  /**
-   * Remove a file from the queue
-   */
-  const removeFile = useCallback((tempId: TempFileId) => {
-    setFilesMap((prev) => {
-      const updated = new Map(prev);
-      updated.delete(tempId);
-      return updated;
-    });
-  }, []);
-
-  /**
-   * Retry a failed file
-   */
-  const retryFile = useCallback((tempId: TempFileId) => {
-    setFilesMap((prev) => {
-      const updated = new Map(prev);
-      const file = updated.get(tempId);
-
-      if (file && file.status === 'error') {
-        updated.set(tempId, {
-          ...file,
-          status: 'pending',
-          progress: 0,
-          error: undefined,
-        });
+      // Validate file type
+      if (!VALID_TYPES.includes(file.type)) {
+        onErrorRef.current?.(`${file.name}: Unsupported file type`);
+        continue;
       }
 
-      return updated;
+      // Validate file size
+      if (file.size > MAX_FILE_SIZE) {
+        onErrorRef.current?.(`${file.name}: File too large (max 20MB)`);
+        continue;
+      }
+
+      const localIndex = nextIndexRef.current++;
+
+      setFiles(prev => [...prev, {
+        localIndex,
+        file,
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type,
+        uploadId: null,
+        fileId: null,
+        stage: 'pending',
+        progress: 0,
+      }]);
+    }
+  }, [files.length, maxFiles]);
+
+  /**
+   * Remove file by localIndex
+   * Only allowed for pending/error/complete files (not during upload)
+   */
+  const removeFile = useCallback((localIndex: number) => {
+    setFiles(prev => {
+      const file = prev.find(f => f.localIndex === localIndex);
+      if (!file) return prev;
+
+      // Can't remove during active upload
+      if (['uploading', 'storing', 'parsing'].includes(file.stage)) {
+        onErrorRef.current?.('Cannot remove file during upload');
+        return prev;
+      }
+
+      // Clear uploadId from known set
+      if (file.uploadId) {
+        knownUploadIdsRef.current.delete(file.uploadId);
+      }
+
+      return prev.filter(f => f.localIndex !== localIndex);
     });
   }, []);
 
@@ -226,364 +315,465 @@ export function useMultiFileUpload(
    * Clear all files
    */
   const clearAll = useCallback(() => {
-    setFilesMap(new Map());
+    // Abort any in-progress upload
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+
+    // Clear known uploadIds
+    knownUploadIdsRef.current.clear();
+
+    // Reset state
+    setFiles([]);
+    nextIndexRef.current = 0;
   }, []);
 
-  // ... continued in next story
+  // ... continued in Story 17.3.3
 }
 ```
 
 ### Acceptance Criteria
-- [ ] `addFiles` accepts FileList or File[]
-- [ ] `addFiles` validates max files limit
-- [ ] `addFiles` validates individual file size
-- [ ] `addFiles` validates total size
-- [ ] `addFiles` generates unique tempId per file
-- [ ] `removeFile` removes by tempId
-- [ ] `retryFile` resets error state to pending
-- [ ] `clearAll` removes all files
-- [ ] Validation errors trigger `onError` callback
+- [ ] addFiles validates type and size
+- [ ] addFiles enforces maxFiles limit
+- [ ] addFiles generates stable localIndex
+- [ ] addFiles reports errors via onError callback
+- [ ] removeFile only works for pending/error/complete
+- [ ] removeFile cleans up uploadId tracking
+- [ ] clearAll aborts in-progress and clears state
 
 ---
 
-## Story 17.3.3: Progress Tracking
+## Story 17.3.3: Upload Implementation
 
 ### Objective
-Implement progress tracking and aggregate calculations.
+Implement uploadAll with proper HTTP handling and uploadId correlation.
 
 ### Implementation
 
 ```typescript
-// Continuing useMultiFileUpload...
+/**
+ * Upload all pending files
+ */
+const uploadAll = useCallback(async (conversationId: string, mode: UploadMode) => {
+  if (!token) {
+    onErrorRef.current?.('Not authenticated');
+    return;
+  }
 
-  /**
-   * Update file progress (called from WebSocket handler)
-   */
-  const updateFileProgress = useCallback((
-    tempId: TempFileId,
-    update: Partial<Pick<FileState, 'status' | 'progress' | 'fileId' | 'error'>>
-  ) => {
-    setFilesMap((prev) => {
-      const updated = new Map(prev);
-      const file = updated.get(tempId);
+  const pendingFiles = files.filter(f => f.stage === 'pending');
+  if (pendingFiles.length === 0) return;
 
-      if (file) {
-        updated.set(tempId, { ...file, ...update });
-      }
+  // Create AbortController for this batch
+  abortControllerRef.current = new AbortController();
 
-      return updated;
-    });
-  }, []);
+  // Mark as uploading
+  setFiles(prev => prev.map(f =>
+    f.stage === 'pending'
+      ? { ...f, stage: 'uploading' as const, progress: 10 }
+      : f
+  ));
 
-  /**
-   * Derived state calculations
-   */
-  const isUploading = useMemo(
-    () => files.some(f => f.status === 'uploading' || f.status === 'parsing'),
-    [files]
-  );
-
-  const completedCount = useMemo(
-    () => files.filter(f => f.status === 'complete').length,
-    [files]
-  );
-
-  const failedCount = useMemo(
-    () => files.filter(f => f.status === 'error').length,
-    [files]
-  );
-
-  const totalCount = files.length;
-
-  /**
-   * Aggregate progress: weighted by file size
-   */
-  const aggregateProgress = useMemo(() => {
-    if (files.length === 0) return 0;
-
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    if (totalSize === 0) return 0;
-
-    const weightedProgress = files.reduce((sum, f) => {
-      const weight = f.size / totalSize;
-      return sum + (f.progress * weight);
-    }, 0);
-
-    return Math.round(weightedProgress);
-  }, [files]);
-
-  /**
-   * Get completed file IDs for message sending
-   */
-  const getCompletedFileIds = useCallback(
-    () => files
-      .filter(f => f.status === 'complete' && f.fileId)
-      .map(f => f.fileId!),
-    [files]
-  );
-
-  const hasFiles = files.length > 0;
-  const hasPendingFiles = files.some(f => f.status === 'pending');
-  const hasErrors = failedCount > 0;
-```
-
-### Acceptance Criteria
-- [ ] `updateFileProgress` updates individual file state
-- [ ] `isUploading` true when any file uploading/parsing
-- [ ] `completedCount` counts successful uploads
-- [ ] `failedCount` counts failed uploads
-- [ ] `aggregateProgress` weighted by file size
-- [ ] `getCompletedFileIds` returns server-assigned IDs
-- [ ] Derived states update reactively
-
----
-
-## Story 17.3.4: WebSocket Integration
-
-### Objective
-Integrate with WebSocket for upload and progress events.
-
-### Implementation
-
-```typescript
-// Continuing useMultiFileUpload...
-
-  /**
-   * Upload all pending files
-   */
-  const uploadAll = useCallback(async (
-    conversationId: string,
-    mode: 'intake' | 'scoring'
-  ): Promise<void> => {
-    const pendingFiles = files.filter(f => f.status === 'pending');
-    if (pendingFiles.length === 0) return;
-
-    // Build FormData with all pending files
+  try {
+    // Build FormData
     const formData = new FormData();
     formData.append('conversationId', conversationId);
     formData.append('mode', mode);
 
-    // Track tempIds for progress correlation
-    const tempIdMap: Record<string, TempFileId> = {};
-
-    pendingFiles.forEach((fileState, index) => {
-      formData.append('files', fileState.file);
-      // Include tempId in a parallel array for correlation
-      tempIdMap[fileState.filename] = fileState.tempId;
-
-      // Mark as uploading
-      updateFileProgress(fileState.tempId, {
-        status: 'uploading',
-        progress: 0,
-      });
+    // Add files in order (server returns uploadIds in same order)
+    const pendingIndices = pendingFiles.map(f => f.localIndex);
+    pendingFiles.forEach(fileState => {
+      formData.append('files', fileState.file);  // Field name is 'files' (plural)
     });
 
-    try {
-      const response = await fetch('/api/documents/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${getAuthToken()}`,
-        },
-        body: formData,
-      });
+    // POST upload
+    const response = await fetch(`${API_BASE_URL}/api/documents/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+      signal: abortControllerRef.current.signal,
+    });
 
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-
-      // Response includes per-file results, but actual progress
-      // comes via WebSocket events (see useEffect below)
-    } catch (error) {
-      // Mark all uploading files as failed
-      pendingFiles.forEach((fileState) => {
-        updateFileProgress(fileState.tempId, {
-          status: 'error',
-          error: error instanceof Error ? error.message : 'Upload failed',
-        });
-      });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(errorData.error || `Upload failed: ${response.status}`);
     }
-  }, [files, updateFileProgress]);
 
-  /**
-   * Subscribe to WebSocket progress events
-   */
-  useEffect(() => {
-    // Subscribe to upload_progress events
-    const unsubscribe = subscribeUploadProgress((event) => {
-      const { tempId, fileId, stage, progress, error } = event;
+    // Parse response to get uploadIds
+    const result = await response.json();
+    // result.files: [{ index, filename, uploadId, status, error? }]
 
-      if (!tempId) return; // Ignore events without tempId
+    // Map uploadIds to our files by index
+    setFiles(prev => {
+      const updated = [...prev];
 
-      updateFileProgress(tempId, {
-        status: stage === 'complete' ? 'complete' :
-                stage === 'error' ? 'error' :
-                stage === 'parsing' ? 'parsing' : 'uploading',
-        progress: progress ?? 0,
-        fileId: fileId,
-        error: error,
+      result.files.forEach((serverFile: any) => {
+        // serverFile.index corresponds to position in FormData
+        const localIndex = pendingIndices[serverFile.index];
+        const fileIndex = updated.findIndex(f => f.localIndex === localIndex);
+
+        if (fileIndex !== -1) {
+          if (serverFile.status === 'accepted') {
+            // Store uploadId and register for WS tracking
+            updated[fileIndex] = {
+              ...updated[fileIndex],
+              uploadId: serverFile.uploadId,
+              stage: 'storing',
+              progress: 30,
+            };
+            knownUploadIdsRef.current.add(serverFile.uploadId);
+          } else {
+            // Server rejected file during validation
+            updated[fileIndex] = {
+              ...updated[fileIndex],
+              stage: 'error',
+              progress: 0,
+              error: serverFile.error || 'Rejected by server',
+            };
+          }
+        }
       });
 
-      // Call onUploadComplete when all files done
-      if (stage === 'complete' || stage === 'error') {
-        // Check if all files finished
-        // (handled in parent via getCompletedFileIds)
-      }
+      return updated;
     });
 
-    return unsubscribe;
-  }, [updateFileProgress]);
+    // Progress continues via WebSocket
 
-  // Return hook interface
-  return {
-    files,
-    isUploading,
-    aggregateProgress,
-    completedCount,
-    failedCount,
-    addFiles,
-    removeFile,
-    retryFile,
-    clearAll,
-    uploadAll,
-    getCompletedFileIds,
-    hasFiles,
-    hasPendingFiles,
-    hasErrors,
-  };
-}
+  } catch (error) {
+    // Handle abort gracefully
+    if (error instanceof Error && error.name === 'AbortError') {
+      setFiles(prev => prev.map(f =>
+        f.stage === 'uploading'
+          ? { ...f, stage: 'pending' as const, progress: 0, uploadId: null }
+          : f
+      ));
+      return;
+    }
+
+    // Mark all uploading as error
+    const errorMsg = error instanceof Error ? error.message : 'Upload failed';
+    setFiles(prev => prev.map(f =>
+      f.stage === 'uploading'
+        ? { ...f, stage: 'error' as const, progress: 0, error: errorMsg }
+        : f
+    ));
+    onErrorRef.current?.(errorMsg);
+
+  } finally {
+    abortControllerRef.current = null;
+  }
+}, [files, token]);
 ```
 
-### WebSocket Event Handling
+### Key Design Points
 
-The hook subscribes to `upload_progress` events which include:
-```typescript
-interface UploadProgressEvent {
-  tempId: string;      // Client-generated ID
-  fileId?: string;     // Server ID (on complete)
-  filename: string;
-  stage: 'uploading' | 'parsing' | 'complete' | 'error';
-  progress?: number;
-  error?: string;
-}
-```
+1. **Field name is `'files'` (plural)** - matches Track A backend change
+2. **Index-based correlation** - server returns `index` matching FormData order
+3. **uploadId stored after HTTP 202** - used for WS event correlation
+4. **knownUploadIdsRef gates WS events** - "never adopt" pattern
 
 ### Acceptance Criteria
-- [ ] `uploadAll` sends FormData with all pending files
-- [ ] `uploadAll` marks files as 'uploading' immediately
-- [ ] WebSocket subscription handles progress updates
-- [ ] Progress events update correct file by tempId
-- [ ] Error events set error state on correct file
-- [ ] Complete events set fileId on correct file
-- [ ] Cleanup unsubscribes on unmount
+- [ ] Builds FormData with field name 'files' (plural)
+- [ ] Includes conversationId and mode
+- [ ] Handles HTTP errors gracefully
+- [ ] Maps server response uploadIds via index
+- [ ] Handles partial acceptance (some rejected)
+- [ ] Registers uploadIds in knownUploadIdsRef
+- [ ] AbortController allows cancellation
 
 ---
 
-## Story 17.3.5: Hook Unit Tests
+## Story 17.3.4: WebSocket Progress Handling
 
 ### Objective
-Comprehensive tests for multi-file hook.
+Handle WS events with per-file "never adopt" pattern.
+
+### Implementation
+
+```typescript
+// WebSocket event subscriptions
+useEffect(() => {
+  if (!wsAdapter.isConnected) return;
+
+  // Upload progress events
+  const unsubProgress = wsAdapter.subscribeUploadProgress((data) => {
+    // "Never adopt" - only accept events for known uploadIds
+    if (!knownUploadIdsRef.current.has(data.uploadId)) return;
+
+    setFiles(prev => prev.map(f => {
+      if (f.uploadId !== data.uploadId) return f;
+
+      return {
+        ...f,
+        stage: data.stage as FileState['stage'],
+        progress: data.progress,
+        error: data.error,
+      };
+    }));
+
+    if (data.stage === 'error') {
+      onErrorRef.current?.(data.error || 'Upload failed');
+    }
+  });
+
+  // Intake context ready
+  const unsubIntake = wsAdapter.subscribeIntakeContextReady((data) => {
+    if (!knownUploadIdsRef.current.has(data.uploadId)) return;
+
+    setFiles(prev => {
+      const updated = prev.map(f => {
+        if (f.uploadId !== data.uploadId) return f;
+
+        if (data.success && data.fileMetadata) {
+          return {
+            ...f,
+            stage: 'complete' as const,
+            progress: 100,
+            fileId: data.fileMetadata.fileId,
+          };
+        } else {
+          return {
+            ...f,
+            stage: 'error' as const,
+            progress: 0,
+            error: data.error || 'Failed to process',
+          };
+        }
+      });
+
+      // Find the file that was updated for callback
+      const updatedFile = updated.find(f => f.uploadId === data.uploadId);
+      if (updatedFile && data.success) {
+        onContextReadyRef.current?.(data, updatedFile.localIndex);
+      }
+
+      return updated;
+    });
+  });
+
+  // Scoring parse ready (similar pattern)
+  const unsubScoring = wsAdapter.subscribeScoringParseReady((data) => {
+    if (!knownUploadIdsRef.current.has(data.uploadId)) return;
+
+    setFiles(prev => {
+      const updated = prev.map(f => {
+        if (f.uploadId !== data.uploadId) return f;
+
+        if (data.success && data.fileMetadata) {
+          return {
+            ...f,
+            stage: 'complete' as const,
+            progress: 100,
+            fileId: data.fileMetadata.fileId,
+          };
+        } else {
+          return {
+            ...f,
+            stage: 'error' as const,
+            progress: 0,
+            error: data.error || 'Failed to parse',
+          };
+        }
+      });
+
+      const updatedFile = updated.find(f => f.uploadId === data.uploadId);
+      if (updatedFile && data.success) {
+        onScoringReadyRef.current?.(data, updatedFile.localIndex);
+      }
+
+      return updated;
+    });
+  });
+
+  return () => {
+    unsubProgress();
+    unsubIntake();
+    unsubScoring();
+  };
+}, [
+  wsAdapter.isConnected,
+  wsAdapter.subscribeUploadProgress,
+  wsAdapter.subscribeIntakeContextReady,
+  wsAdapter.subscribeScoringParseReady
+]);
+```
+
+### Acceptance Criteria
+- [ ] Filters events by uploadId via knownUploadIdsRef
+- [ ] Updates correct file state on progress
+- [ ] Stores fileId on completion
+- [ ] Calls onContextReady/onScoringReady with localIndex
+- [ ] Handles errors per-file
+- [ ] Cleanup on unmount
+
+---
+
+## Story 17.3.5: Computed Values and Tests
+
+### Objective
+Implement computed properties and unit tests.
+
+### Computed Properties
+
+```typescript
+// Computed values
+const isUploading = files.some(f =>
+  ['uploading', 'storing', 'parsing'].includes(f.stage)
+);
+
+const aggregateProgress = files.length === 0 ? 0 : Math.round(
+  files.reduce((sum, f) => sum + f.progress, 0) / files.length
+);
+
+const hasFiles = files.length > 0;
+
+const hasPendingFiles = files.some(f => f.stage === 'pending');
+
+const getCompletedFileIds = useCallback(() => {
+  return files
+    .filter(f => f.stage === 'complete' && f.fileId)
+    .map(f => f.fileId!);
+}, [files]);
+
+return {
+  files,
+  isUploading,
+  aggregateProgress,
+  addFiles,
+  removeFile,
+  clearAll,
+  uploadAll,
+  getCompletedFileIds,
+  hasFiles,
+  hasPendingFiles,
+};
+```
 
 ### Test Cases
 
-```tsx
+```typescript
 // useMultiFileUpload.test.tsx
 import { renderHook, act } from '@testing-library/react';
 import { useMultiFileUpload } from '../useMultiFileUpload';
 
-const createMockFile = (name: string, size: number = 1024): File => {
-  return new File(['x'.repeat(size)], name, { type: 'application/pdf' });
-};
-
 describe('useMultiFileUpload', () => {
+  const mockWsAdapter = {
+    isConnected: true,
+    subscribeUploadProgress: jest.fn(() => jest.fn()),
+    subscribeIntakeContextReady: jest.fn(() => jest.fn()),
+    subscribeScoringParseReady: jest.fn(() => jest.fn()),
+  };
+
+  const defaultOptions = {
+    wsAdapter: mockWsAdapter,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   describe('addFiles', () => {
-    it('should add files to state', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+    it('should add valid files to state', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
+
+      const fileList = createMockFileList([
+        { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+      ]);
 
       act(() => {
-        result.current.addFiles([
-          createMockFile('doc1.pdf'),
-          createMockFile('doc2.pdf'),
-        ]);
+        result.current.addFiles(fileList);
+      });
+
+      expect(result.current.files).toHaveLength(1);
+      expect(result.current.files[0].filename).toBe('doc.pdf');
+      expect(result.current.files[0].stage).toBe('pending');
+    });
+
+    it('should generate unique localIndex for each file', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
+
+      act(() => {
+        result.current.addFiles(createMockFileList([
+          { name: 'doc1.pdf', type: 'application/pdf', size: 1024 },
+        ]));
+        result.current.addFiles(createMockFileList([
+          { name: 'doc2.pdf', type: 'application/pdf', size: 1024 },
+        ]));
+      });
+
+      expect(result.current.files[0].localIndex).not.toBe(
+        result.current.files[1].localIndex
+      );
+    });
+
+    it('should reject files exceeding maxFiles', () => {
+      const onError = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ ...defaultOptions, maxFiles: 2, onError })
+      );
+
+      const fileList = createMockFileList([
+        { name: 'doc1.pdf', type: 'application/pdf', size: 1024 },
+        { name: 'doc2.pdf', type: 'application/pdf', size: 1024 },
+        { name: 'doc3.pdf', type: 'application/pdf', size: 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
       });
 
       expect(result.current.files).toHaveLength(2);
-      expect(result.current.files[0].filename).toBe('doc1.pdf');
-      expect(result.current.files[1].filename).toBe('doc2.pdf');
+      expect(onError).toHaveBeenCalledWith('Maximum 2 files allowed');
     });
 
-    it('should generate unique tempId for each file', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
-
-      act(() => {
-        result.current.addFiles([
-          createMockFile('doc1.pdf'),
-          createMockFile('doc2.pdf'),
-        ]);
-      });
-
-      const tempIds = result.current.files.map(f => f.tempId);
-      expect(new Set(tempIds).size).toBe(2);
-    });
-
-    it('should reject files exceeding max count', () => {
+    it('should reject invalid file types', () => {
       const onError = jest.fn();
       const { result } = renderHook(() =>
-        useMultiFileUpload({ maxFiles: 2, onError })
+        useMultiFileUpload({ ...defaultOptions, onError })
       );
 
       act(() => {
-        result.current.addFiles([
-          createMockFile('doc1.pdf'),
-          createMockFile('doc2.pdf'),
-          createMockFile('doc3.pdf'),
-        ]);
-      });
-
-      expect(result.current.files).toHaveLength(2);
-      expect(onError).toHaveBeenCalledWith(expect.stringContaining('Maximum'));
-    });
-
-    it('should reject files exceeding size limit', () => {
-      const onError = jest.fn();
-      const { result } = renderHook(() =>
-        useMultiFileUpload({ maxFileSize: 1000, onError })
-      );
-
-      act(() => {
-        result.current.addFiles([createMockFile('big.pdf', 2000)]);
+        result.current.addFiles(createMockFileList([
+          { name: 'script.exe', type: 'application/x-msdownload', size: 1024 },
+        ]));
       });
 
       expect(result.current.files).toHaveLength(0);
-      expect(onError).toHaveBeenCalledWith(expect.stringContaining('exceeds'));
+      expect(onError).toHaveBeenCalledWith('script.exe: Unsupported file type');
     });
 
-    it('should set initial status to pending', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+    it('should reject files over 20MB', () => {
+      const onError = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ ...defaultOptions, onError })
+      );
 
       act(() => {
-        result.current.addFiles([createMockFile('doc.pdf')]);
+        result.current.addFiles(createMockFileList([
+          { name: 'huge.pdf', type: 'application/pdf', size: 25 * 1024 * 1024 },
+        ]));
       });
 
-      expect(result.current.files[0].status).toBe('pending');
-      expect(result.current.files[0].progress).toBe(0);
+      expect(result.current.files).toHaveLength(0);
+      expect(onError).toHaveBeenCalledWith('huge.pdf: File too large (max 20MB)');
     });
   });
 
   describe('removeFile', () => {
-    it('should remove file by tempId', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+    it('should remove pending files by localIndex', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
 
       act(() => {
-        result.current.addFiles([
-          createMockFile('doc1.pdf'),
-          createMockFile('doc2.pdf'),
-        ]);
+        result.current.addFiles(createMockFileList([
+          { name: 'doc1.pdf', type: 'application/pdf', size: 1024 },
+          { name: 'doc2.pdf', type: 'application/pdf', size: 1024 },
+        ]));
       });
 
-      const tempIdToRemove = result.current.files[0].tempId;
+      const firstIndex = result.current.files[0].localIndex;
 
       act(() => {
-        result.current.removeFile(tempIdToRemove);
+        result.current.removeFile(firstIndex);
       });
 
       expect(result.current.files).toHaveLength(1);
@@ -593,13 +783,13 @@ describe('useMultiFileUpload', () => {
 
   describe('clearAll', () => {
     it('should remove all files', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
 
       act(() => {
-        result.current.addFiles([
-          createMockFile('doc1.pdf'),
-          createMockFile('doc2.pdf'),
-        ]);
+        result.current.addFiles(createMockFileList([
+          { name: 'doc1.pdf', type: 'application/pdf', size: 1024 },
+          { name: 'doc2.pdf', type: 'application/pdf', size: 1024 },
+        ]));
       });
 
       act(() => {
@@ -610,52 +800,113 @@ describe('useMultiFileUpload', () => {
     });
   });
 
-  describe('aggregateProgress', () => {
-    it('should calculate weighted progress', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+  describe('computed values', () => {
+    it('should compute isUploading correctly', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
 
-      // Manually set up files with different sizes and progress
-      // (In real usage, this comes from WebSocket events)
-      // ... test implementation
+      expect(result.current.isUploading).toBe(false);
+
+      act(() => {
+        result.current.addFiles(createMockFileList([
+          { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+        ]));
+      });
+
+      // Pending is not uploading
+      expect(result.current.isUploading).toBe(false);
     });
-  });
 
-  describe('derived state', () => {
-    it('should track hasFiles correctly', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+    it('should compute aggregateProgress correctly', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
+
+      // No files = 0%
+      expect(result.current.aggregateProgress).toBe(0);
+
+      act(() => {
+        result.current.addFiles(createMockFileList([
+          { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+        ]));
+      });
+
+      // Pending = 0% progress
+      expect(result.current.aggregateProgress).toBe(0);
+    });
+
+    it('should compute hasFiles correctly', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
 
       expect(result.current.hasFiles).toBe(false);
 
       act(() => {
-        result.current.addFiles([createMockFile('doc.pdf')]);
+        result.current.addFiles(createMockFileList([
+          { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+        ]));
       });
 
       expect(result.current.hasFiles).toBe(true);
     });
 
-    it('should track hasPendingFiles correctly', () => {
-      const { result } = renderHook(() => useMultiFileUpload());
+    it('should compute hasPendingFiles correctly', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
+
+      expect(result.current.hasPendingFiles).toBe(false);
 
       act(() => {
-        result.current.addFiles([createMockFile('doc.pdf')]);
+        result.current.addFiles(createMockFileList([
+          { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+        ]));
       });
 
       expect(result.current.hasPendingFiles).toBe(true);
     });
   });
+
+  describe('getCompletedFileIds', () => {
+    it('should return empty array when no completed files', () => {
+      const { result } = renderHook(() => useMultiFileUpload(defaultOptions));
+
+      act(() => {
+        result.current.addFiles(createMockFileList([
+          { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+        ]));
+      });
+
+      expect(result.current.getCompletedFileIds()).toEqual([]);
+    });
+  });
 });
+
+// Helper to create mock FileList
+function createMockFileList(
+  files: Array<{ name: string; type: string; size: number }>
+): FileList {
+  const mockFiles = files.map(f => ({
+    name: f.name,
+    type: f.type,
+    size: f.size,
+  } as File));
+
+  return {
+    length: mockFiles.length,
+    item: (i: number) => mockFiles[i] || null,
+    [Symbol.iterator]: function* () {
+      for (const file of mockFiles) yield file;
+    },
+    ...mockFiles.reduce((acc, f, i) => ({ ...acc, [i]: f }), {}),
+  } as unknown as FileList;
+}
 ```
 
 ### Acceptance Criteria
-- [ ] Test: addFiles adds to state
-- [ ] Test: addFiles generates unique tempIds
-- [ ] Test: addFiles respects maxFiles
-- [ ] Test: addFiles respects maxFileSize
-- [ ] Test: removeFile removes correct file
-- [ ] Test: clearAll removes all
-- [ ] Test: derived states (hasFiles, hasPendingFiles)
-- [ ] Test: aggregateProgress calculation
-- [ ] All tests pass
+- [ ] isUploading computed from stages
+- [ ] aggregateProgress averages all file progress
+- [ ] hasFiles returns true if any files
+- [ ] hasPendingFiles returns true if any pending
+- [ ] getCompletedFileIds returns only complete fileIds
+- [ ] Tests cover addFiles validation
+- [ ] Tests cover removeFile behavior
+- [ ] Tests cover clearAll
+- [ ] Tests cover computed values
 
 ---
 
@@ -664,17 +915,18 @@ describe('useMultiFileUpload', () => {
 Before requesting code review:
 
 - [ ] All 5 stories implemented
-- [ ] `npm test` passes in `apps/web`
+- [ ] `pnpm --filter @guardian/web test` passes
 - [ ] No TypeScript errors
-- [ ] Hook exports all documented types
-- [ ] Memory cleanup on unmount verified
-- [ ] Existing `useFileUpload` unchanged
+- [ ] "Never adopt" pattern preserved (via uploadId)
+- [ ] uploadId correlation works correctly
+- [ ] NO filename-based mapping
+- [ ] AbortController cleanup on unmount
 
 ---
 
 ## Handoff Notes
 
 After this track completes:
-- Composer (Sprint 2) will import and use this hook
-- Backend (Track A) must emit `tempId` in progress events for correlation
-- Old `useFileUpload` can be deprecated in future (not this epic)
+- Composer (Sprint 2) will use this hook for multi-file uploads
+- FileChip (Track B) provides per-file UI
+- Backend (Track A) provides uploadId array in HTTP 202 response

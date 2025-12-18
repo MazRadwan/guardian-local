@@ -23,9 +23,11 @@ User selects files → Upload batch → Parse each → Multiple FileChips → Se
 ### Key Design Decisions
 
 1. **New Hook vs Refactor:** Create `useMultiFileUpload` hook (safer migration path)
-2. **Upload Strategy:** Parallel uploads (faster) with per-file progress
-3. **State Management:** `Map<tempId, FileState>` for tracking multiple files
-4. **Backward Compatibility:** Single-file flow still works (just a batch of 1)
+2. **Upload Strategy:** Single batch HTTP request (simpler), parallel parsing per file
+3. **ID Lifecycle:** `localIndex` (client array position) → `uploadId` (server-generated) → `fileId` (database UUID)
+4. **State Management:** Array-based state with index correlation, NOT Map with client-generated IDs
+5. **Backward Compatibility:** Single-file flow still works (batch of 1)
+6. **Preserve Epic 16 Patterns:** "Never adopt" for WS events, AbortController, async parsing
 
 ---
 
@@ -129,21 +131,26 @@ Depends on all Sprint 1 tracks completing:
 Review criteria for each track:
 
 **Track A (Backend):**
-- [ ] multer configured with sensible MAX_COUNT (e.g., 10)
-- [ ] Per-file progress events emitted correctly
+- [ ] multer configured with MAX_COUNT = 10
+- [ ] 202 immediate response (preserves Epic 16 async pattern)
+- [ ] Per-file uploadId returned in response array
+- [ ] Per-file progress events emitted via WebSocket
 - [ ] Partial failure doesn't block successful files
 - [ ] Unit tests cover multi-file scenarios
 
 **Track B (FileChip):**
-- [ ] onRemove callback properly typed and connected
+- [ ] disabled prop hides X button when true
 - [ ] Compact variant doesn't break existing usage
 - [ ] Accessibility preserved (keyboard, screen reader)
+- [ ] Backward compatible (existing Composer usage unchanged)
 
 **Track C (Hook):**
 - [ ] Clean state management (no stale references)
 - [ ] Memory cleanup on unmount
 - [ ] Progress aggregation is accurate
-- [ ] Retry logic handles edge cases
+- [ ] ID lifecycle correct (localIndex → uploadId → fileId)
+- [ ] "Never adopt" pattern for WS events (knownUploadIdsRef)
+- [ ] NO filename-based correlation anywhere
 
 **Sprint 2:**
 - [ ] Composer layout handles 1-10 files gracefully
@@ -152,14 +159,21 @@ Review criteria for each track:
 
 ---
 
-## Constants & Limits
+## Constants & Limits (Authoritative)
 
 ```typescript
-// Proposed limits (can adjust in review)
+// AUTHORITATIVE - Single source of truth
 const MAX_FILES_PER_MESSAGE = 10;
-const MAX_TOTAL_SIZE_MB = 50;
-const MAX_SINGLE_FILE_MB = 20;  // existing limit
+const MAX_FILE_SIZE_MB = 20;      // Per file (existing Epic 16 limit)
+const MAX_TOTAL_BATCH_SIZE_MB = 50; // Total for all files combined
+
+// Validation order:
+// 1. Check file count (max 10)
+// 2. Check each file size (max 20MB)
+// 3. Check total batch size (max 50MB)
 ```
+
+**Note:** These limits are defined in `sprint-1-backend.md` and must be consistent across all sprint docs.
 
 ---
 
@@ -171,7 +185,7 @@ const MAX_SINGLE_FILE_MB = 20;  // existing limit
 | 17.1.2 | A | Controller batch processing | `sprint-1-backend.md` |
 | 17.1.3 | A | Per-file progress events | `sprint-1-backend.md` |
 | 17.1.4 | A | Backend unit tests | `sprint-1-backend.md` |
-| 17.2.1 | B | FileChip onRemove | `sprint-1-filechip.md` |
+| 17.2.1 | B | FileChip disabled prop | `sprint-1-filechip.md` |
 | 17.2.2 | B | FileChip compact variant | `sprint-1-filechip.md` |
 | 17.2.3 | B | FileChip tests | `sprint-1-filechip.md` |
 | 17.3.1 | C | Multi-file state interface | `sprint-1-hook.md` |
