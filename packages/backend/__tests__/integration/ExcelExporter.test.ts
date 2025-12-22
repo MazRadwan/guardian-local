@@ -338,5 +338,110 @@ describe('ExcelExporter Integration Tests', () => {
       expect(views.length).toBeGreaterThan(0)
       expect(views[0].state).toBe('frozen')
     })
+
+    it('should include assessmentId in Excel metadata', async () => {
+      const vendor = Vendor.create({
+        name: 'Assessment ID Test Vendor',
+        industry: 'Healthcare',
+      })
+
+      const assessment = Assessment.create({
+        vendorId: vendor.id,
+        assessmentType: 'comprehensive',
+        solutionName: 'Health Platform',
+        createdBy: 'test-user-id',
+      })
+
+      const questions = [
+        Question.create({
+          assessmentId: assessment.id,
+          sectionName: 'Privacy',
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Test privacy question',
+          questionType: 'text',
+        }),
+      ]
+
+      const excelBuffer = await excelExporter.generateExcel({
+        assessment,
+        vendor,
+        questions,
+      })
+
+      // Parse Excel to verify assessmentId is in metadata
+      const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
+      await workbook.xlsx.load(excelBuffer)
+
+      const worksheet = workbook.getWorksheet('Assessment Questionnaire')
+      if (!worksheet) throw new Error('Worksheet not found')
+
+      // Check row 3 for "GUARDIAN Assessment ID:"
+      const assessmentIdLabel = worksheet.getCell('A3').value
+      expect(assessmentIdLabel).toBe('GUARDIAN Assessment ID:')
+
+      // Check row 3 column B for the actual assessment ID
+      const assessmentIdValue = worksheet.getCell('B3').value
+      expect(assessmentIdValue).toBe(assessment.id)
+
+      // Verify styling - should have Courier New font and gray background
+      const assessmentIdCell = worksheet.getCell('B3')
+      expect(assessmentIdCell.font?.name).toBe('Courier New')
+      expect(assessmentIdCell.fill).toBeDefined()
+      const fill = assessmentIdCell.fill as ExcelJS.FillPattern
+      expect(fill.fgColor?.argb).toBe('FFF3F4F6')
+    })
+
+    it('should handle special characters in assessmentId in Excel', async () => {
+      const vendor = Vendor.create({
+        name: 'Special Char Test Vendor',
+        industry: 'Technology',
+      })
+
+      // Create assessment with special characters in ID
+      const testAssessmentId = 'test-id-<>&"\''
+      const assessment = Assessment.fromPersistence({
+        id: testAssessmentId,
+        vendorId: vendor.id,
+        assessmentType: 'quick',
+        solutionName: 'Test',
+        solutionType: 'Tool',
+        status: 'draft',
+        assessmentMetadata: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: 'test-user-id',
+      })
+
+      const questions = [
+        Question.create({
+          assessmentId: testAssessmentId,
+          sectionName: 'Test',
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Test question',
+          questionType: 'text',
+        }),
+      ]
+
+      const excelBuffer = await excelExporter.generateExcel({
+        assessment,
+        vendor,
+        questions,
+      })
+
+      // Parse Excel to verify assessmentId with special characters
+      const workbook = new ExcelJS.Workbook()
+      // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
+      await workbook.xlsx.load(excelBuffer)
+
+      const worksheet = workbook.getWorksheet('Assessment Questionnaire')
+      if (!worksheet) throw new Error('Worksheet not found')
+
+      // Verify the assessment ID is correctly stored (ExcelJS handles escaping)
+      const assessmentIdValue = worksheet.getCell('B3').value
+      expect(assessmentIdValue).toBe(testAssessmentId)
+    })
   })
 })

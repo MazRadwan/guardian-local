@@ -66,19 +66,32 @@ export class ExcelExporter implements IExcelExporter {
     vendorCell.alignment = { horizontal: 'center', vertical: 'middle' }
     worksheet.getRow(2).height = 25
 
-    // Metadata
-    worksheet.getCell('A3').value = 'Assessment Type:'
-    worksheet.getCell('B3').value = assessment.assessmentType
-    worksheet.getCell('C3').value = 'Solution:'
-    worksheet.getCell('D3').value = assessment.solutionName || 'N/A'
+    // Assessment ID (first metadata row)
+    worksheet.getCell('A3').value = 'GUARDIAN Assessment ID:'
+    worksheet.getCell('A3').font = { bold: true }
+    worksheet.mergeCells('B3:D3')
+    const assessmentIdCell = worksheet.getCell('B3')
+    assessmentIdCell.value = assessment.id
+    assessmentIdCell.font = { name: 'Courier New' }
+    assessmentIdCell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF3F4F6' },
+    }
 
-    worksheet.getCell('A4').value = 'Created:'
-    worksheet.getCell('B4').value = new Date(assessment.createdAt).toLocaleDateString()
-    worksheet.getCell('C4').value = 'Total Questions:'
-    worksheet.getCell('D4').value = totalQuestions
+    // Other metadata
+    worksheet.getCell('A4').value = 'Assessment Type:'
+    worksheet.getCell('B4').value = assessment.assessmentType
+    worksheet.getCell('C4').value = 'Solution:'
+    worksheet.getCell('D4').value = assessment.solutionName || 'N/A'
+
+    worksheet.getCell('A5').value = 'Created:'
+    worksheet.getCell('B5').value = new Date(assessment.createdAt).toLocaleDateString()
+    worksheet.getCell('C5').value = 'Total Questions:'
+    worksheet.getCell('D5').value = totalQuestions
 
     // Style metadata
-    for (let row = 3; row <= 4; row++) {
+    for (let row = 4; row <= 5; row++) {
       worksheet.getCell(`A${row}`).font = { bold: true }
       worksheet.getCell(`C${row}`).font = { bold: true }
     }
