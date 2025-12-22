@@ -4,7 +4,7 @@
  * Tests actual database operations with test database
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
+// Jest provides describe, it, expect, beforeAll, afterAll, beforeEach globals
 import { db } from '../../../src/infrastructure/database/client.js'
 import { dimensionScores } from '../../../src/infrastructure/database/schema/dimensionScores.js'
 import { assessments } from '../../../src/infrastructure/database/schema/assessments.js'
