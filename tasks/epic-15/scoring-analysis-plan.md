@@ -92,6 +92,40 @@ Implementing the scoring/analysis phase where completed questionnaires are uploa
 
 ---
 
+## PHI/Sensitive Data Handling
+
+> **Status:** Acknowledged - deferred to broader security epic or cross-cutting concern.
+
+### Data Classification
+
+The following Epic 15 data may contain PHI or sensitive vendor information:
+
+| Table/Field | Sensitivity | Contains |
+|-------------|-------------|----------|
+| `responses.response_text` | **High** | Vendor answers may include patient data handling details, security configs |
+| `assessment_results.narrative_report` | **High** | Full risk assessment with vendor-specific findings |
+| `assessment_results.executive_summary` | **Medium** | Summarized findings |
+| `dimension_scores.findings` | **Medium** | Evidence quotes from vendor responses |
+
+### Required Controls (Implementation TBD)
+
+| Control | Description | Status |
+|---------|-------------|--------|
+| **Encryption at rest** | PostgreSQL TDE or application-level encryption for sensitive columns | Defer to infra |
+| **Access control** | Row-level security - users only see their org's assessments | Existing auth model |
+| **Retention policy** | Define retention period for scoring data (e.g., 7 years for compliance) | TBD |
+| **Log redaction** | Ensure response_text and narrative_report aren't logged in full | Implementation |
+| **Audit trail** | Track who accessed/exported scoring results | Existing audit model |
+
+### Immediate Actions for Epic 15
+
+1. **Do NOT log** full `response_text` or `narrative_report` content - use truncation or omit
+2. **Inherit** existing auth model - scoring data scoped to assessment owner's org
+3. **Document** that PHI handling is inherited from existing infrastructure
+4. **Flag** for security review before production deployment
+
+---
+
 ## Gaps to Fix (Implementation Required)
 
 ### 1. Add `assessmentId` to QuestionnaireSchema
@@ -310,7 +344,7 @@ Generated: 2025-01-15
 | **B: Stay in `'assessment'` mode, scoring is a workflow state** | Fewer modes, natural flow after questionnaire | Mode name less intuitive |
 | **C: Mode-independent, scoring triggered by upload type** | Flexible, works in any mode | Less discoverable |
 
-**Recommendation:** Option B - scoring is part of assessment workflow. Use `assessments.status` to track state: `'questions_generated' → 'responses_uploaded' → 'scored'`.
+**Decision:** Option A - New `'scoring'` mode in ModeSelector dropdown. Provides explicit UX, consistent with existing mode pattern, and clear separation of concerns. User selects scoring mode → sees welcome message → uploads completed questionnaire.
 
 ---
 
@@ -397,6 +431,8 @@ export const dimensionScores = pgTable('dimension_scores', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   assessmentDimensionIdx: index('dimension_scores_assessment_idx').on(table.assessmentId, table.dimension),
+  // Idempotency: prevent duplicate scores for same dimension in same batch
+  uniqueBatchDimension: unique('dimension_scores_batch_dimension_unique').on(table.assessmentId, table.batchId, table.dimension),
 }));
 
 export const assessmentResults = pgTable('assessment_results', {
@@ -415,11 +451,18 @@ export const assessmentResults = pgTable('assessment_results', {
   keyFindings: jsonb('key_findings').$type<string[]>(),
   disqualifyingFactors: jsonb('disqualifying_factors').$type<string[]>(),
 
+  // Scoring provenance (for auditability and reproducibility)
+  rubricVersion: text('rubric_version').notNull(), // e.g., 'guardian-v1.0'
+  modelId: text('model_id').notNull(), // e.g., 'claude-sonnet-4-5-20250929'
+  rawToolPayload: jsonb('raw_tool_payload'), // Original scoring_complete payload from Claude
+
   // Audit
   scoredAt: timestamp('scored_at').defaultNow().notNull(),
   scoringDurationMs: integer('scoring_duration_ms'),
 }, (table) => ({
   assessmentIdx: index('assessment_results_assessment_idx').on(table.assessmentId),
+  // Idempotency: one result per batch
+  uniqueBatch: unique('assessment_results_batch_unique').on(table.assessmentId, table.batchId),
 }));
 ```
 
@@ -441,23 +484,32 @@ assessments.status:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  User: Selects "Score Questionnaire" mode, uploads Word doc         │
+│  User: Selects "Scoring" mode, uploads completed questionnaire      │
+│  - PDF (recommended) or DOCX accepted                               │
+│  - Warning shown if DOCX (screenshots won't be analyzed)            │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  DocumentParserService (Claude Vision)                              │
-│  - Reads document as images                                         │
-│  - Extracts assessmentId from header                                │
-│  - Extracts Q&A pairs (including screenshot interpretations)        │
+│  DocumentParserService (Text Extraction)                            │
+│  - PDF: pdf-parse library (text extraction, NOT Vision)             │
+│  - DOCX: mammoth library (text extraction, NOT Vision)              │
+│  - Extracts assessmentId from header text                           │
+│  - Extracts Q&A pairs from text content                             │
 │  - Returns structured responses + confidence scores                 │
+│                                                                     │
+│  ⚠️  LIMITATIONS (current implementation):                          │
+│  - Scanned PDFs (image-only) will fail - no text to extract         │
+│  - Screenshots embedded in PDF/DOCX are NOT analyzed                │
+│  - Only standalone image files use Vision API                       │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Validation                                                         │
 │  - Match assessmentId to DB                                         │
-│  - If not found: reject with error                                  │
+│  - If not found: reject with clear error message                    │
+│  - If legacy export (no ID): reject, ask user to re-export          │
 │  - Store responses to DB (new batch)                                │
 │  - Store original file to S3                                        │
 └─────────────────────────────────────────────────────────────────────┘
@@ -465,21 +517,148 @@ assessments.status:
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  ScoringService (Claude API)                                        │
-│  - Load rubric (cached prompt)                                      │
-│  - Send: responses + rubric + questionnaire context                 │
-│  - Stream response: per-dimension scores as they complete           │
-│  - Store scores to DB                                               │
+│  - Load rubric (cached via PromptCacheManager)                      │
+│  - Send: responses + rubric                                         │
+│  - Stream narrative report to chat                                  │
+│  - Claude calls scoring_complete tool with structured scores        │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Payload Validation & Storage                                       │
+│  - Validate scoring_complete payload (scores 0-100, required fields)│
+│  - Reject/flag malformed payloads before persistence                │
+│  - Store dimension_scores (10 rows) + assessment_results (1 row)    │
+│  - Include provenance: rubric_version, model_id, raw payload        │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Results                                                            │
-│  - Composite score + recommendation                                 │
-│  - Store assessment_results to DB                                   │
-│  - Display in chat (inline card)                                    │
-│  - Offer export options                                             │
+│  - Display ScoringResultCard in chat                                │
+│  - Composite score + recommendation badge                           │
+│  - Risk dashboard (10 dimensions, color-coded)                      │
+│  - Offer export options (PDF, Word)                                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### Parsing Limitations & UX Warnings
+
+| Scenario | Current Behavior | UX Message |
+|----------|------------------|------------|
+| DOCX uploaded | Text extraction only | "Note: Screenshots in Word documents won't be analyzed. For best results, upload as PDF." |
+| Scanned PDF (image-only) | Extraction fails/empty | "This appears to be a scanned document. Please upload a text-based PDF or the original Word file." |
+| PDF with embedded screenshots | Text extracted, images ignored | "Note: Embedded images in this PDF weren't analyzed. Text content was processed successfully." |
+| No Assessment ID found | Rejected | "I couldn't find a Guardian Assessment ID in this document. Please upload a questionnaire exported from Guardian." |
+| Legacy export (pre-ID) | Rejected | "This questionnaire was exported before Assessment ID tracking. Please generate a new questionnaire or re-export from the assessment." |
+
+---
+
+## Scoring Tool & Payload Validation
+
+### scoring_complete Tool Definition
+
+Claude calls this tool after streaming the narrative report to provide structured scores for persistence:
+
+```typescript
+const scoringCompleteTool = {
+  name: 'scoring_complete',
+  description: 'Submit structured scoring results after narrative analysis',
+  input_schema: {
+    type: 'object',
+    required: ['compositeScore', 'recommendation', 'overallRiskRating', 'dimensionScores', 'executiveSummary'],
+    properties: {
+      compositeScore: {
+        type: 'integer',
+        minimum: 0,
+        maximum: 100,
+        description: 'Weighted average score across all dimensions'
+      },
+      recommendation: {
+        type: 'string',
+        enum: ['approve', 'conditional', 'decline', 'more_info'],
+        description: 'Overall recommendation based on scoring'
+      },
+      overallRiskRating: {
+        type: 'string',
+        enum: ['low', 'medium', 'high', 'critical'],
+        description: 'Aggregate risk level'
+      },
+      executiveSummary: {
+        type: 'string',
+        description: 'Brief summary for leadership (2-3 sentences)'
+      },
+      keyFindings: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Top 3-5 key findings'
+      },
+      disqualifyingFactors: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Any factors that automatically fail the assessment'
+      },
+      dimensionScores: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['dimension', 'score', 'riskRating'],
+          properties: {
+            dimension: { type: 'string' },
+            score: { type: 'integer', minimum: 0, maximum: 100 },
+            riskRating: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+            findings: { type: 'object' }
+          }
+        },
+        minItems: 10,
+        maxItems: 10,
+        description: 'Scores for all 10 risk dimensions'
+      }
+    }
+  }
+};
+```
+
+### Payload Validation (Critical)
+
+Before persisting scoring results, validate the `scoring_complete` payload:
+
+```typescript
+interface ScoringPayloadValidator {
+  validate(payload: unknown): ValidationResult;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  sanitized?: ScoringCompletePayload;
+}
+
+// Validation rules:
+const validationRules = {
+  compositeScore: (v: number) => v >= 0 && v <= 100,
+  recommendation: (v: string) => ['approve', 'conditional', 'decline', 'more_info'].includes(v),
+  overallRiskRating: (v: string) => ['low', 'medium', 'high', 'critical'].includes(v),
+  dimensionScores: (v: unknown[]) => v.length === 10,
+  eachDimensionScore: (d: { score: number }) => d.score >= 0 && d.score <= 100,
+};
+```
+
+### Validation Failure Handling
+
+| Scenario | Action |
+|----------|--------|
+| Missing required field | Reject, log error, notify user scoring failed |
+| Score out of range (< 0 or > 100) | Reject, do not persist |
+| Invalid enum value | Reject, do not persist |
+| Wrong dimension count (!= 10) | Reject, do not persist |
+| Malformed JSON from Claude | Reject, log raw response, notify user |
+
+**On validation failure:**
+1. Log the raw payload for debugging (redact sensitive content)
+2. Do NOT persist to database
+3. Emit `scoring_error` WebSocket event
+4. Display user-friendly error: "Scoring analysis encountered an issue. Please try again."
 
 ---
 
@@ -727,21 +906,21 @@ Options discussed:
 3. ~~Export architecture~~ → Option A (parallel interfaces)
 4. ~~Progress UX~~ → Rotating status messages
 
-### Remaining
-1. **Confirm separate scoring mode UX** - Still open (mode dropdown vs workflow state)
-2. **Finalize database schema** - Review proposed schema with user
-3. **Implement assessmentId in exports** - Update PDF/Word/Excel exporters
-4. **Codify rubric** - TypeScript types + constants from Guardian v1.0 Part IV
-5. **Build ScoringService** - Orchestrate parse → score → store → emit
-6. **Build scoring prompt** - Adapt Part V template for Claude API + tool definition
-7. **Build UI components** - ScoringResultCard, rotating status, DOCX warning
-8. **Build scoring exporters** - IScoringPDFExporter, IScoringWordExporter
+### Implementation Tasks (Ready)
+
+1. **Add assessmentId to exports** - Update PDF/Word/Excel exporters (prerequisite)
+2. **Create database schema/migrations** - 3 new tables with provenance + idempotency
+3. **Build ScoringService** - Orchestrate parse → validate → score → store → emit
+4. **Build scoring_complete tool + validation** - Strict payload validation before persistence
+5. **Build scoring prompt** - Adapt Part V template for Claude API
+6. **Build UI components** - ScoringResultCard, rotating status, DOCX/scanned PDF warnings
+7. **Build scoring exporters** - IScoringPDFExporter, IScoringWordExporter
 
 ---
 
 ## Session Handoff Notes
 
-**Session: 2025-12-22 (COMPLETE)**
+**Session: 2025-12-22 (Planning + Code Review)**
 
 ### All Planning Decisions Made ✅
 
@@ -760,37 +939,55 @@ Options discussed:
 | Table relationships | All FK to `assessments.id`, grouped by `batch_id` |
 | AssessmentId in exports | Add ID to PDF/Word/Excel headers (prerequisite for scoring) |
 
+### Code Review Additions (2025-12-22)
+
+| Addition | Description |
+|----------|-------------|
+| Payload validation | Strict schema validation for `scoring_complete` before persistence |
+| Scoring provenance | `rubric_version`, `model_id`, `raw_tool_payload` in assessment_results |
+| Idempotency | Unique constraints on (assessment_id, batch_id, dimension) |
+| PHI handling | Acknowledged sensitive data, deferred to security epic |
+| Parsing accuracy | Clarified text-only extraction for PDF/DOCX (not Vision) |
+| Scanned PDF warning | Added UX message for image-only PDFs |
+| Legacy export handling | Clear error + re-export guidance for pre-ID questionnaires |
+| CLAUDE.md update | Changed "Claude interprets → TS calculates" to "Claude scores → TS validates" |
+
 ### Key Technical Details
 
+**AI vs Code (Updated):** Claude applies rubric and outputs scores. TypeScript validates payloads and persists. No domain-layer scoring logic.
+
 **Prompt caching:** Already implemented in `PromptCacheManager.ts` - reuse for scoring rubric (~3-4K tokens cached)
+
+**Parsing reality:** DocumentParserService uses text extraction (pdf-parse, mammoth), NOT Vision. Scanned PDFs and embedded screenshots are NOT analyzed.
 
 **Data flow:**
 1. User selects scoring mode → sees welcome message
 2. User uploads completed questionnaire (PDF preferred, DOCX with warning)
-3. `DocumentParserService.parseForResponses()` extracts Q&A + assessmentId
-4. Validate assessmentId exists in DB
+3. `DocumentParserService.parseForResponses()` extracts Q&A + assessmentId (text-only)
+4. Validate assessmentId exists in DB; reject legacy exports gracefully
 5. Store responses to `responses` table with `batch_id`
 6. Send responses + cached rubric to Claude
 7. Claude streams narrative report
 8. Claude calls `scoring_complete` tool with structured scores
-9. Store to `dimension_scores` (10 rows) + `assessment_results` (1 row)
-10. Display `ScoringResultCard` in chat
-11. User can export to PDF/Word
+9. **Validate payload** (scores 0-100, required fields, 10 dimensions)
+10. Store to `dimension_scores` (10 rows) + `assessment_results` (1 row) with provenance
+11. Display `ScoringResultCard` in chat
+12. User can export to PDF/Word
 
 **New components needed:**
-- Backend: `ScoringService`, `ResponseRepository`, `DimensionScoreRepository`, `AssessmentResultRepository`, `IScoringPDFExporter`, `ScoringPDFExporter`, scoring system prompt
-- Frontend: `ScoringResultCard`, rotating status component, DOCX warning toast
-- Schema: 3 new tables with migrations
+- Backend: `ScoringService`, `ScoringPayloadValidator`, `ResponseRepository`, `DimensionScoreRepository`, `AssessmentResultRepository`, `IScoringPDFExporter`, `ScoringPDFExporter`, scoring system prompt
+- Frontend: `ScoringResultCard`, rotating status component, DOCX warning toast, scanned PDF warning
+- Schema: 3 new tables with migrations (includes provenance + unique constraints)
 
 ### Branch
 
-`feature/epic-15-scoring-analysis` (created from main, uncommitted changes ready)
+`feature/epic-15-scoring-analysis`
 
 ### To Resume
 
 1. Read this file (`tasks/epic-15/scoring-analysis-plan.md`)
 2. All planning complete - ready for implementation sprints
 3. First implementation task: Add assessmentId to questionnaire exports (prerequisite)
-4. Then: Create database schema/migrations
-5. Then: Build ScoringService + prompt
+4. Then: Create database schema/migrations (with provenance + idempotency)
+5. Then: Build ScoringService + payload validation
 6. Then: Build UI components

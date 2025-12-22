@@ -1,9 +1,9 @@
 # Guardian Architecture - Layers & Modules
 
-**Version:** 1.0 (Extracted from system-design.md v1.5)
-**Last Updated:** 2025-01-04
+**Version:** 1.1
+**Last Updated:** 2025-12-22
 **Architecture Pattern:** Lightweight Clean Architecture
-**Status:** Stable (foundational)
+**Status:** Stable (foundational patterns); Module inventory updated to reflect implementation status
 
 ---
 
@@ -280,7 +280,19 @@ export class ClaudeQuestionGenerator implements IQuestionGenerator {
 
 ## Module Boundaries
 
-Guardian is organized into **7 modules** plus shared infrastructure:
+Guardian is organized into **7 planned modules** plus shared infrastructure.
+
+> **Implementation Status:** Not all modules are built. See `docs/architecture/c4-diagrams.md` for actual implemented components. This section describes the **target architecture**.
+
+| Module | Status | Notes |
+|--------|--------|-------|
+| Assessment | **Implemented** | Intake, questionnaire generation, export |
+| Conversation | **Implemented** | Chat, WebSocket, message streaming |
+| Auth | **Implemented** | JWT auth, user management |
+| Export | **Implemented** | PDF/Word/Excel questionnaire export |
+| Analysis | **Epic 15** | Scoring, risk analysis - in planning |
+| Reporting | **Future** | Web view reports, dashboards |
+| Portfolio | **Future** | Vendor comparison, trends |
 
 ### Module 1: Assessment Module
 
@@ -312,7 +324,9 @@ interface IAssessmentModule {
 
 ### Module 2: Analysis Module
 
-**Owns:**
+> **Status:** Planned for Epic 15 (Questionnaire Scoring & Analysis)
+
+**Will Own:**
 - Risk scoring algorithms (10 dimensions)
 - Claude interpretation orchestration
 - Compliance framework evaluation (PIPEDA, ATIPP, NIST)
@@ -337,7 +351,9 @@ interface IAnalysisModule {
 
 ### Module 3: Reporting Module
 
-**Owns:**
+> **Status:** Future (Post-MVP). Currently only questionnaire export exists via Export Module.
+
+**Will Own:**
 - Report generation (internal + vendor feedback)
 - Report templates and formatting
 - Web view rendering (interactive reports)
@@ -362,7 +378,9 @@ interface IReportingModule {
 
 ### Module 4: Portfolio Module
 
-**Owns:**
+> **Status:** Future (Post-MVP). Basic vendor CRUD exists in VendorService.
+
+**Will Own:**
 - Vendor profile management
 - Assessment history tracking
 - Portfolio analytics (aggregations, trends)
@@ -675,10 +693,16 @@ useEffect(() => {
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-04 | Extracted from system-design.md v1.5 - Contains architecture overview, layer responsibilities, 7 module boundaries, dependency rules, and key design patterns |
+| 1.1 | 2025-12-22 | Added implementation status to modules (Assessment, Conversation, Auth, Export = implemented; Analysis = Epic 15; Reporting, Portfolio = future). Clarified this doc describes patterns/principles, C4 diagrams show actual implementation. |
 
 ---
 
-**This document defines the FOUNDATIONAL architecture for Guardian.** All agents should read this FIRST before building any module. The layers and module boundaries are stable - changes to this document require team discussion.
+**This document defines the FOUNDATIONAL architecture patterns for Guardian.** All agents should read this FIRST to understand layer separation, dependency rules, and design patterns.
+
+**Source of Truth Hierarchy:**
+- **Patterns & Principles:** This document (`architecture-layers.md`)
+- **Actual Implementation:** `docs/architecture/c4-diagrams.md` (shows what's built)
+- **Current Tasks:** `tasks/task-overview.md`
 
 **For implementation details (data flows, caching, testing), see:** `implementation-guide.md`
 **For deployment and infrastructure, see:** `deployment-guide.md`

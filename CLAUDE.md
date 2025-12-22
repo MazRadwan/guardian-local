@@ -30,10 +30,10 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 - Never suggest traditional multi-step form UIs
 
 ### AI vs Code Responsibilities
-**IMPORTANT:** Assessment responses are qualitative text requiring interpretation.
-- ✅ Claude interprets vendor responses against rubrics → identifies risk factors
-- ✅ TypeScript calculates scores from identified factors → deterministic math
-- ❌ Claude does NOT do arithmetic on structured data
+**IMPORTANT:** Scoring uses the Guardian rubric which requires qualitative interpretation.
+- ✅ Claude applies rubric to vendor responses → outputs scores + narrative (matches Claude.ai Projects workflow)
+- ✅ TypeScript validates payloads → stores results in database
+- ❌ TypeScript does NOT re-interpret or second-guess Claude's scoring
 
 ### Test Requirements
 **IMPORTANT:** All features MUST have tests. No exceptions.
