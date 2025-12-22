@@ -8,6 +8,7 @@ export type AssessmentStatusValue =
   | 'draft'
   | 'questions_generated'
   | 'exported'
+  | 'scored'
   | 'cancelled'
 
 export class AssessmentStatus {
@@ -15,6 +16,7 @@ export class AssessmentStatus {
     'draft',
     'questions_generated',
     'exported',
+    'scored',
     'cancelled',
   ]
 
@@ -25,7 +27,8 @@ export class AssessmentStatus {
   > = {
     draft: ['questions_generated', 'cancelled'],
     questions_generated: ['exported', 'cancelled'],
-    exported: ['cancelled'], // Can still cancel after export
+    exported: ['scored', 'cancelled'], // Can score after export, or cancel
+    scored: ['cancelled'], // Can still cancel after scoring
     cancelled: [], // Terminal state - no transitions allowed
   }
 
@@ -51,6 +54,10 @@ export class AssessmentStatus {
 
   static exported(): AssessmentStatus {
     return new AssessmentStatus('exported')
+  }
+
+  static scored(): AssessmentStatus {
+    return new AssessmentStatus('scored')
   }
 
   static cancelled(): AssessmentStatus {
@@ -90,6 +97,10 @@ export class AssessmentStatus {
 
   isExported(): boolean {
     return this.value === 'exported'
+  }
+
+  isScored(): boolean {
+    return this.value === 'scored'
   }
 
   isCancelled(): boolean {
