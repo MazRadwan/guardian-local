@@ -4,6 +4,7 @@
 
 **Created:** 2025-12-22
 **Last Updated:** 2025-12-22
+**Code Review:** Complete (2 rounds)
 **Depends On:** Epic 16/17 (Document Parser Infrastructure) - COMPLETE
 
 ---
@@ -34,6 +35,22 @@ Epic 15 implements **Questionnaire Scoring & Analysis** - the phase where comple
 | `tasks/epic-16/6.9-attachment-security-tests/` | Parallel agent execution pattern |
 | `.claude/documentation/GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md` | Rubric (Part IV) + output template (Part V) |
 
+### PHI / Security
+
+See `tasks/epic-15/scoring-analysis-plan.md` § "PHI / Sensitive Data Handling" for:
+- Data retention policies
+- Access control requirements
+- Log redaction rules
+- Audit trail requirements
+
+### Out of Scope for Epic 15
+
+| Item | Rationale | Belongs To |
+|------|-----------|------------|
+| Scanned PDF detection + Vision fallback | Document parsing issue, not scoring | Epic 17 (multi-doc) or new Epic |
+| Portfolio-level analytics | Future feature | Epic TBD (Portfolio module) |
+| Web view dashboard | Future feature | Epic TBD (Reporting module) |
+
 ---
 
 ## Dependency Graph
@@ -43,7 +60,8 @@ Epic 15 implements **Questionnaire Scoring & Analysis** - the phase where comple
 │  PHASE 0: PREREQUISITE (Sequential)                                         │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │  Story 0.1: AssessmentId in Questionnaire Exports                    │   │
-│  │  - Update QuestionnaireMetadata type                                 │   │
+│  │  - Update question generation prompt (include assessmentId in YAML)  │   │
+│  │  - Update QuestionnaireMetadata DTO + parsing                        │   │
 │  │  - Modify PDFExporter, WordExporter, ExcelExporter                   │   │
 │  │  - Add tests (prerequisite for scoring flow)                         │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
@@ -57,25 +75,33 @@ Epic 15 implements **Questionnaire Scoring & Analysis** - the phase where comple
 │  │  - 3 tables: responses, dimension_scores, assessment_results        │   │
 │  │  - Provenance fields: rubric_version, model_id, raw_tool_payload    │   │
 │  │  - Idempotency: unique constraints on (assessment_id, batch_id, *)  │   │
+│  │  - Retry behavior: 409 conflict → generate new batchId and retry    │   │
 │  │  - 3 repository interfaces + implementations                        │   │
 │  │  - Integration tests for repositories                               │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
-                    ┌───────────────┴───────────────┐
-                    ▼                               ▼
-┌───────────────────────────────────┐ ┌───────────────────────────────────┐
-│  PHASE 2A (Parallel)              │ │  PHASE 2B (Parallel)              │
-│  ┌─────────────────────────────┐  │ │  ┌─────────────────────────────┐  │
-│  │  Story 2.1: Types + Prompt  │  │ │  │  Story 2.2: Validator       │  │
-│  │  - ScoringReportData type   │  │ │  │  - ScoringPayloadValidator  │  │
-│  │  - scoring_complete tool    │  │ │  │  - Validation rules         │  │
-│  │  - Scoring system prompt    │  │ │  │  - Error handling           │  │
-│  │  - Rubric constants         │  │ │  │  - Unit tests (domain)      │  │
-│  └─────────────────────────────┘  │ │  └─────────────────────────────┘  │
-└───────────────────────────────────┘ └───────────────────────────────────┘
-                    │                               │
-                    └───────────────┬───────────────┘
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  PHASE 2: CORE TYPES (Sequential - 2.1 must complete before 2.2)            │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Story 2.1: Types + Prompt + Tool + Mode                            │   │
+│  │  - ConversationMode enum: add 'scoring' mode (shared dependency)    │   │
+│  │  - ScoringReportData, DimensionScore types                          │   │
+│  │  - scoring_complete tool definition (JSON schema)                   │   │
+│  │  - Scoring system prompt + rubric constants (single source of truth)│   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                    │                                        │
+│                                    ▼                                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  Story 2.2: Validator (depends on 2.1 types)                        │   │
+│  │  - ScoringPayloadValidator using types from 2.1                     │   │
+│  │  - Validation rules (scores 0-100, 10 dimensions, required fields)  │   │
+│  │  - Error handling with detailed messages                            │   │
+│  │  - Unit tests + 1 contract test (schema ↔ validator alignment)      │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  PHASE 3: SCORING SERVICE (Sequential - depends on Phase 2)                 │
@@ -135,10 +161,10 @@ Epic 15 implements **Questionnaire Scoring & Analysis** - the phase where comple
 
 | Story | Name | Phase | Parallel? | ~Lines | Tests? | Agent Type |
 |-------|------|-------|-----------|--------|--------|------------|
-| **0.1** | AssessmentId in Exports | 0 | No | 700 | Yes | `chat-backend-agent` |
-| **1.1** | Schema + Repositories | 1 | No | 700 | Yes | `chat-backend-agent` |
-| **2.1** | Types + Prompt + Tool | 2 | **Yes** | 600 | No | `chat-backend-agent` |
-| **2.2** | ScoringPayloadValidator | 2 | **Yes** | 500 | Yes | `chat-backend-agent` |
+| **0.1** | AssessmentId in Exports (full chain) | 0 | No | 700 | Yes | `chat-backend-agent` |
+| **1.1** | Schema + Repositories + Retry | 1 | No | 700 | Yes | `chat-backend-agent` |
+| **2.1** | Types + Prompt + Tool + Mode | 2 | No | 650 | No | `chat-backend-agent` |
+| **2.2** | ScoringPayloadValidator + Contract Test | 2 | No (depends 2.1) | 500 | Yes | `chat-backend-agent` |
 | **3.1** | ScoringService | 3 | No | 700 | Yes | `chat-backend-agent` |
 | **4.1** | Mode + Status + Warnings | 4 | **Yes** | 700 | No | `frontend-agent` |
 | **4.2** | ScoringResultCard | 4 | **Yes** | 600 | No | `frontend-agent` |
@@ -146,7 +172,8 @@ Epic 15 implements **Questionnaire Scoring & Analysis** - the phase where comple
 | **5.1** | ChatServer Integration | 5 | No | 700 | Yes | `chat-backend-agent` |
 | **6.1** | E2E + Remaining Tests | 6 | No | 600 | Yes | `chat-backend-agent` |
 
-**Total:** 10 stories, ~6,500 lines across all story files
+**Total:** 10 stories, ~6,550 lines across all story files
+**Parallel phases:** Only Phase 4 (3 agents)
 
 ---
 
@@ -166,15 +193,17 @@ Stories: 1.1
 Duration: 1 agent session
 ```
 
-### Phase 2: Core Backend (2 Parallel Agents)
+### Phase 2: Core Types (Sequential - 2 Agents)
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Launch: 2 Task tool calls in ONE message                       │
+│  SEQUENTIAL: 2.1 must complete before 2.2                       │
+│  (2.2 validator imports types defined in 2.1)                   │
 │                                                                 │
-│  Agent A: chat-backend-agent                                    │
-│  Prompt: "Execute Story 2.1 - Types + Prompt + Tool..."        │
+│  Step 1: chat-backend-agent                                     │
+│  Prompt: "Execute Story 2.1 - Types + Prompt + Tool + Mode..." │
+│  Wait for completion                                            │
 │                                                                 │
-│  Agent B: chat-backend-agent                                    │
+│  Step 2: chat-backend-agent                                     │
 │  Prompt: "Execute Story 2.2 - ScoringPayloadValidator..."      │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -225,17 +254,20 @@ Depends on: Phase 5 complete
 
 | Story | Files Created/Modified | Conflicts With |
 |-------|------------------------|----------------|
-| 0.1 | PDFExporter.ts, WordExporter.ts, ExcelExporter.ts, QuestionnaireSchema.ts | None (existing files) |
+| 0.1 | questionnaire-prompt.ts, QuestionnaireSchema.ts, PDFExporter.ts, WordExporter.ts, ExcelExporter.ts | None (existing files) |
 | 1.1 | schema/responses.ts, schema/dimensionScores.ts, schema/assessmentResults.ts, repos/* | None (new files) |
-| 2.1 | types/ScoringTypes.ts, prompts/scoringPrompt.ts, tools/scoringComplete.ts | None (new files) |
-| 2.2 | domain/ScoringPayloadValidator.ts | None (new file) |
+| 2.1 | types/ScoringTypes.ts, types/ConversationMode.ts, prompts/scoringPrompt.ts, tools/scoringComplete.ts, rubric.ts | None (new files) |
+| 2.2 | domain/ScoringPayloadValidator.ts | **2.1** (imports types) - must run after 2.1 |
 | 3.1 | services/ScoringService.ts | None (new file) |
 | 4.1 | ModeSelector.tsx, RotatingStatus.tsx, ScoringWarnings.tsx | None |
 | 4.2 | ScoringResultCard.tsx | None |
 | 4.3 | IScoringPDFExporter.ts, ScoringPDFExporter.ts, IScoringWordExporter.ts, ScoringWordExporter.ts | None (new files) |
 | 5.1 | ChatServer.ts | Potential conflict if 4.1 touches ChatServer |
 
-**Note:** Phase 4 agents work on completely separate files - safe for parallel execution.
+**Notes:**
+- Phase 2 is sequential: 2.2 imports types from 2.1
+- Phase 4 agents work on completely separate files - safe for parallel execution
+- Story 2.1 adds `'scoring'` to ConversationMode enum (shared dependency for 4.1 and 5.1)
 
 ---
 
@@ -246,7 +278,7 @@ Depends on: Phase 5 complete
 | 0.1 | ✅ Yes | Prerequisite - all later phases depend on ID in exports |
 | 1.1 | ✅ Yes | Foundation - repos must work before service can store |
 | 2.1 | ❌ No | Configuration/types - tested via service integration |
-| 2.2 | ✅ Yes | Domain logic - critical validation, could regress |
+| 2.2 | ✅ Yes + Contract | Domain logic + 1 contract test for schema↔validator alignment |
 | 3.1 | ✅ Yes | Core orchestration - Phase 5 depends on it working |
 | 4.1 | ❌ No | UI - no downstream dependencies, test in Phase 6 |
 | 4.2 | ❌ No | UI - no downstream dependencies, test in Phase 6 |
@@ -325,10 +357,22 @@ Each story file should follow this structure (~700 lines target):
 
 ### What Was Completed
 1. Full Epic 15 planning (`scoring-analysis-plan.md`)
-2. Code review integration (payload validation, provenance, PHI handling)
-3. Sprint structure design (this file)
-4. CLAUDE.md updated (AI vs Code responsibilities)
-5. architecture-layers.md updated (module status)
+2. Code review round 1 (payload validation, provenance, PHI handling)
+3. Code review round 2 (phase sequencing, scope expansion, contract tests)
+4. Sprint structure design (this file)
+5. CLAUDE.md updated (AI vs Code responsibilities)
+6. architecture-layers.md updated (module status)
+
+### Code Review Changes Applied (Round 2)
+| Change | Action Taken |
+|--------|--------------|
+| Phase 2 parallel conflict | Made sequential (2.1 → 2.2) |
+| Story 0.1 scope | Expanded: prompt → DTO → exporters |
+| ConversationMode shared dependency | Added to Story 2.1 |
+| Contract test for validator | Added to Story 2.2 |
+| Retry behavior | Added to Story 1.1 |
+| PHI reference | Added pointer to main plan |
+| Scanned PDF detection | Out of scope (Epic 17) |
 
 ### What Needs to Be Done Next
 1. Create 10 story files following the structure above
@@ -368,7 +412,8 @@ Each story file should follow this structure (~700 lines target):
 `feature/epic-15-scoring-analysis`
 
 ### Files Modified This Session
-- `tasks/epic-15/scoring-analysis-plan.md` - extensive updates
+- `tasks/epic-15/scoring-analysis-plan.md` - extensive updates (code review round 1)
+- `tasks/epic-15/sprint-structure.md` - this file (code review round 2)
 - `CLAUDE.md` - AI vs Code rule updated
 - `docs/design/architecture/architecture-layers.md` - module status added
 
