@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-export type ConversationMode = 'consult' | 'assessment';
+export type ConversationMode = 'consult' | 'assessment' | 'scoring';
 
 export interface ModeOption {
   value: ConversationMode;
@@ -28,6 +28,11 @@ const MODE_OPTIONS: ModeOption[] = [
     value: 'assessment',
     name: 'Assessment',
     description: 'Structured vendor assessment workflow',
+  },
+  {
+    value: 'scoring',
+    name: 'Scoring',
+    description: 'Score completed questionnaire responses',
   },
 ];
 

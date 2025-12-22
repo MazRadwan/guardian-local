@@ -12,7 +12,7 @@ export const conversations = pgTable(
       .references(() => users.id),
 
     // Mode
-    mode: text('mode').notNull().$type<'consult' | 'assessment'>().default('consult'),
+    mode: text('mode').notNull().$type<'consult' | 'assessment' | 'scoring'>().default('consult'),
 
     // Optional links
     assessmentId: uuid('assessment_id').references(() => assessments.id),

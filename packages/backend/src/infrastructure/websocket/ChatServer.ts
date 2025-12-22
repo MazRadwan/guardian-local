@@ -112,7 +112,7 @@ export class ChatServer {
   ): Promise<{
     messages: ClaudeMessage[];
     systemPrompt: string;
-    mode: 'consult' | 'assessment';
+    mode: 'consult' | 'assessment' | 'scoring';
     promptCache: { usePromptCache: boolean; cachedPromptId?: string };
   }> {
     // Get conversation to determine mode
@@ -1108,7 +1108,7 @@ Reply with: **1**, **2**, or **3**
       conversationId: string;
       userId: string;
       assessmentId: string | null;
-      mode?: 'consult' | 'assessment';
+      mode?: 'consult' | 'assessment' | 'scoring';
     }
   ): Promise<void> {
     for (const toolUse of toolUseBlocks) {

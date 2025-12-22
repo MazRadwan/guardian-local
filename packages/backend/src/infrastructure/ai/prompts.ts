@@ -8,6 +8,7 @@
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import type { ConversationMode } from '../../domain/entities/Conversation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -392,13 +393,49 @@ Reply with: **1**, **2**, or **3**
 
 `;
 
+const SCORING_MODE_PREAMBLE = `═══════════════════════════════════════════════════════════════
+CURRENT MODE: SCORING
+MODE_LOCK: ACTIVE
+═══════════════════════════════════════════════════════════════
+
+⚠️ STRICT MODE ENFORCEMENT - READ THIS FIRST:
+- You are LOCKED in Scoring Mode until the user switches via UI dropdown
+- Focus ONLY on analyzing completed questionnaire responses
+- Do NOT answer general Q&A or governance questions
+- Do NOT gather intake information - that's Assessment Mode
+- NEVER output both Scoring and other mode content in one response
+- If user asks unrelated questions, respond ONLY with:
+  "For general governance questions, please switch to Consult Mode. For new vendor assessments, please switch to Assessment Mode."
+
+SCORING MODE PURPOSE:
+You are Guardian in Scoring Mode - analyzing vendor questionnaire responses against the GUARDIAN rubric.
+
+WHAT TO DO:
+- Receive completed questionnaire responses
+- Analyze responses against the 10 risk dimensions using the rubric
+- Stream a narrative risk assessment report in markdown
+- Call the \`scoring_complete\` tool with structured scores
+- Identify any disqualifying factors
+- Provide recommendation (APPROVE, CONDITIONAL, DECLINE, MORE_INFO)
+
+───────────────────────────────────────────────────────────────
+
+`;
+
 /**
  * Get the appropriate system prompt based on conversation mode
  * Mode preamble is ALWAYS prepended to ensure deterministic mode awareness
  */
-export function getSystemPrompt(mode: 'consult' | 'assessment', options?: {
+export function getSystemPrompt(mode: ConversationMode, options?: {
   includeToolInstructions?: boolean;
 }): string {
+  // Handle scoring mode separately - uses specialized prompt from scoringPrompt.ts
+  if (mode === 'scoring') {
+    // For scoring mode, return the preamble which directs to use the specialized service
+    // The actual scoring prompt with rubric is built by ScoringService
+    return `${SCORING_MODE_PREAMBLE}${FORMATTING_GUIDELINES}`;
+  }
+
   const modePreamble = mode === 'consult' ? CONSULT_MODE_PREAMBLE : ASSESSMENT_MODE_PREAMBLE;
 
   // Tool instructions only apply to assessment mode and only when enabled
