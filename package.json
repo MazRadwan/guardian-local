@@ -11,6 +11,7 @@
     "dev": "pnpm --parallel -r dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "test:unit": "pnpm -r test:unit",
     "test:coverage": "pnpm -r test:coverage",
     "lint": "pnpm -r lint",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",

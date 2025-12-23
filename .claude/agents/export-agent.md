@@ -83,20 +83,17 @@ See `tasks/mvp-tasks.md` Epic 7 for detailed specifications.
 
 ## Test Requirements
 
-**Integration tests:**
-- PDFExporter generates valid PDF
-- PDF contains all questions
-- WordExporter generates valid .docx
-- ExcelExporter generates valid .xlsx
-- Files are readable in respective applications
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**E2E tests:**
-- GET /export/pdf returns PDF file
-- Content-Disposition header correct
-- File downloads successfully
-- Assessment status updated to 'exported'
+**What to test for this epic:**
+- Integration: PDFExporter generates valid PDF with all questions
+- Integration: WordExporter generates valid .docx
+- Integration: ExcelExporter generates valid .xlsx
+- E2E: GET /export/pdf returns PDF file with correct headers
 
-**Run:** `npm test`
+**Commands:**
+- During dev: `pnpm --filter @guardian/backend test:watch:unit`
+- Before commit: `pnpm test:unit` + `pnpm test:integration`
 
 ## Dependencies
 
@@ -110,7 +107,7 @@ See `tasks/mvp-tasks.md` Epic 7 for detailed specifications.
 Before marking this epic complete, verify:
 
 - [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 7 stories)
-- [ ] Tests written and passing (unit + integration, >70% coverage)
+- [ ] Tests written and passing (`pnpm test:unit` + `pnpm test:integration`)
 - [ ] PDF export generates correctly (formatted, professional)
 - [ ] Word export works (.docx format)
 - [ ] Excel export works (spreadsheet format)

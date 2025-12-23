@@ -131,8 +131,14 @@ grep -l "Status: pending" tasks/epic-12/4.3*.md | head -1
 
 ## Test Requirements
 
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
+
 **Run before marking any story complete:**
 ```bash
+# Watch mode during dev
+pnpm --filter @guardian/web test:watch
+
+# Before commit
 pnpm --filter @guardian/web test
 ```
 

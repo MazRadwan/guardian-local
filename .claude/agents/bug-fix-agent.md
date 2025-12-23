@@ -57,9 +57,10 @@ Use TodoWrite to create task list:
 
 ### Step 4: Implement Fix
 - Fix the code
-- Add/update tests
-- Ensure all tests pass: `npm test`
-- Check coverage: `npm run test:coverage`
+- Add/update tests (refer to `.claude/skills/testing/SKILL.md` for patterns)
+- Run tests: `pnpm test:unit` (fast feedback)
+- If DB touched: `pnpm test:integration`
+- Check coverage: `pnpm test:coverage`
 
 ### Step 5: Code Review
 ```bash

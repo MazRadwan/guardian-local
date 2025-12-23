@@ -61,7 +61,9 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
   })
 
   afterAll(async () => {
-    // Cleanup (cascade will handle children)
+    // Cleanup in correct order (assessments FK to users is NO ACTION, not CASCADE)
+    await db.delete(assessments).where(eq(assessments.id, testAssessmentId))
+    await db.delete(vendors).where(eq(vendors.id, testVendorId))
     await db.delete(users).where(eq(users.id, testUserId))
   })
 

@@ -38,31 +38,78 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 ### Test Requirements
 **IMPORTANT:** All features MUST have tests. No exceptions.
 
-**Before building:**
-- Plan test cases (what should pass/fail?)
-- Check existing tests for patterns
+#### Test Commands (Use the Right One)
 
-**While building:**
-- Domain layer: Write tests FIRST (TDD)
-- Services: Write tests WITH implementation
-- Integration: Write tests AFTER implementation
+| Command | What it runs | Speed | When to use |
+|---------|--------------|-------|-------------|
+| `pnpm test:unit` | Unit tests only | ~10-20s | During development |
+| `pnpm test:integration` | DB/repository tests | ~30-60s | After DB changes |
+| `pnpm test` | Unit + integration | ~1-2min | Before commit |
+| `pnpm test:e2e` | E2E tests | ~2-5min | Before PR/merge |
 
-**Test requirements:**
-- ✅ Unit tests for domain logic (entities, business rules, scoring)
-- ✅ Integration tests for repositories (Drizzle with test DB)
-- ✅ E2E tests for critical workflows (auth, chat, question generation)
-- ✅ Minimum 70% coverage (aim for 80%+)
+**Package-specific commands:**
+```bash
+# Backend
+pnpm --filter @guardian/backend test:unit
+pnpm --filter @guardian/backend test:integration
+pnpm --filter @guardian/backend test:watch        # Watch mode (recommended during dev)
+pnpm --filter @guardian/backend test:watch:unit   # Watch unit tests only
 
-- **E2E strategy (Epic 13+):**
-- Keep E2E only for critical happy paths (auth, chat, question gen, export/resume, stepper main flow).
-- UI polish/variants go to component/integration tests; one E2E smoke per epic is enough.
-- Tag suites: run `smoke` on PRs, full E2E nightly or pre-release.
-- Stabilize: deterministic fixtures/seeds, mock externals, assert via test-ids, wait on events (no sleeps), isolate storage per test.
+# Frontend
+pnpm --filter @guardian/web test:unit
+pnpm --filter @guardian/web test:watch
+pnpm --filter @guardian/web test:e2e              # Playwright
+```
+
+#### When to Run Tests (Tiered Approach)
+
+**During development (use watch mode):**
+```bash
+# Start watch mode in the package you're working on
+pnpm --filter @guardian/backend test:watch:unit
+# Jest will re-run only affected tests on file save
+```
 
 **Before committing:**
-- Run: `npm test` (all tests must pass)
-- Run: `npm run test:coverage` (check coverage)
-- Fix failures before proceeding
+- Run `pnpm test:unit` — Must pass
+- If you touched DB/repositories: also run `pnpm test:integration`
+
+**Before PR/merge:**
+- Run `pnpm test` — Full unit + integration suite
+- E2E tests run in CI (or run locally if touching critical paths)
+
+#### What Tests to Write
+
+| Layer | Test type | When to write | Mock strategy |
+|-------|-----------|---------------|---------------|
+| **Domain** (entities, value objects) | Unit | TDD (test first) | No mocks needed |
+| **Application** (services) | Unit | With implementation | Mock repositories, external APIs |
+| **Infrastructure** (repositories) | Integration | After implementation | Real test DB |
+| **API/WebSocket** | E2E | Critical paths only | Real services, test DB |
+| **UI Components** | Unit | With implementation | Mock hooks, services |
+
+#### What NOT to Test
+
+- ❌ Simple getters/setters with no logic
+- ❌ Framework code (Express routing, Next.js config)
+- ❌ Third-party library internals
+- ❌ Trivial pass-through functions
+- ❌ Every edge case of external APIs (mock them)
+
+#### Test Speed Expectations
+
+- **Unit tests:** <100ms each (if slower, you're hitting real I/O)
+- **Integration tests:** <1s each (DB operations)
+- **E2E tests:** <10s each (full workflows)
+
+If tests need 1+ minute timeouts, something is wrong — likely missing mocks or hitting real external services.
+
+#### E2E Strategy
+
+- Keep E2E only for critical happy paths (auth, chat, question gen, export)
+- UI polish/variants go to component tests; one E2E smoke per epic is enough
+- Use deterministic fixtures/seeds, mock externals, assert via test-ids
+- Wait on events (no sleeps), isolate storage per test
 
 **If tests fail:** Fix the code, don't skip the tests.
 
@@ -145,6 +192,7 @@ Sample_assessment_YAML_COMPLETED.yaml # Test data example
 ❌ **Never add tasks outside /tasks/** - Single source of truth
 ❌ **Never make Claude do arithmetic** - Code calculates, Claude interprets
 ❌ **Never treat 111 questions as rigid** - Question count is dynamic (78-126)
+❌ **Never use Vitest** - Always use Jest for all tests
 
 ---
 
@@ -270,11 +318,12 @@ Main Agent identifies: "Need to complete Epic 9 Stories 9.1-9.3"
 - [ ] Read `tasks/task-overview.md` for current status
 - [ ] Read `tasks/implementation-logs/epic-X.md` (if epic in progress and log exists)
 - [ ] Check git log for recent changes: `git log --oneline -10`
-- [ ] Run tests to verify starting state: `npm test`
+- [ ] Start watch mode: `pnpm --filter @guardian/backend test:watch:unit`
 
 ### After Completing Each Story
-- [ ] Run all tests: `npm test` (must pass)
-- [ ] Run coverage: `npm run test:coverage` (check 70% minimum)
+- [ ] Run unit tests: `pnpm test:unit` (must pass)
+- [ ] If DB changes: `pnpm test:integration` (must pass)
+- [ ] Run coverage: `pnpm test:coverage` (check 70% minimum)
 - [ ] Invoke code-review agent (use Task tool)
 - [ ] Consider updating implementation log (optional but helpful)
 - [ ] Commit code changes

@@ -71,14 +71,19 @@ You review those specific files, then either approve or request fixes for Story 
 
 **Run tests:**
 ```bash
-cd packages/backend
-npm test
+# Fast unit tests first
+pnpm test:unit
+
+# If DB changes involved
+pnpm test:integration
 ```
 
 **Check coverage:**
 ```bash
-npm run test:coverage
+pnpm test:coverage
 ```
+
+**Refer to:** `.claude/skills/testing/SKILL.md` for test patterns and expectations.
 
 **Minimum:** 70% coverage. If below, flag as issue.
 
@@ -196,11 +201,14 @@ docker ps | grep guardian-postgres
 **If Docker is running, proceed with tests:**
 
 ```bash
-cd packages/backend
-npm test
+# Unit tests (no Docker needed)
+pnpm test:unit
+
+# Integration tests (needs Docker)
+pnpm test:integration
 
 # Check coverage
-npm run test:coverage
+pnpm test:coverage
 ```
 
 **Note:** Unit tests run without Docker. Integration/E2E tests need PostgreSQL container.

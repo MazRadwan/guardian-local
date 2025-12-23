@@ -89,22 +89,18 @@ See `tasks/mvp-tasks.md` Epic 5 for detailed specifications.
 
 ## Test Requirements
 
-**Unit tests:**
-- Vendor.create() validates name
-- Assessment.create() validates assessment_type
-- AssessmentService (mock repositories)
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration tests:**
-- Repositories save/find vendors
-- Repositories save/find assessments
-- JSONB fields persist correctly
+**What to test for this epic:**
+- Unit: Vendor.create() validates name
+- Unit: Assessment.create() validates assessment_type
+- Unit: AssessmentService (mock repositories)
+- Integration: Repositories save/find vendors/assessments
+- E2E: Vendor + Assessment CRUD endpoints
 
-**E2E tests:**
-- POST /api/vendors creates vendor
-- POST /api/assessments creates assessment
-- GET /api/vendors/:id/assessments returns history
-
-**Run:** `npm test`
+**Commands:**
+- During dev: `pnpm --filter @guardian/backend test:watch:unit`
+- Before commit: `pnpm test:unit` + `pnpm test:integration`
 
 ## Dependencies
 
@@ -117,7 +113,7 @@ See `tasks/mvp-tasks.md` Epic 5 for detailed specifications.
 Before marking this epic complete, verify:
 
 - [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 5 stories)
-- [ ] Tests written and passing (unit + integration, >70% coverage)
+- [ ] Tests written and passing (`pnpm test:unit` + `pnpm test:integration`)
 - [ ] Assessment CRUD operations work correctly
 - [ ] Vendor management functional (create, update, list)
 - [ ] Repository pattern implemented (IAssessmentRepository, IVendorRepository)

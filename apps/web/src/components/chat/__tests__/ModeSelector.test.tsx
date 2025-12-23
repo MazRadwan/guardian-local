@@ -61,7 +61,7 @@ describe('ModeSelector', () => {
     });
 
     it('shows all mode options when open', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);
@@ -72,7 +72,7 @@ describe('ModeSelector', () => {
     });
 
     it('shows mode descriptions in dropdown', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);
@@ -115,7 +115,7 @@ describe('ModeSelector', () => {
     });
 
     it('calls onModeChange when selecting scoring mode', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);
@@ -359,7 +359,7 @@ describe('ModeSelector', () => {
       render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
-      expect(badge).toHaveAttribute('aria-haspopup', 'listbox');
+      expect(badge).toHaveAttribute('aria-haspopup', 'dialog');
     });
 
     it('dropdown has role="dialog" (ShadCN Popover)', async () => {
@@ -373,7 +373,7 @@ describe('ModeSelector', () => {
     });
 
     it('mode options have role="option"', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);

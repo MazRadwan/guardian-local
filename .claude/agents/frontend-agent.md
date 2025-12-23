@@ -115,13 +115,17 @@ apps/web/src/
 
 ## Test Requirements
 
-**Component tests (React Testing Library):**
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
+
+**What to test for this epic:**
 - ChatMessage renders correctly for user/assistant
 - MessageInput sends message on Enter key
 - ModeSwitcher changes mode
 - WebSocket hook connects and sends messages
 
-**Run:** `npm test` in apps/web
+**Commands:**
+- During dev: `pnpm --filter @guardian/web test:watch`
+- Before commit: `pnpm --filter @guardian/web test`
 
 ## Dependencies
 
@@ -134,7 +138,7 @@ apps/web/src/
 Before marking this epic complete, verify:
 
 - [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 4 stories)
-- [ ] Tests written and passing (component + integration, >70% coverage)
+- [ ] Tests written and passing (`pnpm --filter @guardian/web test`)
 - [ ] Chat interface renders and functions correctly
 - [ ] WebSocket connection works (send/receive messages)
 - [ ] Message streaming displays properly
@@ -164,7 +168,7 @@ Document continuously (not just at end):
 **CRITICAL:** After completing EACH story, follow this workflow:
 
 1. **Update implementation log** with what was built, bugs found, fixes applied
-2. **Run tests:** `npm test` - all must pass
+2. **Run tests:** `pnpm --filter @guardian/web test` - all must pass
 3. **Invoke code-reviewer:** Use Task tool with subagent_type="code-reviewer"
 4. **Iterate on feedback:** Fix issues, re-invoke code-reviewer until approved
 5. **Move to next story:** Once approved, proceed to next story

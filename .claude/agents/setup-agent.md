@@ -72,13 +72,15 @@ See `tasks/mvp-tasks.md` Epic 1 for detailed story specifications.
 
 ## Test Requirements
 
-**Epic 1 tests:**
-- Integration test: Database connection
-- Integration test: Schema verification (6 tables exist)
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
+
+**What to test for this epic:**
+- Integration: Database connection
+- Integration: Schema verification (6 tables exist)
 - No unit tests needed (infrastructure setup)
 
-**Before completing:**
-- Run: `npm test` (if tests exist)
+**Commands:**
+- Run: `pnpm test:integration` (after tests exist)
 - Verify: `docker-compose up` works
 - Verify: Database migration applied successfully
 

@@ -202,28 +202,22 @@ apps/web/src/
 
 ## Test Requirements
 
-**Component tests (React Testing Library):**
-- Sidebar renders in expanded/minimized states
-- Sidebar toggles smoothly
-- Composer textarea auto-resizes
-- ModeSelector opens dropdown above badge
-- ConversationList renders conversations
-- MessageActions copy/regenerate work
-- Responsive behavior (mobile drawer)
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration tests:**
-- Full conversation flow (create → send → switch → return)
-- Sidebar + conversation switching
-- Mode switching + message sending
+**What to test for this epic:**
+- Component: Sidebar renders in expanded/minimized states
+- Component: Composer textarea auto-resizes
+- Component: ModeSelector opens dropdown above badge
+- Component: ConversationList renders conversations
+- Integration: Full conversation flow (create → send → switch → return)
+- Accessibility: Keyboard navigation, WCAG AA contrast
 
-**Accessibility:**
-- Keyboard navigation (Tab, Enter, Escape, Arrows)
-- Screen reader compatibility
-- WCAG AA color contrast (4.5:1)
-- Focus indicators visible
+**Commands:**
+- During dev: `pnpm --filter @guardian/web test:watch`
+- Before commit: `pnpm --filter @guardian/web test`
+- E2E: `pnpm --filter @guardian/web test:e2e`
 
-**Run tests:** `npm test` in apps/web
-**Coverage:** Maintain >70% (currently 78.79%)
+**Coverage:** Maintain >70%
 
 ## Granular Story Approach
 
@@ -464,9 +458,8 @@ This creates a narrative of the development process, invaluable for debugging an
 
 1. **Run tests:**
    ```bash
-   cd apps/web
-   npm test
-   npm run lint
+   pnpm --filter @guardian/web test
+   pnpm --filter @guardian/web lint
    ```
 
 2. **Self-review:** Check Definition of Done checklist above

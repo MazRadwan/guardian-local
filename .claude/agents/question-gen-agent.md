@@ -116,25 +116,21 @@ Return structured JSON:
 
 ## Test Requirements
 
-**Unit tests:**
-- QuestionParser validates JSON structure
-- QuestionService calls Claude client (mock)
-- Question entity validation
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration tests:**
-- DrizzleQuestionRepository bulk inserts 87 questions
-- Questions retrieved in correct order
-- Unique constraint enforced
-
-**E2E tests:**
-- POST /generate-questions creates questions
-- Claude API called successfully
-- Questions saved to database
-- Assessment status updated
+**What to test for this epic:**
+- Unit: QuestionParser validates JSON structure
+- Unit: QuestionService calls Claude client (mock)
+- Unit: Question entity validation
+- Integration: DrizzleQuestionRepository bulk inserts
+- Integration: Questions retrieved in correct order
+- E2E: POST /generate-questions full flow
 
 **Manual test:** Generate real questions, verify quality
 
-**Run:** `npm test`
+**Commands:**
+- During dev: `pnpm --filter @guardian/backend test:watch:unit`
+- Before commit: `pnpm test:unit` + `pnpm test:integration`
 
 ## Dependencies
 
@@ -158,7 +154,7 @@ Return structured JSON:
 Before marking this epic complete, verify:
 
 - [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 6 stories)
-- [ ] Tests written and passing (unit + integration + E2E, >70% coverage)
+- [ ] Tests written and passing (`pnpm test:unit` + `pnpm test:integration`)
 - [ ] Claude API integration works (question generation successful)
 - [ ] Questions persisted to database correctly
 - [ ] API key secure (env var only, never in code or frontend)

@@ -96,21 +96,19 @@ See `tasks/mvp-tasks.md` Epic 3 for detailed specifications.
 
 ## Test Requirements
 
-**Unit tests:**
-- Conversation.switchMode() validates transitions
-- Message.create() validates role and content structure
-- ConversationService methods (mock repositories)
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration tests:**
-- Repositories save/retrieve with test database
-- JSONB content persists correctly
+**What to test for this epic:**
+- Unit: Conversation.switchMode() validates transitions
+- Unit: Message.create() validates role and content structure
+- Unit: ConversationService methods (mock repositories)
+- Integration: Repositories save/retrieve with test database
+- Integration: JSONB content persists correctly
+- E2E: WebSocket connection, send_message, get_history
 
-**E2E tests:**
-- WebSocket connection with valid JWT
-- send_message event saves to database
-- get_history returns messages in order
-
-**Run before completing:** `npm test`
+**Commands:**
+- During dev: `pnpm --filter @guardian/backend test:watch:unit`
+- Before commit: `pnpm test:unit` + `pnpm test:integration`
 
 ## Dependencies
 
@@ -123,7 +121,7 @@ See `tasks/mvp-tasks.md` Epic 3 for detailed specifications.
 Before marking this epic complete, verify:
 
 - [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 3 stories)
-- [ ] Tests written and passing (unit + integration + E2E, >70% coverage)
+- [ ] Tests written and passing (`pnpm test:unit` + `pnpm test:integration`)
 - [ ] WebSocket server connects and streams messages correctly
 - [ ] Message persistence works (save/retrieve from database)
 - [ ] Authentication enforced (JWT required for WebSocket connection)

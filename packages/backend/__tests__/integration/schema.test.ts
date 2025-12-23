@@ -6,14 +6,14 @@ describe('Database Schema', () => {
     await queryClient.end()
   })
 
-  it('should have all 7 tables (6 MVP + files)', async () => {
+  it('should have all 10 tables', async () => {
     const result = await db.execute<{ tablename: string }>(
       sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
     )
 
     const tableNames = result.map((row) => row.tablename)
 
-    // Check all 6 MVP tables exist
+    // Check all MVP tables exist
     expect(tableNames).toContain('users')
     expect(tableNames).toContain('vendors')
     expect(tableNames).toContain('assessments')
@@ -22,9 +22,13 @@ describe('Database Schema', () => {
     expect(tableNames).toContain('messages')
     // Epic 16.6.9: Files table for attachment security
     expect(tableNames).toContain('files')
+    // Epic 15: Scoring tables
+    expect(tableNames).toContain('responses')
+    expect(tableNames).toContain('dimension_scores')
+    expect(tableNames).toContain('assessment_results')
 
-    // Should have exactly 7 tables
-    expect(tableNames).toHaveLength(7)
+    // Should have exactly 10 tables
+    expect(tableNames).toHaveLength(10)
   })
 
   it('should have users table with correct columns', async () => {

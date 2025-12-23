@@ -100,19 +100,18 @@ See `tasks/epic-11-questionnaire-extraction.md` for complete specifications.
 
 ## Test Requirements
 
-**Unit Tests:**
-- QuestionParser regex patterns
-- Detection logic in ChatServer
-- DownloadButton auth handling
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration Tests:**
-- Full extraction flow (detect → parse → persist → emit)
-- WebSocket event delivery
+**What to test for this epic:**
+- Unit: QuestionParser regex patterns
+- Unit: Detection logic in ChatServer
+- Unit: DownloadButton auth handling
+- Integration: Full extraction flow (detect → parse → persist → emit)
+- E2E: Complete flow: generate questionnaire → download → works
 
-**E2E Tests:**
-- Complete flow: generate questionnaire → download buttons appear → download works
-
-**Run:** `pnpm test` from monorepo root
+**Commands:**
+- During dev: `pnpm --filter @guardian/backend test:watch:unit`
+- Before commit: `pnpm test:unit` + `pnpm test:integration`
 
 ## Story Completion Workflow
 
