@@ -12,7 +12,7 @@ export interface Conversation {
   title: string;
   createdAt: Date;
   updatedAt: Date;
-  mode: 'consult' | 'assessment';
+  mode: 'consult' | 'assessment' | 'scoring';
 }
 
 export interface ChatState {

@@ -408,7 +408,7 @@ export class WebSocketClient {
     this.socket.emit('get_conversations');
   }
 
-  startNewConversation(mode: 'consult' | 'assessment' = 'consult'): void {
+  startNewConversation(mode: 'consult' | 'assessment' | 'scoring' = 'consult'): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
@@ -436,7 +436,7 @@ export class WebSocketClient {
     this.socket.emit('delete_conversation', { conversationId });
   }
 
-  switchMode(conversationId: string, mode: 'consult' | 'assessment'): void {
+  switchMode(conversationId: string, mode: 'consult' | 'assessment' | 'scoring'): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }

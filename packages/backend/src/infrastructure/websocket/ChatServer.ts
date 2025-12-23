@@ -4,6 +4,7 @@ import { AssessmentService } from '../../application/services/AssessmentService.
 import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
+import type { IScoringService, ScoringInput } from '../../application/interfaces/IScoringService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
 import type { IFileRepository, FileWithIntakeContext } from '../../application/interfaces/IFileRepository.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
@@ -14,6 +15,7 @@ import { assessmentModeTools } from '../ai/tools/index.js';
 import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
 import type { IntakeDocumentContext } from '../../domain/entities/Conversation.js';
 import type { MessageAttachment } from '../../domain/entities/Message.js';
+import type { ScoringProgressEvent, ScoringReportData } from '../../domain/scoring/types.js';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -55,6 +57,12 @@ interface GenerateQuestionnairePayload {
   selectedCategories?: string[];
 }
 
+interface StartScoringPayload {
+  conversationId: string;
+  assessmentId: string;
+  fileId: string;
+}
+
 export class ChatServer {
   private io: SocketIOServer;
   private conversationService: ConversationService;
@@ -77,7 +85,8 @@ export class ChatServer {
     private readonly questionnaireReadyService: QuestionnaireReadyService,
     private readonly questionnaireGenerationService: QuestionnaireGenerationService,
     private readonly questionService: QuestionService,
-    private readonly fileRepository: IFileRepository
+    private readonly fileRepository: IFileRepository,
+    private readonly scoringService?: IScoringService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -962,8 +971,8 @@ export class ChatServer {
         }
       });
 
-      // Switch conversation mode (consult ⟺ assessment)
-      socket.on('switch_mode', async (payload: { conversationId?: string; mode?: 'consult' | 'assessment' }) => {
+      // Switch conversation mode (consult ⟺ assessment ⟺ scoring)
+      socket.on('switch_mode', async (payload: { conversationId?: string; mode?: 'consult' | 'assessment' | 'scoring' }) => {
         try {
           if (!socket.userId) {
             socket.emit('error', {
@@ -1017,13 +1026,13 @@ export class ChatServer {
 
 Please select your assessment approach (reply with 1, 2, or 3):
 
-1️⃣ **Quick Assessment** (30-40 questions)  
+1️⃣ **Quick Assessment** (30-40 questions)
    ↳ Fast red-flag screening, ~15 minutes
 
 2️⃣ **Comprehensive Assessment** (85-95 questions)
    ↳ Full coverage across all 10 risk dimensions
 
-3️⃣ **Category-Focused Assessment**  
+3️⃣ **Category-Focused Assessment**
    ↳ Tailored to your AI solution type
 
 Reply with: **1**, **2**, or **3**
@@ -1041,6 +1050,45 @@ Reply with: **1**, **2**, or **3**
               role: guidanceMessage.role,
               content: guidanceMessage.content,
               createdAt: guidanceMessage.createdAt,
+            });
+          }
+
+          // Provide guidance when entering scoring mode
+          if (mode === 'scoring') {
+            const scoringGuidanceText = `
+📊 **Scoring Mode Activated**
+
+Upload a completed vendor questionnaire to analyze:
+
+**Supported Formats:**
+- PDF (text-based, not scanned)
+- Word (.docx)
+
+**Requirements:**
+- Must be an exported Guardian questionnaire
+- Contains Guardian Assessment ID for validation
+
+Once uploaded, I'll analyze the responses against our 10 risk dimensions and provide:
+- Composite risk score
+- Per-dimension breakdown
+- Executive summary
+- Recommendation (Approve/Conditional/Decline)
+
+**Drag & drop** your file or click the upload button to begin.
+`.trim();
+
+            const scoringGuidanceMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'assistant',
+              content: { text: scoringGuidanceText },
+            });
+
+            socket.emit('message', {
+              id: scoringGuidanceMessage.id,
+              conversationId: scoringGuidanceMessage.conversationId,
+              role: scoringGuidanceMessage.role,
+              content: scoringGuidanceMessage.content,
+              createdAt: scoringGuidanceMessage.createdAt,
             });
           }
         } catch (error) {
@@ -1062,6 +1110,11 @@ Reply with: **1**, **2**, or **3**
         // Mark for simulated streaming (Epic 12.5 path)
         if (socket.conversationId) {
           this.abortedStreams.add(socket.conversationId);
+
+          // Abort scoring if in progress (Epic 15)
+          if (this.scoringService) {
+            this.scoringService.abort(socket.conversationId);
+          }
         }
 
         // Emit acknowledgment - frontend will call finishStreaming()
@@ -1087,6 +1140,17 @@ Reply with: **1**, **2**, or **3**
       // Handle get_export_status (Story 13.9.1)
       socket.on('get_export_status', async (data: { conversationId: string }) => {
         await this.handleGetExportStatus(socket, data);
+      });
+
+      // Handle start_scoring event (Epic 15)
+      socket.on('start_scoring', async (payload: StartScoringPayload) => {
+        const userId = socket.userId;
+        if (!userId) {
+          console.error('[ChatServer] start_scoring called without authenticated user');
+          socket.emit('scoring_error', { error: 'Not authenticated', conversationId: payload.conversationId });
+          return;
+        }
+        await this.handleStartScoring(socket, payload, userId);
       });
 
       // Handle disconnect
@@ -1369,6 +1433,136 @@ Reply with: **1**, **2**, or **3**
       socket.emit('export_status_error', {
         conversationId,
         error: 'Internal server error',
+      });
+    }
+  }
+
+  /**
+   * Handle start_scoring event (Epic 15)
+   *
+   * Triggers ScoringService.score() and emits progress/complete events.
+   * Called after document upload when user clicks "Start Analysis".
+   */
+  public async handleStartScoring(
+    socket: AuthenticatedSocket,
+    payload: StartScoringPayload,
+    userId: string
+  ): Promise<void> {
+    const { conversationId, assessmentId, fileId } = payload;
+
+    console.log(`[ChatServer] start_scoring: conversationId=${conversationId}, assessmentId=${assessmentId}, fileId=${fileId}`);
+
+    // Validate payload
+    if (!conversationId || !assessmentId || !fileId) {
+      socket.emit('scoring_error', {
+        conversationId,
+        error: 'Missing required fields: conversationId, assessmentId, fileId',
+      });
+      return;
+    }
+
+    // Check if scoring service is available
+    if (!this.scoringService) {
+      console.error('[ChatServer] ScoringService not configured');
+      socket.emit('scoring_error', {
+        conversationId,
+        error: 'Scoring service not available',
+      });
+      return;
+    }
+
+    try {
+      // Validate conversation ownership
+      await this.validateConversationOwnership(conversationId, userId);
+
+      // Save system message indicating scoring started
+      await this.conversationService.sendMessage({
+        conversationId,
+        role: 'system',
+        content: { text: '[System: User initiated scoring analysis]' },
+      });
+
+      // Build scoring input
+      const scoringInput: ScoringInput = {
+        assessmentId,
+        conversationId,
+        fileId,
+        userId,
+      };
+
+      // Call scoring service with progress callback
+      const result = await this.scoringService.score(scoringInput, (event: ScoringProgressEvent) => {
+        // Emit progress to frontend
+        socket.emit('scoring_progress', {
+          conversationId,
+          status: event.status,
+          message: event.message,
+          progress: event.progress,
+        });
+      });
+
+      if (result.success && result.report) {
+        // Build result data for frontend
+        const resultData = {
+          compositeScore: result.report.payload.compositeScore,
+          recommendation: result.report.payload.recommendation,
+          overallRiskRating: result.report.payload.overallRiskRating,
+          executiveSummary: result.report.payload.executiveSummary,
+          keyFindings: result.report.payload.keyFindings,
+          dimensionScores: result.report.payload.dimensionScores.map(ds => ({
+            dimension: ds.dimension,
+            score: ds.score,
+            riskRating: ds.riskRating,
+          })),
+          batchId: result.batchId,
+          assessmentId,
+        };
+
+        // Emit scoring complete with results
+        socket.emit('scoring_complete', {
+          conversationId,
+          result: resultData,
+          narrativeReport: result.report.narrativeReport,
+        });
+
+        // Save narrative report as assistant message
+        const reportMessage = await this.conversationService.sendMessage({
+          conversationId,
+          role: 'assistant',
+          content: { text: result.report.narrativeReport },
+        });
+
+        // Emit the message for display
+        socket.emit('message', {
+          id: reportMessage.id,
+          conversationId: reportMessage.conversationId,
+          role: reportMessage.role,
+          content: reportMessage.content,
+          createdAt: reportMessage.createdAt,
+        });
+
+        console.log(`[ChatServer] Scoring complete: assessmentId=${assessmentId}, score=${result.report.payload.compositeScore}`);
+
+      } else {
+        // Scoring failed
+        socket.emit('scoring_error', {
+          conversationId,
+          error: result.error || 'Scoring failed',
+        });
+
+        // Save error message
+        await this.conversationService.sendMessage({
+          conversationId,
+          role: 'system',
+          content: { text: `[System: Scoring failed - ${result.error || 'Unknown error'}]` },
+        });
+      }
+
+    } catch (error) {
+      console.error('[ChatServer] Error in start_scoring:', error);
+      socket.emit('scoring_error', {
+        conversationId,
+        error: error instanceof Error ? error.message : 'Scoring failed',
       });
     }
   }

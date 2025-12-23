@@ -32,7 +32,11 @@ import { DrizzleVendorRepository } from './infrastructure/database/repositories/
 import { DrizzleAssessmentRepository } from './infrastructure/database/repositories/DrizzleAssessmentRepository.js';
 import { DrizzleQuestionRepository } from './infrastructure/database/repositories/DrizzleQuestionRepository.js';
 import { DrizzleFileRepository } from './infrastructure/database/repositories/DrizzleFileRepository.js';
+import { DrizzleResponseRepository } from './infrastructure/database/repositories/DrizzleResponseRepository.js';
+import { DrizzleDimensionScoreRepository } from './infrastructure/database/repositories/DrizzleDimensionScoreRepository.js';
+import { DrizzleAssessmentResultRepository } from './infrastructure/database/repositories/DrizzleAssessmentResultRepository.js';
 import { ClaudeClient } from './infrastructure/ai/ClaudeClient.js';
+import { ScoringPromptBuilder } from './infrastructure/ai/ScoringPromptBuilder.js';
 import { JWTProvider } from './infrastructure/auth/JWTProvider.js';
 import { AuthController } from './infrastructure/http/controllers/AuthController.js';
 import { VendorController } from './infrastructure/http/controllers/VendorController.js';
@@ -50,6 +54,8 @@ import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
 import { createFileStorage } from './infrastructure/storage/index.js';
 import { FileValidationService } from './application/services/FileValidationService.js';
+import { ScoringService } from './application/services/ScoringService.js';
+import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidator.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
@@ -77,6 +83,11 @@ const vendorRepo = new DrizzleVendorRepository();
 const assessmentRepo = new DrizzleAssessmentRepository();
 const questionRepo = new DrizzleQuestionRepository();
 const fileRepo = new DrizzleFileRepository();
+
+// Initialize scoring repositories (Epic 15)
+const responseRepo = new DrizzleResponseRepository();
+const dimensionScoreRepo = new DrizzleDimensionScoreRepository();
+const assessmentResultRepo = new DrizzleAssessmentResultRepository();
 
 // Initialize providers
 const jwtProvider = new JWTProvider(JWT_SECRET);
@@ -132,6 +143,22 @@ const documentParserService = new DocumentParserService(
   claudeClient   // IVisionClient - ClaudeClient implements both
 );
 
+// Initialize scoring components (Epic 15)
+const scoringPromptBuilder = new ScoringPromptBuilder();
+const scoringPayloadValidator = new ScoringPayloadValidator();
+const scoringService = new ScoringService(
+  responseRepo,
+  dimensionScoreRepo,
+  assessmentResultRepo,
+  assessmentRepo,
+  fileRepo,
+  fileStorage,
+  documentParserService, // IScoringDocumentParser
+  claudeClient,          // ILLMClient - ClaudeClient implements this
+  scoringPromptBuilder,
+  scoringPayloadValidator
+);
+
 // Initialize controllers
 const authController = new AuthController(authService);
 const vendorController = new VendorController(assessmentService);
@@ -171,7 +198,8 @@ const chatServer = new ChatServer(
   questionnaireReadyService,
   questionnaireGenerationService,
   questionService,
-  fileRepo
+  fileRepo,
+  scoringService  // Epic 15
 );
 
 console.log('[App] ChatServer initialized');

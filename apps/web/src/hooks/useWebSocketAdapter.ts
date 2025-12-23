@@ -6,7 +6,7 @@ import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, Questionnaire
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
-export type ConversationMode = 'consult' | 'assessment';
+export type ConversationMode = 'consult' | 'assessment' | 'scoring';
 
 /**
  * Event handlers for WebSocket adapter
@@ -24,7 +24,7 @@ export interface WebSocketEventHandlers {
   onConversationTitleUpdated?: (conversationId: string, title: string) => void;
   onStreamAborted?: (conversationId: string) => void;
   onConversationDeleted?: (conversationId: string) => void;
-  onConversationModeUpdated?: (data: { conversationId: string; mode: 'consult' | 'assessment' }) => void;
+  onConversationModeUpdated?: (data: { conversationId: string; mode: ConversationMode }) => void;
   onExportReady?: (data: ExportReadyPayload) => void;
   onExtractionFailed?: (data: ExtractionFailedPayload) => void;
   onQuestionnaireReady?: (data: QuestionnaireReadyPayload) => void;

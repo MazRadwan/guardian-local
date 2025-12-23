@@ -1,3 +1,5 @@
+import type { JSONSchemaProperty } from './IClaudeClient.js';
+
 /**
  * Port for LLM client - application layer abstraction
  * Infrastructure layer implements this with ClaudeClient
@@ -23,8 +25,16 @@ export interface StreamWithToolOptions {
   onToolUse?: (toolName: string, input: unknown) => void;
 }
 
+/**
+ * Tool definition compatible with Claude API
+ */
 export interface ToolDefinition {
   name: string;
   description: string;
-  input_schema: object;
+  input_schema: {
+    type: 'object';
+    properties: Record<string, JSONSchemaProperty>;
+    required?: string[];
+    additionalProperties?: boolean;
+  };
 }

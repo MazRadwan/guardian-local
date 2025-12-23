@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Guardian Risk Assessment Report</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      color: #1f2937;
+      line-height: 1.6;
+      padding: 40px;
+    }
+
+    .header {
+      border-bottom: 3px solid #7c3aed;
+      padding-bottom: 20px;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      color: #7c3aed;
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .header .subtitle {
+      color: #6b7280;
+      font-size: 14px;
+    }
+
+    .assessment-id {
+      font-family: monospace;
+      background: #f3f4f6;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .score-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+    }
+
+    .composite-score {
+      text-align: center;
+    }
+
+    .composite-score .value {
+      font-size: 48px;
+      font-weight: bold;
+      color: #1f2937;
+    }
+
+    .composite-score .label {
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .recommendation {
+      padding: 12px 24px;
+      border-radius: 24px;
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .recommendation.approve { background: #dcfce7; color: #166534; }
+    .recommendation.conditional { background: #fef3c7; color: #92400e; }
+    .recommendation.decline { background: #fee2e2; color: #991b1b; }
+    .recommendation.more_info { background: #dbeafe; color: #1e40af; }
+
+    .section {
+      margin-bottom: 30px;
+    }
+
+    .section h2 {
+      font-size: 18px;
+      color: #374151;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .executive-summary {
+      background: #f9fafb;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .findings-list {
+      list-style: none;
+    }
+
+    .findings-list li {
+      padding: 8px 0;
+      padding-left: 20px;
+      position: relative;
+      font-size: 14px;
+    }
+
+    .findings-list li::before {
+      content: "•";
+      color: #7c3aed;
+      position: absolute;
+      left: 0;
+    }
+
+    .dimension-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .dimension-table th {
+      text-align: left;
+      padding: 12px;
+      background: #f3f4f6;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .dimension-table td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .score-bar {
+      width: 100px;
+      height: 8px;
+      background: #e5e7eb;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .score-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+    }
+
+    .risk-low { background: #22c55e; }
+    .risk-medium { background: #f59e0b; }
+    .risk-high { background: #f97316; }
+    .risk-critical { background: #ef4444; }
+
+    .risk-badge {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .risk-badge.low { background: #dcfce7; color: #166534; }
+    .risk-badge.medium { background: #fef3c7; color: #92400e; }
+    .risk-badge.high { background: #ffedd5; color: #c2410c; }
+    .risk-badge.critical { background: #fee2e2; color: #991b1b; }
+
+    .footer {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+
+    .page-break { page-break-before: always; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>Guardian Risk Assessment Report</h1>
+    <p class="subtitle">
+      <strong>Vendor:</strong> {{vendorName}} |
+      <strong>Solution:</strong> {{solutionName}} |
+      <strong>Date:</strong> {{generatedAt}}
+    </p>
+    <p class="subtitle" style="margin-top: 8px;">
+      <span class="assessment-id">Assessment ID: {{assessmentId}}</span>
+    </p>
+  </div>
+
+  <!-- Score Banner -->
+  <div class="score-banner">
+    <div class="composite-score">
+      <div class="value">{{compositeScore}}</div>
+      <div class="label">Composite Score</div>
+    </div>
+    <div>
+      <span class="recommendation {{recommendation}}">{{recommendationLabel}}</span>
+      <p style="margin-top: 8px; font-size: 14px; color: #6b7280;">
+        Overall Risk: <strong>{{overallRiskRating}}</strong>
+      </p>
+    </div>
+  </div>
+
+  <!-- Executive Summary -->
+  <div class="section">
+    <h2>Executive Summary</h2>
+    <div class="executive-summary">{{executiveSummary}}</div>
+  </div>
+
+  <!-- Key Findings -->
+  <div class="section">
+    <h2>Key Findings</h2>
+    <ul class="findings-list">
+      {{#keyFindings}}
+      <li>{{.}}</li>
+      {{/keyFindings}}
+    </ul>
+  </div>
+
+  <!-- Dimension Scores -->
+  <div class="section page-break">
+    <h2>Dimension Scores</h2>
+    <table class="dimension-table">
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>Score</th>
+          <th>Rating</th>
+          <th>Visual</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#dimensionScores}}
+        <tr>
+          <td>{{label}}</td>
+          <td>{{score}}/100</td>
+          <td><span class="risk-badge {{riskRating}}">{{riskRating}}</span></td>
+          <td>
+            <div class="score-bar">
+              <div class="score-bar-fill risk-{{riskRating}}" style="width: {{score}}%"></div>
+            </div>
+          </td>
+        </tr>
+        {{/dimensionScores}}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Narrative Report -->
+  <div class="section page-break">
+    <h2>Detailed Analysis</h2>
+    <div class="narrative">{{narrativeReport}}</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <p>Generated by Guardian | Rubric Version: {{rubricVersion}} | Report ID: {{batchId}}</p>
+  </div>
+</body>
+</html>

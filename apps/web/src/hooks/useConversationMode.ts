@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 
-export type ConversationMode = 'consult' | 'assessment';
+export type ConversationMode = 'consult' | 'assessment' | 'scoring';
 
 export function useConversationMode(initialMode: ConversationMode = 'consult') {
   const [mode, setMode] = useState<ConversationMode>(initialMode);

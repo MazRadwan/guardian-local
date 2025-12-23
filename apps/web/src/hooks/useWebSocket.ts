@@ -121,7 +121,7 @@ export function useWebSocket({
     clientRef.current.fetchConversations();
   }, [isConnected]);
 
-  const startNewConversation = useCallback((mode: 'consult' | 'assessment' = 'consult') => {
+  const startNewConversation = useCallback((mode: 'consult' | 'assessment' | 'scoring' = 'consult') => {
     if (!clientRef.current || !isConnected) {
       console.warn('[useWebSocket] Cannot start new conversation - not connected');
       return;
@@ -141,7 +141,7 @@ export function useWebSocket({
     clientRef.current.deleteConversation(conversationId);
   }, [isConnected]);
 
-  const updateConversationMode = useCallback((conversationId: string, mode: 'consult' | 'assessment') => {
+  const updateConversationMode = useCallback((conversationId: string, mode: 'consult' | 'assessment' | 'scoring') => {
     if (!clientRef.current || !isConnected) {
       console.warn('[useWebSocket] Cannot switch mode - not connected');
       return;

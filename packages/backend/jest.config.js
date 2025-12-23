@@ -24,10 +24,12 @@ export default {
     // Mock ESM-only packages
     '^uuid$': '<rootDir>/__tests__/__mocks__/uuid.ts',
     '^file-type$': '<rootDir>/__tests__/__mocks__/file-type.ts',
+    '^marked$': '<rootDir>/__tests__/__mocks__/marked.ts',
+    '^isomorphic-dompurify$': '<rootDir>/__tests__/__mocks__/isomorphic-dompurify.ts',
   },
   // Transform ESM packages
   transformIgnorePatterns: [
-    '/node_modules/(?!(uuid|file-type|strtok3|token-types|peek-readable)/)',
+    '/node_modules/(?!(uuid|file-type|strtok3|token-types|peek-readable|marked)/)',
   ],
   transform: {
     '^.+\\.ts$': [
