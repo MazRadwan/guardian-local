@@ -344,6 +344,84 @@ it('should match snapshot', () => {
 
 ---
 
+## Is the Code Wrong or the Test Wrong?
+
+When a test fails, determine the root cause before fixing.
+
+### Signals the CODE is Wrong
+
+| Signal | Why |
+|--------|-----|
+| Test was passing, now fails after code change | You broke something |
+| Multiple tests for same feature failing | Systemic issue in code |
+| Test logic is simple and matches spec | Test is probably right |
+| Test has been stable for months | Unlikely to be the test |
+| Error shows wrong output/exception | Code behavior changed |
+
+### Signals the TEST is Wrong
+
+| Signal | Why |
+|--------|-----|
+| Test was just written or modified | New tests have bugs too |
+| Only 1 test fails, similar tests pass | Test might be overly specific |
+| Test checks implementation details | Brittle to refactoring |
+| Test expectation doesn't match docs/spec | Test misunderstands requirements |
+| Assertion is too specific (exact strings, timestamps) | Test is fragile |
+| Test setup is complex/convoluted | Setup might be wrong |
+
+### Diagnostic Steps
+
+1. **Read BOTH** the test AND the code under test
+2. **Check git blame** - who changed what recently?
+3. **Ask:** "Does the test match the documented behavior?"
+4. **Run related tests** - pattern or isolated failure?
+5. **Check:** Is it testing behavior vs implementation details?
+
+### Quick Heuristic
+
+```
+IF test existed before your changes AND was passing
+  → Your code is probably wrong
+
+IF you just wrote the test AND it fails
+  → Either could be wrong, verify both
+
+IF test checks exact strings/formats that changed
+  → Test is probably too brittle, update it
+
+IF multiple tests fail after your change
+  → Your code is probably wrong
+```
+
+### Examples
+
+**Code is wrong:**
+```typescript
+// Test: "should return user email in lowercase"
+// Expected: "test@example.com"
+// Actual: "TEST@EXAMPLE.COM"
+// → Code forgot to normalize, fix the code
+```
+
+**Test is wrong:**
+```typescript
+// Test: "should return error message"
+// Expected: "User not found"
+// Actual: "User with email test@x.com not found"
+// → Test is too specific about message format, fix the test
+```
+
+**Test is brittle:**
+```typescript
+// BAD: Exact timestamp match
+expect(result.createdAt).toBe('2024-01-15T10:30:00Z');
+
+// GOOD: Check it's a valid date
+expect(result.createdAt).toBeInstanceOf(Date);
+```
+
+---
+
 ## Checklist: Is My Test Good?
 
 - [ ] Test has a clear, descriptive name
