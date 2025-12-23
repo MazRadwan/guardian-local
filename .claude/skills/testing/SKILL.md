@@ -420,6 +420,44 @@ expect(result.createdAt).toBe('2024-01-15T10:30:00Z');
 expect(result.createdAt).toBeInstanceOf(Date);
 ```
 
+### When New Features Break Tests
+
+The heuristics above assume **unintentional** changes. When implementing a **new feature**, tests may fail because behavior **intentionally** changed.
+
+**Key question:** "Did I **intend** to change this behavior?"
+
+| Scenario | Action |
+|----------|--------|
+| Test is in the area you're changing AND new behavior matches requirements | Update the test |
+| Test checks old behavior you're intentionally replacing | Update the test |
+| Test failure is unrelated to your feature | Fix your code (regression) |
+| Test covers a side effect you didn't expect | Investigate - might be a bug |
+
+**Example - Update the test:**
+```typescript
+// You added scoring mode to ModeSelector (intentional)
+// OLD test expected 2 modes, now there are 3
+// → Update test to expect 3 modes
+expect(screen.getAllByRole('option')).toHaveLength(3);
+```
+
+**Example - Fix your code:**
+```typescript
+// You're adding scoring mode, but login tests start failing
+// Login is unrelated to scoring mode
+// → You accidentally broke auth, fix your code
+```
+
+**Agent workflow for new features:**
+1. Implement feature
+2. Run tests
+3. For each failure, ask:
+   - Is this test in the area I'm changing?
+   - Does my feature REQUIRE this behavior to change?
+   - YES to both → update test
+   - NO to either → fix code (regression)
+4. Write NEW tests for new functionality
+
 ---
 
 ## Checklist: Is My Test Good?
