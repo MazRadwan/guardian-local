@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, Check, MessageSquare, ClipboardList, BarChart3 } from 'lucide-react';
+import { ChevronDown, Check, MessageSquare, BarChart3 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export type ConversationMode = 'consult' | 'assessment' | 'scoring';
@@ -35,7 +35,7 @@ const MODE_OPTIONS: ModeOption[] = [
     value: 'assessment',
     name: 'Assessment',
     description: 'Structured vendor assessment workflow',
-    icon: <ClipboardList className="h-4 w-4" />,
+    icon: null,
   },
   {
     value: 'scoring',
@@ -88,7 +88,7 @@ export function ModeSelector({
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="start" sideOffset={8} className="w-72 p-0">
+      <PopoverContent side="top" align="start" sideOffset={8} className="w-72 p-0 z-[100] bg-white shadow-lg border border-gray-200 rounded-lg">
         <div className="px-3 py-2 border-b border-gray-100">
           <span className="text-xs font-medium uppercase tracking-wider text-gray-500">Mode</span>
         </div>
@@ -105,7 +105,7 @@ export function ModeSelector({
               role="option"
               aria-selected={option.value === selectedMode}
             >
-              <span className="mt-0.5 text-gray-500">{option.icon}</span>
+              {option.icon && <span className="mt-0.5 text-gray-500">{option.icon}</span>}
               <div className="flex-1">
                 <div className="text-sm font-medium text-gray-900">{option.name}</div>
                 <div className="text-xs text-gray-500 mt-0.5">{option.description}</div>

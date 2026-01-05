@@ -36,6 +36,8 @@ export interface ComposerProps {
   // Epic 16: Upload support
   wsAdapter?: WebSocketAdapterInterface;
   conversationId?: string;
+  // Epic 15: Scoring mode visibility
+  showScoringMode?: boolean;
 }
 
 export interface ComposerRef {
@@ -57,6 +59,8 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       // Epic 16 props
       wsAdapter,
       conversationId,
+      // Epic 15 props
+      showScoringMode = false,
     },
     ref
   ) => {
@@ -289,6 +293,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                         selectedMode={currentMode}
                         onModeChange={onModeChange}
                         disabled={disabled || modeChangeDisabled}
+                        showScoringMode={showScoringMode}
                       />
                     )}
 
