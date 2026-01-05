@@ -89,7 +89,9 @@ describe('useConversationSync', () => {
 
   describe('URL Synchronization', () => {
     it('should sync activeConversationId from URL param on mount', () => {
+      // URL and localStorage must MATCH for URL sync to work (guard against stale URLs)
       mockSearchParams.set('conversation', 'conv-url-456');
+      localStorage.setItem('guardian_conversation_id', 'conv-url-456');
 
       renderHook(() =>
         useConversationSync({
@@ -209,7 +211,7 @@ describe('useConversationSync', () => {
       expect(localStorage.getItem('guardian_conversation_id')).toBe('conv-persist-123');
     });
 
-    it('should NOT write when activeConversationId is null', () => {
+    it('should CLEAR localStorage when activeConversationId is null', () => {
       localStorage.setItem('guardian_conversation_id', 'conv-old-456');
 
       renderHook(() =>
@@ -219,8 +221,8 @@ describe('useConversationSync', () => {
         })
       );
 
-      // Should not modify localStorage
-      expect(localStorage.getItem('guardian_conversation_id')).toBe('conv-old-456');
+      // Should clear localStorage to prevent stale IDs from being passed on reconnect
+      expect(localStorage.getItem('guardian_conversation_id')).toBeNull();
     });
 
     it('should update localStorage on every conversation switch', () => {
@@ -429,8 +431,9 @@ describe('useConversationSync', () => {
     });
 
     it('should handle URL param sync + localStorage load together', () => {
-      localStorage.setItem('guardian_conversation_id', 'conv-stored-789');
-      mockSearchParams.set('conversation', 'conv-url-456');
+      // URL and localStorage must MATCH for URL sync to work (guard against stale URLs)
+      localStorage.setItem('guardian_conversation_id', 'conv-matching-123');
+      mockSearchParams.set('conversation', 'conv-matching-123');
 
       const { result } = renderHook(() =>
         useConversationSync({
@@ -444,10 +447,30 @@ describe('useConversationSync', () => {
         jest.runAllTimers();
       });
 
-      expect(result.current.savedConversationId).toBe('conv-stored-789');
+      expect(result.current.savedConversationId).toBe('conv-matching-123');
 
-      // Should also sync from URL
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-url-456');
+      // Should sync from URL (only works when localStorage matches URL)
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('conv-matching-123');
+    });
+
+    it('should NOT sync from URL if localStorage mismatches (stale URL guard)', () => {
+      // URL and localStorage have DIFFERENT values - guard should prevent restore
+      localStorage.setItem('guardian_conversation_id', 'conv-stored-different');
+      mockSearchParams.set('conversation', 'conv-url-stale');
+
+      renderHook(() =>
+        useConversationSync({
+          ...defaultParams,
+          activeConversationId: null,
+        })
+      );
+
+      act(() => {
+        jest.runAllTimers();
+      });
+
+      // Should NOT sync from URL because localStorage doesn't match (stale URL being cleared)
+      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('conv-url-stale');
     });
 
     it('should handle conversation switch with URL + localStorage updates', () => {
@@ -523,9 +546,9 @@ describe('useConversationSync', () => {
       // Simulate deletion (activeConversationId becomes null)
       rerender({ activeConversationId: null });
 
-      // localStorage should remain (deletion cleanup happens in useChatController)
-      // This hook only writes when activeConversationId is non-null
-      expect(localStorage.getItem('guardian_conversation_id')).toBe('conv-to-delete');
+      // localStorage should be CLEARED when activeConversationId is set to null
+      // This prevents stale IDs from being passed on reconnect
+      expect(localStorage.getItem('guardian_conversation_id')).toBeNull();
     });
   });
 

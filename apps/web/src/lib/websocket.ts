@@ -284,7 +284,14 @@ export class WebSocketClient {
     this.config = config;
   }
 
-  connect(): Promise<void> {
+  /**
+   * Connect to the WebSocket server.
+   * @param options Optional callbacks that must be registered BEFORE the socket connects
+   *                to avoid missing immediately-emitted events like connection_ready
+   */
+  connect(options?: {
+    onConnectionReady?: (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => void;
+  }): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         this.socket = io(this.config.url, {
@@ -297,6 +304,20 @@ export class WebSocketClient {
           reconnectionDelay: this.reconnectDelay,
           reconnectionAttempts: this.maxReconnectAttempts,
         });
+
+        // CRITICAL: Register connection_ready listener IMMEDIATELY after socket creation
+        // but BEFORE the 'connect' event fires. The server emits connection_ready
+        // right after the client connects, so we must register this listener first.
+        if (options?.onConnectionReady) {
+          this.socket.on('connection_ready', (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => {
+            console.log('[WebSocket] Connection ready:', {
+              hasActiveConversation: data.hasActiveConversation,
+              conversationId: data.conversationId,
+              resumed: data.resumed
+            });
+            options.onConnectionReady?.(data);
+          });
+        }
 
         this.socket.on('connect', () => {
           console.log('[WebSocket] Connected');

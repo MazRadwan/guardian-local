@@ -69,6 +69,10 @@ export function useWebSocket({
   const [isConnecting, setIsConnecting] = useState(false);
   const clientRef = useRef<WebSocketClient | null>(null);
 
+  // Ref to store latest onConnectionReady callback to avoid stale closures
+  const onConnectionReadyRef = useRef(onConnectionReady);
+  onConnectionReadyRef.current = onConnectionReady;
+
   const connect = useCallback(async () => {
     // Guard: Don't connect if already connected or connecting
     if (isConnecting || isConnected) return;
@@ -80,9 +84,17 @@ export function useWebSocket({
         url,
         token,
         conversationId,
-        // Note: Event callbacks registered dynamically in effect, not via config
+        // Note: Most event callbacks registered dynamically in effect, not via config
       });
-      await client.connect();
+
+      // CRITICAL: Pass onConnectionReady to connect() so it's registered BEFORE
+      // the socket actually connects. The server emits connection_ready immediately
+      // after connect, so we must register this listener before connect completes.
+      await client.connect({
+        onConnectionReady: onConnectionReadyRef.current
+          ? (data) => onConnectionReadyRef.current?.(data)
+          : undefined,
+      });
       clientRef.current = client;
       setIsConnected(true);
     } catch (error) {
@@ -290,12 +302,9 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
-    if (onConnectionReady) {
-      const unsub = client.onConnectionReady((data) => {
-        onConnectionReady(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    // NOTE: onConnectionReady is registered in connect() BEFORE the socket connects
+    // to ensure we don't miss the server's immediate connection_ready event.
+    // It's not registered here to avoid double-registration.
 
     // Story 13.9.2: Export status resume subscriptions
     if (onExportStatusNotFound) {
@@ -344,7 +353,8 @@ export function useWebSocket({
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onConnectionReady, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError]);
+  // NOTE: onConnectionReady is NOT in deps - it's registered in connect() before the socket connects
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {

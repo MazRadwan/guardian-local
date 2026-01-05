@@ -234,6 +234,16 @@ export function useWebSocketEvents({
         setActiveConversation(data.conversationId);
       } else {
         // SCENARIO 2: No active conversation (deleted/missing) - auto-create new chat
+        // CRITICAL: Clear localStorage BEFORE setActiveConversation(null) to prevent race condition
+        // The URL sync effect runs when activeConversationId changes and checks if localStorage
+        // matches the URL. If we clear localStorage first, the guard will fail and won't restore
+        // the stale ID from the URL.
+        console.log('[useWebSocketEvents] Clearing stale conversation ID and localStorage');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('guardian_conversation_id');
+        }
+        setActiveConversation(null);
+
         // Use sessionStorage guard to survive React Strict Mode double-mount
         const hasAutoCreated = sessionStorage.getItem('guardian_auto_created_chat');
 
