@@ -36,8 +36,6 @@ export interface ComposerProps {
   // Epic 16: Upload support
   wsAdapter?: WebSocketAdapterInterface;
   conversationId?: string;
-  // Epic 15: Scoring mode visibility
-  showScoringMode?: boolean;
 }
 
 export interface ComposerRef {
@@ -59,8 +57,6 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       // Epic 16 props
       wsAdapter,
       conversationId,
-      // Epic 15 props
-      showScoringMode = false,
     },
     ref
   ) => {
@@ -71,10 +67,10 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Epic 16: File upload (only enabled when wsAdapter and conversationId are provided)
     const uploadEnabled = !!wsAdapter && !!conversationId;
 
-    // MVP: Always use 'intake' mode for document parsing (extracts vendor context)
-    // Future: Wire 'scoring' mode when assessment mode needs to parse completed questionnaires
-    // See: packages/backend/src/application/interfaces/IScoringDocumentParser.ts
-    const uploadMode: UploadMode = 'intake';
+    // Epic 15 Story 5a.4: Dynamic upload mode based on conversation mode
+    // - 'scoring' mode: Parse completed questionnaires for risk analysis
+    // - All other modes: Extract vendor context for intake
+    const uploadMode: UploadMode = currentMode === 'scoring' ? 'scoring' : 'intake';
 
     // Use stable fallback adapter when wsAdapter not provided
     // Module-level constant prevents subscription thrashing from object identity changes
@@ -293,7 +289,6 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                         selectedMode={currentMode}
                         onModeChange={onModeChange}
                         disabled={disabled || modeChangeDisabled}
-                        showScoringMode={showScoringMode}
                       />
                     )}
 

@@ -4,7 +4,7 @@
  * Implements IAssessmentRepository using Drizzle ORM
  */
 
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, and, inArray } from 'drizzle-orm'
 import { db } from '../client'
 import { assessments } from '../schema/assessments'
 import { vendors } from '../schema/vendors'
@@ -203,5 +203,20 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
         createdBy: assessment.createdBy,
       })
     )
+  }
+
+  async hasExportedAssessments(userId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ id: assessments.id })
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.createdBy, userId),
+          inArray(assessments.status, ['exported', 'questions_generated', 'scored'])
+        )
+      )
+      .limit(1)
+
+    return !!result
   }
 }

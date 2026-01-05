@@ -1,6 +1,6 @@
 # Sprint 5a: Gap Closure & Scoring Flow Completion
 
-## Status: Draft (Pending Approval)
+## Status: In Progress
 
 **Created:** 2025-01-05
 **Last Updated:** 2025-01-05
@@ -1011,11 +1011,45 @@ for (const agent of phase1Agents.slice(1)) {
 
 ---
 
+## Post-Implementation Changes
+
+### Change 5a.6.1: Scoring Mode Always Visible (2025-01-05)
+
+**Original Spec (Story 5a.6):** Scoring mode visibility tied to `hasExportedAssessments` check
+```typescript
+// Was: Show only if user has exported assessments
+showScoringMode={hasExportedAssessments}
+```
+
+**Final Implementation:** Scoring mode is ALWAYS visible in ModeSelector
+```typescript
+// Now: Always show all 3 modes (consult, assessment, scoring)
+const availableModes = MODE_OPTIONS;
+```
+
+**Rationale:** User feedback clarified that vendors may return completed questionnaires days or weeks after export. The user needs to be able to switch to Scoring mode at any time to upload and score a returned questionnaire, regardless of whether they currently have any exported assessments in their session.
+
+**Files Changed:**
+- `apps/web/src/components/chat/ModeSelector.tsx` - Removed `showScoringMode` prop and filtering logic
+- `apps/web/src/components/chat/Composer.tsx` - Removed `showScoringMode` prop from interface and usage
+- `apps/web/src/components/chat/ChatInterface.tsx` - Removed `useUserAssessments` hook call and `showScoringMode` prop passing
+- `apps/web/src/components/chat/__tests__/ModeSelector.test.tsx` - Updated tests to verify all 3 modes always visible
+
+**Impact:**
+- ✅ Simpler implementation (no API call needed to check assessment status)
+- ✅ Better UX (scoring mode always accessible)
+- ⚠️ `useUserAssessments` hook is now unused (can be removed in cleanup)
+- ⚠️ Backend `/api/assessments/status` endpoint is now unused (was never implemented, can skip)
+
+**Code Review Note:** This deviates from the original 5a.6 spec but aligns with the actual user need. The scoring workflow still validates assessment existence and ownership when scoring is triggered - the change only affects mode visibility in the UI.
+
+---
+
 ## Handoff to Sprint 6
 
 After Sprint 5a completes, Sprint 6 (E2E Tests) should include:
 - E2E test for full scoring flow: upload → parse → match → score → display → export
 - E2E test for error cases (bad assessment ID, unauthorized, not exported)
 - Component tests for welcome message display
-- Integration tests for showScoringMode persistence
+- ~~Integration tests for showScoringMode persistence~~ (REMOVED - scoring mode now always visible)
 - Regression tests for questionnaire exports with Assessment ID

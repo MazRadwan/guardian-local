@@ -177,4 +177,12 @@ export class AssessmentService {
 
     return this.vendorRepository.create(vendor)
   }
+
+  /**
+   * Checks if user has any assessments with status >= 'exported'
+   * Used for determining scoring mode visibility
+   */
+  async hasExportedAssessments(userId: string): Promise<boolean> {
+    return this.assessmentRepository.hasExportedAssessments(userId)
+  }
 }

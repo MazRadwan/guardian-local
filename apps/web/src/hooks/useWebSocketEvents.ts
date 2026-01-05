@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
@@ -78,6 +78,11 @@ export interface UseWebSocketEventsReturn {
   handleExtractionFailed: (data: ExtractionFailedPayload) => void;
   handleQuestionnaireReady: (data: QuestionnaireReadyPayload) => void;
   handleGenerationPhase: (data: GenerationPhasePayload) => void;
+  // Epic 15 Story 5a.7: Scoring event handlers
+  handleScoringStarted: (data: ScoringStartedPayload) => void;
+  handleScoringProgress: (data: ScoringProgressPayload) => void;
+  handleScoringComplete: (data: ScoringCompletePayload) => void;
+  handleScoringError: (data: ScoringErrorPayload) => void;
 }
 
 /**
@@ -507,6 +512,105 @@ export function useWebSocketEvents({
     [activeConversationId]
   );
 
+  // Epic 15 Story 5a.7: Scoring event handlers
+  const handleScoringStarted = useCallback(
+    (data: ScoringStartedPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_started for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Scoring started:', data.assessmentId);
+      // Update scoring progress state to 'parsing' (first status)
+      useChatStore.getState().updateScoringProgress({
+        status: 'parsing',
+        message: 'Starting analysis...',
+      });
+    },
+    [activeConversationId]
+  );
+
+  const handleScoringProgress = useCallback(
+    (data: ScoringProgressPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_progress for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Scoring progress:', data.status, data.message);
+      // Update scoring progress state
+      useChatStore.getState().updateScoringProgress({
+        status: data.status,
+        message: data.message,
+        progress: data.progress,
+        error: data.error,
+      });
+    },
+    [activeConversationId]
+  );
+
+  const handleScoringComplete = useCallback(
+    (data: ScoringCompletePayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_complete for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Scoring complete:', data.result?.compositeScore);
+
+      // Update scoring progress to complete
+      useChatStore.getState().updateScoringProgress({
+        status: 'complete',
+        message: 'Analysis complete!',
+      });
+
+      // Store scoring results
+      useChatStore.getState().setScoringResult(data.result);
+
+      // Narrative report is sent as a separate message event, no need to handle it here
+    },
+    [activeConversationId]
+  );
+
+  const handleScoringError = useCallback(
+    (data: ScoringErrorPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_error for inactive conversation');
+        return;
+      }
+
+      console.error('[useWebSocketEvents] Scoring error:', data.code, data.error);
+
+      // Map error codes to user-friendly messages
+      const errorMessages: Record<string, string> = {
+        ASSESSMENT_NOT_FOUND: 'Assessment not found. Please try again.',
+        UNAUTHORIZED_ASSESSMENT: 'You do not have permission to score this assessment.',
+        ASSESSMENT_NOT_EXPORTED: 'This assessment has not been exported yet. Please export the questionnaire first.',
+        PARSE_FAILED: 'Failed to extract responses from the document. Please ensure you uploaded a valid Guardian questionnaire.',
+        PARSE_CONFIDENCE_TOO_LOW: 'Document quality is too low. Please upload a text-based PDF or Word document instead of a scanned image.',
+        RATE_LIMITED: 'Too many requests. Please wait a moment and try again.',
+        DUPLICATE_FILE: 'This file has already been uploaded. Please upload a different file.',
+        SCORING_FAILED: 'Scoring analysis failed. Please try again.',
+      };
+
+      const userMessage = data.code && errorMessages[data.code]
+        ? errorMessages[data.code]
+        : data.error || 'An error occurred during scoring.';
+
+      // Update scoring progress to error state
+      useChatStore.getState().updateScoringProgress({
+        status: 'error',
+        message: userMessage,
+        error: data.error,
+      });
+    },
+    [activeConversationId]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -523,5 +627,9 @@ export function useWebSocketEvents({
     handleExtractionFailed,
     handleQuestionnaireReady,
     handleGenerationPhase,
+    handleScoringStarted,
+    handleScoringProgress,
+    handleScoringComplete,
+    handleScoringError,
   };
 }

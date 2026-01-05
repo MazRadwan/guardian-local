@@ -64,4 +64,11 @@ export interface IAssessmentRepository {
    * @returns Array of assessments ordered by creation date (newest first)
    */
   list(limit?: number, offset?: number): Promise<Assessment[]>
+
+  /**
+   * Checks if user has any assessments with status >= 'exported'
+   * @param userId The user ID
+   * @returns True if user has at least one exported assessment
+   */
+  hasExportedAssessments(userId: string): Promise<boolean>
 }

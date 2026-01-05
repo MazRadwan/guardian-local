@@ -19,6 +19,7 @@ import {
   createConversationModeMock,
   createAuthMock,
   createPersistenceMock,
+  createUserAssessmentsMock,
   createQuestionnairePayload,
 } from './_testUtils';
 
@@ -63,6 +64,7 @@ jest.mock('@/hooks/useWebSocket');
 jest.mock('@/hooks/useConversationMode');
 jest.mock('@/hooks/useAuth');
 jest.mock('@/hooks/useQuestionnairePersistence');
+jest.mock('@/hooks/useUserAssessments');
 jest.mock('@/hooks/useChatController');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
@@ -103,6 +105,10 @@ describe('ChatInterface Questionnaire', () => {
     mockPersistence = createPersistenceMock();
     const { useQuestionnairePersistence } = require('@/hooks/useQuestionnairePersistence');
     (useQuestionnairePersistence as jest.Mock).mockReturnValue(mockPersistence);
+
+    // Setup user assessments mock
+    const { useUserAssessments } = require('@/hooks/useUserAssessments');
+    (useUserAssessments as jest.Mock).mockReturnValue(createUserAssessmentsMock());
 
     // Setup controller mock
     const { useChatController } = require('@/hooks/useChatController');

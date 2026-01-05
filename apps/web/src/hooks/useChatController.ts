@@ -167,6 +167,10 @@ export function useChatController(): UseChatControllerReturn {
     handleExtractionFailed,
     handleQuestionnaireReady,
     handleGenerationPhase,
+    handleScoringStarted,
+    handleScoringProgress,
+    handleScoringComplete,
+    handleScoringError,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
@@ -241,6 +245,10 @@ export function useChatController(): UseChatControllerReturn {
     onGenerationPhase: handleGenerationPhase,
     onExportStatusNotFound: handleExportStatusNotFound,
     onExportStatusError: handleExportStatusError,
+    onScoringStarted: handleScoringStarted,
+    onScoringProgress: handleScoringProgress,
+    onScoringComplete: handleScoringComplete,
+    onScoringError: handleScoringError,
   }), [
     handleMessage,
     handleMessageStream,
@@ -260,6 +268,10 @@ export function useChatController(): UseChatControllerReturn {
     handleGenerationPhase,
     handleExportStatusNotFound,
     handleExportStatusError,
+    handleScoringStarted,
+    handleScoringProgress,
+    handleScoringComplete,
+    handleScoringError,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket

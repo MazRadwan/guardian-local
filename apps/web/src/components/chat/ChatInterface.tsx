@@ -311,7 +311,6 @@ export function ChatInterface() {
               onStopStream={abortStream}
               wsAdapter={adapter}
               conversationId={activeConversationId ?? undefined}
-              showScoringMode={!!exportData}
             />
           </div>
         </div>
@@ -362,7 +361,6 @@ export function ChatInterface() {
                 onStopStream={abortStream}
                 wsAdapter={adapter}
                 conversationId={activeConversationId ?? undefined}
-                showScoringMode={!!exportData}
               />
             </div>
             <div className="text-center text-xs text-gray-400 py-2 pb-4">

@@ -4,7 +4,7 @@
  * Drizzle ORM implementation of IAssessmentResultRepository
  */
 
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, gte, sql } from 'drizzle-orm'
 import { db } from '../client.js'
 import { assessmentResults, type AssessmentResult, type NewAssessmentResult } from '../schema/assessmentResults.js'
 import type { IAssessmentResultRepository } from '../../../application/interfaces/IAssessmentResultRepository.js'
@@ -75,6 +75,40 @@ export class DrizzleAssessmentResultRepository implements IAssessmentResultRepos
       .limit(1)
 
     return row ? this.toDTO(row) : null
+  }
+
+  /**
+   * Epic 15 Story 5a.4: Rate limiting
+   * Count scoring attempts for an assessment within the last 24 hours
+   */
+  async countTodayForAssessment(assessmentId: string): Promise<number> {
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(assessmentResults)
+      .where(
+        and(
+          eq(assessmentResults.assessmentId, assessmentId),
+          gte(assessmentResults.scoredAt, oneDayAgo)
+        )
+      )
+
+    return result[0]?.count ?? 0
+  }
+
+  /**
+   * Epic 15 Story 5a.4: De-duplication
+   * Find recent scoring by file hash within specified hours window
+   *
+   * Note: File hash tracking is not yet implemented in the schema.
+   * This method is a placeholder for future implementation.
+   * For MVP, it always returns null (no duplicate detected).
+   */
+  async findRecentByFileHash(fileHash: string, hoursWindow: number): Promise<AssessmentResultDTO | null> {
+    // TODO: Implement when file hash column is added to schema
+    // For now, return null (no duplicate detection)
+    return null
   }
 
   /**

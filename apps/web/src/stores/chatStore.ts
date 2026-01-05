@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload, ScoringCompletePayload } from '@/lib/websocket';
 import type { Step } from '@/types/stepper';
 import { GENERATION_STEPS } from '@/types/stepper';
+import type { ScoringStatus, ScoringProgressEvent } from '@/types/scoring';
 
 // Re-export for convenience
 export { GENERATION_STEPS };
@@ -95,6 +96,23 @@ export interface ChatState {
    */
   currentGenerationStep: number;
 
+  /**
+   * Epic 15 Story 5a.7: Scoring progress state
+   * Tracks current status of scoring analysis
+   */
+  scoringProgress: {
+    status: ScoringStatus;
+    message: string;
+    progress?: number;
+    error?: string;
+  };
+
+  /**
+   * Epic 15 Story 5a.7: Scoring result (set on completion)
+   * Contains composite score, dimension scores, and recommendations
+   */
+  scoringResult: ScoringCompletePayload['result'] | null;
+
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
@@ -176,6 +194,24 @@ export interface ChatState {
    * Called when streaming finishes to allow download bubble to render
    */
   setQuestionnaireStreamComplete: (value: boolean) => void;
+
+  /**
+   * Epic 15 Story 5a.7: Update scoring progress
+   * Called when scoring_progress events are received
+   */
+  updateScoringProgress: (progress: Partial<ScoringProgressEvent>) => void;
+
+  /**
+   * Epic 15 Story 5a.7: Set scoring result
+   * Called when scoring_complete event is received
+   */
+  setScoringResult: (result: ScoringCompletePayload['result'] | null) => void;
+
+  /**
+   * Epic 15 Story 5a.7: Reset scoring state
+   * Called when starting new scoring or changing conversations
+   */
+  resetScoring: () => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -218,6 +254,13 @@ export const useChatStore = create<ChatState>()(
       // Stepper state - defaults (Story 13.4.2)
       generationSteps: GENERATION_STEPS,
       currentGenerationStep: -1,
+
+      // Epic 15 Story 5a.7: Scoring state - defaults
+      scoringProgress: {
+        status: 'idle',
+        message: '',
+      },
+      scoringResult: null,
 
       addMessage: (message) =>
         set((state) => ({
@@ -495,6 +538,30 @@ export const useChatStore = create<ChatState>()(
       setQuestionnaireStreamComplete: (value) => {
         console.log('[chatStore] Setting isQuestionnaireStreamComplete:', value);
         set({ isQuestionnaireStreamComplete: value });
+      },
+
+      // Epic 15 Story 5a.7: Scoring state management
+      updateScoringProgress: (progress) => {
+        set((state) => ({
+          scoringProgress: {
+            ...state.scoringProgress,
+            ...progress,
+          },
+        }));
+      },
+
+      setScoringResult: (result) => {
+        set({ scoringResult: result });
+      },
+
+      resetScoring: () => {
+        set({
+          scoringProgress: {
+            status: 'idle',
+            message: '',
+          },
+          scoringResult: null,
+        });
       },
     }),
     {

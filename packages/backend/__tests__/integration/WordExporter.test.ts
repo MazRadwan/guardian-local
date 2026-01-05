@@ -8,6 +8,7 @@ import { WordExporter } from '../../src/infrastructure/export/WordExporter'
 import { Assessment } from '../../src/domain/entities/Assessment'
 import { Vendor } from '../../src/domain/entities/Vendor'
 import { Question } from '../../src/domain/entities/Question'
+import mammoth from 'mammoth'
 
 describe('WordExporter Integration Tests', () => {
   let wordExporter: WordExporter
@@ -264,14 +265,17 @@ describe('WordExporter Integration Tests', () => {
         questions,
       })
 
-      // Verify Word document was generated with assessmentId
-      // Word documents contain the text as XML, but we can't easily parse it here
-      // Just verify the document was generated successfully
+      // Verify Word document was generated
       expect(Buffer.isBuffer(wordBuffer)).toBe(true)
       expect(wordBuffer.length).toBeGreaterThan(0)
 
-      // Word file should be larger than without assessmentId (basic sanity check)
-      expect(wordBuffer.length).toBeGreaterThan(5000)
+      // Extract text from Word document to verify assessmentId is present
+      const result = await mammoth.extractRawText({ buffer: wordBuffer })
+      const documentText = result.value
+
+      // Verify assessmentId is in the document
+      expect(documentText).toContain('GUARDIAN Assessment ID:')
+      expect(documentText).toContain(assessment.id)
     })
 
     it('should handle special characters in assessmentId', async () => {
@@ -315,6 +319,14 @@ describe('WordExporter Integration Tests', () => {
       // Word document should be generated successfully
       expect(Buffer.isBuffer(wordBuffer)).toBe(true)
       expect(wordBuffer.length).toBeGreaterThan(0)
+
+      // Extract text to verify special characters in assessmentId are handled
+      const result = await mammoth.extractRawText({ buffer: wordBuffer })
+      const documentText = result.value
+
+      // Verify assessmentId is in the document (special chars handled by Word XML)
+      expect(documentText).toContain('GUARDIAN Assessment ID:')
+      expect(documentText).toContain(testAssessmentId)
     })
   })
 })

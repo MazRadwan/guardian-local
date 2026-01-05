@@ -16,6 +16,7 @@ import {
   createControllerMock,
   createAuthMock,
   createPersistenceMock,
+  createUserAssessmentsMock,
 } from './_testUtils';
 
 // Mock child components
@@ -54,6 +55,7 @@ jest.mock('../QuestionnairePromptCard', () => ({
 jest.mock('@/stores/chatStore');
 jest.mock('@/hooks/useAuth');
 jest.mock('@/hooks/useQuestionnairePersistence');
+jest.mock('@/hooks/useUserAssessments');
 jest.mock('@/hooks/useChatController');
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
@@ -88,6 +90,10 @@ describe('ChatInterface Conversation Management', () => {
     // Setup persistence mock
     const { useQuestionnairePersistence } = require('@/hooks/useQuestionnairePersistence');
     (useQuestionnairePersistence as jest.Mock).mockReturnValue(createPersistenceMock());
+
+    // Setup user assessments mock
+    const { useUserAssessments } = require('@/hooks/useUserAssessments');
+    (useUserAssessments as jest.Mock).mockReturnValue(createUserAssessmentsMock());
 
     // Setup controller mock
     const { useChatController } = require('@/hooks/useChatController');

@@ -134,6 +134,50 @@ export interface ScoringParseResult {
 }
 
 /**
+ * Epic 15 Story 5a.7: Scoring event payloads
+ */
+export interface ScoringStartedPayload {
+  assessmentId: string;
+  fileId: string;
+  conversationId: string;
+}
+
+export interface ScoringProgressPayload {
+  conversationId: string;
+  status: 'parsing' | 'scoring' | 'validating' | 'complete' | 'error';
+  message: string;
+  progress?: number;
+  error?: string;
+}
+
+export interface ScoringCompletePayload {
+  conversationId: string;
+  result: {
+    compositeScore: number;
+    recommendation: 'approve' | 'conditional' | 'decline' | 'more_info';
+    overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
+    executiveSummary: string;
+    keyFindings: string[];
+    dimensionScores: Array<{
+      dimension: string;
+      score: number;
+      riskRating: 'low' | 'medium' | 'high' | 'critical';
+    }>;
+    batchId: string;
+    assessmentId: string;
+  };
+  narrativeReport: string;
+}
+
+export interface ScoringErrorPayload {
+  conversationId: string;
+  error: string;
+  code?: string;
+  assessmentId?: string;
+  fileId?: string;
+}
+
+/**
  * Payload for questionnaire_ready event from backend
  */
 export interface QuestionnaireReadyPayload {
@@ -757,6 +801,70 @@ export class WebSocketClient {
 
     this.socket.on('scoring_parse_ready', handler);
     return () => this.socket?.off('scoring_parse_ready', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_started events
+   * Emitted when scoring analysis begins
+   */
+  onScoringStarted(callback: (data: ScoringStartedPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringStartedPayload) => {
+      console.log('[WebSocket] Scoring started:', data.assessmentId);
+      callback(data);
+    };
+
+    this.socket.on('scoring_started', handler);
+    return () => this.socket?.off('scoring_started', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_progress events
+   * Emitted during scoring workflow with status updates
+   */
+  onScoringProgress(callback: (data: ScoringProgressPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringProgressPayload) => {
+      console.log('[WebSocket] Scoring progress:', data.status, data.message);
+      callback(data);
+    };
+
+    this.socket.on('scoring_progress', handler);
+    return () => this.socket?.off('scoring_progress', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_complete events
+   * Emitted when scoring analysis completes successfully
+   */
+  onScoringComplete(callback: (data: ScoringCompletePayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringCompletePayload) => {
+      console.log('[WebSocket] Scoring complete:', data.result?.compositeScore);
+      callback(data);
+    };
+
+    this.socket.on('scoring_complete', handler);
+    return () => this.socket?.off('scoring_complete', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_error events
+   * Emitted when scoring analysis encounters an error
+   */
+  onScoringError(callback: (data: ScoringErrorPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringErrorPayload) => {
+      console.log('[WebSocket] Scoring error:', data.code, data.error);
+      callback(data);
+    };
+
+    this.socket.on('scoring_error', handler);
+    return () => this.socket?.off('scoring_error', handler);
   }
 
 }

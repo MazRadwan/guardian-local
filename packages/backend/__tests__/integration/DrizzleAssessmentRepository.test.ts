@@ -387,4 +387,153 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       expect(assessments[1].id).toBe(a1.id)
     })
   })
+
+  describe('hasExportedAssessments()', () => {
+    it('should return true if user has assessment with status "exported"', async () => {
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      assessment.markQuestionsGenerated()
+      assessment.markExported()
+      await repository.create(assessment)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(true)
+    })
+
+    it('should return true if user has assessment with status "questions_generated"', async () => {
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      assessment.markQuestionsGenerated()
+      await repository.create(assessment)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(true)
+    })
+
+    it('should return true if user has assessment with status "scored"', async () => {
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      assessment.markQuestionsGenerated()
+      assessment.markExported()
+      assessment.updateStatus('scored')
+      await repository.create(assessment)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(true)
+    })
+
+    it('should return false if user only has draft assessments', async () => {
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      await repository.create(assessment)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(false)
+    })
+
+    it('should return false if user only has cancelled assessments', async () => {
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      assessment.cancel()
+      await repository.create(assessment)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(false)
+    })
+
+    it('should return false if user has no assessments', async () => {
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(false)
+    })
+
+    it('should only check assessments for the specified user', async () => {
+      // Create another user
+      const [user2] = await db
+        .insert(users)
+        .values({
+          email: 'user2@example.com',
+          passwordHash: 'hashed_password',
+          name: 'User 2',
+          role: 'analyst',
+        })
+        .returning()
+
+      // User 2 has exported assessment
+      const assessment2 = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: user2.id,
+      })
+      assessment2.markQuestionsGenerated()
+      assessment2.markExported()
+      await repository.create(assessment2)
+
+      // Test user has only draft
+      const assessment1 = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      await repository.create(assessment1)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(false)
+    })
+
+    it('should return true if user has at least one exported among many assessments', async () => {
+      // Create draft assessment
+      await repository.create(
+        Assessment.create({
+          vendorId: testVendorId,
+          assessmentType: 'quick',
+          createdBy: testUserId,
+        })
+      )
+
+      // Create cancelled assessment
+      const cancelled = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      cancelled.cancel()
+      await repository.create(cancelled)
+
+      // Create exported assessment
+      const exported = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'comprehensive',
+        createdBy: testUserId,
+      })
+      exported.markQuestionsGenerated()
+      exported.markExported()
+      await repository.create(exported)
+
+      const hasExported = await repository.hasExportedAssessments(testUserId)
+
+      expect(hasExported).toBe(true)
+    })
+  })
 })

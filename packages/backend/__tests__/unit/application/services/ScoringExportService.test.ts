@@ -34,6 +34,7 @@ describe('ScoringExportService', () => {
       list: jest.fn(),
       findByCreatedBy: jest.fn(),
       getVendor: jest.fn(),
+      hasExportedAssessments: jest.fn(),
     } as jest.Mocked<IAssessmentRepository>
 
     mockResultRepo = {
@@ -41,6 +42,8 @@ describe('ScoringExportService', () => {
       findByAssessmentId: jest.fn(),
       findByBatchId: jest.fn(),
       findLatestByAssessmentId: jest.fn(),
+      countTodayForAssessment: jest.fn(),
+      findRecentByFileHash: jest.fn(),
     } as jest.Mocked<IAssessmentResultRepository>
 
     mockDimensionScoreRepo = {

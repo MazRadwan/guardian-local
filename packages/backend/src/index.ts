@@ -214,7 +214,8 @@ const documentUploadController = new DocumentUploadController(
   documentParserService,  // IScoringDocumentParser (same implementation)
   conversationService,    // Ownership validation + save assistant messages
   chatNamespace,
-  fileRepo                // Epic 16.6.9: File registration in database
+  fileRepo,               // Epic 16.6.9: File registration in database
+  scoringService          // Epic 15 Sprint 5a: Auto-trigger scoring after parse
 );
 
 // Register document routes (Epic 16)

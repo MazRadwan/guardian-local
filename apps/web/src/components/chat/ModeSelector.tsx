@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, Check, MessageSquare, BarChart3 } from 'lucide-react';
+import { ChevronDown, Check, MessageSquare, ClipboardList, BarChart3 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export type ConversationMode = 'consult' | 'assessment' | 'scoring';
@@ -17,11 +17,6 @@ export interface ModeSelectorProps {
   selectedMode: ConversationMode;
   onModeChange: (mode: ConversationMode) => void;
   disabled?: boolean;
-  /**
-   * Whether scoring mode should be visible
-   * Only show when assessment has been exported (questions_generated or exported status)
-   */
-  showScoringMode?: boolean;
 }
 
 const MODE_OPTIONS: ModeOption[] = [
@@ -35,7 +30,7 @@ const MODE_OPTIONS: ModeOption[] = [
     value: 'assessment',
     name: 'Assessment',
     description: 'Structured vendor assessment workflow',
-    icon: null,
+    icon: <ClipboardList className="h-4 w-4" />,
   },
   {
     value: 'scoring',
@@ -49,18 +44,13 @@ export function ModeSelector({
   selectedMode,
   onModeChange,
   disabled = false,
-  showScoringMode = false,
 }: ModeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = MODE_OPTIONS.find((opt) => opt.value === selectedMode);
 
-  // Filter modes based on showScoringMode prop
-  const availableModes = MODE_OPTIONS.filter((opt) => {
-    if (opt.value === 'scoring') {
-      return showScoringMode;
-    }
-    return true;
-  });
+  // All modes always available - Scoring visible regardless of export status
+  // (users may return days later to score returned questionnaires)
+  const availableModes = MODE_OPTIONS;
 
   const handleModeSelect = (mode: ConversationMode) => {
     onModeChange(mode);

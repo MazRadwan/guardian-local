@@ -266,15 +266,30 @@ describe('PDFExporter Integration Tests', () => {
         }),
       ]
 
+      // Generate PDF with assessment data including assessmentId
       const pdfBuffer = await pdfExporter.generatePDF({
         assessment,
         vendor,
         questions,
       })
 
-      // Verify PDF was generated (content parsing requires e2e test)
+      // Verify PDF was generated successfully
       expect(pdfBuffer).toBeInstanceOf(Buffer)
       expect(pdfBuffer.length).toBeGreaterThan(1000) // PDF with content should be > 1KB
+
+      // Verify PDF header
+      const pdfHeader = pdfBuffer.slice(0, 4).toString()
+      expect(pdfHeader).toBe('%PDF')
+
+      // Note: PDFs use compressed streams (FlateDecode) for text content.
+      // The assessmentId is present in the rendered PDF but requires pdf-parse
+      // or e2e testing to fully verify. This test confirms:
+      // 1. The PDF generator accepts assessmentId in the data structure
+      // 2. The PDF is generated without errors
+      // 3. The template (questionnaire-template.html) contains {{assessmentId}} placeholder
+      // 4. PDFExporter.ts (line 82) replaces the placeholder with assessment.id
+      //
+      // Content verification is performed in e2e tests as noted in test file header.
     }, 30000)
 
     it('should escape HTML special characters in assessmentId', async () => {
@@ -309,15 +324,24 @@ describe('PDFExporter Integration Tests', () => {
         }),
       ]
 
+      // Generate PDF with XSS-attempt assessmentId
       const pdfBuffer = await pdfExporter.generatePDF({
         assessment,
         vendor,
         questions,
       })
 
-      // PDF should be generated successfully (no XSS execution)
+      // PDF should be generated successfully (no XSS execution in Puppeteer)
       expect(Buffer.isBuffer(pdfBuffer)).toBe(true)
       expect(pdfBuffer.length).toBeGreaterThan(0)
+
+      // Verify it's a valid PDF
+      const pdfHeader = pdfBuffer.slice(0, 4).toString()
+      expect(pdfHeader).toBe('%PDF')
+
+      // Note: PDFExporter.escapeHtml() method (line 255-263) escapes HTML characters
+      // before passing to Puppeteer, preventing XSS. The script tag becomes text.
+      // Full verification of escaped content requires pdf-parse or e2e testing.
     }, 30000)
   })
 })

@@ -4,7 +4,7 @@ import { AssessmentService } from '../../application/services/AssessmentService.
 import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
-import type { IScoringService, ScoringInput } from '../../application/interfaces/IScoringService.js';
+import type { IScoringService } from '../../application/interfaces/IScoringService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
 import type { IFileRepository, FileWithIntakeContext } from '../../application/interfaces/IFileRepository.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
@@ -15,7 +15,8 @@ import { assessmentModeTools } from '../ai/tools/index.js';
 import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
 import type { IntakeDocumentContext } from '../../domain/entities/Conversation.js';
 import type { MessageAttachment } from '../../domain/entities/Message.js';
-import type { ScoringProgressEvent, ScoringReportData } from '../../domain/scoring/types.js';
+// NOTE: ScoringProgressEvent, ScoringReportData imports removed - scoring now
+// handled by DocumentUploadController.runScoring() (Sprint 5a)
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -57,11 +58,8 @@ interface GenerateQuestionnairePayload {
   selectedCategories?: string[];
 }
 
-interface StartScoringPayload {
-  conversationId: string;
-  assessmentId: string;
-  fileId: string;
-}
+// NOTE: StartScoringPayload removed in Sprint 5a - scoring now auto-triggers
+// after successful document parse in DocumentUploadController.runScoring()
 
 export class ChatServer {
   private io: SocketIOServer;
@@ -1142,16 +1140,9 @@ Once uploaded, I'll analyze the responses against our 10 risk dimensions and pro
         await this.handleGetExportStatus(socket, data);
       });
 
-      // Handle start_scoring event (Epic 15)
-      socket.on('start_scoring', async (payload: StartScoringPayload) => {
-        const userId = socket.userId;
-        if (!userId) {
-          console.error('[ChatServer] start_scoring called without authenticated user');
-          socket.emit('scoring_error', { error: 'Not authenticated', conversationId: payload.conversationId });
-          return;
-        }
-        await this.handleStartScoring(socket, payload, userId);
-      });
+      // NOTE: start_scoring event removed in Sprint 5a - scoring now auto-triggers
+      // after successful document parse in DocumentUploadController.runScoring()
+      // This prevents double-scoring if both auto-trigger and manual trigger existed.
 
       // Handle disconnect
       socket.on('disconnect', (reason) => {
@@ -1437,135 +1428,9 @@ Once uploaded, I'll analyze the responses against our 10 risk dimensions and pro
     }
   }
 
-  /**
-   * Handle start_scoring event (Epic 15)
-   *
-   * Triggers ScoringService.score() and emits progress/complete events.
-   * Called after document upload when user clicks "Start Analysis".
-   */
-  public async handleStartScoring(
-    socket: AuthenticatedSocket,
-    payload: StartScoringPayload,
-    userId: string
-  ): Promise<void> {
-    const { conversationId, assessmentId, fileId } = payload;
-
-    console.log(`[ChatServer] start_scoring: conversationId=${conversationId}, assessmentId=${assessmentId}, fileId=${fileId}`);
-
-    // Validate payload
-    if (!conversationId || !assessmentId || !fileId) {
-      socket.emit('scoring_error', {
-        conversationId,
-        error: 'Missing required fields: conversationId, assessmentId, fileId',
-      });
-      return;
-    }
-
-    // Check if scoring service is available
-    if (!this.scoringService) {
-      console.error('[ChatServer] ScoringService not configured');
-      socket.emit('scoring_error', {
-        conversationId,
-        error: 'Scoring service not available',
-      });
-      return;
-    }
-
-    try {
-      // Validate conversation ownership
-      await this.validateConversationOwnership(conversationId, userId);
-
-      // Save system message indicating scoring started
-      await this.conversationService.sendMessage({
-        conversationId,
-        role: 'system',
-        content: { text: '[System: User initiated scoring analysis]' },
-      });
-
-      // Build scoring input
-      const scoringInput: ScoringInput = {
-        assessmentId,
-        conversationId,
-        fileId,
-        userId,
-      };
-
-      // Call scoring service with progress callback
-      const result = await this.scoringService.score(scoringInput, (event: ScoringProgressEvent) => {
-        // Emit progress to frontend
-        socket.emit('scoring_progress', {
-          conversationId,
-          status: event.status,
-          message: event.message,
-          progress: event.progress,
-        });
-      });
-
-      if (result.success && result.report) {
-        // Build result data for frontend
-        const resultData = {
-          compositeScore: result.report.payload.compositeScore,
-          recommendation: result.report.payload.recommendation,
-          overallRiskRating: result.report.payload.overallRiskRating,
-          executiveSummary: result.report.payload.executiveSummary,
-          keyFindings: result.report.payload.keyFindings,
-          dimensionScores: result.report.payload.dimensionScores.map(ds => ({
-            dimension: ds.dimension,
-            score: ds.score,
-            riskRating: ds.riskRating,
-          })),
-          batchId: result.batchId,
-          assessmentId,
-        };
-
-        // Emit scoring complete with results
-        socket.emit('scoring_complete', {
-          conversationId,
-          result: resultData,
-          narrativeReport: result.report.narrativeReport,
-        });
-
-        // Save narrative report as assistant message
-        const reportMessage = await this.conversationService.sendMessage({
-          conversationId,
-          role: 'assistant',
-          content: { text: result.report.narrativeReport },
-        });
-
-        // Emit the message for display
-        socket.emit('message', {
-          id: reportMessage.id,
-          conversationId: reportMessage.conversationId,
-          role: reportMessage.role,
-          content: reportMessage.content,
-          createdAt: reportMessage.createdAt,
-        });
-
-        console.log(`[ChatServer] Scoring complete: assessmentId=${assessmentId}, score=${result.report.payload.compositeScore}`);
-
-      } else {
-        // Scoring failed
-        socket.emit('scoring_error', {
-          conversationId,
-          error: result.error || 'Scoring failed',
-        });
-
-        // Save error message
-        await this.conversationService.sendMessage({
-          conversationId,
-          role: 'system',
-          content: { text: `[System: Scoring failed - ${result.error || 'Unknown error'}]` },
-        });
-      }
-
-    } catch (error) {
-      console.error('[ChatServer] Error in start_scoring:', error);
-      socket.emit('scoring_error', {
-        conversationId,
-        error: error instanceof Error ? error.message : 'Scoring failed',
-      });
-    }
-  }
+  // NOTE: handleStartScoring removed in Sprint 5a - scoring now auto-triggers
+  // in DocumentUploadController.runScoring() after successful document parse.
+  // This prevents double-scoring if both auto-trigger and manual trigger existed.
 
   /**
    * Split markdown into chunks for simulated streaming

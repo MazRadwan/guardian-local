@@ -36,6 +36,7 @@ describe('ExportService', () => {
       list: jest.fn(),
       findByCreatedBy: jest.fn(),
       getVendor: jest.fn(),
+      hasExportedAssessments: jest.fn(),
     } as jest.Mocked<IAssessmentRepository>
 
     mockQuestionRepo = {

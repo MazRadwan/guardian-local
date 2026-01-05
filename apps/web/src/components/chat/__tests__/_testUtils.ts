@@ -222,6 +222,17 @@ export const createPersistenceMock = (overrides: Record<string, unknown> = {}) =
 });
 
 /**
+ * Creates a mock for useUserAssessments hook
+ * Story 5a.6: Persistence-based scoring mode visibility
+ */
+export const createUserAssessmentsMock = (overrides: Record<string, unknown> = {}) => ({
+  hasExportedAssessments: false,
+  isLoading: false,
+  error: null,
+  ...overrides,
+});
+
+/**
  * Creates a mock for next/navigation hooks
  */
 export const createNavigationMock = () => ({

@@ -79,6 +79,8 @@ describe('ScoringService', () => {
       findByAssessmentId: jest.fn().mockResolvedValue(null),
       findByBatchId: jest.fn().mockResolvedValue(null),
       findLatestByAssessmentId: jest.fn().mockResolvedValue(null),
+      countTodayForAssessment: jest.fn().mockResolvedValue(0),
+      findRecentByFileHash: jest.fn().mockResolvedValue(null),
     } as jest.Mocked<IAssessmentResultRepository>
 
     // Mock assessment repo with getVendor method
@@ -89,6 +91,7 @@ describe('ScoringService', () => {
         solutionName: 'Test Solution',
         assessmentType: 'clinical',
         vendorId: 'vendor-1',
+        status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
       }),
       getVendor: jest.fn().mockResolvedValue({ name: 'Test Vendor' }),
       updateStatus: jest.fn().mockResolvedValue(undefined),
@@ -98,6 +101,7 @@ describe('ScoringService', () => {
       update: jest.fn(),
       delete: jest.fn(),
       list: jest.fn(),
+      hasExportedAssessments: jest.fn(),
     } as any
 
     // Mock file repository for authorization
@@ -497,6 +501,7 @@ describe('ScoringService', () => {
           createdBy: testUserId,
           solutionName: 'Clinical AI Tool',
           assessmentType: 'clinical',
+          status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
         } as any)
 
         mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
@@ -519,6 +524,7 @@ describe('ScoringService', () => {
           createdBy: testUserId,
           solutionName: 'Admin AI Tool',
           assessmentType: 'administrative',
+          status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
         } as any)
 
         mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
@@ -541,6 +547,7 @@ describe('ScoringService', () => {
           createdBy: testUserId,
           solutionName: 'Patient Portal',
           assessmentType: 'patient',
+          status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
         } as any)
 
         mockLLMClient.streamWithTool.mockImplementation(async (opts) => {

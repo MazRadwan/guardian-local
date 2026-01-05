@@ -244,4 +244,32 @@ export class AssessmentController {
       next(error)
     }
   }
+
+  /**
+   * GET /api/assessments/status
+   * Check if user has any exported assessments (for scoring mode visibility)
+   */
+  getAssessmentStatus = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      // Get authenticated user from middleware
+      const userId = (req as any).user?.id
+
+      if (!userId) {
+        res.status(401).json({
+          error: 'User not authenticated',
+        })
+        return
+      }
+
+      const hasExportedAssessments = await this.assessmentService.hasExportedAssessments(userId)
+
+      res.json({ hasExportedAssessments })
+    } catch (error) {
+      next(error)
+    }
+  }
 }

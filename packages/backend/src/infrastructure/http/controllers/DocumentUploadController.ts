@@ -15,10 +15,12 @@ import { IFileStorage } from '../../../application/interfaces/IFileStorage.js';
 import { FileValidationService } from '../../../application/services/FileValidationService.js';
 import { IIntakeDocumentParser, IntakeContext } from '../../../application/interfaces/IIntakeDocumentParser.js';
 import { IScoringDocumentParser } from '../../../application/interfaces/IScoringDocumentParser.js';
+import { IScoringService, ScoringInput } from '../../../application/interfaces/IScoringService.js';
 import { ConversationService } from '../../../application/services/ConversationService.js';
 import { DocumentMetadata } from '../../../application/interfaces/IDocumentParser.js';
 import { User } from '../../../domain/entities/User.js';
 import { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
+import { ScoringProgressEvent } from '../../../domain/scoring/types.js';
 
 /**
  * Sanitize filename for use in Content-Disposition header.
@@ -107,7 +109,9 @@ export class DocumentUploadController {
     /** Must be the /chat namespace, not base io - clients connect to /chat */
     private readonly chatNamespace: Namespace,
     /** FileRepository for registering uploaded files (Epic 16.6.9) */
-    private readonly fileRepository: IFileRepository
+    private readonly fileRepository: IFileRepository,
+    /** ScoringService for auto-triggering scoring after parse (Epic 15 Sprint 5a) */
+    private readonly scoringService?: IScoringService
   ) {}
 
   /**
@@ -328,11 +332,12 @@ export class DocumentUploadController {
 
       // Parse based on mode - track success and error for correct stage emission
       // Epic 16.6.9: Pass fileId (database UUID) for attachment metadata
+      // Epic 15 Sprint 5a: Pass userId for auto-triggering scoring
       let parseResult: { success: boolean; error?: string };
       if (mode === 'intake') {
         parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId);
       } else {
-        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId);
+        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId, userId);
       }
 
       // Emit final stage based on parse result
@@ -472,8 +477,9 @@ export class DocumentUploadController {
   }
 
   /**
-   * Parse document for scoring responses
+   * Parse document for scoring responses and auto-trigger scoring
    * Epic 16.6.9: File metadata includes fileId (database UUID), NOT storagePath
+   * Epic 15 Sprint 5a: Auto-trigger scoring after successful parse (no manual button click)
    * @returns { success: boolean, error?: string } - parse result with error details
    */
   private async parseForScoring(
@@ -482,13 +488,15 @@ export class DocumentUploadController {
     metadata: DocumentMetadata,
     conversationId: string,
     uploadId: string,
-    fileId: string
+    fileId: string,
+    userId: string
   ): Promise<{ success: boolean; error?: string }> {
     const result = await this.scoringParser.parseForResponses(buffer, metadata, {
       conversationId,
     });
 
     if (result.success && result.assessmentId) {
+      // Emit parse ready event first
       this.chatNamespace.to(socketRoom).emit('scoring_parse_ready', {
         conversationId,
         uploadId,
@@ -507,6 +515,14 @@ export class DocumentUploadController {
           size: metadata.sizeBytes,
         },
       });
+
+      // Epic 15 Sprint 5a: Auto-trigger scoring (no manual approval required)
+      if (this.scoringService) {
+        await this.runScoring(socketRoom, conversationId, result.assessmentId, fileId, userId);
+      } else {
+        console.warn('[DocumentUpload] ScoringService not configured - scoring not auto-triggered');
+      }
+
       return { success: true };
     } else {
       const errorMessage = result.error || 'Failed to extract responses. Ensure this is a Guardian-exported questionnaire.';
@@ -518,6 +534,111 @@ export class DocumentUploadController {
         error: errorMessage,
       });
       return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Run scoring workflow and emit events to room
+   * Epic 15 Sprint 5a: Auto-triggered after successful document parse
+   */
+  private async runScoring(
+    socketRoom: string,
+    conversationId: string,
+    assessmentId: string,
+    fileId: string,
+    userId: string
+  ): Promise<void> {
+    if (!this.scoringService) return;
+
+    try {
+      // Emit scoring_started
+      this.chatNamespace.to(socketRoom).emit('scoring_started', {
+        assessmentId,
+        fileId,
+        conversationId,
+      });
+
+      // Build scoring input
+      const scoringInput: ScoringInput = {
+        assessmentId,
+        conversationId,
+        fileId,
+        userId,
+      };
+
+      // Call scoring service with progress callback
+      const scoringResult = await this.scoringService.score(scoringInput, (event: ScoringProgressEvent) => {
+        this.chatNamespace.to(socketRoom).emit('scoring_progress', {
+          conversationId,
+          status: event.status,
+          message: event.message,
+          progress: event.progress,
+        });
+      });
+
+      if (scoringResult.success && scoringResult.report) {
+        // Build result data for frontend
+        const resultData = {
+          compositeScore: scoringResult.report.payload.compositeScore,
+          recommendation: scoringResult.report.payload.recommendation,
+          overallRiskRating: scoringResult.report.payload.overallRiskRating,
+          executiveSummary: scoringResult.report.payload.executiveSummary,
+          keyFindings: scoringResult.report.payload.keyFindings,
+          dimensionScores: scoringResult.report.payload.dimensionScores.map(ds => ({
+            dimension: ds.dimension,
+            score: ds.score,
+            riskRating: ds.riskRating,
+          })),
+          batchId: scoringResult.batchId,
+          assessmentId,
+        };
+
+        // Emit scoring complete with results
+        this.chatNamespace.to(socketRoom).emit('scoring_complete', {
+          conversationId,
+          result: resultData,
+          narrativeReport: scoringResult.report.narrativeReport,
+        });
+
+        // Save narrative report as assistant message
+        const reportMessage = await this.conversationService.sendMessage({
+          conversationId,
+          role: 'assistant',
+          content: { text: scoringResult.report.narrativeReport },
+        });
+
+        // Emit the message for display
+        this.chatNamespace.to(socketRoom).emit('message', {
+          id: reportMessage.id,
+          conversationId: reportMessage.conversationId,
+          role: reportMessage.role,
+          content: reportMessage.content,
+          createdAt: reportMessage.createdAt,
+        });
+
+        console.log(`[DocumentUpload] Scoring complete: assessmentId=${assessmentId}, score=${scoringResult.report.payload.compositeScore}`);
+      } else {
+        // Scoring failed - emit structured error
+        this.chatNamespace.to(socketRoom).emit('scoring_error', {
+          conversationId,
+          error: scoringResult.error || 'Scoring failed',
+          code: scoringResult.code || 'SCORING_FAILED',
+        });
+
+        // Save error message
+        await this.conversationService.sendMessage({
+          conversationId,
+          role: 'system',
+          content: { text: `[System: Scoring failed - ${scoringResult.error || 'Unknown error'}]` },
+        });
+      }
+    } catch (error) {
+      console.error('[DocumentUpload] Error in scoring:', error);
+      this.chatNamespace.to(socketRoom).emit('scoring_error', {
+        conversationId,
+        error: error instanceof Error ? error.message : 'Scoring failed',
+        code: 'SCORING_FAILED',
+      });
     }
   }
 

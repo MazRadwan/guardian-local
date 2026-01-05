@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 
 export interface UseWebSocketOptions {
@@ -28,6 +28,11 @@ export interface UseWebSocketOptions {
   // Story 13.9.2: Export status resume callbacks
   onExportStatusNotFound?: (data: ExportStatusNotFoundPayload) => void;
   onExportStatusError?: (data: ExportStatusErrorPayload) => void;
+  // Epic 15 Story 5a.7: Scoring event callbacks
+  onScoringStarted?: (data: ScoringStartedPayload) => void;
+  onScoringProgress?: (data: ScoringProgressPayload) => void;
+  onScoringComplete?: (data: ScoringCompletePayload) => void;
+  onScoringError?: (data: ScoringErrorPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -54,6 +59,10 @@ export function useWebSocket({
   onGenerationPhase,
   onExportStatusNotFound,
   onExportStatusError,
+  onScoringStarted,
+  onScoringProgress,
+  onScoringComplete,
+  onScoringError,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -303,10 +312,39 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // Epic 15 Story 5a.7: Scoring event subscriptions
+    if (onScoringStarted) {
+      const unsub = client.onScoringStarted((data) => {
+        onScoringStarted(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onScoringProgress) {
+      const unsub = client.onScoringProgress((data) => {
+        onScoringProgress(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onScoringComplete) {
+      const unsub = client.onScoringComplete((data) => {
+        onScoringComplete(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onScoringError) {
+      const unsub = client.onScoringError((data) => {
+        onScoringError(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onConnectionReady, onExportStatusNotFound, onExportStatusError]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onConnectionReady, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {

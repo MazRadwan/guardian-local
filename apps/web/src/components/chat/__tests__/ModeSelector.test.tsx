@@ -60,8 +60,8 @@ describe('ModeSelector', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('shows all mode options when open', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
+    it('shows all mode options when open (Scoring always visible)', async () => {
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);
@@ -72,7 +72,7 @@ describe('ModeSelector', () => {
     });
 
     it('shows mode descriptions in dropdown', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);
@@ -115,7 +115,7 @@ describe('ModeSelector', () => {
     });
 
     it('calls onModeChange when selecting scoring mode', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);
@@ -373,7 +373,7 @@ describe('ModeSelector', () => {
     });
 
     it('mode options have role="option"', async () => {
-      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} showScoringMode={true} />);
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
       await userEvent.click(badge);

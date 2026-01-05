@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
@@ -32,6 +32,11 @@ export interface WebSocketEventHandlers {
   // Story 13.9.2: Export status resume callbacks
   onExportStatusNotFound?: (data: ExportStatusNotFoundPayload) => void;
   onExportStatusError?: (data: ExportStatusErrorPayload) => void;
+  // Epic 15 Story 5a.7: Scoring event callbacks
+  onScoringStarted?: (data: ScoringStartedPayload) => void;
+  onScoringProgress?: (data: ScoringProgressPayload) => void;
+  onScoringComplete?: (data: ScoringCompletePayload) => void;
+  onScoringError?: (data: ScoringErrorPayload) => void;
 }
 
 /**
@@ -151,6 +156,10 @@ export function useWebSocketAdapter({
     onGenerationPhase: handlers.onGenerationPhase,
     onExportStatusNotFound: handlers.onExportStatusNotFound,
     onExportStatusError: handlers.onExportStatusError,
+    onScoringStarted: handlers.onScoringStarted,
+    onScoringProgress: handlers.onScoringProgress,
+    onScoringComplete: handlers.onScoringComplete,
+    onScoringError: handlers.onScoringError,
     autoConnect,
   });
 
