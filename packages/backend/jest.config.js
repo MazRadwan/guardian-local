@@ -1,12 +1,11 @@
-import dotenv from 'dotenv'
-
-// Load environment variables for tests
-dotenv.config()
-
 export default {
   testEnvironment: 'node',
   roots: ['<rootDir>/__tests__'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+
+  // Setup files run BEFORE test files are imported
+  // This sets DATABASE_URL to TEST_DATABASE_URL before the db client initializes
+  setupFiles: ['<rootDir>/__tests__/setup/jest.integration.setup.ts'],
 
   // Performance: Prevent resource exhaustion from parallel tests
   // E2E tests spawn servers, databases, and Puppeteer browsers

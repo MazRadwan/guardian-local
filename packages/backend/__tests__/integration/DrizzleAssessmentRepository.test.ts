@@ -2,7 +2,8 @@
  * Integration tests for DrizzleAssessmentRepository
  */
 
-import { db } from '../../src/infrastructure/database/client'
+import { sql } from 'drizzle-orm'
+import { testDb, closeTestDb } from '../setup/test-db'
 import { assessments } from '../../src/infrastructure/database/schema/assessments'
 import { vendors } from '../../src/infrastructure/database/schema/vendors'
 import { users } from '../../src/infrastructure/database/schema/users'
@@ -18,9 +19,18 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
     repository = new DrizzleAssessmentRepository()
   })
 
+  afterAll(async () => {
+    await closeTestDb()
+  })
+
   beforeEach(async () => {
+    // Clean slate before each test
+    await testDb.execute(sql`TRUNCATE TABLE assessments CASCADE`)
+    await testDb.execute(sql`TRUNCATE TABLE vendors CASCADE`)
+    await testDb.execute(sql`TRUNCATE TABLE users CASCADE`)
+
     // Create test vendor and user for foreign key relationships
-    const [vendor] = await db
+    const [vendor] = await testDb
       .insert(vendors)
       .values({
         name: 'Test Vendor',
@@ -28,7 +38,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
       })
       .returning()
 
-    const [user] = await db
+    const [user] = await testDb
       .insert(users)
       .values({
         email: 'test@example.com',
@@ -43,10 +53,10 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
   })
 
   afterEach(async () => {
-    // Clean up test data (cascade will handle assessments)
-    await db.delete(assessments)
-    await db.delete(vendors)
-    await db.delete(users)
+    // Clean up test data
+    await testDb.execute(sql`TRUNCATE TABLE assessments CASCADE`)
+    await testDb.execute(sql`TRUNCATE TABLE vendors CASCADE`)
+    await testDb.execute(sql`TRUNCATE TABLE users CASCADE`)
   })
 
   describe('create()', () => {
@@ -469,7 +479,7 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
 
     it('should only check assessments for the specified user', async () => {
       // Create another user
-      const [user2] = await db
+      const [user2] = await testDb
         .insert(users)
         .values({
           email: 'user2@example.com',

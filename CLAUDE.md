@@ -113,6 +113,42 @@ If tests need 1+ minute timeouts, something is wrong — likely missing mocks or
 
 **If tests fail:** Fix the code, don't skip the tests.
 
+#### Test Database Setup (REQUIRED for Integration Tests)
+
+**CRITICAL:** Integration tests use a **separate test database** to avoid wiping dev data.
+
+**Environment variable required:**
+```bash
+# Add to .env file
+TEST_DATABASE_URL=postgresql://guardian:guardian_password@localhost:5433/guardian_test
+```
+
+**If `TEST_DATABASE_URL` is not set**, integration tests will fail with a clear error message. This is intentional - it prevents accidentally truncating your dev database.
+
+**First-time setup:**
+```bash
+# Create test database (one-time)
+docker exec guardian-postgres psql -U guardian -d postgres -c "CREATE DATABASE guardian_test"
+
+# Run migrations on test database
+pnpm --filter @guardian/backend db:migrate:test
+```
+
+**When you modify database schema:**
+```bash
+# Generate migration (once)
+pnpm --filter @guardian/backend db:generate
+
+# Apply to BOTH databases
+pnpm --filter @guardian/backend db:migrate        # dev database
+pnpm --filter @guardian/backend db:migrate:test   # test database
+```
+
+**Why this matters:**
+- Integration tests run `TRUNCATE TABLE ... CASCADE` to reset state
+- Without a separate test DB, this wipes your dev data
+- The safety check in `packages/backend/__tests__/setup/test-db.ts` enforces this
+
 ### Tech Stack Versions (DO NOT DOWNGRADE)
 
 **CRITICAL:** These are the LATEST stable versions (Jan 2025). Your training data is STALE.
@@ -343,4 +379,4 @@ Main Agent identifies: "Need to complete Epic 9 Stories 9.1-9.3"
 - [ ] Update implementation log with fix details (recommended)
 - [ ] Clear commit message with "fix:" prefix
 
-**Last Updated:** 2025-01-12 v5.0 (added implementation logs + bug-fix agent workflow)
+**Last Updated:** 2026-01-05 v5.1 (added test database setup requirements)

@@ -20,6 +20,7 @@
     "test:coverage": "jest --coverage --testPathIgnorePatterns=e2e-external",
     "db:generate": "cd ../.. && drizzle-kit generate",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
+    "db:migrate:test": "DATABASE_URL=$TEST_DATABASE_URL tsx src/infrastructure/database/migrate.ts",
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
