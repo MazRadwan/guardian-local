@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
+import { ScoringResultCard } from './ScoringResultCard';
 import { AlertCircle } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
@@ -59,6 +60,10 @@ export function ChatInterface() {
 
   // Story 14.1.5: Gate download visibility until stream completes
   const isQuestionnaireStreamComplete = useChatStore((state) => state.isQuestionnaireStreamComplete);
+
+  // Scoring result state (Story 5c)
+  const scoringResult = useChatStore((state) => state.scoringResult);
+  const resetScoring = useChatStore((state) => state.resetScoring);
 
   // Get export data for active conversation
   const exportData = activeConversationId
@@ -151,6 +156,11 @@ export function ChatInterface() {
   useEffect(() => {
     resetGenerationStep();
   }, [activeConversationId, resetGenerationStep]);
+
+  // Reset scoring state when conversation changes (Story 5c)
+  useEffect(() => {
+    resetScoring();
+  }, [activeConversationId, resetScoring]);
 
   const handleGenerateQuestionnaire = useCallback(() => {
     if (!pendingQuestionnaire || !adapter) return;
@@ -294,10 +304,21 @@ export function ChatInterface() {
       {messages.length === 0 && !showDelayedLoading ? (
         // Empty state: Centered composer (only when truly empty, not loading)
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center px-4">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to Guardian</h1>
-            <p className="text-gray-600">Start a conversation to assess AI vendors or get guidance.</p>
-          </div>
+          {/* Welcome message - hidden when scoring result is present */}
+          {!(scoringResult && scoringResult.assessmentId) && (
+            <div className="text-center mb-8">
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to Guardian</h1>
+              <p className="text-gray-600">Start a conversation to assess AI vendors or get guidance.</p>
+            </div>
+          )}
+
+          {/* Scoring Result Card - also in empty state (Story 5c fix) */}
+          {scoringResult && scoringResult.assessmentId && (
+            <div className="w-full max-w-3xl mb-4">
+              <ScoringResultCard result={scoringResult} />
+            </div>
+          )}
+
           <div className="w-full max-w-3xl">
             <Composer
               ref={composerRef}
@@ -347,6 +368,16 @@ export function ChatInterface() {
               }
             />
           </div>
+
+          {/* Scoring Result Card - appears after scoring completes (Story 5c) */}
+          {scoringResult && scoringResult.assessmentId && (
+            <div className="flex-shrink-0 border-t px-4 py-4">
+              <div className="max-w-3xl mx-auto">
+                <ScoringResultCard result={scoringResult} />
+              </div>
+            </div>
+          )}
+
           <div className="flex-shrink-0 bg-white z-10">
             <div className="max-w-3xl mx-auto w-full">
               <Composer

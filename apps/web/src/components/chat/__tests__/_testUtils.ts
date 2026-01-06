@@ -107,6 +107,16 @@ export const createStoreMock = (overrides: Record<string, unknown> = {}) => ({
   setCurrentGenerationStep: jest.fn(),
   resetGenerationStep: jest.fn(),
 
+  // Scoring state (Epic 15 Story 5c)
+  scoringProgress: {
+    status: 'idle' as const,
+    message: '',
+  },
+  scoringResult: null,
+  updateScoringProgress: jest.fn(),
+  setScoringResult: jest.fn(),
+  resetScoring: jest.fn(),
+
   // Apply overrides
   ...overrides,
 });

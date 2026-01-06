@@ -1,16 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
-import { FileDown, ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
+import { ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { RecommendationBadge } from './RecommendationBadge';
 import { ScoreDashboard } from './ScoreDashboard';
+import { DownloadButton } from './DownloadButton';
 import { ScoringResultData, RiskRating } from '@/types/scoring';
 
 interface ScoringResultCardProps {
   result: ScoringResultData;
-  onExportPDF: () => void;
-  onExportWord: () => void;
-  isExporting?: boolean;
 }
 
 const RISK_RATING_COLORS: Record<RiskRating, string> = {
@@ -22,9 +20,6 @@ const RISK_RATING_COLORS: Record<RiskRating, string> = {
 
 export function ScoringResultCard({
   result,
-  onExportPDF,
-  onExportWord,
-  isExporting = false,
 }: ScoringResultCardProps) {
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -108,22 +103,18 @@ export function ScoringResultCard({
 
       {/* Export Actions */}
       <div className="px-6 py-4 bg-gray-50 flex gap-3">
-        <button
-          onClick={onExportPDF}
-          disabled={isExporting}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <FileDown className="h-4 w-4" />
-          Export PDF
-        </button>
-        <button
-          onClick={onExportWord}
-          disabled={isExporting}
-          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <FileDown className="h-4 w-4" />
-          Export Word
-        </button>
+        <DownloadButton
+          assessmentId={result.assessmentId}
+          format="pdf"
+          exportType="scoring"
+          label="Export PDF"
+        />
+        <DownloadButton
+          assessmentId={result.assessmentId}
+          format="word"
+          exportType="scoring"
+          label="Export Word"
+        />
       </div>
     </div>
   );

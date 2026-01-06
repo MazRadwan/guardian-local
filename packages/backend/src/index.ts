@@ -22,9 +22,12 @@ import { QuestionService } from './application/services/QuestionService.js';
 import { QuestionnaireReadyService } from './application/services/QuestionnaireReadyService.js';
 import { QuestionnaireGenerationService } from './application/services/QuestionnaireGenerationService.js';
 import { ExportService } from './application/services/ExportService.js';
+import { ScoringExportService } from './application/services/ScoringExportService.js';
 import { PDFExporter } from './infrastructure/export/PDFExporter.js';
 import { WordExporter } from './infrastructure/export/WordExporter.js';
 import { ExcelExporter } from './infrastructure/export/ExcelExporter.js';
+import { ScoringPDFExporter } from './infrastructure/export/ScoringPDFExporter.js';
+import { ScoringWordExporter } from './infrastructure/export/ScoringWordExporter.js';
 import { DrizzleUserRepository } from './infrastructure/database/repositories/DrizzleUserRepository.js';
 import { DrizzleConversationRepository } from './infrastructure/database/repositories/DrizzleConversationRepository.js';
 import { DrizzleMessageRepository } from './infrastructure/database/repositories/DrizzleMessageRepository.js';
@@ -43,12 +46,14 @@ import { VendorController } from './infrastructure/http/controllers/VendorContro
 import { AssessmentController } from './infrastructure/http/controllers/AssessmentController.js';
 import { QuestionController } from './infrastructure/http/controllers/QuestionController.js';
 import { ExportController } from './infrastructure/http/controllers/ExportController.js';
+import { ScoringExportController } from './infrastructure/http/controllers/ScoringExportController.js';
 import { DocumentUploadController } from './infrastructure/http/controllers/DocumentUploadController.js';
 import { createAuthRoutes } from './infrastructure/http/routes/auth.routes.js';
 import { createVendorRoutes } from './infrastructure/http/routes/vendor.routes.js';
 import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.routes.js';
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
 import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
+import { createScoringExportRoutes } from './infrastructure/http/routes/scoring.export.routes.js';
 import { createDocumentRoutes } from './infrastructure/http/routes/document.routes.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
@@ -110,6 +115,14 @@ const pdfExporter = new PDFExporter(pdfTemplatePath);
 const wordExporter = new WordExporter();
 const excelExporter = new ExcelExporter();
 
+// Initialize scoring exporters (Epic 15)
+const scoringPdfTemplatePath = resolve(
+  __dirname,
+  'infrastructure/export/templates/scoring-template.html'
+);
+const scoringPDFExporter = new ScoringPDFExporter(scoringPdfTemplatePath);
+const scoringWordExporter = new ScoringWordExporter();
+
 // Initialize services
 const authService = new AuthService(userRepo, jwtProvider);
 const conversationService = new ConversationService(conversationRepo, messageRepo);
@@ -133,6 +146,15 @@ const exportService = new ExportService(
   pdfExporter,
   wordExporter,
   excelExporter
+);
+
+// Initialize scoring export service (Epic 15)
+const scoringExportService = new ScoringExportService(
+  assessmentRepo,
+  assessmentResultRepo,
+  dimensionScoreRepo,
+  scoringPDFExporter,
+  scoringWordExporter
 );
 
 // Initialize file storage and validation (Epic 16)
@@ -165,6 +187,10 @@ const vendorController = new VendorController(assessmentService);
 const assessmentController = new AssessmentController(assessmentService);
 const questionController = new QuestionController(questionService);
 const exportController = new ExportController(exportService, assessmentRepo);
+const scoringExportController = new ScoringExportController(
+  scoringExportService,
+  assessmentRepo
+);
 
 // Initialize server
 const server = new Server({
@@ -177,6 +203,7 @@ server.registerRoutes('/api/auth', createAuthRoutes(authController));
 server.registerRoutes('/api/vendors', createVendorRoutes(vendorController, authService));
 server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentController, authService));
 server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
+server.registerRoutes('/api/export/scoring', createScoringExportRoutes(scoringExportController, authService));
 server.registerRoutes('/api', createQuestionRoutes(questionController, authService));
 
 // Initialize rate limiter (10 messages per user per minute)
