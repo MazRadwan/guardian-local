@@ -1,7 +1,7 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 export interface MessageComponent {
-  type: 'button' | 'link' | 'code' | 'form';
+  type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result';
   data: unknown;
 }
 

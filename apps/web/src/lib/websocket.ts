@@ -18,7 +18,7 @@ export interface WebSocketConfig {
 }
 
 export interface EmbeddedComponent {
-  type: 'button' | 'link' | 'form' | 'download' | 'error';
+  type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result';
   data: {
     label?: string;
     action?: string;
@@ -26,6 +26,14 @@ export interface EmbeddedComponent {
     assessmentId?: string;
     formats?: Array<'pdf' | 'word' | 'excel'>;
     questionCount?: number;
+    // Scoring result data (when type === 'scoring_result')
+    compositeScore?: number;
+    recommendation?: string;
+    overallRiskRating?: string;
+    executiveSummary?: string;
+    keyFindings?: string[];
+    dimensionScores?: Array<{ dimension: string; score: number; riskRating: string }>;
+    batchId?: string;
     [key: string]: any;  // Allow additional properties for flexibility
   };
 }
@@ -225,10 +233,11 @@ interface BackendError {
 function normalizeComponents(components?: any[]): EmbeddedComponent[] | undefined {
   if (!components || !Array.isArray(components)) return undefined;
 
+  const validTypes = ['button', 'link', 'form', 'download', 'error', 'scoring_result'];
   return components
-    .filter((c) => c && ['button', 'link', 'form', 'download', 'error'].includes(c.type))
+    .filter((c) => c && validTypes.includes(c.type))
     .map((c) => ({
-      type: c.type as 'button' | 'link' | 'form' | 'download' | 'error',
+      type: c.type as EmbeddedComponent['type'],
       data: c.data && typeof c.data === 'object' ? c.data : {}, // Safe default
     }));
 }

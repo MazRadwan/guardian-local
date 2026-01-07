@@ -384,7 +384,7 @@ describe('DocumentUploadController', () => {
         'scoring_parse_ready',
         expect.objectContaining({
           success: false,
-          error: 'Not a Guardian questionnaire',
+          error: expect.stringContaining("doesn't appear to be a Guardian questionnaire"),
         })
       );
 
@@ -393,7 +393,7 @@ describe('DocumentUploadController', () => {
         'upload_progress',
         expect.objectContaining({
           stage: 'error',
-          error: 'Not a Guardian questionnaire', // Parser error included
+          error: expect.stringContaining("doesn't appear to be a Guardian questionnaire"),
         })
       );
     });

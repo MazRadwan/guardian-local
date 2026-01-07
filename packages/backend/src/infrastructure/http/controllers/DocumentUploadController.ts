@@ -621,23 +621,35 @@ export class DocumentUploadController {
           narrativeReport: scoringResult.report.narrativeReport,
         });
 
-        // Save narrative report as assistant message (with fallback for empty narrative)
+        // Save narrative report as assistant message with scoring_result component
+        // The component embeds scoring data directly in the message for persistence
         const narrativeText = scoringResult.report.narrativeReport ||
           `Risk assessment complete. Composite score: ${scoringResult.report.payload.compositeScore}/100. ` +
           `Overall risk: ${scoringResult.report.payload.overallRiskRating}. ` +
           `Recommendation: ${scoringResult.report.payload.recommendation}.`;
+
+        // Embed scoring result as component - survives page refresh via message history
+        const scoringComponent = {
+          type: 'scoring_result' as const,
+          data: resultData,
+        };
+
         const reportMessage = await this.conversationService.sendMessage({
           conversationId,
           role: 'assistant',
-          content: { text: narrativeText },
+          content: {
+            text: narrativeText,
+            components: [scoringComponent],
+          },
         });
 
-        // Emit the message for display
+        // Emit the message for display (include components)
         this.chatNamespace.to(socketRoom).emit('message', {
           id: reportMessage.id,
           conversationId: reportMessage.conversationId,
           role: reportMessage.role,
           content: reportMessage.content,
+          components: [scoringComponent],
           createdAt: reportMessage.createdAt,
         });
 

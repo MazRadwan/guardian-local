@@ -17,7 +17,7 @@ export const messages = pgTable(
       .$type<{
         text: string
         components?: Array<{
-          type: 'button' | 'link' | 'code'
+          type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result'
           data: any
         }>
       }>(),

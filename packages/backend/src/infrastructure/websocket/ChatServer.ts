@@ -36,7 +36,7 @@ interface SendMessagePayload {
   text?: string; // Message text (preferred)
   content?: string; // Backward compatibility with frontend
   components?: Array<{
-    type: 'button' | 'link' | 'code' | 'form';
+    type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result';
     data: unknown;
   }>;
   // Epic 16.6.9: File attachments now only send fileId (server validates and enriches)
