@@ -22,9 +22,12 @@ import { QuestionService } from './application/services/QuestionService.js';
 import { QuestionnaireReadyService } from './application/services/QuestionnaireReadyService.js';
 import { QuestionnaireGenerationService } from './application/services/QuestionnaireGenerationService.js';
 import { ExportService } from './application/services/ExportService.js';
+import { ScoringExportService } from './application/services/ScoringExportService.js';
 import { PDFExporter } from './infrastructure/export/PDFExporter.js';
 import { WordExporter } from './infrastructure/export/WordExporter.js';
 import { ExcelExporter } from './infrastructure/export/ExcelExporter.js';
+import { ScoringPDFExporter } from './infrastructure/export/ScoringPDFExporter.js';
+import { ScoringWordExporter } from './infrastructure/export/ScoringWordExporter.js';
 import { DrizzleUserRepository } from './infrastructure/database/repositories/DrizzleUserRepository.js';
 import { DrizzleConversationRepository } from './infrastructure/database/repositories/DrizzleConversationRepository.js';
 import { DrizzleMessageRepository } from './infrastructure/database/repositories/DrizzleMessageRepository.js';
@@ -32,24 +35,32 @@ import { DrizzleVendorRepository } from './infrastructure/database/repositories/
 import { DrizzleAssessmentRepository } from './infrastructure/database/repositories/DrizzleAssessmentRepository.js';
 import { DrizzleQuestionRepository } from './infrastructure/database/repositories/DrizzleQuestionRepository.js';
 import { DrizzleFileRepository } from './infrastructure/database/repositories/DrizzleFileRepository.js';
+import { DrizzleResponseRepository } from './infrastructure/database/repositories/DrizzleResponseRepository.js';
+import { DrizzleDimensionScoreRepository } from './infrastructure/database/repositories/DrizzleDimensionScoreRepository.js';
+import { DrizzleAssessmentResultRepository } from './infrastructure/database/repositories/DrizzleAssessmentResultRepository.js';
 import { ClaudeClient } from './infrastructure/ai/ClaudeClient.js';
+import { ScoringPromptBuilder } from './infrastructure/ai/ScoringPromptBuilder.js';
 import { JWTProvider } from './infrastructure/auth/JWTProvider.js';
 import { AuthController } from './infrastructure/http/controllers/AuthController.js';
 import { VendorController } from './infrastructure/http/controllers/VendorController.js';
 import { AssessmentController } from './infrastructure/http/controllers/AssessmentController.js';
 import { QuestionController } from './infrastructure/http/controllers/QuestionController.js';
 import { ExportController } from './infrastructure/http/controllers/ExportController.js';
+import { ScoringExportController } from './infrastructure/http/controllers/ScoringExportController.js';
 import { DocumentUploadController } from './infrastructure/http/controllers/DocumentUploadController.js';
 import { createAuthRoutes } from './infrastructure/http/routes/auth.routes.js';
 import { createVendorRoutes } from './infrastructure/http/routes/vendor.routes.js';
 import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.routes.js';
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
 import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
+import { createScoringExportRoutes } from './infrastructure/http/routes/scoring.export.routes.js';
 import { createDocumentRoutes } from './infrastructure/http/routes/document.routes.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
 import { createFileStorage } from './infrastructure/storage/index.js';
 import { FileValidationService } from './application/services/FileValidationService.js';
+import { ScoringService } from './application/services/ScoringService.js';
+import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidator.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
@@ -78,6 +89,11 @@ const assessmentRepo = new DrizzleAssessmentRepository();
 const questionRepo = new DrizzleQuestionRepository();
 const fileRepo = new DrizzleFileRepository();
 
+// Initialize scoring repositories (Epic 15)
+const responseRepo = new DrizzleResponseRepository();
+const dimensionScoreRepo = new DrizzleDimensionScoreRepository();
+const assessmentResultRepo = new DrizzleAssessmentResultRepository();
+
 // Initialize providers
 const jwtProvider = new JWTProvider(JWT_SECRET);
 
@@ -98,6 +114,14 @@ const pdfTemplatePath = resolve(
 const pdfExporter = new PDFExporter(pdfTemplatePath);
 const wordExporter = new WordExporter();
 const excelExporter = new ExcelExporter();
+
+// Initialize scoring exporters (Epic 15)
+const scoringPdfTemplatePath = resolve(
+  __dirname,
+  'infrastructure/export/templates/scoring-report.html'
+);
+const scoringPDFExporter = new ScoringPDFExporter(scoringPdfTemplatePath);
+const scoringWordExporter = new ScoringWordExporter();
 
 // Initialize services
 const authService = new AuthService(userRepo, jwtProvider);
@@ -124,6 +148,15 @@ const exportService = new ExportService(
   excelExporter
 );
 
+// Initialize scoring export service (Epic 15)
+const scoringExportService = new ScoringExportService(
+  assessmentRepo,
+  assessmentResultRepo,
+  dimensionScoreRepo,
+  scoringPDFExporter,
+  scoringWordExporter
+);
+
 // Initialize file storage and validation (Epic 16)
 const fileStorage = createFileStorage();
 const fileValidationService = new FileValidationService();
@@ -132,12 +165,32 @@ const documentParserService = new DocumentParserService(
   claudeClient   // IVisionClient - ClaudeClient implements both
 );
 
+// Initialize scoring components (Epic 15)
+const scoringPromptBuilder = new ScoringPromptBuilder();
+const scoringPayloadValidator = new ScoringPayloadValidator();
+const scoringService = new ScoringService(
+  responseRepo,
+  dimensionScoreRepo,
+  assessmentResultRepo,
+  assessmentRepo,
+  fileRepo,
+  fileStorage,
+  documentParserService, // IScoringDocumentParser
+  claudeClient,          // ILLMClient - ClaudeClient implements this
+  scoringPromptBuilder,
+  scoringPayloadValidator
+);
+
 // Initialize controllers
 const authController = new AuthController(authService);
 const vendorController = new VendorController(assessmentService);
 const assessmentController = new AssessmentController(assessmentService);
 const questionController = new QuestionController(questionService);
 const exportController = new ExportController(exportService, assessmentRepo);
+const scoringExportController = new ScoringExportController(
+  scoringExportService,
+  assessmentRepo
+);
 
 // Initialize server
 const server = new Server({
@@ -150,6 +203,7 @@ server.registerRoutes('/api/auth', createAuthRoutes(authController));
 server.registerRoutes('/api/vendors', createVendorRoutes(vendorController, authService));
 server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentController, authService));
 server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
+server.registerRoutes('/api/export/scoring', createScoringExportRoutes(scoringExportController, authService));
 server.registerRoutes('/api', createQuestionRoutes(questionController, authService));
 
 // Initialize rate limiter (10 messages per user per minute)
@@ -171,7 +225,8 @@ const chatServer = new ChatServer(
   questionnaireReadyService,
   questionnaireGenerationService,
   questionService,
-  fileRepo
+  fileRepo,
+  scoringService  // Epic 15
 );
 
 console.log('[App] ChatServer initialized');
@@ -186,7 +241,8 @@ const documentUploadController = new DocumentUploadController(
   documentParserService,  // IScoringDocumentParser (same implementation)
   conversationService,    // Ownership validation + save assistant messages
   chatNamespace,
-  fileRepo                // Epic 16.6.9: File registration in database
+  fileRepo,               // Epic 16.6.9: File registration in database
+  scoringService          // Epic 15 Sprint 5a: Auto-trigger scoring after parse
 );
 
 // Register document routes (Epic 16)

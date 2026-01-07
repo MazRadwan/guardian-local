@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 export interface DownloadButtonProps {
   assessmentId: string;
   format: 'pdf' | 'word' | 'excel';
+  exportType?: 'questionnaire' | 'scoring';
   label?: string;
   onDownload?: () => void;
 }
@@ -16,6 +17,7 @@ export interface DownloadButtonProps {
 export function DownloadButton({
   assessmentId,
   format,
+  exportType = 'questionnaire',
   label,
   onDownload,
 }: DownloadButtonProps) {
@@ -40,7 +42,13 @@ export function DownloadButton({
     setIsDownloading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/assessments/${assessmentId}/export/${format}`, {
+
+      // Build URL based on exportType
+      const url = exportType === 'scoring'
+        ? `${apiUrl}/api/export/scoring/${assessmentId}/${format}`
+        : `${apiUrl}/api/assessments/${assessmentId}/export/${format}`;
+
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -64,18 +72,19 @@ export function DownloadButton({
 
       // Create download link
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = blobUrl;
 
-      // Set filename based on format with timestamp
+      // Set filename based on format and exportType with timestamp
       const extension = format === 'word' ? 'docx' : format === 'excel' ? 'xlsx' : 'pdf';
       const timestamp = new Date().toISOString().split('T')[0];
-      a.download = `questionnaire-${timestamp}.${extension}`;
+      const prefix = exportType === 'scoring' ? 'scoring-report' : 'questionnaire';
+      a.download = `${prefix}-${timestamp}.${extension}`;
 
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(blobUrl);
       document.body.removeChild(a);
 
       console.log(`[DownloadButton] Successfully downloaded ${format.toUpperCase()} file`);

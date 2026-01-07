@@ -99,22 +99,18 @@ infrastructure/
 
 ## Test Requirements (MANDATORY)
 
-**Unit tests:**
-- User.create() validates email format
-- User.setPassword() hashes with bcrypt
-- AuthService.login() validates credentials (mock repo)
-- authMiddleware validates JWT
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration tests:**
-- DrizzleUserRepository saves/finds user
-- Repository with test database (Docker)
+**What to test for this epic:**
+- Unit: User.create() validates email, User.setPassword() hashes with bcrypt
+- Unit: AuthService.login() validates credentials (mock repo)
+- Unit: authMiddleware validates JWT
+- Integration: DrizzleUserRepository saves/finds user (test DB)
+- E2E: Register → login → protected route flow
 
-**E2E tests:**
-- POST /api/auth/register creates user
-- POST /api/auth/login returns JWT
-- Protected endpoint rejects invalid token
-
-**Before completing:** Run `npm test` - all must pass.
+**Commands:**
+- During dev: `pnpm --filter @guardian/backend test:watch:unit`
+- Before commit: `pnpm test:unit` + `pnpm test:integration`
 
 ## Dependencies
 
@@ -126,7 +122,7 @@ infrastructure/
 Before marking this epic complete, verify:
 
 - [ ] All acceptance criteria met (check `tasks/mvp-tasks.md` Epic 2 stories)
-- [ ] Tests written and passing (unit + integration, >70% coverage)
+- [ ] Tests written and passing (`pnpm test:unit` + `pnpm test:integration`)
 - [ ] Code reviewed (self-review: clean architecture, no domain layer violations)
 - [ ] Security verified (passwords hashed with bcrypt, JWT secrets in env vars)
 - [ ] No eslint/prettier errors (`npm run lint`)

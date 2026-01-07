@@ -91,6 +91,25 @@ export class WordExporter implements IWordExporter {
       new Paragraph({
         children: [
           new TextRun({
+            text: 'GUARDIAN Assessment ID: ',
+            bold: true,
+            size: 20,
+          }),
+          new TextRun({
+            text: assessment.id,
+            font: 'Courier New',
+            size: 20,
+            color: '6B7280',
+          }),
+        ],
+        spacing: { after: 100 },
+        shading: {
+          fill: 'F3F4F6',
+        },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
             text: 'Assessment Type: ',
             bold: true,
           }),

@@ -66,7 +66,7 @@ export interface ToolUseContext {
   assessmentId: string | null;
 
   /** Current conversation mode */
-  mode?: 'consult' | 'assessment';
+  mode?: 'consult' | 'assessment' | 'scoring';
 }
 
 /**

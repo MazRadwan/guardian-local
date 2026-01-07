@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
+import { ScoringResultCard } from './ScoringResultCard';
 import { AlertCircle } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
@@ -59,6 +60,13 @@ export function ChatInterface() {
 
   // Story 14.1.5: Gate download visibility until stream completes
   const isQuestionnaireStreamComplete = useChatStore((state) => state.isQuestionnaireStreamComplete);
+
+  // Scoring state (Stories 5b, 5c)
+  const scoringResult = useChatStore((state) => state.scoringResult);
+  const scoringProgress = useChatStore((state) => state.scoringProgress);
+  const resetScoring = useChatStore((state) => state.resetScoring);
+  const scoringResultByConversation = useChatStore((state) => state.scoringResultByConversation);
+  const setScoringResult = useChatStore((state) => state.setScoringResult);
 
   // Get export data for active conversation
   const exportData = activeConversationId
@@ -151,6 +159,44 @@ export function ChatInterface() {
   useEffect(() => {
     resetGenerationStep();
   }, [activeConversationId, resetGenerationStep]);
+
+  // Story 5c: Restore/reset scoring state when conversation changes
+  useEffect(() => {
+    if (!activeConversationId) {
+      resetScoring();
+      return;
+    }
+
+    // Check cache for existing scoring result for this conversation
+    const cachedResult = scoringResultByConversation[activeConversationId];
+    if (cachedResult) {
+      // Restore from cache
+      console.log('[ChatInterface] Restoring scoring result from cache for conversation:', activeConversationId);
+      setScoringResult(cachedResult);
+      // Set progress to complete since we have results
+      useChatStore.getState().updateScoringProgress({
+        status: 'complete',
+        message: 'Analysis complete!',
+      });
+    } else {
+      // No cached result - reset to idle
+      resetScoring();
+    }
+  }, [activeConversationId, resetScoring, scoringResultByConversation, setScoringResult]);
+
+  // Story 5b: Clear Composer files when scoring completes
+  const prevScoringStatusRef = useRef<string>('idle');
+  useEffect(() => {
+    const currentStatus = scoringProgress.status;
+    const previousStatus = prevScoringStatusRef.current;
+    prevScoringStatusRef.current = currentStatus;
+
+    // When status transitions TO 'complete' (not just IS complete)
+    if (currentStatus === 'complete' && previousStatus !== 'complete' && previousStatus !== 'idle') {
+      console.log('[ChatInterface] Scoring complete - clearing Composer files');
+      composerRef.current?.clearFiles();
+    }
+  }, [scoringProgress.status, composerRef]);
 
   const handleGenerateQuestionnaire = useCallback(() => {
     if (!pendingQuestionnaire || !adapter) return;
@@ -290,85 +336,98 @@ export function ChatInterface() {
         </div>
       )}
 
-      {/* Conditional Layout: Centered vs Active State */}
-      {messages.length === 0 && !showDelayedLoading ? (
-        // Empty state: Centered composer (only when truly empty, not loading)
+      {/*
+        Layout Architecture:
+        - CRITICAL FIX: Single Composer instance to preserve file upload state across layout changes
+        - When messages are empty (empty state), center the welcome message and composer
+        - When messages exist (active state), show MessageList above the composer
+        - The Composer MUST remain mounted through both states to preserve upload progress
+      */}
+
+      {/* Empty state content (centered) - shown only when no messages */}
+      {messages.length === 0 && !showDelayedLoading && (
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center px-4">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to Guardian</h1>
-            <p className="text-gray-600">Start a conversation to assess AI vendors or get guidance.</p>
-          </div>
-          <div className="w-full max-w-3xl">
-            <Composer
-              ref={composerRef}
-              onSendMessage={handleSendMessage}
-              disabled={!isConnected || isLoading || isStreaming}
-              currentMode={mode}
-              onModeChange={handleModeChange}
-              modeChangeDisabled={isChanging || !isConnected}
-              isStreaming={isStreaming}
-              isLoading={isLoading}
-              onStopStream={abortStream}
-              wsAdapter={adapter}
-              conversationId={activeConversationId ?? undefined}
-            />
-          </div>
+          {/* Welcome message - hidden when scoring result is present */}
+          {!(scoringResult && scoringResult.assessmentId) && (
+            <div className="text-center mb-8">
+              <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to Guardian</h1>
+              <p className="text-gray-600">Start a conversation to assess AI vendors or get guidance.</p>
+            </div>
+          )}
+
+          {/* Scoring Result Card - also in empty state (Story 5c fix) */}
+          {scoringResult && scoringResult.assessmentId && (
+            <div className="w-full max-w-3xl mb-4 overflow-y-auto max-h-[60vh]">
+              <ScoringResultCard result={scoringResult} />
+            </div>
+          )}
         </div>
-      ) : (
-        // Active state: Messages + composer at bottom (includes loading state)
-        <>
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <MessageList
-              ref={messageListRef}
-              messages={messages}
-              isLoading={showDelayedLoading}
-              isStreaming={isStreaming}
-              onRegenerate={handleRegenerate}
-              regeneratingMessageIndex={regeneratingMessageIndex}
-              onDownloadAttachment={handleDownloadAttachment}
-              questionnaire={
-                pendingQuestionnaire &&
-                pendingQuestionnaire.conversationId === activeConversationId &&
-                gatedUIState !== 'hidden'
-                  ? {
-                      payload: pendingQuestionnaire,
-                      uiState: gatedUIState, // Story 14.1.5: Gated to 'generating' until stream completes
-                      error: questionnaireError,
-                      exportData: gatedExportData, // Story 14.1.5: Gated until stream completes
-                      onGenerate: handleGenerateQuestionnaire,
-                      onDownload: handleDownload,
-                      onRetry: handleGenerateQuestionnaire,
-                      steps: generationSteps,
-                      currentStep: currentGenerationStep,
-                      isRunning: isGeneratingQuestionnaire,
-                      insertIndex: questionnaireMessageIndex,
-                    }
-                  : undefined
-              }
-            />
-          </div>
-          <div className="flex-shrink-0 bg-white z-10">
-            <div className="max-w-3xl mx-auto w-full">
-              <Composer
-                ref={composerRef}
-                onSendMessage={handleSendMessage}
-                disabled={!isConnected || isLoading || isStreaming}
-                currentMode={mode}
-                onModeChange={handleModeChange}
-                modeChangeDisabled={isChanging || !isConnected}
-                isStreaming={isStreaming}
-                isLoading={isLoading}
-                onStopStream={abortStream}
-                wsAdapter={adapter}
-                conversationId={activeConversationId ?? undefined}
-              />
-            </div>
-            <div className="text-center text-xs text-gray-400 py-2 pb-4">
-              Guardian can make mistakes. Review generated assessments.
-            </div>
-          </div>
-        </>
       )}
+
+      {/* Active state content (MessageList) - shown when messages exist */}
+      {(messages.length > 0 || showDelayedLoading) && (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <MessageList
+            ref={messageListRef}
+            messages={messages}
+            isLoading={showDelayedLoading}
+            isStreaming={isStreaming}
+            onRegenerate={handleRegenerate}
+            regeneratingMessageIndex={regeneratingMessageIndex}
+            onDownloadAttachment={handleDownloadAttachment}
+            questionnaire={
+              pendingQuestionnaire &&
+              pendingQuestionnaire.conversationId === activeConversationId &&
+              gatedUIState !== 'hidden'
+                ? {
+                    payload: pendingQuestionnaire,
+                    uiState: gatedUIState, // Story 14.1.5: Gated to 'generating' until stream completes
+                    error: questionnaireError,
+                    exportData: gatedExportData, // Story 14.1.5: Gated until stream completes
+                    onGenerate: handleGenerateQuestionnaire,
+                    onDownload: handleDownload,
+                    onRetry: handleGenerateQuestionnaire,
+                    steps: generationSteps,
+                    currentStep: currentGenerationStep,
+                    isRunning: isGeneratingQuestionnaire,
+                    insertIndex: questionnaireMessageIndex,
+                  }
+                : undefined
+            }
+            scoringResult={scoringResult}
+            scoringProgress={scoringProgress}
+          />
+        </div>
+      )}
+
+      {/*
+        Single Composer instance - ALWAYS rendered (never unmounts)
+        This preserves file upload state when switching between empty/active states
+      */}
+      <div className={`flex-shrink-0 bg-white z-10 ${
+        messages.length === 0 && !showDelayedLoading
+          ? 'w-full max-w-3xl mx-auto px-4'
+          : ''
+      }`}>
+        <div className="max-w-3xl mx-auto w-full">
+          <Composer
+            ref={composerRef}
+            onSendMessage={handleSendMessage}
+            disabled={!isConnected || isLoading || isStreaming}
+            currentMode={mode}
+            onModeChange={handleModeChange}
+            modeChangeDisabled={isChanging || !isConnected}
+            isStreaming={isStreaming}
+            isLoading={isLoading}
+            onStopStream={abortStream}
+            wsAdapter={adapter}
+            conversationId={activeConversationId ?? undefined}
+          />
+        </div>
+        <div className="text-center text-xs text-gray-400 py-2 pb-4">
+          Guardian can make mistakes. Review generated assessments.
+        </div>
+      </div>
     </div>
   );
 }

@@ -136,6 +136,9 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
     // 7. Get or create assessment
     const assessmentId = await this.ensureAssessment(context, schema);
 
+    // 7.5. Add assessmentId to schema metadata (required for scoring workflow)
+    schema.metadata.assessmentId = assessmentId;
+
     // 8. Persist questions to assessment (replaces existing if re-generating)
     await this.persistQuestions(assessmentId, schema);
 
@@ -267,6 +270,7 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
       version: '1.0',
       metadata: {
         ...metadata,
+        assessmentId: metadata.assessmentId ?? '', // Placeholder - set after ensureAssessment()
         assessmentType: metadata.assessmentType ?? schema.metadata?.assessmentType ?? 'comprehensive',
         generatedAt: metadata.generatedAt ?? schema.metadata?.generatedAt ?? new Date().toISOString(),
         questionCount: metadata.questionCount ?? schema.metadata?.questionCount ?? 0,
@@ -410,6 +414,9 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
     // Get or create assessment (same as normal flow)
     const assessmentId = await this.ensureAssessment(context, schema);
 
+    // Add assessmentId to schema metadata (required for scoring workflow)
+    schema.metadata.assessmentId = assessmentId;
+
     // Persist questions (same as normal flow)
     await this.persistQuestions(assessmentId, schema);
 
@@ -438,6 +445,7 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
     return {
       version: '1.0',
       metadata: {
+        assessmentId: '', // Placeholder - will be set after ensureAssessment()
         assessmentType: context.assessmentType,
         vendorName: context.vendorName || 'Test Vendor',
         solutionName: context.solutionName || 'Test Solution',

@@ -305,7 +305,7 @@ export class DocumentParserService
           images: visionContent,
           prompt: `${prompt}\n\nAnalyze the questionnaire shown in the image(s).`,
           systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT,
-          maxTokens: 8192, // Larger for full questionnaire
+          maxTokens: 16384, // Extended output for large questionnaires (100+ questions)
         });
         responseContent = visionResponse.content;
       } else {
@@ -317,7 +317,7 @@ export class DocumentParserService
               content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}`,
             },
           ],
-          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 8192 }
+          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384 }
         );
         responseContent = response.content;
       }
@@ -457,15 +457,43 @@ export class DocumentParserService
   private parseJsonResponse(content: string): Record<string, unknown> | null {
     try {
       // Try to extract JSON from response (handle markdown code blocks)
-      let jsonStr = content;
+      let jsonStr = content.trim();
 
-      // Check for markdown code block
+      // Strategy 1: Check for complete markdown code block (```json ... ```)
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
-        jsonStr = jsonMatch[1];
+        jsonStr = jsonMatch[1].trim();
+      } else {
+        // Strategy 2: Strip leading code fence if present but no closing fence
+        // This handles cases where Claude returns ```json\n{...} without closing ```
+        if (jsonStr.startsWith('```')) {
+          // Remove opening fence (```json or ```)
+          jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '');
+          // Remove trailing fence if it exists at end
+          jsonStr = jsonStr.replace(/\s*```\s*$/, '');
+        }
+
+        // Strategy 3: Find first { and last } to extract JSON object
+        const firstBrace = jsonStr.indexOf('{');
+        const lastBrace = jsonStr.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+          jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+        }
       }
 
-      const parsed = JSON.parse(jsonStr.trim());
+      // First attempt: parse as-is
+      try {
+        const parsed = JSON.parse(jsonStr.trim());
+        if (isObject(parsed)) {
+          return parsed;
+        }
+      } catch {
+        // Fall through to repair attempts
+      }
+
+      // Strategy 4: Attempt JSON repair for common Claude errors
+      const repairedJson = this.attemptJsonRepair(jsonStr.trim());
+      const parsed = JSON.parse(repairedJson);
 
       // Use isObject to fail fast on arrays, nulls, primitives
       if (!isObject(parsed)) {
@@ -478,6 +506,43 @@ export class DocumentParserService
       console.error('[DocumentParserService] JSON parse error:', error);
       return null;
     }
+  }
+
+  /**
+   * Attempt to repair common JSON syntax errors from Claude
+   */
+  private attemptJsonRepair(jsonStr: string): string {
+    let repaired = jsonStr;
+
+    // Fix 1: Remove trailing commas before ] or }
+    repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
+
+    // Fix 2: Add missing commas between array elements (} followed by { without comma)
+    repaired = repaired.replace(/}(\s*){/g, '},$1{');
+
+    // Fix 3: Add missing commas between array elements (" followed by { without comma)
+    repaired = repaired.replace(/"(\s*){/g, '",$1{');
+
+    // Fix 4: Ensure arrays and objects are properly closed
+    // Count brackets
+    const openBraces = (repaired.match(/{/g) || []).length;
+    const closeBraces = (repaired.match(/}/g) || []).length;
+    const openBrackets = (repaired.match(/\[/g) || []).length;
+    const closeBrackets = (repaired.match(/\]/g) || []).length;
+
+    // Add missing closing braces
+    for (let i = 0; i < openBraces - closeBraces; i++) {
+      repaired += '}';
+    }
+
+    // Add missing closing brackets
+    for (let i = 0; i < openBrackets - closeBrackets; i++) {
+      repaired += ']';
+    }
+
+    console.log(`[DocumentParserService] JSON repair applied: ${openBraces - closeBraces} missing }, ${openBrackets - closeBrackets} missing ]`);
+
+    return repaired;
   }
 
   /**

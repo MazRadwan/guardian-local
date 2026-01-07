@@ -40,10 +40,18 @@ export function useConversationSync({
   }, []);
 
   // Sync activeConversationId from URL on mount
+  // GUARD: Only sync if localStorage also has the ID (prevents restoring stale URLs)
   useEffect(() => {
     const urlConversationId = searchParams.get('conversation');
     if (urlConversationId && !activeConversationId) {
-      setActiveConversation(urlConversationId);
+      // Check localStorage - if it's been cleared, don't restore from URL
+      // This prevents race condition when intentionally clearing stale conversations
+      const storedId = typeof window !== 'undefined' ? localStorage.getItem('guardian_conversation_id') : null;
+      if (storedId === urlConversationId) {
+        setActiveConversation(urlConversationId);
+      } else {
+        console.log('[useConversationSync] Skipping URL sync - localStorage mismatch (stale URL being cleared)');
+      }
     }
   }, [searchParams, activeConversationId, setActiveConversation]);
 
@@ -60,6 +68,20 @@ export function useConversationSync({
       // Update localStorage for session persistence
       if (typeof window !== 'undefined') {
         localStorage.setItem('guardian_conversation_id', activeConversationId);
+      }
+    } else if (activeConversationId === null) {
+      // Clear localStorage when conversation is explicitly set to null
+      // This prevents stale conversation IDs from being passed on reconnect
+      if (typeof window !== 'undefined') {
+        console.log('[useConversationSync] Clearing stale conversation from localStorage');
+        localStorage.removeItem('guardian_conversation_id');
+      }
+
+      // Clear URL param if present
+      const currentConversationId = searchParams.get('conversation');
+      if (currentConversationId) {
+        console.log('[useConversationSync] Clearing stale conversation from URL');
+        router.replace('/chat', { scroll: false });
       }
     }
   }, [activeConversationId, searchParams, router]);

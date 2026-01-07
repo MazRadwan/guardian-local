@@ -26,6 +26,13 @@ describe('ModeSelector', () => {
       expect(screen.getByLabelText('Mode: Assessment')).toBeInTheDocument();
     });
 
+    it('renders badge with scoring mode', () => {
+      render(<ModeSelector selectedMode="scoring" onModeChange={mockOnModeChange} />);
+
+      expect(screen.getByText('Scoring')).toBeInTheDocument();
+      expect(screen.getByLabelText('Mode: Scoring')).toBeInTheDocument();
+    });
+
     it('renders ChevronDown icon', () => {
       const { container } = render(
         <ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />
@@ -53,7 +60,7 @@ describe('ModeSelector', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
-    it('shows both mode options when open', async () => {
+    it('shows all mode options when open (Scoring always visible)', async () => {
       render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
@@ -61,6 +68,7 @@ describe('ModeSelector', () => {
 
       expect(screen.getByTestId('mode-option-consult')).toBeInTheDocument();
       expect(screen.getByTestId('mode-option-assessment')).toBeInTheDocument();
+      expect(screen.getByTestId('mode-option-scoring')).toBeInTheDocument();
     });
 
     it('shows mode descriptions in dropdown', async () => {
@@ -71,6 +79,7 @@ describe('ModeSelector', () => {
 
       expect(screen.getByText('General questions about AI governance')).toBeInTheDocument();
       expect(screen.getByText('Structured vendor assessment workflow')).toBeInTheDocument();
+      expect(screen.getByText('Score completed questionnaire responses')).toBeInTheDocument();
     });
 
     it('closes dropdown when clicking badge again', async () => {
@@ -102,6 +111,19 @@ describe('ModeSelector', () => {
       await userEvent.click(assessmentOption);
 
       expect(mockOnModeChange).toHaveBeenCalledWith('assessment');
+      expect(mockOnModeChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls onModeChange when selecting scoring mode', async () => {
+      render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
+
+      const badge = screen.getByLabelText('Mode: Consult');
+      await userEvent.click(badge);
+
+      const scoringOption = screen.getByTestId('mode-option-scoring');
+      await userEvent.click(scoringOption);
+
+      expect(mockOnModeChange).toHaveBeenCalledWith('scoring');
       expect(mockOnModeChange).toHaveBeenCalledTimes(1);
     });
 
@@ -337,7 +359,7 @@ describe('ModeSelector', () => {
       render(<ModeSelector selectedMode="consult" onModeChange={mockOnModeChange} />);
 
       const badge = screen.getByLabelText('Mode: Consult');
-      expect(badge).toHaveAttribute('aria-haspopup', 'listbox');
+      expect(badge).toHaveAttribute('aria-haspopup', 'dialog');
     });
 
     it('dropdown has role="dialog" (ShadCN Popover)', async () => {
@@ -357,7 +379,7 @@ describe('ModeSelector', () => {
       await userEvent.click(badge);
 
       const options = screen.getAllByRole('option');
-      expect(options).toHaveLength(2);
+      expect(options).toHaveLength(3);
     });
 
     it('selected option has aria-selected="true"', async () => {

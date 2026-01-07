@@ -133,15 +133,17 @@ res.json({ success: true, data: testUser })
 
 ## Test Requirements
 
-**Component tests:**
-- LoginForm validation works
-- RegisterForm creates user
-- DevModeButton only shows in development
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
 
-**Integration tests:**
-- Protected route redirects to /login
-- Login stores token, redirects to /chat
-- WebSocket gets token from useAuth
+**What to test for this epic:**
+- Component: LoginForm validation works
+- Component: RegisterForm creates user
+- Component: DevModeButton only shows in development
+- Integration: Protected route redirects, login stores token
+
+**Commands:**
+- During dev: `pnpm --filter @guardian/web test:watch`
+- Before commit: `pnpm --filter @guardian/web test`
 
 ## Dependencies
 

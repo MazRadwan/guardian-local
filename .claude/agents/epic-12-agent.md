@@ -145,20 +145,22 @@ grep -l "Status: pending" tasks/epic-12/*.md | head -1
 
 ## Test Requirements
 
+**Refer to:** `.claude/skills/testing/SKILL.md` for commands and patterns.
+
 **Run before marking any story complete:**
 ```bash
-# Backend tests
-cd packages/backend && pnpm test
+# Backend unit tests (fast)
+pnpm --filter @guardian/backend test:unit
 
 # Frontend tests
-cd apps/web && pnpm test
+pnpm --filter @guardian/web test
 ```
 
-**Test coverage:**
-- Unit tests for QuestionnaireReadyService
-- Unit tests for GenerateQuestionnaireButton
-- Integration tests for ChatServer tool handling
-- Feature flag tests (both paths)
+**What to test:**
+- Unit: QuestionnaireReadyService
+- Unit: GenerateQuestionnaireButton
+- Integration: ChatServer tool handling
+- Feature flag: Both paths
 
 ## Code Review
 

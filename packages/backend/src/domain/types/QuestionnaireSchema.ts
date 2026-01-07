@@ -119,6 +119,9 @@ export interface QuestionnaireSection {
  * Metadata about the generated questionnaire
  */
 export interface QuestionnaireMetadata {
+  /** Assessment ID - required for scoring workflow to link back to assessment */
+  assessmentId: string;
+
   /** Type of assessment */
   assessmentType: AssessmentType;
 
@@ -198,6 +201,12 @@ export function validateQuestionnaireSchemaDetailed(
 
   if (!s.metadata || typeof s.metadata !== 'object') {
     return { isValid: false, error: 'Metadata missing or invalid' };
+  }
+
+  // Note: assessmentId may be empty during initial generation (set after validation)
+  // Exports and scoring workflow will verify it's non-empty
+  if (s.metadata.assessmentId !== undefined && typeof s.metadata.assessmentId !== 'string') {
+    return { isValid: false, error: 'Metadata assessmentId must be a string' };
   }
 
   if (!['quick', 'comprehensive', 'category_focused'].includes(s.metadata.assessmentType)) {

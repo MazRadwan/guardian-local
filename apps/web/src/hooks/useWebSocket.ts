@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 
 export interface UseWebSocketOptions {
@@ -28,6 +28,11 @@ export interface UseWebSocketOptions {
   // Story 13.9.2: Export status resume callbacks
   onExportStatusNotFound?: (data: ExportStatusNotFoundPayload) => void;
   onExportStatusError?: (data: ExportStatusErrorPayload) => void;
+  // Epic 15 Story 5a.7: Scoring event callbacks
+  onScoringStarted?: (data: ScoringStartedPayload) => void;
+  onScoringProgress?: (data: ScoringProgressPayload) => void;
+  onScoringComplete?: (data: ScoringCompletePayload) => void;
+  onScoringError?: (data: ScoringErrorPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -54,11 +59,19 @@ export function useWebSocket({
   onGenerationPhase,
   onExportStatusNotFound,
   onExportStatusError,
+  onScoringStarted,
+  onScoringProgress,
+  onScoringComplete,
+  onScoringError,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const clientRef = useRef<WebSocketClient | null>(null);
+
+  // Ref to store latest onConnectionReady callback to avoid stale closures
+  const onConnectionReadyRef = useRef(onConnectionReady);
+  onConnectionReadyRef.current = onConnectionReady;
 
   const connect = useCallback(async () => {
     // Guard: Don't connect if already connected or connecting
@@ -71,9 +84,17 @@ export function useWebSocket({
         url,
         token,
         conversationId,
-        // Note: Event callbacks registered dynamically in effect, not via config
+        // Note: Most event callbacks registered dynamically in effect, not via config
       });
-      await client.connect();
+
+      // CRITICAL: Pass onConnectionReady to connect() so it's registered BEFORE
+      // the socket actually connects. The server emits connection_ready immediately
+      // after connect, so we must register this listener before connect completes.
+      await client.connect({
+        onConnectionReady: onConnectionReadyRef.current
+          ? (data) => onConnectionReadyRef.current?.(data)
+          : undefined,
+      });
       clientRef.current = client;
       setIsConnected(true);
     } catch (error) {
@@ -121,7 +142,7 @@ export function useWebSocket({
     clientRef.current.fetchConversations();
   }, [isConnected]);
 
-  const startNewConversation = useCallback((mode: 'consult' | 'assessment' = 'consult') => {
+  const startNewConversation = useCallback((mode: 'consult' | 'assessment' | 'scoring' = 'consult') => {
     if (!clientRef.current || !isConnected) {
       console.warn('[useWebSocket] Cannot start new conversation - not connected');
       return;
@@ -141,7 +162,7 @@ export function useWebSocket({
     clientRef.current.deleteConversation(conversationId);
   }, [isConnected]);
 
-  const updateConversationMode = useCallback((conversationId: string, mode: 'consult' | 'assessment') => {
+  const updateConversationMode = useCallback((conversationId: string, mode: 'consult' | 'assessment' | 'scoring') => {
     if (!clientRef.current || !isConnected) {
       console.warn('[useWebSocket] Cannot switch mode - not connected');
       return;
@@ -281,12 +302,9 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
-    if (onConnectionReady) {
-      const unsub = client.onConnectionReady((data) => {
-        onConnectionReady(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    // NOTE: onConnectionReady is registered in connect() BEFORE the socket connects
+    // to ensure we don't miss the server's immediate connection_ready event.
+    // It's not registered here to avoid double-registration.
 
     // Story 13.9.2: Export status resume subscriptions
     if (onExportStatusNotFound) {
@@ -303,10 +321,40 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // Epic 15 Story 5a.7: Scoring event subscriptions
+    if (onScoringStarted) {
+      const unsub = client.onScoringStarted((data) => {
+        onScoringStarted(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onScoringProgress) {
+      const unsub = client.onScoringProgress((data) => {
+        onScoringProgress(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onScoringComplete) {
+      const unsub = client.onScoringComplete((data) => {
+        onScoringComplete(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
+    if (onScoringError) {
+      const unsub = client.onScoringError((data) => {
+        onScoringError(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onConnectionReady, onExportStatusNotFound, onExportStatusError]);
+  // NOTE: onConnectionReady is NOT in deps - it's registered in connect() before the socket connects
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {

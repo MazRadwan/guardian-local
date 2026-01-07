@@ -107,6 +107,20 @@ export const createStoreMock = (overrides: Record<string, unknown> = {}) => ({
   setCurrentGenerationStep: jest.fn(),
   resetGenerationStep: jest.fn(),
 
+  // Scoring state (Epic 15 Story 5c)
+  scoringProgress: {
+    status: 'idle' as const,
+    message: '',
+  },
+  scoringResult: null,
+  scoringResultByConversation: {}, // Story 5c persistence cache
+  updateScoringProgress: jest.fn(),
+  setScoringResult: jest.fn(),
+  resetScoring: jest.fn(),
+  setScoringResultForConversation: jest.fn(), // Story 5c
+  getScoringResultForConversation: jest.fn(), // Story 5c
+  clearScoringResultForConversation: jest.fn(), // Story 5c
+
   // Apply overrides
   ...overrides,
 });
@@ -218,6 +232,17 @@ export const createPersistenceMock = (overrides: Record<string, unknown> = {}) =
   saveExport: jest.fn(),
   loadExport: jest.fn().mockReturnValue(null),
   clearExport: jest.fn(),
+  ...overrides,
+});
+
+/**
+ * Creates a mock for useUserAssessments hook
+ * Story 5a.6: Persistence-based scoring mode visibility
+ */
+export const createUserAssessmentsMock = (overrides: Record<string, unknown> = {}) => ({
+  hasExportedAssessments: false,
+  isLoading: false,
+  error: null,
   ...overrides,
 });
 

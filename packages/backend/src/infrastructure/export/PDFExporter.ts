@@ -79,6 +79,7 @@ export class PDFExporter implements IPDFExporter {
 
     // Replace simple variables
     let html = template
+      .replace(/{{assessmentId}}/g, this.escapeHtml(assessment.id))
       .replace(/{{vendorName}}/g, this.escapeHtml(vendor.name))
       .replace(
         /{{assessmentType}}/g,

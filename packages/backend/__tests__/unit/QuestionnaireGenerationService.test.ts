@@ -57,6 +57,7 @@ function createValidSchema(): QuestionnaireSchema {
   return {
     version: '1.0',
     metadata: {
+      assessmentId: 'test-assessment-id',
       assessmentType: 'comprehensive',
       vendorName: 'Test Vendor',
       solutionName: 'Test Solution',
@@ -508,6 +509,7 @@ describe('QuestionnaireGenerationService', () => {
       const schema: QuestionnaireSchema = {
         version: '1.0',
         metadata: {
+          assessmentId: 'test-assessment-id',
           assessmentType: 'comprehensive',
           vendorName: 'Test Vendor',
           solutionName: 'Test Solution',
@@ -582,6 +584,7 @@ describe('QuestionnaireGenerationService', () => {
       const schema: QuestionnaireSchema = {
         version: '1.0',
         metadata: {
+          assessmentId: 'test-assessment-id',
           assessmentType: 'comprehensive',
           vendorName: 'Test Vendor',
           solutionName: 'Test Solution',

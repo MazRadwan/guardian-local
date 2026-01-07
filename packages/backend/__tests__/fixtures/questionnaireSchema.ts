@@ -7,6 +7,7 @@
 import type { QuestionnaireSchema, QuestionnaireSection, RiskDimension, QuestionType } from '../../src/domain/types/QuestionnaireSchema.js';
 
 interface FixtureOptions {
+  assessmentId?: string;
   assessmentType?: 'quick' | 'comprehensive' | 'category_focused';
   vendorName?: string;
   solutionName?: string;
@@ -71,6 +72,7 @@ export function fixtureQuestionnaireSchema(
   options: FixtureOptions = {}
 ): QuestionnaireSchema {
   const {
+    assessmentId = 'test-assessment-id',
     assessmentType = 'comprehensive',
     vendorName = 'Test Vendor',
     solutionName = 'Test Solution',
@@ -90,6 +92,7 @@ export function fixtureQuestionnaireSchema(
   return {
     version: '1.0',
     metadata: {
+      assessmentId,
       assessmentType,
       vendorName,
       solutionName,

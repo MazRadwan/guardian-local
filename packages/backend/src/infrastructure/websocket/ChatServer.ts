@@ -4,6 +4,7 @@ import { AssessmentService } from '../../application/services/AssessmentService.
 import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
+import type { IScoringService } from '../../application/interfaces/IScoringService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
 import type { IFileRepository, FileWithIntakeContext } from '../../application/interfaces/IFileRepository.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
@@ -14,6 +15,8 @@ import { assessmentModeTools } from '../ai/tools/index.js';
 import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
 import type { IntakeDocumentContext } from '../../domain/entities/Conversation.js';
 import type { MessageAttachment } from '../../domain/entities/Message.js';
+// NOTE: ScoringProgressEvent, ScoringReportData imports removed - scoring now
+// handled by DocumentUploadController.runScoring() (Sprint 5a)
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -33,7 +36,7 @@ interface SendMessagePayload {
   text?: string; // Message text (preferred)
   content?: string; // Backward compatibility with frontend
   components?: Array<{
-    type: 'button' | 'link' | 'code' | 'form';
+    type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result';
     data: unknown;
   }>;
   // Epic 16.6.9: File attachments now only send fileId (server validates and enriches)
@@ -54,6 +57,9 @@ interface GenerateQuestionnairePayload {
   contextSummary?: string;
   selectedCategories?: string[];
 }
+
+// NOTE: StartScoringPayload removed in Sprint 5a - scoring now auto-triggers
+// after successful document parse in DocumentUploadController.runScoring()
 
 export class ChatServer {
   private io: SocketIOServer;
@@ -77,7 +83,8 @@ export class ChatServer {
     private readonly questionnaireReadyService: QuestionnaireReadyService,
     private readonly questionnaireGenerationService: QuestionnaireGenerationService,
     private readonly questionService: QuestionService,
-    private readonly fileRepository: IFileRepository
+    private readonly fileRepository: IFileRepository,
+    private readonly scoringService?: IScoringService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -112,7 +119,7 @@ export class ChatServer {
   ): Promise<{
     messages: ClaudeMessage[];
     systemPrompt: string;
-    mode: 'consult' | 'assessment';
+    mode: 'consult' | 'assessment' | 'scoring';
     promptCache: { usePromptCache: boolean; cachedPromptId?: string };
   }> {
     // Get conversation to determine mode
@@ -126,12 +133,14 @@ export class ChatServer {
     const history = await this.conversationService.getHistory(conversationId, 10);
 
     // Format messages for Claude API (only user/assistant, skip system messages)
+    // Also filter out empty messages (Claude API requires non-empty content)
     const messages: ClaudeMessage[] = history
       .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
       .map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: typeof msg.content === 'string' ? msg.content : msg.content.text || '',
-      }));
+      }))
+      .filter((msg) => msg.content.trim().length > 0);
 
     // Epic 17.3: Inject stored intake context(s) as synthetic assistant message
     // Query per-file contexts (sorted by parse time, oldest first)
@@ -560,11 +569,18 @@ export class ChatServer {
           }
 
           // Save user message with enriched attachments (not client-supplied)
+          // Generate placeholder text for file-only messages (Claude API requires non-empty content)
+          let finalMessageText = messageText || '';
+          if (!finalMessageText && enrichedAttachments && enrichedAttachments.length > 0) {
+            const fileNames = enrichedAttachments.map(a => a.filename).join(', ');
+            finalMessageText = `[Uploaded file for analysis: ${fileNames}]`;
+          }
+
           const message = await this.conversationService.sendMessage({
             conversationId,
             role: 'user',
             content: {
-              text: messageText || '', // Allow empty text for file-only messages
+              text: finalMessageText,
               components: payload.components,
             },
             attachments: enrichedAttachments,
@@ -594,6 +610,11 @@ export class ChatServer {
           // Note: buildConversationContext loads history which already includes
           // the message we just saved above, so no need to add it again
           const { messages, systemPrompt, promptCache, mode } = await this.buildConversationContext(conversationId);
+
+          // Epic 15: In scoring mode, Claude responds with acknowledgment
+          // The scoring service handles file analysis automatically
+          // Claude's system prompt tells it to acknowledge uploads and answer questions
+          // No skip needed - Claude knows how to respond appropriately
 
           // Stream Claude response
           let fullResponse = '';
@@ -962,8 +983,8 @@ export class ChatServer {
         }
       });
 
-      // Switch conversation mode (consult ⟺ assessment)
-      socket.on('switch_mode', async (payload: { conversationId?: string; mode?: 'consult' | 'assessment' }) => {
+      // Switch conversation mode (consult ⟺ assessment ⟺ scoring)
+      socket.on('switch_mode', async (payload: { conversationId?: string; mode?: 'consult' | 'assessment' | 'scoring' }) => {
         try {
           if (!socket.userId) {
             socket.emit('error', {
@@ -1017,13 +1038,13 @@ export class ChatServer {
 
 Please select your assessment approach (reply with 1, 2, or 3):
 
-1️⃣ **Quick Assessment** (30-40 questions)  
+1️⃣ **Quick Assessment** (30-40 questions)
    ↳ Fast red-flag screening, ~15 minutes
 
 2️⃣ **Comprehensive Assessment** (85-95 questions)
    ↳ Full coverage across all 10 risk dimensions
 
-3️⃣ **Category-Focused Assessment**  
+3️⃣ **Category-Focused Assessment**
    ↳ Tailored to your AI solution type
 
 Reply with: **1**, **2**, or **3**
@@ -1041,6 +1062,46 @@ Reply with: **1**, **2**, or **3**
               role: guidanceMessage.role,
               content: guidanceMessage.content,
               createdAt: guidanceMessage.createdAt,
+            });
+          }
+
+          // Provide guidance when entering scoring mode
+          if (mode === 'scoring') {
+            const scoringGuidanceText = `
+📊 **Scoring Mode Activated**
+
+Upload a completed vendor questionnaire for risk analysis.
+
+**Important:** Only questionnaires exported from Guardian can be scored. These contain an embedded Assessment ID that links responses to your original assessment.
+
+**How it works:**
+1. Export a questionnaire from Guardian (Assessment Mode → Generate → Download)
+2. Send it to the vendor to complete
+3. Upload the completed questionnaire here
+
+**Supported formats:** PDF or Word (.docx)
+
+Once uploaded, I'll analyze the responses and provide:
+- Composite risk score (0-100)
+- Per-dimension breakdown
+- Executive summary
+- Recommendation (Approve/Conditional/Decline)
+
+**Drag & drop** your file or click the upload button to begin.
+`.trim();
+
+            const scoringGuidanceMessage = await this.conversationService.sendMessage({
+              conversationId,
+              role: 'assistant',
+              content: { text: scoringGuidanceText },
+            });
+
+            socket.emit('message', {
+              id: scoringGuidanceMessage.id,
+              conversationId: scoringGuidanceMessage.conversationId,
+              role: scoringGuidanceMessage.role,
+              content: scoringGuidanceMessage.content,
+              createdAt: scoringGuidanceMessage.createdAt,
             });
           }
         } catch (error) {
@@ -1062,6 +1123,11 @@ Reply with: **1**, **2**, or **3**
         // Mark for simulated streaming (Epic 12.5 path)
         if (socket.conversationId) {
           this.abortedStreams.add(socket.conversationId);
+
+          // Abort scoring if in progress (Epic 15)
+          if (this.scoringService) {
+            this.scoringService.abort(socket.conversationId);
+          }
         }
 
         // Emit acknowledgment - frontend will call finishStreaming()
@@ -1089,6 +1155,10 @@ Reply with: **1**, **2**, or **3**
         await this.handleGetExportStatus(socket, data);
       });
 
+      // NOTE: start_scoring event removed in Sprint 5a - scoring now auto-triggers
+      // after successful document parse in DocumentUploadController.runScoring()
+      // This prevents double-scoring if both auto-trigger and manual trigger existed.
+
       // Handle disconnect
       socket.on('disconnect', (reason) => {
         console.log(`[ChatServer] Client disconnected: ${socket.id} (Reason: ${reason})`);
@@ -1108,7 +1178,7 @@ Reply with: **1**, **2**, or **3**
       conversationId: string;
       userId: string;
       assessmentId: string | null;
-      mode?: 'consult' | 'assessment';
+      mode?: 'consult' | 'assessment' | 'scoring';
     }
   ): Promise<void> {
     for (const toolUse of toolUseBlocks) {
@@ -1372,6 +1442,10 @@ Reply with: **1**, **2**, or **3**
       });
     }
   }
+
+  // NOTE: handleStartScoring removed in Sprint 5a - scoring now auto-triggers
+  // in DocumentUploadController.runScoring() after successful document parse.
+  // This prevents double-scoring if both auto-trigger and manual trigger existed.
 
   /**
    * Split markdown into chunks for simulated streaming

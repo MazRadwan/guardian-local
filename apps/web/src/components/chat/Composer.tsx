@@ -40,6 +40,8 @@ export interface ComposerProps {
 
 export interface ComposerRef {
   focus: () => void;
+  /** Clear all uploaded files from composer (used when scoring auto-completes) */
+  clearFiles: () => void;
 }
 
 export const Composer = forwardRef<ComposerRef, ComposerProps>(
@@ -67,10 +69,10 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Epic 16: File upload (only enabled when wsAdapter and conversationId are provided)
     const uploadEnabled = !!wsAdapter && !!conversationId;
 
-    // MVP: Always use 'intake' mode for document parsing (extracts vendor context)
-    // Future: Wire 'scoring' mode when assessment mode needs to parse completed questionnaires
-    // See: packages/backend/src/application/interfaces/IScoringDocumentParser.ts
-    const uploadMode: UploadMode = 'intake';
+    // Epic 15 Story 5a.4: Dynamic upload mode based on conversation mode
+    // - 'scoring' mode: Parse completed questionnaires for risk analysis
+    // - All other modes: Extract vendor context for intake
+    const uploadMode: UploadMode = currentMode === 'scoring' ? 'scoring' : 'intake';
 
     // Use stable fallback adapter when wsAdapter not provided
     // Module-level constant prevents subscription thrashing from object identity changes
@@ -106,10 +108,13 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       },
     });
 
-    // Expose focus method to parent
+    // Expose focus and clearFiles methods to parent
     useImperativeHandle(ref, () => ({
       focus: () => {
         textareaRef.current?.focus();
+      },
+      clearFiles: () => {
+        clearAll();
       },
     }));
 
@@ -205,7 +210,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       e.target.value = '';
     };
 
-    // Open file picker
+    // Open file picker (used for keyboard accessibility on the label)
     const openFilePicker = () => {
       fileInputRef.current?.click();
     };
@@ -220,15 +225,17 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
     return (
       <div className="bg-white p-2">
-        {/* Hidden file input */}
+        {/* Hidden file input with id for label-based activation
+            Using label htmlFor is more reliable than programmatic click() */}
         <input
           ref={fileInputRef}
+          id="composer-file-input"
           type="file"
           accept=".pdf,.docx,.png,.jpg,.jpeg"
           multiple
           onChange={handleFileChange}
           className="hidden"
-          aria-hidden="true"
+          tabIndex={-1}
         />
 
         {/* Centered composer container */}
@@ -292,18 +299,27 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                       />
                     )}
 
-                    {/* File upload button - only enabled when upload is available */}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 text-gray-500 hover:bg-gray-100 rounded-lg"
-                      disabled={disabled || !uploadEnabled || isUploading || files.length >= 10}
+                    {/* File upload label - uses native label->input association
+                        This is more reliable than programmatic click() across browsers */}
+                    <label
+                      htmlFor="composer-file-input"
+                      className={`inline-flex items-center justify-center h-9 w-9 rounded-lg cursor-pointer transition-colors ${
+                        disabled || !uploadEnabled || isUploading || files.length >= 10
+                          ? 'text-gray-300 cursor-not-allowed pointer-events-none'
+                          : 'text-gray-500 hover:bg-gray-100'
+                      }`}
                       aria-label="Attach file"
-                      onClick={openFilePicker}
+                      role="button"
+                      tabIndex={disabled || !uploadEnabled || isUploading || files.length >= 10 ? -1 : 0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          fileInputRef.current?.click();
+                        }
+                      }}
                     >
                       <Paperclip className="h-5 w-5" />
-                    </Button>
+                    </label>
                   </>
                 )}
               </div>

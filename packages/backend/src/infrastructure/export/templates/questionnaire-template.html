@@ -59,6 +59,16 @@
       color: #64748b;
     }
 
+    .assessment-id {
+      font-family: 'Courier New', monospace;
+      font-size: 10px;
+      color: #6b7280;
+      background-color: #f3f4f6;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+    }
+
     .section {
       page-break-inside: avoid;
       margin-bottom: 40px;
@@ -148,6 +158,10 @@
   <div class="header">
     <h1>AI Vendor Assessment Questionnaire</h1>
     <div class="subtitle">{{vendorName}}</div>
+
+    <div class="assessment-id">
+      <strong>GUARDIAN Assessment ID:</strong> {{assessmentId}}
+    </div>
 
     <div class="metadata">
       <div class="metadata-item">

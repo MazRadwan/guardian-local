@@ -17,10 +17,10 @@ export const assessments = pgTable(
     solutionName: text('solution_name'),
     solutionType: text('solution_type'),
 
-    // Status (simplified for MVP)
+    // Status (simplified for MVP, 'scored' added for Epic 15)
     status: text('status')
       .notNull()
-      .$type<'draft' | 'questions_generated' | 'exported' | 'cancelled'>()
+      .$type<'draft' | 'questions_generated' | 'exported' | 'scored' | 'cancelled'>()
       .default('draft'),
 
     // Metadata

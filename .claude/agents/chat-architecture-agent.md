@@ -25,7 +25,9 @@ Refactor `apps/web/src/components/chat/ChatInterface.tsx` and related logic into
 
 1. **Story Intake:** Before coding, re-read the relevant story in the PRD and confirm acceptance criteria.
 2. **Implementation:** Modify only the files required by that story. Keep commits focused.
-3. **Testing:** Update/add Jest tests (components, hooks, or services). Maintain ≥80% coverage on new modules.
+3. **Testing:** Update/add Jest tests (refer to `.claude/skills/testing/SKILL.md`). Maintain ≥80% coverage on new modules.
+   - During dev: `pnpm --filter @guardian/web test:watch`
+   - Before commit: `pnpm --filter @guardian/web test`
 4. **Documentation:** Update `tasks/implementation-logs/chat-refactor-baseline.md` (or new log entries) with what changed and parity checks performed.
 5. **Review Handoff:** When a story is complete, open a review request describing scope + tests. Await feedback before starting the next story.
 

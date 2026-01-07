@@ -35,6 +35,8 @@ describe('AssessmentService', () => {
       updateStatus: jest.fn(),
       delete: jest.fn(),
       list: jest.fn(),
+      getVendor: jest.fn(),
+      hasExportedAssessments: jest.fn(),
     }
 
     service = new AssessmentService(mockVendorRepo, mockAssessmentRepo)

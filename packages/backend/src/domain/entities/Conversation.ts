@@ -1,4 +1,4 @@
-export type ConversationMode = 'consult' | 'assessment';
+export type ConversationMode = 'consult' | 'assessment' | 'scoring';
 export type ConversationStatus = 'active' | 'completed';
 
 /**

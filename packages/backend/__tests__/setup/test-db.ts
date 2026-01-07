@@ -8,13 +8,14 @@ import postgres from 'postgres'
 import { sql } from 'drizzle-orm'
 import * as schema from '../../src/infrastructure/database/schema/index'
 
-// Test database URL (should be different from dev database)
-const TEST_DATABASE_URL =
-  process.env.TEST_DATABASE_URL || process.env.DATABASE_URL
+// Test database URL (MUST be different from dev database)
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
 
 if (!TEST_DATABASE_URL) {
   throw new Error(
-    'TEST_DATABASE_URL or DATABASE_URL environment variable is not set'
+    'TEST_DATABASE_URL environment variable is not set. ' +
+    'Integration tests require a separate test database to avoid wiping dev data. ' +
+    'Add TEST_DATABASE_URL=postgresql://guardian:guardian_password@localhost:5433/guardian_test to your .env file.'
   )
 }
 

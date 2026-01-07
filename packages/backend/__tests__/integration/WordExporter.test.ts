@@ -8,6 +8,7 @@ import { WordExporter } from '../../src/infrastructure/export/WordExporter'
 import { Assessment } from '../../src/domain/entities/Assessment'
 import { Vendor } from '../../src/domain/entities/Vendor'
 import { Question } from '../../src/domain/entities/Question'
+import mammoth from 'mammoth'
 
 describe('WordExporter Integration Tests', () => {
   let wordExporter: WordExporter
@@ -232,6 +233,100 @@ describe('WordExporter Integration Tests', () => {
 
       // Should generate without errors
       expect(Buffer.isBuffer(wordBuffer)).toBe(true)
+    })
+
+    it('should include assessmentId in generated Word document', async () => {
+      const vendor = Vendor.create({
+        name: 'Assessment ID Test Vendor',
+        industry: 'Healthcare',
+      })
+
+      const assessment = Assessment.create({
+        vendorId: vendor.id,
+        assessmentType: 'comprehensive',
+        solutionName: 'Medical Platform',
+        createdBy: 'test-user-id',
+      })
+
+      const questions = [
+        Question.create({
+          assessmentId: assessment.id,
+          sectionName: 'Privacy',
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Test privacy question',
+          questionType: 'text',
+        }),
+      ]
+
+      const wordBuffer = await wordExporter.generateWord({
+        assessment,
+        vendor,
+        questions,
+      })
+
+      // Verify Word document was generated
+      expect(Buffer.isBuffer(wordBuffer)).toBe(true)
+      expect(wordBuffer.length).toBeGreaterThan(0)
+
+      // Extract text from Word document to verify assessmentId is present
+      const result = await mammoth.extractRawText({ buffer: wordBuffer })
+      const documentText = result.value
+
+      // Verify assessmentId is in the document
+      expect(documentText).toContain('GUARDIAN Assessment ID:')
+      expect(documentText).toContain(assessment.id)
+    })
+
+    it('should handle special characters in assessmentId', async () => {
+      const vendor = Vendor.create({
+        name: 'Special Char Test Vendor',
+        industry: 'Technology',
+      })
+
+      // Create assessment with special characters in ID
+      const testAssessmentId = 'test-id-<>&"\''
+      const assessment = Assessment.fromPersistence({
+        id: testAssessmentId,
+        vendorId: vendor.id,
+        assessmentType: 'quick',
+        solutionName: 'Test',
+        solutionType: 'Tool',
+        status: 'draft',
+        assessmentMetadata: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        createdBy: 'test-user-id',
+      })
+
+      const questions = [
+        Question.create({
+          assessmentId: testAssessmentId,
+          sectionName: 'Test',
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Test question',
+          questionType: 'text',
+        }),
+      ]
+
+      const wordBuffer = await wordExporter.generateWord({
+        assessment,
+        vendor,
+        questions,
+      })
+
+      // Word document should be generated successfully
+      expect(Buffer.isBuffer(wordBuffer)).toBe(true)
+      expect(wordBuffer.length).toBeGreaterThan(0)
+
+      // Extract text to verify special characters in assessmentId are handled
+      const result = await mammoth.extractRawText({ buffer: wordBuffer })
+      const documentText = result.value
+
+      // Verify assessmentId is in the document (special chars handled by Word XML)
+      expect(documentText).toContain('GUARDIAN Assessment ID:')
+      expect(documentText).toContain(testAssessmentId)
     })
   })
 })

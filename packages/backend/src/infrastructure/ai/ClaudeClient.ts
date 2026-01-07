@@ -24,8 +24,13 @@ import type {
   VisionRequest,
   VisionResponse,
 } from '../../application/interfaces/IVisionClient.js';
+import type {
+  ILLMClient,
+  StreamWithToolOptions,
+  ToolDefinition,
+} from '../../application/interfaces/ILLMClient.js';
 
-export class ClaudeClient implements IClaudeClient, IVisionClient {
+export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
   private client: Anthropic;
   private readonly model = 'claude-sonnet-4-5-20250929';
   private readonly maxTokens = 4096;
@@ -361,6 +366,115 @@ export class ClaudeClient implements IClaudeClient, IVisionClient {
         },
       },
     ];
+  }
+
+  // =========================================================================
+  // ILLMClient Implementation (Epic 15)
+  // =========================================================================
+
+  /**
+   * Get the model identifier for provenance tracking
+   */
+  getModelId(): string {
+    return this.model;
+  }
+
+  /**
+   * Stream a conversation with tool support
+   * Used by ScoringService for scoring analysis
+   *
+   * @param options - System prompt, user prompt, tools, and callbacks
+   */
+  async streamWithTool(options: StreamWithToolOptions): Promise<void> {
+    const {
+      systemPrompt,
+      userPrompt,
+      tools,
+      tool_choice,
+      abortSignal,
+      onTextDelta,
+      onToolUse,
+    } = options;
+
+    // Convert tool definitions to Claude format
+    const claudeTools: ClaudeTool[] = tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      input_schema: t.input_schema,
+    }));
+
+    // Build messages
+    const messages: ClaudeMessage[] = [
+      { role: 'user', content: userPrompt },
+    ];
+
+    try {
+      const stream = await this.client.messages.stream(
+        {
+          model: this.model,
+          max_tokens: 8192, // Larger for scoring narrative
+          system: systemPrompt,
+          messages: messages.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+          tools: claudeTools.length > 0 ? claudeTools : undefined,
+          // tool_choice forces Claude to use the tool - essential for structured output
+          ...(tool_choice && { tool_choice }),
+        },
+        // No prompt caching for scoring (prompts vary per assessment)
+        undefined
+      );
+
+      // Track tool use blocks during streaming
+      let currentToolUse: { name: string; inputJson: string } | null = null;
+
+      for await (const event of stream) {
+        // Check abort signal
+        if (abortSignal?.aborted) {
+          console.log('[ClaudeClient] streamWithTool aborted');
+          break;
+        }
+
+        if (event.type === 'content_block_start') {
+          if (event.content_block.type === 'tool_use') {
+            // Start tracking a new tool use
+            currentToolUse = {
+              name: event.content_block.name,
+              inputJson: '',
+            };
+          }
+        } else if (event.type === 'content_block_delta') {
+          if (event.delta.type === 'text_delta') {
+            // Emit text delta
+            onTextDelta?.(event.delta.text);
+          } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
+            // Accumulate tool input JSON
+            currentToolUse.inputJson += event.delta.partial_json;
+          }
+        } else if (event.type === 'content_block_stop') {
+          if (currentToolUse) {
+            // Parse accumulated JSON and emit tool use
+            try {
+              const input = JSON.parse(currentToolUse.inputJson || '{}');
+              onToolUse?.(currentToolUse.name, input);
+            } catch {
+              console.error('[ClaudeClient] Failed to parse tool input JSON');
+            }
+            currentToolUse = null;
+          }
+        }
+      }
+    } catch (error) {
+      if (abortSignal?.aborted) {
+        console.log('[ClaudeClient] streamWithTool aborted during request');
+        return;
+      }
+      throw new ClaudeAPIError(
+        `streamWithTool failed: ${(error as Error).message}`,
+        error as Error
+      );
+    }
   }
 }
 

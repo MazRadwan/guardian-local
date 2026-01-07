@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
@@ -78,6 +78,11 @@ export interface UseWebSocketEventsReturn {
   handleExtractionFailed: (data: ExtractionFailedPayload) => void;
   handleQuestionnaireReady: (data: QuestionnaireReadyPayload) => void;
   handleGenerationPhase: (data: GenerationPhasePayload) => void;
+  // Epic 15 Story 5a.7: Scoring event handlers
+  handleScoringStarted: (data: ScoringStartedPayload) => void;
+  handleScoringProgress: (data: ScoringProgressPayload) => void;
+  handleScoringComplete: (data: ScoringCompletePayload) => void;
+  handleScoringError: (data: ScoringErrorPayload) => void;
 }
 
 /**
@@ -229,6 +234,16 @@ export function useWebSocketEvents({
         setActiveConversation(data.conversationId);
       } else {
         // SCENARIO 2: No active conversation (deleted/missing) - auto-create new chat
+        // CRITICAL: Clear localStorage BEFORE setActiveConversation(null) to prevent race condition
+        // The URL sync effect runs when activeConversationId changes and checks if localStorage
+        // matches the URL. If we clear localStorage first, the guard will fail and won't restore
+        // the stale ID from the URL.
+        console.log('[useWebSocketEvents] Clearing stale conversation ID and localStorage');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('guardian_conversation_id');
+        }
+        setActiveConversation(null);
+
         // Use sessionStorage guard to survive React Strict Mode double-mount
         const hasAutoCreated = sessionStorage.getItem('guardian_auto_created_chat');
 
@@ -344,25 +359,35 @@ export function useWebSocketEvents({
         if (savedId === conversationId) {
           console.log('[useWebSocketEvents] Clearing localStorage for deleted conversation');
           localStorage.removeItem('guardian_conversation_id');
-          // Note: savedConversationId is now managed by useConversationSync
         }
       }
 
-      // CRITICAL FIX: Also clear Zustand persisted activeConversationId if it matches
-      if (activeConversationId === conversationId) {
-        console.log('[useWebSocketEvents] Clearing active conversation ID for deleted conversation');
-        setActiveConversation(null);
-      }
+      // Get remaining conversations after removal
+      const remainingConversations = conversations.filter(c => c.id !== conversationId);
 
-      // CRITICAL FIX: If no conversations left after deletion, auto-create new one
-      // conversations.length will be the count before removal, so check if it will be 0
-      const remainingCount = conversations.filter(c => c.id !== conversationId).length;
-      if (remainingCount === 0) {
-        console.log('[useWebSocketEvents] Last conversation deleted - auto-creating new chat');
-        requestNewChat();
+      // CRITICAL FIX: If deleted conversation was active, handle state transition
+      if (activeConversationId === conversationId) {
+        console.log('[useWebSocketEvents] Deleted conversation was active - transitioning state');
+
+        // Clear messages immediately to prevent stale UI
+        setMessages([]);
+
+        if (remainingConversations.length > 0) {
+          // Auto-select the most recent remaining conversation
+          const nextConversation = remainingConversations[0]; // Already sorted by updatedAt desc
+          console.log('[useWebSocketEvents] Auto-selecting conversation:', nextConversation.id);
+          setActiveConversation(nextConversation.id);
+          // History will be loaded by the conversation switching effect
+          setShouldLoadHistory(true);
+        } else {
+          // No conversations left - clear active and auto-create new one
+          console.log('[useWebSocketEvents] Last conversation deleted - auto-creating new chat');
+          setActiveConversation(null);
+          requestNewChat();
+        }
       }
     },
-    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat, persistence]
+    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat, persistence, setMessages, setShouldLoadHistory]
   );
 
   // Handler 11: Conversation mode updated (server→client)
@@ -507,6 +532,108 @@ export function useWebSocketEvents({
     [activeConversationId]
   );
 
+  // Epic 15 Story 5a.7: Scoring event handlers
+  const handleScoringStarted = useCallback(
+    (data: ScoringStartedPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_started for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Scoring started:', data.assessmentId);
+      // Update scoring progress state to 'parsing' (first status)
+      useChatStore.getState().updateScoringProgress({
+        status: 'parsing',
+        message: 'Starting analysis...',
+      });
+    },
+    [activeConversationId]
+  );
+
+  const handleScoringProgress = useCallback(
+    (data: ScoringProgressPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_progress for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Scoring progress:', data.status, data.message);
+      // Update scoring progress state
+      useChatStore.getState().updateScoringProgress({
+        status: data.status,
+        message: data.message,
+        progress: data.progress,
+        error: data.error,
+      });
+    },
+    [activeConversationId]
+  );
+
+  const handleScoringComplete = useCallback(
+    (data: ScoringCompletePayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_complete for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Scoring complete:', data.result?.compositeScore);
+
+      // Update scoring progress to complete
+      useChatStore.getState().updateScoringProgress({
+        status: 'complete',
+        message: 'Analysis complete!',
+      });
+
+      // Store scoring results (in current display state)
+      useChatStore.getState().setScoringResult(data.result);
+
+      // Story 5c: Also save to per-conversation cache for persistence across switches
+      useChatStore.getState().setScoringResultForConversation(data.conversationId, data.result);
+
+      // Narrative report is sent as a separate message event, no need to handle it here
+    },
+    [activeConversationId]
+  );
+
+  const handleScoringError = useCallback(
+    (data: ScoringErrorPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring scoring_error for inactive conversation');
+        return;
+      }
+
+      console.error('[useWebSocketEvents] Scoring error:', data.code, data.error);
+
+      // Map error codes to user-friendly messages
+      const errorMessages: Record<string, string> = {
+        ASSESSMENT_NOT_FOUND: 'Assessment not found. Please try again.',
+        UNAUTHORIZED_ASSESSMENT: 'You do not have permission to score this assessment.',
+        ASSESSMENT_NOT_EXPORTED: 'This assessment has not been exported yet. Please export the questionnaire first.',
+        PARSE_FAILED: 'Failed to extract responses from the document. Please ensure you uploaded a valid Guardian questionnaire.',
+        PARSE_CONFIDENCE_TOO_LOW: 'Document quality is too low. Please upload a text-based PDF or Word document instead of a scanned image.',
+        RATE_LIMITED: 'Too many requests. Please wait a moment and try again.',
+        DUPLICATE_FILE: 'This file has already been uploaded. Please upload a different file.',
+        SCORING_FAILED: 'Scoring analysis failed. Please try again.',
+      };
+
+      const userMessage = data.code && errorMessages[data.code]
+        ? errorMessages[data.code]
+        : data.error || 'An error occurred during scoring.';
+
+      // Update scoring progress to error state
+      useChatStore.getState().updateScoringProgress({
+        status: 'error',
+        message: userMessage,
+        error: data.error,
+      });
+    },
+    [activeConversationId]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -523,5 +650,9 @@ export function useWebSocketEvents({
     handleExtractionFailed,
     handleQuestionnaireReady,
     handleGenerationPhase,
+    handleScoringStarted,
+    handleScoringProgress,
+    handleScoringComplete,
+    handleScoringError,
   };
 }

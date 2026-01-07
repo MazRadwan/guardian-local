@@ -4,9 +4,10 @@
  * Implements IAssessmentRepository using Drizzle ORM
  */
 
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, and, inArray } from 'drizzle-orm'
 import { db } from '../client'
 import { assessments } from '../schema/assessments'
+import { vendors } from '../schema/vendors'
 import { IAssessmentRepository } from '../../../application/interfaces/IAssessmentRepository'
 import { Assessment } from '../../../domain/entities/Assessment'
 
@@ -115,7 +116,7 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
         assessmentType: persistence.assessmentType as 'quick' | 'comprehensive' | 'category_focused',
         solutionName: persistence.solutionName,
         solutionType: persistence.solutionType,
-        status: persistence.status as 'draft' | 'questions_generated' | 'exported' | 'cancelled',
+        status: persistence.status as 'draft' | 'questions_generated' | 'exported' | 'scored' | 'cancelled',
         assessmentMetadata: persistence.assessmentMetadata,
         updatedAt: new Date(),
       })
@@ -142,7 +143,7 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
 
   async updateStatus(
     id: string,
-    status: 'draft' | 'questions_generated' | 'exported' | 'cancelled'
+    status: 'draft' | 'questions_generated' | 'exported' | 'scored' | 'cancelled'
   ): Promise<void> {
     await db
       .update(assessments)
@@ -151,6 +152,24 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
         updatedAt: new Date(),
       })
       .where(eq(assessments.id, id))
+  }
+
+  async getVendor(assessmentId: string): Promise<{ id: string; name: string }> {
+    const [result] = await db
+      .select({
+        id: vendors.id,
+        name: vendors.name,
+      })
+      .from(assessments)
+      .innerJoin(vendors, eq(assessments.vendorId, vendors.id))
+      .where(eq(assessments.id, assessmentId))
+      .limit(1)
+
+    if (!result) {
+      throw new Error(`Vendor not found for assessment ${assessmentId}`)
+    }
+
+    return result
   }
 
   async delete(id: string): Promise<void> {
@@ -184,5 +203,20 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
         createdBy: assessment.createdBy,
       })
     )
+  }
+
+  async hasExportedAssessments(userId: string): Promise<boolean> {
+    const [result] = await db
+      .select({ id: assessments.id })
+      .from(assessments)
+      .where(
+        and(
+          eq(assessments.createdBy, userId),
+          inArray(assessments.status, ['exported', 'questions_generated', 'scored'])
+        )
+      )
+      .limit(1)
+
+    return !!result
   }
 }

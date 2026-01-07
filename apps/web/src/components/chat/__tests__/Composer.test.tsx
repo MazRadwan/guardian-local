@@ -300,7 +300,9 @@ describe('Composer', () => {
       render(<Composer onSendMessage={mockOnSendMessage} disabled={true} />);
 
       const uploadButton = screen.getByLabelText('Attach file');
-      expect(uploadButton).toBeDisabled();
+      // Label elements don't have native disabled attribute - check CSS classes instead
+      expect(uploadButton).toHaveClass('pointer-events-none');
+      expect(uploadButton).toHaveClass('cursor-not-allowed');
     });
   });
 
@@ -311,7 +313,9 @@ describe('Composer', () => {
       render(<Composer onSendMessage={mockOnSendMessage} />);
 
       const uploadButton = screen.getByLabelText('Attach file');
-      expect(uploadButton).toBeDisabled();
+      // Label elements don't have native disabled attribute - check CSS classes instead
+      expect(uploadButton).toHaveClass('pointer-events-none');
+      expect(uploadButton).toHaveClass('cursor-not-allowed');
     });
 
     it('has hidden file input for upload', () => {
@@ -616,9 +620,11 @@ describe('Composer', () => {
         expect(screen.getByText('doc0.pdf')).toBeInTheDocument();
       });
 
-      // Attach button should be disabled
+      // Attach button should be disabled (at max files)
       const attachButton = screen.getByLabelText('Attach file');
-      expect(attachButton).toBeDisabled();
+      // Label elements don't have native disabled attribute - check CSS classes instead
+      expect(attachButton).toHaveClass('pointer-events-none');
+      expect(attachButton).toHaveClass('cursor-not-allowed');
     });
 
     it('should clear files after successful send', async () => {

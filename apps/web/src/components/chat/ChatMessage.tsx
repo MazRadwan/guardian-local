@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { User, Bot, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
 import { DownloadButton } from './DownloadButton';
 import { FileChipInChat } from './FileChipInChat';
+import { ScoringResultCard } from './ScoringResultCard';
+import type { ScoringResultData, RiskRating, Recommendation, DimensionScoreData } from '@/types/scoring';
 
 /**
  * Epic 16.6.8: File attachment metadata for chat messages
@@ -20,7 +22,7 @@ export interface MessageAttachment {
 }
 
 export interface MessageComponent {
-  type: 'button' | 'link' | 'form' | 'download' | 'error';
+  type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result';
   data: Record<string, any>;
 }
 
@@ -225,6 +227,8 @@ function EmbeddedComponent({ component }: { component: MessageComponent }) {
       return <EmbeddedDownload data={component.data} />;
     case 'error':
       return <EmbeddedError data={component.data} />;
+    case 'scoring_result':
+      return <EmbeddedScoringResult data={component.data} />;
     default:
       return null;
   }
@@ -341,6 +345,47 @@ function EmbeddedError({ data }: { data: Record<string, any> }) {
       {data.error && (
         <p className="mt-2 text-sm text-red-600">{data.error}</p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Epic 15 Story 5b: Render scoring result as persistent message component
+ * Maps raw component data to ScoringResultData and renders ScoringResultCard
+ */
+function EmbeddedScoringResult({ data }: { data: Record<string, any> }) {
+  // Validate required fields
+  if (
+    typeof data.compositeScore !== 'number' ||
+    typeof data.recommendation !== 'string' ||
+    typeof data.overallRiskRating !== 'string' ||
+    typeof data.assessmentId !== 'string'
+  ) {
+    console.warn('[EmbeddedScoringResult] Missing required fields:', data);
+    return null;
+  }
+
+  // Map raw data to typed ScoringResultData
+  const result: ScoringResultData = {
+    compositeScore: data.compositeScore,
+    recommendation: data.recommendation as Recommendation,
+    overallRiskRating: data.overallRiskRating as RiskRating,
+    executiveSummary: data.executiveSummary || '',
+    keyFindings: Array.isArray(data.keyFindings) ? data.keyFindings : [],
+    dimensionScores: Array.isArray(data.dimensionScores)
+      ? data.dimensionScores.map((d: DimensionScoreData) => ({
+          dimension: d.dimension || '',
+          score: typeof d.score === 'number' ? d.score : 0,
+          riskRating: (d.riskRating || 'medium') as RiskRating,
+        }))
+      : [],
+    batchId: data.batchId || '',
+    assessmentId: data.assessmentId,
+  };
+
+  return (
+    <div data-testid="scoring-result-component">
+      <ScoringResultCard result={result} />
     </div>
   );
 }

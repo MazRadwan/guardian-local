@@ -22,6 +22,7 @@ function fixtureQuestionnaireSchema(
   return {
     version: '1.0',
     metadata: {
+      assessmentId: 'test-assessment-id',
       assessmentType: 'comprehensive',
       vendorName: 'Test Vendor',
       solutionName: 'Test Solution',

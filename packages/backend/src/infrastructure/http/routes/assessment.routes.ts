@@ -18,6 +18,9 @@ export function createAssessmentRoutes(
   // All routes require authentication
   router.use(authMiddleware(authService))
 
+  // GET /api/assessments/status - Check if user has exported assessments (must be before /:id)
+  router.get('/status', controller.getAssessmentStatus)
+
   // POST /api/assessments - Create assessment
   router.post('/', controller.createAssessment)
 

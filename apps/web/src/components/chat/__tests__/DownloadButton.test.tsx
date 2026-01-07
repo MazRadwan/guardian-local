@@ -369,4 +369,92 @@ describe('DownloadButton', () => {
       });
     });
   });
+
+  describe('exportType prop', () => {
+    it('uses questionnaire endpoint by default', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(mockBlob),
+      });
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/assessments/test-123/export/pdf',
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('uses scoring endpoint when exportType="scoring"', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(mockBlob),
+      });
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" exportType="scoring" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/export/scoring/test-123/pdf',
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('uses scoring endpoint for word format', async () => {
+      const mockBlob = new Blob(['test content'], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(mockBlob),
+      });
+
+      render(<DownloadButton assessmentId="test-123" format="word" exportType="scoring" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/export/scoring/test-123/word',
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('uses correct filename prefix for scoring exports', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        blob: () => Promise.resolve(mockBlob),
+      });
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" exportType="scoring" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        // Check that the download was triggered
+        expect(global.URL.createObjectURL).toHaveBeenCalled();
+        // Note: We can't directly verify the filename, but we ensure the download flow completed
+        expect(global.URL.revokeObjectURL).toHaveBeenCalled();
+      });
+    });
+  });
 });

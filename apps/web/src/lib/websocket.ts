@@ -18,7 +18,7 @@ export interface WebSocketConfig {
 }
 
 export interface EmbeddedComponent {
-  type: 'button' | 'link' | 'form' | 'download' | 'error';
+  type: 'button' | 'link' | 'form' | 'download' | 'error' | 'scoring_result';
   data: {
     label?: string;
     action?: string;
@@ -26,6 +26,14 @@ export interface EmbeddedComponent {
     assessmentId?: string;
     formats?: Array<'pdf' | 'word' | 'excel'>;
     questionCount?: number;
+    // Scoring result data (when type === 'scoring_result')
+    compositeScore?: number;
+    recommendation?: string;
+    overallRiskRating?: string;
+    executiveSummary?: string;
+    keyFindings?: string[];
+    dimensionScores?: Array<{ dimension: string; score: number; riskRating: string }>;
+    batchId?: string;
     [key: string]: any;  // Allow additional properties for flexibility
   };
 }
@@ -134,6 +142,50 @@ export interface ScoringParseResult {
 }
 
 /**
+ * Epic 15 Story 5a.7: Scoring event payloads
+ */
+export interface ScoringStartedPayload {
+  assessmentId: string;
+  fileId: string;
+  conversationId: string;
+}
+
+export interface ScoringProgressPayload {
+  conversationId: string;
+  status: 'parsing' | 'scoring' | 'validating' | 'complete' | 'error';
+  message: string;
+  progress?: number;
+  error?: string;
+}
+
+export interface ScoringCompletePayload {
+  conversationId: string;
+  result: {
+    compositeScore: number;
+    recommendation: 'approve' | 'conditional' | 'decline' | 'more_info';
+    overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
+    executiveSummary: string;
+    keyFindings: string[];
+    dimensionScores: Array<{
+      dimension: string;
+      score: number;
+      riskRating: 'low' | 'medium' | 'high' | 'critical';
+    }>;
+    batchId: string;
+    assessmentId: string;
+  };
+  narrativeReport: string;
+}
+
+export interface ScoringErrorPayload {
+  conversationId: string;
+  error: string;
+  code?: string;
+  assessmentId?: string;
+  fileId?: string;
+}
+
+/**
  * Payload for questionnaire_ready event from backend
  */
 export interface QuestionnaireReadyPayload {
@@ -181,10 +233,11 @@ interface BackendError {
 function normalizeComponents(components?: any[]): EmbeddedComponent[] | undefined {
   if (!components || !Array.isArray(components)) return undefined;
 
+  const validTypes = ['button', 'link', 'form', 'download', 'error', 'scoring_result'];
   return components
-    .filter((c) => c && ['button', 'link', 'form', 'download', 'error'].includes(c.type))
+    .filter((c) => c && validTypes.includes(c.type))
     .map((c) => ({
-      type: c.type as 'button' | 'link' | 'form' | 'download' | 'error',
+      type: c.type as EmbeddedComponent['type'],
       data: c.data && typeof c.data === 'object' ? c.data : {}, // Safe default
     }));
 }
@@ -240,7 +293,14 @@ export class WebSocketClient {
     this.config = config;
   }
 
-  connect(): Promise<void> {
+  /**
+   * Connect to the WebSocket server.
+   * @param options Optional callbacks that must be registered BEFORE the socket connects
+   *                to avoid missing immediately-emitted events like connection_ready
+   */
+  connect(options?: {
+    onConnectionReady?: (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => void;
+  }): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         this.socket = io(this.config.url, {
@@ -253,6 +313,20 @@ export class WebSocketClient {
           reconnectionDelay: this.reconnectDelay,
           reconnectionAttempts: this.maxReconnectAttempts,
         });
+
+        // CRITICAL: Register connection_ready listener IMMEDIATELY after socket creation
+        // but BEFORE the 'connect' event fires. The server emits connection_ready
+        // right after the client connects, so we must register this listener first.
+        if (options?.onConnectionReady) {
+          this.socket.on('connection_ready', (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => {
+            console.log('[WebSocket] Connection ready:', {
+              hasActiveConversation: data.hasActiveConversation,
+              conversationId: data.conversationId,
+              resumed: data.resumed
+            });
+            options.onConnectionReady?.(data);
+          });
+        }
 
         this.socket.on('connect', () => {
           console.log('[WebSocket] Connected');
@@ -408,7 +482,7 @@ export class WebSocketClient {
     this.socket.emit('get_conversations');
   }
 
-  startNewConversation(mode: 'consult' | 'assessment' = 'consult'): void {
+  startNewConversation(mode: 'consult' | 'assessment' | 'scoring' = 'consult'): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
@@ -436,7 +510,7 @@ export class WebSocketClient {
     this.socket.emit('delete_conversation', { conversationId });
   }
 
-  switchMode(conversationId: string, mode: 'consult' | 'assessment'): void {
+  switchMode(conversationId: string, mode: 'consult' | 'assessment' | 'scoring'): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
@@ -757,6 +831,70 @@ export class WebSocketClient {
 
     this.socket.on('scoring_parse_ready', handler);
     return () => this.socket?.off('scoring_parse_ready', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_started events
+   * Emitted when scoring analysis begins
+   */
+  onScoringStarted(callback: (data: ScoringStartedPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringStartedPayload) => {
+      console.log('[WebSocket] Scoring started:', data.assessmentId);
+      callback(data);
+    };
+
+    this.socket.on('scoring_started', handler);
+    return () => this.socket?.off('scoring_started', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_progress events
+   * Emitted during scoring workflow with status updates
+   */
+  onScoringProgress(callback: (data: ScoringProgressPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringProgressPayload) => {
+      console.log('[WebSocket] Scoring progress:', data.status, data.message);
+      callback(data);
+    };
+
+    this.socket.on('scoring_progress', handler);
+    return () => this.socket?.off('scoring_progress', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_complete events
+   * Emitted when scoring analysis completes successfully
+   */
+  onScoringComplete(callback: (data: ScoringCompletePayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringCompletePayload) => {
+      console.log('[WebSocket] Scoring complete:', data.result?.compositeScore);
+      callback(data);
+    };
+
+    this.socket.on('scoring_complete', handler);
+    return () => this.socket?.off('scoring_complete', handler);
+  }
+
+  /**
+   * Epic 15 Story 5a.7: Subscribe to scoring_error events
+   * Emitted when scoring analysis encounters an error
+   */
+  onScoringError(callback: (data: ScoringErrorPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ScoringErrorPayload) => {
+      console.log('[WebSocket] Scoring error:', data.code, data.error);
+      callback(data);
+    };
+
+    this.socket.on('scoring_error', handler);
+    return () => this.socket?.off('scoring_error', handler);
   }
 
 }
