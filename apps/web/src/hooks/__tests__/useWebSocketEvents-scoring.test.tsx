@@ -28,6 +28,7 @@ describe('useWebSocketEvents - Scoring Events', () => {
       updateScoringProgress: jest.fn(),
       setScoringResult: jest.fn(),
       resetScoring: jest.fn(),
+      setScoringResultForConversation: jest.fn(), // Story 5c persistence
     };
 
     (useChatStore.getState as jest.Mock).mockReturnValue(mockStore);
@@ -169,6 +170,12 @@ describe('useWebSocketEvents - Scoring Events', () => {
       });
 
       expect(mockStore.setScoringResult).toHaveBeenCalledWith(payload.result);
+
+      // Story 5c: Should also save to per-conversation cache
+      expect(mockStore.setScoringResultForConversation).toHaveBeenCalledWith(
+        'conv-123',
+        payload.result
+      );
     });
 
     it('should ignore scoring_complete for inactive conversation', () => {
@@ -194,6 +201,7 @@ describe('useWebSocketEvents - Scoring Events', () => {
 
       expect(mockStore.updateScoringProgress).not.toHaveBeenCalled();
       expect(mockStore.setScoringResult).not.toHaveBeenCalled();
+      expect(mockStore.setScoringResultForConversation).not.toHaveBeenCalled();
     });
   });
 

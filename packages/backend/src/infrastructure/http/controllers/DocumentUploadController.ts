@@ -518,14 +518,27 @@ export class DocumentUploadController {
 
       // Epic 15 Sprint 5a: Auto-trigger scoring (no manual approval required)
       if (this.scoringService) {
-        await this.runScoring(socketRoom, conversationId, result.assessmentId, fileId, userId);
+        console.log(`[DocumentUpload] Auto-triggering scoring: assessmentId=${result.assessmentId}, fileId=${fileId}, userId=${userId}`);
+        try {
+          await this.runScoring(socketRoom, conversationId, result.assessmentId, fileId, userId);
+          console.log(`[DocumentUpload] Scoring auto-trigger completed successfully`);
+        } catch (scoringError) {
+          console.error(`[DocumentUpload] Scoring auto-trigger failed:`, scoringError);
+          // The error is already handled in runScoring, but log it here too
+        }
       } else {
         console.warn('[DocumentUpload] ScoringService not configured - scoring not auto-triggered');
       }
 
       return { success: true };
     } else {
-      const errorMessage = result.error || 'Failed to extract responses. Ensure this is a Guardian-exported questionnaire.';
+      // Provide clear, actionable error message for common failure cases
+      let errorMessage: string;
+      if (result.error?.includes('Assessment ID') || result.error?.includes('assessmentId') || !result.assessmentId) {
+        errorMessage = 'This document doesn\'t appear to be a Guardian questionnaire. Only questionnaires exported from Guardian (with an embedded Assessment ID) can be scored. Did you mean to upload a different file, or switch to a different mode?';
+      } else {
+        errorMessage = result.error || 'Failed to extract responses. Please ensure this is a completed Guardian questionnaire.';
+      }
       this.chatNamespace.to(socketRoom).emit('scoring_parse_ready', {
         conversationId,
         uploadId,
@@ -548,10 +561,16 @@ export class DocumentUploadController {
     fileId: string,
     userId: string
   ): Promise<void> {
-    if (!this.scoringService) return;
+    if (!this.scoringService) {
+      console.warn('[DocumentUpload] runScoring called but scoringService is null');
+      return;
+    }
+
+    console.log(`[DocumentUpload] runScoring START: socketRoom=${socketRoom}, conversationId=${conversationId}, assessmentId=${assessmentId}`);
 
     try {
       // Emit scoring_started
+      console.log(`[DocumentUpload] Emitting scoring_started event`);
       this.chatNamespace.to(socketRoom).emit('scoring_started', {
         assessmentId,
         fileId,
@@ -567,7 +586,9 @@ export class DocumentUploadController {
       };
 
       // Call scoring service with progress callback
+      console.log(`[DocumentUpload] Calling scoringService.score() with input:`, scoringInput);
       const scoringResult = await this.scoringService.score(scoringInput, (event: ScoringProgressEvent) => {
+        console.log(`[DocumentUpload] Scoring progress: ${event.status} - ${event.message}`);
         this.chatNamespace.to(socketRoom).emit('scoring_progress', {
           conversationId,
           status: event.status,
@@ -600,11 +621,15 @@ export class DocumentUploadController {
           narrativeReport: scoringResult.report.narrativeReport,
         });
 
-        // Save narrative report as assistant message
+        // Save narrative report as assistant message (with fallback for empty narrative)
+        const narrativeText = scoringResult.report.narrativeReport ||
+          `Risk assessment complete. Composite score: ${scoringResult.report.payload.compositeScore}/100. ` +
+          `Overall risk: ${scoringResult.report.payload.overallRiskRating}. ` +
+          `Recommendation: ${scoringResult.report.payload.recommendation}.`;
         const reportMessage = await this.conversationService.sendMessage({
           conversationId,
           role: 'assistant',
-          content: { text: scoringResult.report.narrativeReport },
+          content: { text: narrativeText },
         });
 
         // Emit the message for display

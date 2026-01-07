@@ -47,9 +47,26 @@ jest.mock('@/hooks/useQuestionnairePersistence', () => ({
 
 // Mock child components to avoid Next.js router issues
 jest.mock('../MessageList', () => ({
-  MessageList: React.forwardRef(({ messages }: { messages: unknown[] }, ref) => (
+  MessageList: React.forwardRef(({ messages, scoringResult }: { messages: unknown[]; scoringResult?: unknown }, ref) => (
     <div data-testid="message-list" ref={ref as React.Ref<HTMLDivElement>}>
       Messages: {messages.length}
+      {/* Render scoring result card if provided */}
+      {scoringResult && (
+        <div data-testid="message-list-scoring">
+          <div data-testid="scoring-result-card">
+            <h3>Risk Assessment Complete</h3>
+            <div data-testid="composite-score">{(scoringResult as { compositeScore: number }).compositeScore}</div>
+            <div data-testid="overall-risk">{(scoringResult as { overallRiskRating: string }).overallRiskRating}</div>
+            <div data-testid="recommendation">{(scoringResult as { recommendation: string }).recommendation}</div>
+            <div data-testid="executive-summary">{(scoringResult as { executiveSummary: string }).executiveSummary}</div>
+            {(scoringResult as { keyFindings: string[] }).keyFindings.map((finding: string, i: number) => (
+              <div key={i} data-testid="key-finding">{finding}</div>
+            ))}
+            <button data-testid="export-pdf">Export PDF</button>
+            <button data-testid="export-word">Export Word</button>
+          </div>
+        </div>
+      )}
     </div>
   )),
 }));

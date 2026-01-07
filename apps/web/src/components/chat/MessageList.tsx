@@ -4,10 +4,13 @@ import React, { useEffect, useRef, forwardRef, useState, useCallback } from 'rea
 import { ChatMessage, MessageAttachment } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { QuestionnaireMessage } from './QuestionnaireMessage';
+import { ScoringResultCard } from './ScoringResultCard';
+import { RotatingStatus } from './RotatingStatus';
 import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload } from '@/lib/websocket';
 import { ChevronDown } from 'lucide-react';
 import type { Step } from '@/types/stepper';
 import type { QuestionnaireUIState } from './QuestionnairePromptCard';
+import type { ScoringResultData, ScoringStatus } from '@/types/scoring';
 
 export interface MessageListProps {
   messages: ChatMessageType[];
@@ -32,10 +35,19 @@ export interface MessageListProps {
     /** Position in message list (-1 = append at end) */
     insertIndex: number;
   };
+  /** Epic 15 Story 5c: Scoring result to display at end of messages */
+  scoringResult?: ScoringResultData | null;
+  /** Epic 15 Story 5b: Scoring progress indicator */
+  scoringProgress?: {
+    status: ScoringStatus;
+    message: string;
+    progress?: number;
+    error?: string;
+  };
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire, scoringResult, scoringProgress }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -45,6 +57,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const prevQuestionnaireVisibleRef = useRef<boolean>(false);
     // Track previous isLoading state to detect when typing indicator appears
     const prevIsLoadingRef = useRef<boolean>(false);
+    // Epic 15 Story 5b: Track previous scoring progress visibility to scroll when it appears
+    const prevScoringProgressActiveRef = useRef<boolean>(false);
 
     // Merged ref callback to ensure both parent ref and local ref point to same DOM node
     const mergedRef = useCallback((node: HTMLDivElement | null) => {
@@ -100,12 +114,17 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       const typingIndicatorJustAppeared = !!isLoading && !prevIsLoadingRef.current;
       prevIsLoadingRef.current = !!isLoading;
 
-      // If streaming OR near bottom OR questionnaire just became visible OR typing indicator appeared, force scroll to bottom
-      // This ensures new content (questionnaire bubble, typing indicator) scrolls into view
-      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared) {
+      // Epic 15 Story 5b: Detect when scoring progress becomes active
+      const isScoringActive = !!(scoringProgress && scoringProgress.status !== 'idle' && scoringProgress.status !== 'complete');
+      const scoringProgressJustAppeared = isScoringActive && !prevScoringProgressActiveRef.current;
+      prevScoringProgressActiveRef.current = isScoringActive;
+
+      // If streaming OR near bottom OR questionnaire/scoring progress/typing indicator just appeared, force scroll to bottom
+      // This ensures new content scrolls into view
+      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared || scoringProgressJustAppeared) {
         container.scrollTop = container.scrollHeight;
       }
-    }, [messages, isStreaming, isNearBottom, isLoading, questionnaire?.uiState, questionnaire?.insertIndex]);
+    }, [messages, isStreaming, isNearBottom, isLoading, questionnaire?.uiState, questionnaire?.insertIndex, scoringProgress?.status]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
@@ -229,6 +248,24 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                 </div>
               </div>
             )}
+
+            {/* Epic 15 Story 5b: Scoring progress indicator - shows during active scoring */}
+            {scoringProgress && scoringProgress.status !== 'idle' && scoringProgress.status !== 'complete' && (
+              <div className="py-4" data-testid="scoring-progress">
+                <RotatingStatus
+                  status={scoringProgress.status}
+                  currentMessage={scoringProgress.message}
+                />
+              </div>
+            )}
+
+            {/* Epic 15 Story 5c: Scoring Result Card - inside scrollable area */}
+            {scoringResult && scoringResult.assessmentId && (
+              <div className="py-4">
+                <ScoringResultCard result={scoringResult} />
+              </div>
+            )}
+
             <div ref={bottomRef} />
           </div>
         </div>

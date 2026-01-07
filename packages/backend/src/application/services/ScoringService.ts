@@ -334,6 +334,9 @@ export class ScoringService implements IScoringService {
       systemPrompt,
       userPrompt,
       tools: [scoringCompleteTool],
+      // CRITICAL: Force Claude to use the scoring_complete tool
+      // Without this, Claude may write narrative but skip calling the tool
+      tool_choice: { type: 'any' },
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;

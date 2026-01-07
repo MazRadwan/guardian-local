@@ -133,12 +133,14 @@ export class ChatServer {
     const history = await this.conversationService.getHistory(conversationId, 10);
 
     // Format messages for Claude API (only user/assistant, skip system messages)
+    // Also filter out empty messages (Claude API requires non-empty content)
     const messages: ClaudeMessage[] = history
       .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
       .map((msg) => ({
         role: msg.role as 'user' | 'assistant',
         content: typeof msg.content === 'string' ? msg.content : msg.content.text || '',
-      }));
+      }))
+      .filter((msg) => msg.content.trim().length > 0);
 
     // Epic 17.3: Inject stored intake context(s) as synthetic assistant message
     // Query per-file contexts (sorted by parse time, oldest first)
@@ -567,11 +569,18 @@ export class ChatServer {
           }
 
           // Save user message with enriched attachments (not client-supplied)
+          // Generate placeholder text for file-only messages (Claude API requires non-empty content)
+          let finalMessageText = messageText || '';
+          if (!finalMessageText && enrichedAttachments && enrichedAttachments.length > 0) {
+            const fileNames = enrichedAttachments.map(a => a.filename).join(', ');
+            finalMessageText = `[Uploaded file for analysis: ${fileNames}]`;
+          }
+
           const message = await this.conversationService.sendMessage({
             conversationId,
             role: 'user',
             content: {
-              text: messageText || '', // Allow empty text for file-only messages
+              text: finalMessageText,
               components: payload.components,
             },
             attachments: enrichedAttachments,
@@ -601,6 +610,11 @@ export class ChatServer {
           // Note: buildConversationContext loads history which already includes
           // the message we just saved above, so no need to add it again
           const { messages, systemPrompt, promptCache, mode } = await this.buildConversationContext(conversationId);
+
+          // Epic 15: In scoring mode, Claude responds with acknowledgment
+          // The scoring service handles file analysis automatically
+          // Claude's system prompt tells it to acknowledge uploads and answer questions
+          // No skip needed - Claude knows how to respond appropriately
 
           // Stream Claude response
           let fullResponse = '';
@@ -1056,18 +1070,19 @@ Reply with: **1**, **2**, or **3**
             const scoringGuidanceText = `
 📊 **Scoring Mode Activated**
 
-Upload a completed vendor questionnaire to analyze:
+Upload a completed vendor questionnaire for risk analysis.
 
-**Supported Formats:**
-- PDF (text-based, not scanned)
-- Word (.docx)
+**Important:** Only questionnaires exported from Guardian can be scored. These contain an embedded Assessment ID that links responses to your original assessment.
 
-**Requirements:**
-- Must be an exported Guardian questionnaire
-- Contains Guardian Assessment ID for validation
+**How it works:**
+1. Export a questionnaire from Guardian (Assessment Mode → Generate → Download)
+2. Send it to the vendor to complete
+3. Upload the completed questionnaire here
 
-Once uploaded, I'll analyze the responses against our 10 risk dimensions and provide:
-- Composite risk score
+**Supported formats:** PDF or Word (.docx)
+
+Once uploaded, I'll analyze the responses and provide:
+- Composite risk score (0-100)
 - Per-dimension breakdown
 - Executive summary
 - Recommendation (Approve/Conditional/Decline)

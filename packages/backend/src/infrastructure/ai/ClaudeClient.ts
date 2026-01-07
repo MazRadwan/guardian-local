@@ -390,6 +390,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       systemPrompt,
       userPrompt,
       tools,
+      tool_choice,
       abortSignal,
       onTextDelta,
       onToolUse,
@@ -418,6 +419,8 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
             content: msg.content,
           })),
           tools: claudeTools.length > 0 ? claudeTools : undefined,
+          // tool_choice forces Claude to use the tool - essential for structured output
+          ...(tool_choice && { tool_choice }),
         },
         // No prompt caching for scoring (prompts vary per assessment)
         undefined

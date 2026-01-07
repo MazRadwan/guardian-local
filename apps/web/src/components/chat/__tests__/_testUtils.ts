@@ -113,9 +113,13 @@ export const createStoreMock = (overrides: Record<string, unknown> = {}) => ({
     message: '',
   },
   scoringResult: null,
+  scoringResultByConversation: {}, // Story 5c persistence cache
   updateScoringProgress: jest.fn(),
   setScoringResult: jest.fn(),
   resetScoring: jest.fn(),
+  setScoringResultForConversation: jest.fn(), // Story 5c
+  getScoringResultForConversation: jest.fn(), // Story 5c
+  clearScoringResultForConversation: jest.fn(), // Story 5c
 
   // Apply overrides
   ...overrides,

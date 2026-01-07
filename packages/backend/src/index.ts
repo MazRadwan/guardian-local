@@ -118,7 +118,7 @@ const excelExporter = new ExcelExporter();
 // Initialize scoring exporters (Epic 15)
 const scoringPdfTemplatePath = resolve(
   __dirname,
-  'infrastructure/export/templates/scoring-template.html'
+  'infrastructure/export/templates/scoring-report.html'
 );
 const scoringPDFExporter = new ScoringPDFExporter(scoringPdfTemplatePath);
 const scoringWordExporter = new ScoringWordExporter();

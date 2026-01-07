@@ -359,25 +359,35 @@ export function useWebSocketEvents({
         if (savedId === conversationId) {
           console.log('[useWebSocketEvents] Clearing localStorage for deleted conversation');
           localStorage.removeItem('guardian_conversation_id');
-          // Note: savedConversationId is now managed by useConversationSync
         }
       }
 
-      // CRITICAL FIX: Also clear Zustand persisted activeConversationId if it matches
-      if (activeConversationId === conversationId) {
-        console.log('[useWebSocketEvents] Clearing active conversation ID for deleted conversation');
-        setActiveConversation(null);
-      }
+      // Get remaining conversations after removal
+      const remainingConversations = conversations.filter(c => c.id !== conversationId);
 
-      // CRITICAL FIX: If no conversations left after deletion, auto-create new one
-      // conversations.length will be the count before removal, so check if it will be 0
-      const remainingCount = conversations.filter(c => c.id !== conversationId).length;
-      if (remainingCount === 0) {
-        console.log('[useWebSocketEvents] Last conversation deleted - auto-creating new chat');
-        requestNewChat();
+      // CRITICAL FIX: If deleted conversation was active, handle state transition
+      if (activeConversationId === conversationId) {
+        console.log('[useWebSocketEvents] Deleted conversation was active - transitioning state');
+
+        // Clear messages immediately to prevent stale UI
+        setMessages([]);
+
+        if (remainingConversations.length > 0) {
+          // Auto-select the most recent remaining conversation
+          const nextConversation = remainingConversations[0]; // Already sorted by updatedAt desc
+          console.log('[useWebSocketEvents] Auto-selecting conversation:', nextConversation.id);
+          setActiveConversation(nextConversation.id);
+          // History will be loaded by the conversation switching effect
+          setShouldLoadHistory(true);
+        } else {
+          // No conversations left - clear active and auto-create new one
+          console.log('[useWebSocketEvents] Last conversation deleted - auto-creating new chat');
+          setActiveConversation(null);
+          requestNewChat();
+        }
       }
     },
-    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat, persistence]
+    [removeConversationFromList, clearDeleteConversationRequest, clearExportReady, activeConversationId, setActiveConversation, conversations, requestNewChat, persistence, setMessages, setShouldLoadHistory]
   );
 
   // Handler 11: Conversation mode updated (server→client)
@@ -577,8 +587,11 @@ export function useWebSocketEvents({
         message: 'Analysis complete!',
       });
 
-      // Store scoring results
+      // Store scoring results (in current display state)
       useChatStore.getState().setScoringResult(data.result);
+
+      // Story 5c: Also save to per-conversation cache for persistence across switches
+      useChatStore.getState().setScoringResultForConversation(data.conversationId, data.result);
 
       // Narrative report is sent as a separate message event, no need to handle it here
     },

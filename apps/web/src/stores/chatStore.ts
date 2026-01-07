@@ -36,6 +36,9 @@ export interface ChatState {
   // Export readiness cache (per-conversation)
   exportReadyByConversation: Record<string, ExportReadyPayload>;
 
+  // Scoring result cache (per-conversation) - Story 5c persistence
+  scoringResultByConversation: Record<string, ScoringCompletePayload['result']>;
+
   /**
    * Pending questionnaire ready to be generated
    * Set when Claude calls questionnaire_ready tool
@@ -212,6 +215,22 @@ export interface ChatState {
    * Called when starting new scoring or changing conversations
    */
   resetScoring: () => void;
+
+  /**
+   * Epic 15 Story 5c: Set scoring result for specific conversation (persistence)
+   * Called when scoring_complete event is received
+   */
+  setScoringResultForConversation: (conversationId: string, result: ScoringCompletePayload['result']) => void;
+
+  /**
+   * Epic 15 Story 5c: Get scoring result for specific conversation
+   */
+  getScoringResultForConversation: (conversationId: string) => ScoringCompletePayload['result'] | undefined;
+
+  /**
+   * Epic 15 Story 5c: Clear scoring result for specific conversation
+   */
+  clearScoringResultForConversation: (conversationId: string) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -235,6 +254,9 @@ export const useChatStore = create<ChatState>()(
 
       // Export readiness cache - defaults
       exportReadyByConversation: {},
+
+      // Scoring result cache - defaults (Story 5c persistence)
+      scoringResultByConversation: {},
 
       // Questionnaire generation - defaults
       pendingQuestionnaire: null,
@@ -561,6 +583,29 @@ export const useChatStore = create<ChatState>()(
             message: '',
           },
           scoringResult: null,
+        });
+      },
+
+      // Epic 15 Story 5c: Per-conversation scoring result persistence
+      setScoringResultForConversation: (conversationId, result) => {
+        console.log('[chatStore] Setting scoring result for conversation:', conversationId);
+        set((state) => ({
+          scoringResultByConversation: {
+            ...state.scoringResultByConversation,
+            [conversationId]: result,
+          },
+        }));
+      },
+
+      getScoringResultForConversation: (conversationId) => {
+        return get().scoringResultByConversation[conversationId];
+      },
+
+      clearScoringResultForConversation: (conversationId) => {
+        console.log('[chatStore] Clearing scoring result for conversation:', conversationId);
+        set((state) => {
+          const { [conversationId]: _, ...rest } = state.scoringResultByConversation;
+          return { scoringResultByConversation: rest };
         });
       },
     }),
