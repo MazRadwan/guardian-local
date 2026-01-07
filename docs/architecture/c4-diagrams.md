@@ -1,6 +1,6 @@
 # Guardian C4 Architecture Diagrams
 
-> **Last Updated:** 2025-12-19
+> **Last Updated:** 2026-01-07
 > **Mermaid Version:** 11.4.1+
 
 This document contains the C4 model diagrams for Guardian at four zoom levels.
@@ -14,19 +14,19 @@ The highest level view showing Guardian as a single system with its users and ex
 ```mermaid
 flowchart TB
     subgraph users["Users"]
-        analyst["Healthcare Analyst<br><i>Assesses AI vendors against<br>10 risk dimensions via chat</i>"]
+        analyst["Healthcare Analyst<br><i>Assesses AI vendors, generates questionnaires,<br>scores responses across 10 risk dimensions</i>"]
         admin["Admin<br><i>Manages users and<br>system configuration</i>"]
         viewer["Viewer<br><i>Reviews completed<br>assessments (read-only)</i>"]
     end
 
-    guardian["Guardian<br><br>Conversational AI assistant for<br>healthcare organizations to assess<br>AI vendor risk and compliance"]
+    guardian["Guardian<br><br>Conversational AI assistant for healthcare organizations to<br>assess AI vendor risk, generate questionnaires,<br>score responses, and export reports"]
 
     subgraph external["External Systems"]
-        claude["Anthropic Claude API<br><i>LLM for conversation,<br>question generation,<br>document parsing</i>"]
+        claude["Anthropic Claude API<br><i>LLM for conversation,<br>question generation,<br>document parsing, scoring analysis</i>"]
         s3["AWS S3<br><i>Production file storage<br>for uploaded documents</i>"]
     end
 
-    analyst -->|"Uploads vendor docs,<br>chats, generates questionnaires,<br>exports assessments"| guardian
+    analyst -->|"Uploads vendor docs,<br>chats, generates questionnaires,<br>scores responses, exports reports"| guardian
     admin -->|"Manages users,<br>views all assessments"| guardian
     viewer -->|"Views assessments"| guardian
 
@@ -45,11 +45,11 @@ flowchart TB
 
 | Element | Type | Description |
 |---------|------|-------------|
-| Healthcare Analyst | User | Primary user - assesses vendors via chat |
+| Healthcare Analyst | User | Primary user - assesses vendors, scores responses, exports reports |
 | Admin | User | Manages users, system config |
 | Viewer | User | Read-only access to assessments |
 | Guardian | System | Core application |
-| Anthropic Claude API | External | LLM for AI features |
+| Anthropic Claude API | External | LLM for chat, parsing, questionnaire generation, scoring |
 | AWS S3 | External | Production file storage |
 
 ---
@@ -67,25 +67,25 @@ flowchart TB
     end
 
     subgraph guardian["Guardian System"]
-        webapp["Web Application<br><br><i>Next.js 16 / React 19</i><br><br>Provides chat UI, file uploads,<br>questionnaire generation,<br>assessment export"]
+        webapp["Web Application<br><br><i>Next.js 16 / React 19</i><br><br>Provides chat UI, file uploads,<br>questionnaire generation, scoring,<br>assessment & scoring report export"]
 
-        api["API Server<br><br><i>Express 5 / Node.js 22</i><br><br>REST endpoints + WebSocket<br>for real-time chat streaming"]
+        api["API Server<br><br><i>Express 5 / Node.js 22</i><br><br>REST + WebSocket for chat,<br>document parsing, scoring, exports"]
 
-        db["Database<br><br><i>PostgreSQL 17</i><br><br>Stores users, conversations,<br>messages, assessments,<br>vendors, questions, files"]
+        db["Database<br><br><i>PostgreSQL 17</i><br><br>Stores users, conversations, messages,<br>vendors, assessments, questions, files,<br>responses, dimension scores, results"]
 
-        storage["File Storage<br><br><i>Local (dev) / S3 (prod)</i><br><br>Stores uploaded vendor<br>documents (PDF, DOCX, images)"]
+        storage["File Storage<br><br><i>Local (dev) / S3 (prod)</i><br><br>Stores uploaded vendor docs<br>and scoring response files"]
     end
 
     subgraph external["External Systems"]
-        claude["Anthropic Claude API<br><br><i>claude-sonnet-4-5</i><br><br>Conversation, question generation,<br>document parsing, vision"]
+        claude["Anthropic Claude API<br><br><i>claude-sonnet-4-5</i><br><br>Conversation, question generation,<br>document parsing, scoring analysis"]
     end
 
     analyst -->|"HTTPS<br>Browser"| webapp
     admin -->|"HTTPS<br>Browser"| webapp
     viewer -->|"HTTPS<br>Browser"| webapp
 
-    webapp <-->|"WebSocket (Socket.IO)<br>Real-time chat streaming"| api
-    webapp -->|"REST/HTTPS<br>Auth, CRUD, Export"| api
+    webapp <-->|"WebSocket (Socket.IO)<br>Chat streaming + progress events"| api
+    webapp -->|"REST/HTTPS<br>Auth, CRUD, uploads, exports"| api
 
     api -->|"SQL<br>Drizzle ORM"| db
     api -->|"Read/Write<br>AWS SDK / fs"| storage
@@ -105,18 +105,18 @@ flowchart TB
 
 | Container | Technology | Responsibility |
 |-----------|------------|----------------|
-| Web Application | Next.js 16 / React 19 | Chat UI, file uploads, mode switching, export downloads |
-| API Server | Express 5 / Node.js 22 | REST + WebSocket, auth, business logic, AI orchestration |
-| Database | PostgreSQL 17 + Drizzle | 7 tables: users, conversations, messages, vendors, assessments, questions, files |
-| File Storage | Local / AWS S3 | Uploaded documents with intake context parsing |
+| Web Application | Next.js 16 / React 19 | Chat UI, file uploads, questionnaire generation, scoring, export downloads |
+| API Server | Express 5 / Node.js 22 | REST + WebSocket, auth, business logic, document parsing, scoring analysis |
+| Database | PostgreSQL 17 + Drizzle | 10 tables: users, conversations, messages, vendors, assessments, questions, files, responses, dimension_scores, assessment_results |
+| File Storage | Local / AWS S3 | Uploaded intake + scoring documents |
 
 ### Protocols
 
 | Connection | Protocol | Purpose |
 |------------|----------|---------|
 | Browser ↔ Web App | HTTPS | Static assets, SSR |
-| Web App ↔ API | WebSocket (Socket.IO) | Real-time chat streaming |
-| Web App ↔ API | REST/HTTPS | Auth, CRUD, file upload/download |
+| Web App ↔ API | WebSocket (Socket.IO) | Real-time chat streaming, generation phases, intake/scoring progress |
+| Web App ↔ API | REST/HTTPS | Auth, CRUD, file upload/download, export |
 | API ↔ Database | SQL (Drizzle ORM) | Data persistence |
 | API ↔ Storage | fs / AWS SDK | File operations |
 | API ↔ Claude | HTTPS/REST | LLM prompts and responses |
@@ -140,30 +140,31 @@ flowchart TB
         subgraph components["UI Components"]
             chatInterface["ChatInterface<br><i>Orchestrates chat experience</i>"]
             composer["Composer<br><i>Message input + ModeSelector</i>"]
-            messageList["MessageList<br><i>Renders conversation history</i>"]
+            messageList["MessageList<br><i>ChatMessage + QuestionnaireMessage</i>"]
             sidebar["Sidebar<br><i>ConversationList + Search</i>"]
             stepper["VerticalStepper<br><i>Generation phase progress</i>"]
             questionnaireCard["QuestionnairePromptCard<br><i>Inline questionnaire trigger</i>"]
-            downloadBubble["DownloadBubble<br><i>Export ready notification</i>"]
+            downloadButton["DownloadButton<br><i>Questionnaire/Scoring export</i>"]
+            scoringCard["ScoringResultCard<br><i>ScoreDashboard + recommendations</i>"]
             fileChip["FileChip<br><i>Composer file preview</i>"]
             fileChipInChat["FileChipInChat<br><i>Message attachment display</i>"]
         end
 
         subgraph hooks["Hooks & Controllers"]
             useChatController["useChatController<br><i>Central chat orchestration</i>"]
-            useWebSocketAdapter["useWebSocketAdapter<br><i>Socket.IO connection</i>"]
+            useWebSocketAdapter["useWebSocketAdapter<br><i>Socket.IO adapter</i>"]
             useWebSocketEvents["useWebSocketEvents<br><i>Event handlers</i>"]
             useHistoryManager["useHistoryManager<br><i>Message history</i>"]
             useConversationSync["useConversationSync<br><i>Conversation state sync</i>"]
-            useConversationMode["useConversationMode<br><i>consult/assessment toggle</i>"]
+            useConversationMode["useConversationMode<br><i>consult/assessment/scoring</i>"]
             useAuth["useAuth<br><i>JWT token management</i>"]
-            useFileUpload["useFileUpload<br><i>Single file upload</i>"]
+            useFileUpload["useFileUpload<br><i>Intake/scoring upload</i>"]
             useMultiFileUpload["useMultiFileUpload<br><i>Multi-file upload</i>"]
             useQuestionnairePersistence["useQuestionnairePersistence<br><i>localStorage cache</i>"]
         end
 
         subgraph state["State Management"]
-            chatStore["Zustand chatStore<br><i>messages, pendingQuestionnaire,<br>generationSteps, exportReady,<br>pendingFiles, uploadProgress</i>"]
+            chatStore["Zustand chatStore<br><i>messages, pendingQuestionnaire,<br>generationSteps, exportReadyByConversation,<br>pendingFiles, uploadProgress,<br>scoringProgress, scoringResult</i>"]
         end
 
         subgraph services["Frontend Services"]
@@ -175,7 +176,7 @@ flowchart TB
     end
 
     subgraph external["External (API Server)"]
-        restApi["REST API<br><i>/api/auth, /api/documents</i>"]
+        restApi["REST API<br><i>/api/auth, /api/documents,<br>/api/export, /api/export/scoring</i>"]
         wsServer["WebSocket Server<br><i>/chat namespace</i>"]
     end
 
@@ -192,9 +193,10 @@ flowchart TB
     sidebar --> useChatController
     stepper --> chatStore
     questionnaireCard --> chatStore
-    downloadBubble --> chatStore
+    scoringCard --> chatStore
     fileChip --> useMultiFileUpload
     fileChipInChat --> chatStore
+    downloadButton --> useAuth
 
     %% Hook orchestration
     useChatController --> chatService
@@ -208,7 +210,6 @@ flowchart TB
     useChatController --> chatStore
     useMultiFileUpload --> chatStore
     useFileUpload --> chatStore
-    useAuth --> chatStore
 
     %% Service to WebSocket
     chatService --> useWebSocketAdapter
@@ -230,9 +231,9 @@ flowchart TB
 | Layer | Components | Responsibility |
 |-------|------------|----------------|
 | Pages | ChatPage, AuthPages, Layout | Route entry points |
-| UI Components | ChatInterface, Composer, MessageList, Sidebar, Stepper, FileChips | Visual presentation |
-| Hooks | useChatController (orchestrator), useWebSocket*, useAuth, useFileUpload | Behavior & state logic |
-| State | Zustand chatStore | Global reactive state |
+| UI Components | ChatInterface, Composer, MessageList, Sidebar, Stepper, QuestionnairePromptCard, ScoringResultCard, FileChips | Visual presentation |
+| Hooks | useChatController (orchestrator), useWebSocketAdapter/useWebSocketEvents, useConversationMode, useFileUpload/useMultiFileUpload | Behavior & state logic |
+| State | Zustand chatStore | Global reactive state (messages, uploads, scoring) |
 | Services | ChatService, ConversationService, WebSocketClient | API communication |
 
 ### Key Patterns
@@ -241,6 +242,7 @@ flowchart TB
 - Components read from `chatStore`, hooks write to it
 - `WebSocketClient` handles all real-time communication
 - File uploads go directly to REST API (multipart), not WebSocket
+- Scoring results persist per conversation in `chatStore` for cross-session viewing
 
 ---
 
@@ -255,10 +257,11 @@ flowchart TB
         subgraph http["HTTP Layer"]
             authController["AuthController<br><i>Login, register, refresh</i>"]
             vendorController["VendorController<br><i>Vendor CRUD</i>"]
-            assessmentController["AssessmentController<br><i>Assessment CRUD</i>"]
+            assessmentController["AssessmentController<br><i>Assessment CRUD + status</i>"]
             questionController["QuestionController<br><i>Question CRUD</i>"]
-            exportController["ExportController<br><i>PDF/Word/Excel export</i>"]
-            documentController["DocumentUploadController<br><i>Upload, download files</i>"]
+            exportController["ExportController<br><i>Questionnaire export</i>"]
+            scoringExportController["ScoringExportController<br><i>Scoring report export</i>"]
+            documentController["DocumentUploadController<br><i>Upload, download, parse</i>"]
         end
 
         subgraph websocket["WebSocket Layer (/chat)"]
@@ -274,17 +277,19 @@ flowchart TB
             questionService["QuestionService<br><i>Legacy question gen</i>"]
             questionnaireReadyService["QuestionnaireReadyService<br><i>Tool call handler</i>"]
             questionnaireGenService["QuestionnaireGenerationService<br><i>Structured generation</i>"]
-            exportService["ExportService<br><i>Export orchestration</i>"]
+            exportService["ExportService<br><i>Questionnaire export</i>"]
+            scoringService["ScoringService<br><i>Parse + score responses</i>"]
+            scoringExportService["ScoringExportService<br><i>Scoring report export</i>"]
             fileValidationService["FileValidationService<br><i>Magic bytes, MIME, size</i>"]
         end
 
         subgraph ai["AI & Parsing"]
-            claudeClient["ClaudeClient<br><i>Anthropic SDK wrapper</i>"]
+            claudeClient["ClaudeClient<br><i>Anthropic SDK wrapper (LLM + Vision)</i>"]
             promptCacheManager["PromptCacheManager<br><i>Tool-aware caching</i>"]
             documentParser["DocumentParserService<br><i>Intake + scoring parsing</i>"]
-            visionClient["VisionClient<br><i>Image analysis</i>"]
+            scoringPromptBuilder["ScoringPromptBuilder<br><i>Scoring prompt assembly</i>"]
             assessmentTools["assessmentModeTools<br><i>questionnaire_ready tool</i>"]
-            questionnaireSchema["QuestionnaireSchemaAdapter<br><i>Structured JSON output</i>"]
+            questionnaireSchema["QuestionnaireSchemaAdapter<br><i>Schema to Question mapping</i>"]
             markdownConverter["questionnaireToMarkdown<br><i>Render for chat</i>"]
         end
 
@@ -296,6 +301,9 @@ flowchart TB
             assessmentRepo["AssessmentRepository"]
             questionRepo["QuestionRepository"]
             fileRepo["FileRepository"]
+            responseRepo["ResponseRepository"]
+            dimensionScoreRepo["DimensionScoreRepository"]
+            assessmentResultRepo["AssessmentResultRepository"]
             jwtProvider["JWTProvider"]
         end
 
@@ -303,6 +311,8 @@ flowchart TB
             pdfExporter["PDFExporter"]
             wordExporter["WordExporter"]
             excelExporter["ExcelExporter"]
+            scoringPdfExporter["ScoringPDFExporter"]
+            scoringWordExporter["ScoringWordExporter"]
         end
 
         subgraph storage["File Storage"]
@@ -325,10 +335,12 @@ flowchart TB
     assessmentController --> assessmentService
     questionController --> questionService
     exportController --> exportService
+    scoringExportController --> scoringExportService
     documentController --> fileValidationService
     documentController --> fileRepo
     documentController --> storageFactory
     documentController --> documentParser
+    documentController --> scoringService
 
     %% WebSocket relationships
     chatServer --> rateLimiter
@@ -346,7 +358,9 @@ flowchart TB
     questionnaireGenService --> vendorService
     questionnaireGenService --> markdownConverter
     documentParser --> claudeClient
-    documentParser --> visionClient
+    scoringService --> documentParser
+    scoringService --> scoringPromptBuilder
+    scoringService --> claudeClient
 
     %% Service to Repository relationships
     authService --> userRepo
@@ -358,6 +372,16 @@ flowchart TB
     questionService --> questionRepo
     questionnaireSchema --> questionRepo
     exportService --> exporters
+    scoringExportService --> scoringPdfExporter
+    scoringExportService --> scoringWordExporter
+    scoringService --> responseRepo
+    scoringService --> dimensionScoreRepo
+    scoringService --> assessmentResultRepo
+    scoringService --> assessmentRepo
+    scoringService --> fileRepo
+    scoringExportService --> assessmentResultRepo
+    scoringExportService --> dimensionScoreRepo
+    scoringExportService --> assessmentRepo
 
     %% Storage relationships
     storageFactory --> localStorage
@@ -371,8 +395,10 @@ flowchart TB
     assessmentRepo --> db
     questionRepo --> db
     fileRepo --> db
+    responseRepo --> db
+    dimensionScoreRepo --> db
+    assessmentResultRepo --> db
     claudeClient --> claudeApi
-    visionClient --> claudeApi
     s3Storage --> s3
 
     style chatServer fill:#7B1FA2,stroke:#4A148C,color:#fff
@@ -385,19 +411,20 @@ flowchart TB
 
 | Layer | Components | Responsibility |
 |-------|------------|----------------|
-| HTTP Controllers | Auth, Vendor, Assessment, Question, Export, DocumentUpload | REST endpoint handlers |
+| HTTP Controllers | Auth, Vendor, Assessment, Question, Export, ScoringExport, DocumentUpload | REST endpoint handlers |
 | WebSocket | ChatServer, RateLimiter | Real-time chat, streaming, rate limiting |
-| Services | Auth, Conversation, Assessment, Vendor, Question, QuestionnaireGen, Export, FileValidation | Business logic orchestration |
-| AI & Parsing | ClaudeClient, PromptCacheManager, DocumentParser, VisionClient | LLM integration, document extraction |
-| Data Layer | 7 Repositories + JWTProvider | Database access via Drizzle ORM |
-| Exporters | PDF, Word, Excel | Document generation |
+| Services | Auth, Conversation, Assessment, Vendor, Question, QuestionnaireGen, Export, Scoring, ScoringExport, FileValidation | Business logic orchestration |
+| AI & Parsing | ClaudeClient, PromptCacheManager, DocumentParser, ScoringPromptBuilder | LLM integration, document extraction |
+| Data Layer | 10 Repositories + JWTProvider | Database access via Drizzle ORM |
+| Exporters | PDF, Word, Excel, Scoring PDF/Word | Document generation |
 | Storage | Factory → Local/S3 | File persistence abstraction |
 
 ### Key Patterns
 
 - `ChatServer` is the **WebSocket orchestrator** - handles all real-time events
 - `PromptCacheManager` optimizes Claude API calls with caching
-- `DocumentParserService` uses both ClaudeClient (text) and VisionClient (images)
+- `DocumentParserService` uses ClaudeClient for both text and vision parsing (intake + scoring)
+- `ScoringService` orchestrates parse -> LLM scoring -> persistence, triggered from uploads
 - Storage factory pattern enables dev/prod environment switching
 
 ---
@@ -417,32 +444,59 @@ For complete database schema, see [database-schema.md](../design/data/database-s
 | assessments | Assessment records |
 | questions | Generated questionnaire questions |
 | files | Uploaded documents with intake context |
+| responses | Parsed questionnaire responses |
+| dimension_scores | Per-dimension scoring results |
+| assessment_results | Scoring report summaries |
 
 ---
 
-## Epic 16/17 Additions
+## Epic 15-17 Additions
 
-Components added in Epic 16 (Document Parser) and Epic 17 (Multi-File Upload):
+### Epic 15 - Scoring & Analysis
+Frontend:
+- `ModeSelector` - Scoring mode
+- `ScoringResultCard` + `ScoreDashboard` - Scoring results UI
+- `DownloadButton` - Scoring report exports
+- `scoringProgress`, `scoringResult`, `scoringResultByConversation` state in chatStore
 
-### Frontend
+Backend:
+- `ScoringService` - Parse + score responses workflow
+- `ScoringPromptBuilder` + `ScoringPayloadValidator` - Prompt assembly + validation
+- `ScoringExportService` + `ScoringPDFExporter` + `ScoringWordExporter` - Scoring report exports
+- `ScoringExportController` - Scoring export endpoints
+- Auto-trigger scoring after successful scoring parse in `DocumentUploadController`
+
+WebSocket Events:
+- `scoring_started` - Scoring workflow started
+- `scoring_progress` - Status updates
+- `scoring_complete` - Final results payload
+- `scoring_error` - Scoring failure
+
+Database:
+- `responses` table for parsed questionnaire responses
+- `dimension_scores` table for per-dimension scores
+- `assessment_results` table for report summaries
+
+### Epic 16/17 - Document Parser + Multi-File Upload
+Frontend:
 - `FileChip` - Composer file preview
 - `FileChipInChat` - Message attachment display
-- `useFileUpload` - Single file upload hook
+- `useFileUpload` - Single file upload hook (intake/scoring)
 - `useMultiFileUpload` - Multi-file upload hook
 - `pendingFiles`, `uploadProgress` state in chatStore
 
-### Backend
+Backend:
 - `DocumentUploadController` - Upload/download endpoints
 - `FileValidationService` - Magic bytes, MIME, size validation
 - `DocumentParserService` - Intake + scoring parsing
-- `VisionClient` - Image analysis via Claude Vision
 - `FileRepository` - File database operations
 - `LocalFileStorage` / `S3FileStorage` - File persistence
 
-### WebSocket Events
+WebSocket Events:
 - `upload_progress` - File processing progress
 - `intake_context_ready` - Parsed document context
 - `scoring_parse_ready` - Questionnaire response extraction
 
-### Database
+Database:
 - `files` table with `intake_context`, `intake_gap_categories`, `intake_parsed_at`
+- `messages.attachments` JSONB for file references
