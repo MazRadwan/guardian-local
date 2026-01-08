@@ -1,0 +1,152 @@
+@startuml Guardian Application Layer
+top to bottom direction
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+package "Services" {
+    class AuthService {
+        -userRepository: IUserRepository
+        -tokenProvider: ITokenProvider
+        +authenticate(email, password): AuthResult
+        +createUser(dto: CreateUserDTO): User
+        +validateToken(token): TokenPayload
+    }
+
+    class ConversationService {
+        -conversationRepo: IConversationRepository
+        -messageRepo: IMessageRepository
+        -claudeClient: IClaudeClient
+        +create(dto: CreateConversationDTO): Conversation
+        +sendMessage(dto: SendMessageDTO): Message
+        +getHistory(conversationId): Message[]
+        +switchMode(conversationId, mode): void
+    }
+
+    class AssessmentService {
+        -assessmentRepo: IAssessmentRepository
+        -vendorRepo: IVendorRepository
+        +create(dto: CreateAssessmentDTO): Assessment
+        +updateStatus(id, status): void
+        +getByVendor(vendorId): Assessment[]
+    }
+
+    class VendorService {
+        -vendorRepo: IVendorRepository
+        +create(name, industry): Vendor
+        +update(id, data): Vendor
+        +list(): Vendor[]
+    }
+
+    class QuestionnaireGenerationService {
+        -claudeClient: IClaudeClient
+        -questionRepo: IQuestionRepository
+        +generate(assessmentId, context): Question[]
+        +parseQuestions(rawOutput): Question[]
+    }
+
+    class ScoringService {
+        -claudeClient: IClaudeClient
+        -validator: ScoringPayloadValidator
+        -resultRepo: IAssessmentResultRepository
+        +scoreAssessment(assessmentId): ScoringResult
+        +streamProgress(callback): void
+    }
+
+    class ExportService {
+        -pdfExporter: IPDFExporter
+        -wordExporter: IWordExporter
+        -excelExporter: IExcelExporter
+        +exportToPDF(assessmentId): Buffer
+        +exportToWord(assessmentId): Buffer
+        +exportToExcel(assessmentId): Buffer
+    }
+
+    class FileValidationService {
+        +validateFile(file): ValidationResult
+        +getAllowedTypes(): string[]
+        +getMaxSize(): number
+    }
+}
+
+package "DTOs" {
+    class CreateUserDTO {
+        +email: string
+        +name: string
+        +password: string
+    }
+
+    class CreateAssessmentDTO {
+        +vendorId: string
+        +assessmentType: string
+        +solutionName: string
+    }
+
+    class CreateConversationDTO {
+        +userId: string
+        +mode: ConversationMode
+        +assessmentId?: string
+    }
+
+    class SendMessageDTO {
+        +conversationId: string
+        +content: string
+        +attachments?: FileAttachment[]
+    }
+}
+
+package "Interfaces (Ports)" {
+    interface IUserRepository {
+        +findById(id): User
+        +findByEmail(email): User
+        +save(user): User
+    }
+
+    interface IConversationRepository {
+        +findById(id): Conversation
+        +findByUserId(userId): Conversation[]
+        +save(conversation): Conversation
+    }
+
+    interface IClaudeClient {
+        +chat(messages): Response
+        +streamChat(messages, callback): void
+        +useTools(messages, tools): ToolResult
+    }
+
+    interface ITokenProvider {
+        +sign(payload): string
+        +verify(token): TokenPayload
+    }
+
+    interface IPDFExporter {
+        +generate(data): Buffer
+    }
+}
+
+' Service dependencies on interfaces
+AuthService --> IUserRepository
+AuthService --> ITokenProvider
+ConversationService --> IConversationRepository
+ConversationService --> IClaudeClient
+AssessmentService --> IUserRepository
+QuestionnaireGenerationService --> IClaudeClient
+ScoringService --> IClaudeClient
+ExportService --> IPDFExporter
+
+' Services use DTOs
+AuthService ..> CreateUserDTO : uses
+AssessmentService ..> CreateAssessmentDTO : uses
+ConversationService ..> CreateConversationDTO : uses
+ConversationService ..> SendMessageDTO : uses
+
+' Service to service
+ConversationService --> AssessmentService : uses
+QuestionnaireGenerationService --> AssessmentService : uses
+ScoringService --> AssessmentService : uses
+
+@enduml

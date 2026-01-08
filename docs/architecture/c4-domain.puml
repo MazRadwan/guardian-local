@@ -1,0 +1,462 @@
+@startuml Guardian Domain Model
+class AssessmentType {
+    -value: AssessmentTypeValue
+    +getValue(): AssessmentTypeValue
+    +isQuick(): boolean
+    +isComprehensive(): boolean
+    +isCategoryFocused(): boolean
+    +equals(other: AssessmentType): boolean
+    +toString(): string
+    -{static} VALID_TYPES: AssessmentTypeValue[]
+    +{static} create(value: string): AssessmentType
+    +{static} quick(): AssessmentType
+    +{static} comprehensive(): AssessmentType
+    +{static} categoryFocused(): AssessmentType
+}
+class AssessmentStatus {
+    -value: AssessmentStatusValue
+    +getValue(): AssessmentStatusValue
+    +canTransitionTo(targetStatus: AssessmentStatus): boolean
+    +validateTransition(targetStatus: AssessmentStatus): void
+    +isDraft(): boolean
+    +isQuestionsGenerated(): boolean
+    +isExported(): boolean
+    +isScored(): boolean
+    +isCancelled(): boolean
+    +isTerminal(): boolean
+    +equals(other: AssessmentStatus): boolean
+    +toString(): string
+    -{static} VALID_STATUSES: AssessmentStatusValue[]
+    -{static} VALID_TRANSITIONS: Record<AssessmentStatusValue, AssessmentStatusValue[]>
+    +{static} create(value: string): AssessmentStatus
+    +{static} draft(): AssessmentStatus
+    +{static} questionsGenerated(): AssessmentStatus
+    +{static} exported(): AssessmentStatus
+    +{static} scored(): AssessmentStatus
+    +{static} cancelled(): AssessmentStatus
+}
+interface AssessmentMetadata {
+    +assessorName?: string | undefined
+    +stakeholders?: string[] | undefined
+    +notes?: string | undefined
+}
+interface CreateAssessmentData {
+    +vendorId: string
+    +assessmentType: AssessmentTypeValue
+    +solutionName?: string | undefined
+    +solutionType?: string | undefined
+    +assessmentMetadata?: AssessmentMetadata | undefined
+    +createdBy: string
+}
+class Assessment {
+    +id: string
+    +vendorId: string
+    -_assessmentType: AssessmentType
+    -_solutionName: string | null
+    -_solutionType: string | null
+    -_status: AssessmentStatus
+    -_assessmentMetadata: AssessmentMetadata | null
+    +createdAt: Date
+    -_updatedAt: Date
+    +createdBy: string
+    +toPersistence(): PersistenceData
+    +assessmentType: AssessmentTypeValue
+    +solutionName: string | null
+    +solutionType: string | null
+    +status: AssessmentStatusValue
+    +assessmentMetadata: AssessmentMetadata | null
+    +updatedAt: Date
+    +updateSolutionName(name: string | null): void
+    +updateSolutionType(type: string | null): void
+    +updateMetadata(metadata: AssessmentMetadata | null): void
+    +updateStatus(newStatus: AssessmentStatusValue): void
+    +markQuestionsGenerated(): void
+    +markExported(): void
+    +cancel(): void
+    +canBeModified(): boolean
+    +canGenerateQuestions(): boolean
+    +{static} create(data: CreateAssessmentData): Assessment
+    +{static} fromPersistence(data: PersistenceData): Assessment
+}
+interface IntakeDocumentContext {
+    +vendorName: string | null
+    +solutionName: string | null
+    +solutionType: string | null
+    +industry: string | null
+    +features: string[]
+    +claims: string[]
+    +complianceMentions: string[]
+}
+interface ConversationContext {
+    +lastIntent?: string | undefined
+    +currentStep?: string | undefined
+    +intakeContext?: IntakeDocumentContext | undefined
+    +intakeGapCategories?: string[] | undefined
+    +intakeParsedAt?: string | undefined
+}
+interface CreateConversationData {
+    +userId: string
+    +mode?: ConversationMode | undefined
+    +assessmentId?: string | undefined
+    +context?: ConversationContext | undefined
+}
+class Conversation {
+    +id: string
+    +userId: string
+    +mode: ConversationMode
+    +assessmentId: string | null
+    +status: ConversationStatus
+    +context: ConversationContext
+    +startedAt: Date
+    +lastActivityAt: Date
+    +completedAt: Date | null
+    +switchMode(newMode: ConversationMode): void
+    +linkAssessment(assessmentId: string): void
+    +updateContext(context: Partial<ConversationContext>): void
+    +complete(): void
+    +isActive(): boolean
+    -updateActivity(): void
+    +{static} create(data: CreateConversationData): Omit<Conversation, "id" | "startedAt">
+    +{static} fromPersistence(data: PersistenceData): Conversation
+}
+interface MessageComponent {
+    +type: "button" | "link" | "form" | "download" | "error" | "scoring_result"
+    +data: unknown
+}
+interface MessageAttachment {
+    +fileId: string
+    +filename: string
+    +mimeType: string
+    +size: number
+}
+interface MessageContent {
+    +text: string
+    +components?: MessageComponent[] | undefined
+}
+interface CreateMessageData {
+    +conversationId: string
+    +role: MessageRole
+    +content: MessageContent
+    +attachments?: MessageAttachment[] | undefined
+}
+class Message {
+    +id: string
+    +conversationId: string
+    +role: MessageRole
+    +content: MessageContent
+    +createdAt: Date
+    +attachments?: MessageAttachment[] | undefined
+    +hasComponents(): boolean
+    +getText(): string
+    +getComponents(): MessageComponent[]
+    +hasAttachments(): boolean
+    +getAttachments(): MessageAttachment[]
+    +{static} create(data: CreateMessageData): Omit<Message, "id" | "createdAt">
+    +{static} fromPersistence(data: PersistenceData): Message
+}
+interface QuestionMetadata {
+    +required?: boolean | undefined
+    +helpText?: string | undefined
+    +enumOptions?: string[] | undefined
+}
+interface QuestionProps {
+    +id?: string | undefined
+    +assessmentId: string
+    +sectionName: string
+    +sectionNumber: number
+    +questionNumber: number
+    +questionText: string
+    +questionType: QuestionType
+    +questionMetadata?: QuestionMetadata | undefined
+    +createdAt?: Date | undefined
+}
+class Question {
+    +id?: string | undefined
+    +assessmentId: string
+    +sectionName: string
+    +sectionNumber: number
+    +questionNumber: number
+    +questionText: string
+    +questionType: QuestionType
+    +questionMetadata?: QuestionMetadata | undefined
+    +createdAt?: Date | undefined
+    +toPersistence(): PersistenceData
+    +{static} create(props: QuestionProps): Question
+    +{static} fromPersistence(data: PersistenceData): Question
+}
+class Email {
+    -value: string
+    +getValue(): string
+    +equals(other: Email): boolean
+    +toString(): string
+    +{static} create(email: string): Email
+}
+interface CreateUserData {
+    +email: string
+    +name: string
+    +passwordHash: string
+    +role?: UserRole | undefined
+}
+interface UserData {
+    +id: string
+    +email: string
+    +passwordHash: string
+    +name: string
+    +role: UserRole
+    +lastLoginAt: Date | null
+    +createdAt: Date
+    +updatedAt: Date
+}
+class User {
+    +id: string
+    +email: Email
+    +passwordHash: string
+    +name: string
+    +role: UserRole
+    +lastLoginAt: Date | null
+    +createdAt: Date
+    +updatedAt: Date
+    +updatePassword(newPasswordHash: string): void
+    +updateName(newName: string): void
+    +updateRole(newRole: UserRole): void
+    +recordLogin(): void
+    +isAdmin(): boolean
+    +canCreateAssessments(): boolean
+    +getEmail(): string
+    +toPersistence(): UserData
+    +{static} create(data: CreateUserData): User
+    +{static} fromPersistence(data: UserData): User
+}
+class VendorName {
+    -value: string
+    +getValue(): string
+    +equals(other: VendorName): boolean
+    +toString(): string
+    +{static} create(value: string): VendorName
+}
+interface VendorContactInfo {
+    +primaryContact?: string | undefined
+    +email?: string | undefined
+    +phone?: string | undefined
+}
+interface CreateVendorData {
+    +name: string
+    +industry?: string | undefined
+    +website?: string | undefined
+    +contactInfo?: VendorContactInfo | undefined
+}
+class Vendor {
+    +id: string
+    -_name: VendorName
+    -_industry: string | null
+    -_website: string | null
+    -_contactInfo: VendorContactInfo | null
+    +createdAt: Date
+    -_updatedAt: Date
+    +toPersistence(): PersistenceData
+    +name: string
+    +industry: string | null
+    +website: string | null
+    +contactInfo: VendorContactInfo | null
+    +updatedAt: Date
+    +updateName(newName: string): void
+    +updateIndustry(industry: string | null): void
+    +updateWebsite(website: string | null): void
+    +updateContactInfo(contactInfo: VendorContactInfo | null): void
+    +update(data: Partial<CreateVendorData>): void
+    +{static} create(data: CreateVendorData): Vendor
+    +{static} fromPersistence(data: PersistenceData): Vendor
+}
+interface QuestionnaireQuestion {
+    +id: string
+    +text: string
+    +category: string
+    +riskDimension: RiskDimension
+    +questionType: QuestionType
+    +required: boolean
+    +guidance?: string | undefined
+    +options?: string[] | undefined
+}
+interface QuestionnaireSection {
+    +id: string
+    +title: string
+    +riskDimension: RiskDimension
+    +description: string
+    +questions: QuestionnaireQuestion[]
+}
+interface QuestionnaireMetadata {
+    +assessmentId: string
+    +assessmentType: AssessmentType
+    +vendorName: string | null
+    +solutionName: string | null
+    +generatedAt: string
+    +questionCount: number
+    +focusCategories?: string[] | undefined
+}
+interface QuestionnaireSchema {
+    +version: "1.0"
+    +metadata: QuestionnaireMetadata
+    +sections: QuestionnaireSection[]
+}
+interface QuestionnaireSchemaValidationResult {
+    +isValid: boolean
+    +error?: string | undefined
+}
+interface DimensionScoreData {
+    +dimension: RiskDimension
+    +score: number
+    +riskRating: RiskRating
+    +findings?: object
+}
+interface ScoringCompletePayload {
+    +compositeScore: number
+    +recommendation: Recommendation
+    +overallRiskRating: RiskRating
+    +executiveSummary: string
+    +keyFindings: string[]
+    +disqualifyingFactors: string[]
+    +dimensionScores: DimensionScoreData[]
+}
+interface ScoringReportData {
+    +assessmentId: string
+    +batchId: string
+    +payload: ScoringCompletePayload
+    +narrativeReport: string
+    +rubricVersion: string
+    +modelId: string
+    +scoringDurationMs: number
+}
+interface ScoringProgressEvent {
+    +status: ScoringStatus
+    +message: string
+    +progress?: number | undefined
+    +error?: string | undefined
+}
+interface ResponseDTO {
+    +id: string
+    +assessmentId: string
+    +batchId: string
+    +fileId?: string | undefined
+    +sectionNumber: number
+    +questionNumber: number
+    +questionText: string
+    +responseText: string
+    +confidence?: number | undefined
+    +hasVisualContent: boolean
+    +visualContentDescription?: string | undefined
+    +createdAt: Date
+}
+interface CreateResponseDTO {
+    +assessmentId: string
+    +batchId: string
+    +fileId?: string | undefined
+    +sectionNumber: number
+    +questionNumber: number
+    +questionText: string
+    +responseText: string
+    +confidence?: number | undefined
+    +hasVisualContent?: boolean | undefined
+    +visualContentDescription?: string | undefined
+}
+interface DimensionScoreDTO {
+    +id: string
+    +assessmentId: string
+    +batchId: string
+    +dimension: string
+    +score: number
+    +riskRating: RiskRating
+    +findings?: object
+    +createdAt: Date
+}
+interface CreateDimensionScoreDTO {
+    +assessmentId: string
+    +batchId: string
+    +dimension: string
+    +score: number
+    +riskRating: RiskRating
+    +findings?: object
+}
+interface AssessmentResultDTO {
+    +id: string
+    +assessmentId: string
+    +batchId: string
+    +compositeScore: number
+    +recommendation: Recommendation
+    +overallRiskRating: RiskRating
+    +narrativeReport?: string | undefined
+    +executiveSummary?: string | undefined
+    +keyFindings?: string[] | undefined
+    +disqualifyingFactors?: string[] | undefined
+    +rubricVersion: string
+    +modelId: string
+    +rawToolPayload?: unknown
+    +scoredAt: Date
+    +scoringDurationMs?: number | undefined
+}
+interface CreateAssessmentResultDTO {
+    +assessmentId: string
+    +batchId: string
+    +compositeScore: number
+    +recommendation: Recommendation
+    +overallRiskRating: RiskRating
+    +narrativeReport?: string | undefined
+    +executiveSummary?: string | undefined
+    +keyFindings?: string[] | undefined
+    +disqualifyingFactors?: string[] | undefined
+    +rubricVersion: string
+    +modelId: string
+    +rawToolPayload?: unknown
+    +scoringDurationMs?: number | undefined
+}
+class ScoringError extends Error {
+    +code: ScoringErrorCode
+}
+class UnauthorizedError extends Error
+interface ValidationResult {
+    +valid: boolean
+    +errors: string[]
+    +sanitized?: ScoringCompletePayload | undefined
+}
+class ScoringPayloadValidator {
+    +validate(payload: unknown): ValidationResult
+    -validateDimensionScores(dimensionScores: unknown): string[]
+    -isValidScore(value: unknown): boolean
+    -isValidRiskRating(value: unknown): boolean
+    -isValidRecommendation(value: unknown): boolean
+}
+CreateAssessmentData --> "1" AssessmentMetadata
+Assessment --> "1" AssessmentType
+Assessment --> "1" AssessmentStatus
+Assessment --> "1" AssessmentMetadata
+Assessment --> "1" CreateAssessmentData
+ConversationContext --> "1" IntakeDocumentContext
+CreateConversationData --> "1" ConversationContext
+Conversation --> "1" ConversationContext
+Conversation --> "1" CreateConversationData
+MessageContent --> "*" MessageComponent
+CreateMessageData --> "1" MessageContent
+CreateMessageData --> "*" MessageAttachment
+Message --> "1" MessageContent
+Message --> "*" MessageAttachment
+Message --> "*" MessageComponent
+Message --> "1" CreateMessageData
+Message --> "1" MessageAttachment
+QuestionProps --> "1" QuestionMetadata
+Question --> "1" QuestionMetadata
+Question --> "1" QuestionProps
+User --> "1" Email
+User --> "1" UserData
+User --> "1" CreateUserData
+CreateVendorData --> "1" VendorContactInfo
+Vendor --> "1" VendorName
+Vendor --> "1" VendorContactInfo
+Vendor --> "1" CreateVendorData
+QuestionnaireSection --> "*" QuestionnaireQuestion
+QuestionnaireMetadata --> "1" AssessmentType
+QuestionnaireSchema --> "1" QuestionnaireMetadata
+QuestionnaireSchema --> "*" QuestionnaireSection
+ScoringCompletePayload --> "*" DimensionScoreData
+ScoringReportData --> "1" ScoringCompletePayload
+ValidationResult --> "1" ScoringCompletePayload
+ScoringPayloadValidator --> "1" ValidationResult
+@enduml

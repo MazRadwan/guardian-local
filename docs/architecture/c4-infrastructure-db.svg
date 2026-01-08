@@ -1,0 +1,493 @@
+<svg version="1.1" baseProfile="full" width="8191.0" height="378.0" viewBox="0 0 8191 378" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:ev="http://www.w3.org/2001/xml-events">
+<desc >#.interface: fill=lightblue
+#.enumeration: fill=lightgreen
+#.type: fill=lightgray
+
+[DrizzleAssessmentRepository||+create(): Promise&lt;Assessment&gt;;+findById(): Promise&lt;Assessment&gt;;+findByVendorId(): Promise&lt;Assessment\[\]&gt;;+findByCreatedBy(): Promise&lt;Assessment\[\]&gt;;+update(): Promise&lt;Assessment&gt;;+updateStatus(): Promise&lt;void&gt;;+getVendor(): Promise&lt;{ id: string; name: string; }&gt;;+delete(): Promise&lt;void&gt;;+list(): Promise&lt;Assessment\[\]&gt;;+hasExportedAssessments(): Promise&lt;boolean&gt;]
+[IAssessmentRepository]&lt;:--[DrizzleAssessmentRepository]
+[DrizzleAssessmentResultRepository||+create(): Promise&lt;AssessmentResultDTO&gt;;+findByAssessmentId(): Promise&lt;AssessmentResultDTO\[\]&gt;;+findByBatchId(): Promise&lt;AssessmentResultDTO&gt;;+findLatestByAssessmentId(): Promise&lt;AssessmentResultDTO&gt;;+countTodayForAssessment(): Promise&lt;number&gt;;+findRecentByFileHash(): Promise&lt;AssessmentResultDTO&gt;;-toDTO(): AssessmentResultDTO]
+[IAssessmentResultRepository]&lt;:--[DrizzleAssessmentResultRepository]
+[DrizzleConversationRepository|-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;|+create(): Promise&lt;Conversation&gt;;+findById(): Promise&lt;Conversation&gt;;+findByUserId(): Promise&lt;Conversation\[\]&gt;;+updateMode(): Promise&lt;void&gt;;+updateStatus(): Promise&lt;void&gt;;+linkAssessment(): Promise&lt;void&gt;;+updateContext(): Promise&lt;void&gt;;+updateActivity(): Promise&lt;void&gt;;+delete(): Promise&lt;void&gt;;-toDomain(): Conversation]
+[IConversationRepository]&lt;:--[DrizzleConversationRepository]
+[DrizzleDimensionScoreRepository||+createBatch(): Promise&lt;DimensionScoreDTO\[\]&gt;;+findByAssessmentId(): Promise&lt;DimensionScoreDTO\[\]&gt;;+findByBatchId(): Promise&lt;DimensionScoreDTO\[\]&gt;;+findLatestByAssessmentId(): Promise&lt;DimensionScoreDTO\[\]&gt;;-toDTO(): DimensionScoreDTO]
+[IDimensionScoreRepository]&lt;:--[DrizzleDimensionScoreRepository]
+[DrizzleFileRepository|-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;|+create(): Promise&lt;FileRecord&gt;;+findById(): Promise&lt;FileRecord&gt;;+findByIdAndUser(): Promise&lt;FileRecord&gt;;+findByIdAndConversation(): Promise&lt;FileRecord&gt;;+updateIntakeContext(): Promise&lt;void&gt;;+findByConversationWithContext(): Promise&lt;FileWithIntakeContext\[\]&gt;;-toDomain(): FileRecord]
+[IFileRepository]&lt;:--[DrizzleFileRepository]
+[DrizzleMessageRepository|-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;|+create(): Promise&lt;Message&gt;;+findById(): Promise&lt;Message&gt;;+findByConversationId(): Promise&lt;Message\[\]&gt;;+getHistory(): Promise&lt;Message\[\]&gt;;+count(): Promise&lt;number&gt;;+findFirstUserMessage(): Promise&lt;Message&gt;;+delete(): Promise&lt;void&gt;;-toDomain(): Message]
+[IMessageRepository]&lt;:--[DrizzleMessageRepository]
+[DrizzleQuestionRepository||+bulkCreate(): Promise&lt;Question\[\]&gt;;+findByAssessmentId(): Promise&lt;Question\[\]&gt;;+findById(): Promise&lt;Question&gt;;+deleteByAssessmentId(): Promise&lt;void&gt;;+replaceAllForAssessment(): Promise&lt;Question\[\]&gt;]
+[IQuestionRepository]&lt;:--[DrizzleQuestionRepository]
+[DrizzleResponseRepository||+createBatch(): Promise&lt;ResponseDTO\[\]&gt;;+findByAssessmentId(): Promise&lt;ResponseDTO\[\]&gt;;+findByBatchId(): Promise&lt;ResponseDTO\[\]&gt;;+deleteByBatchId(): Promise&lt;void&gt;;-toDTO(): ResponseDTO]
+[IResponseRepository]&lt;:--[DrizzleResponseRepository]
+[DrizzleUserRepository|-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;|+create(): Promise&lt;User&gt;;+findByEmail(): Promise&lt;User&gt;;+findById(): Promise&lt;User&gt;;+update(): Promise&lt;User&gt;;+delete(): Promise&lt;boolean&gt;;+listAll(): Promise&lt;User\[\]&gt;]
+[IUserRepository]&lt;:--[DrizzleUserRepository]
+[DrizzleVendorRepository||+create(): Promise&lt;Vendor&gt;;+findById(): Promise&lt;Vendor&gt;;+findByName(): Promise&lt;Vendor&gt;;+update(): Promise&lt;Vendor&gt;;+delete(): Promise&lt;void&gt;;+list(): Promise&lt;Vendor\[\]&gt;;+searchByName(): Promise&lt;Vendor\[\]&gt;]
+[IVendorRepository]&lt;:--[DrizzleVendorRepository]</desc>
+<g stroke-width="1.0" text-align="left" font="12pt Helvetica, Arial, sans-serif" font-size="12pt" font-family="Helvetica" font-weight="bold" font-style="normal">
+<g font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" stroke="#33322E">
+<g stroke="transparent" fill="transparent">
+<rect x="0.0" y="0.0" height="378.0" width="8191.0" stroke="none"></rect>
+</g>
+<g transform="translate(8, 8)" fill="#33322E">
+<g transform="translate(20, 20)" fill="#eee8d5" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal">
+<g stroke-dasharray="6 6">
+<path d="M200.5 45.3 L200.5 52 L200.5 72 L200.5 72.0 " fill="none"></path>
+</g>
+<path d="M205.8 45.3 L200.5 45.3 L195.2 45.3 L200.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M702.0 45.3 L702 52 L702 112.5 L702.0 112.5 " fill="none"></path>
+</g>
+<path d="M707.3 45.3 L702.0 45.3 L696.7 45.3 L702.0 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M1651.5 45.3 L1651.5 52 L1651.5 76 L1651.5 76.0 " fill="none"></path>
+</g>
+<path d="M1656.8 45.3 L1651.5 45.3 L1646.2 45.3 L1651.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M2597.5 45.3 L2597.5 52 L2597.5 128.5 L2597.5 128.5 " fill="none"></path>
+</g>
+<path d="M2602.8 45.3 L2597.5 45.3 L2592.2 45.3 L2597.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M3543.5 45.3 L3543.5 52 L3543.5 100.5 L3543.5 100.5 " fill="none"></path>
+</g>
+<path d="M3548.8 45.3 L3543.5 45.3 L3538.2 45.3 L3543.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M4880.5 45.3 L4880.5 52 L4880.5 92 L4880.5 92.0 " fill="none"></path>
+</g>
+<path d="M4885.8 45.3 L4880.5 45.3 L4875.2 45.3 L4880.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M5775.5 45.3 L5775.5 52 L5775.5 128.5 L5775.5 128.5 " fill="none"></path>
+</g>
+<path d="M5780.8 45.3 L5775.5 45.3 L5770.2 45.3 L5775.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M6230.5 45.3 L6230.5 52 L6230.5 128.5 L6230.5 128.5 " fill="none"></path>
+</g>
+<path d="M6235.8 45.3 L6230.5 45.3 L6225.2 45.3 L6230.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M7127.5 45.3 L7127.5 52 L7127.5 108.5 L7127.5 108.5 " fill="none"></path>
+</g>
+<path d="M7132.8 45.3 L7127.5 45.3 L7122.2 45.3 L7127.5 32.0 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M7975.5 45.3 L7975.5 52 L7975.5 112.5 L7975.5 112.5 " fill="none"></path>
+</g>
+<path d="M7980.8 45.3 L7975.5 45.3 L7970.2 45.3 L7975.5 32.0 Z"></path>
+<g data-name="DrizzleAssessmentRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleAssessmentRepository">
+<rect x="0.0" y="72.0" height="250.0" width="401.0" data-name="DrizzleAssessmentRepository"></rect>
+<path d="M0.0 104.0 L401.0 104.0" fill="none" data-name="DrizzleAssessmentRepository"></path>
+<path d="M0.0 112.0 L401.0 112.0" fill="none" data-name="DrizzleAssessmentRepository"></path>
+</g>
+<g transform="translate(0, 72)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleAssessmentRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleAssessmentRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentRepository.ts.DrizzleAssessmentRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentRepository.ts"><text x="192.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleAssessmentRepository" data-compartment="0">DrizzleAssessmentRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(0, 104)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleAssessmentRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="DrizzleAssessmentRepository" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(0, 112)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleAssessmentRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleAssessmentRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+create(): Promise&lt;Assessment&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+findById(): Promise&lt;Assessment&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+findByVendorId(): Promise&lt;Assessment[]&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+findByCreatedBy(): Promise&lt;Assessment[]&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+update(): Promise&lt;Assessment&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+updateStatus(): Promise&lt;void&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+getVendor(): Promise&lt;{ id: string</text>
+<text x="0.0" y="127.5" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">name: string</text>
+<text x="0.0" y="143.7" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">}&gt;</text>
+<text x="0.0" y="159.9" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+delete(): Promise&lt;void&gt;</text>
+<text x="0.0" y="176.1" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+list(): Promise&lt;Assessment[]&gt;</text>
+<text x="0.0" y="192.3" stroke="none" data-name="DrizzleAssessmentRepository" data-compartment="2">+hasExportedAssessments(): Promise&lt;boolean&gt;</text>
+
+</g>
+</g>
+</g>
+<g data-name="IAssessmentRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IAssessmentRepository">
+<rect x="99.5" y="0.0" height="32.0" width="202.0" data-name="IAssessmentRepository"></rect>
+</g>
+<g transform="translate(99.5, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IAssessmentRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IAssessmentRepository" data-compartment="0">
+<text x="93.0" y="14.1" stroke="none" text-anchor="middle" data-name="IAssessmentRepository" data-compartment="0">IAssessmentRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleAssessmentResultRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleAssessmentResultRepository">
+<rect x="441.0" y="112.5" height="169.0" width="522.0" data-name="DrizzleAssessmentResultRepository"></rect>
+<path d="M441.0 144.5 L963.0 144.5" fill="none" data-name="DrizzleAssessmentResultRepository"></path>
+<path d="M441.0 152.5 L963.0 152.5" fill="none" data-name="DrizzleAssessmentResultRepository"></path>
+</g>
+<g transform="translate(441, 112.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleAssessmentResultRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleAssessmentResultRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.ts.DrizzleAssessmentResultRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.ts"><text x="253.0" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleAssessmentResultRepository" data-compartment="0">DrizzleAssessmentResultRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(441, 144.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleAssessmentResultRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="DrizzleAssessmentResultRepository" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(441, 152.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleAssessmentResultRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleAssessmentResultRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">+create(): Promise&lt;AssessmentResultDTO&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">+findByAssessmentId(): Promise&lt;AssessmentResultDTO[]&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">+findByBatchId(): Promise&lt;AssessmentResultDTO&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">+findLatestByAssessmentId(): Promise&lt;AssessmentResultDTO&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">+countTodayForAssessment(): Promise&lt;number&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">+findRecentByFileHash(): Promise&lt;AssessmentResultDTO&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DrizzleAssessmentResultRepository" data-compartment="2">-toDTO(): AssessmentResultDTO</text>
+
+</g>
+</g>
+</g>
+<g data-name="IAssessmentResultRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IAssessmentResultRepository">
+<rect x="576.0" y="0.0" height="32.0" width="252.0" data-name="IAssessmentResultRepository"></rect>
+</g>
+<g transform="translate(576, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IAssessmentResultRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IAssessmentResultRepository" data-compartment="0">
+<text x="118.0" y="14.1" stroke="none" text-anchor="middle" data-name="IAssessmentResultRepository" data-compartment="0">IAssessmentResultRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleConversationRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleConversationRepository">
+<rect x="1003.0" y="76.0" height="242.0" width="1297.0" data-name="DrizzleConversationRepository"></rect>
+<path d="M1003.0 108.0 L2300.0 108.0" fill="none" data-name="DrizzleConversationRepository"></path>
+<path d="M1003.0 140.0 L2300.0 140.0" fill="none" data-name="DrizzleConversationRepository"></path>
+</g>
+<g transform="translate(1003, 76)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleConversationRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleConversationRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleConversationRepository.ts.DrizzleConversationRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleConversationRepository.ts"><text x="640.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleConversationRepository" data-compartment="0">DrizzleConversationRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(1003, 108)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleConversationRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleConversationRepository" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleConversationRepository" data-compartment="1">-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;</text>
+
+</g>
+</g>
+<g transform="translate(1003, 140)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleConversationRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleConversationRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+create(): Promise&lt;Conversation&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+findById(): Promise&lt;Conversation&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+findByUserId(): Promise&lt;Conversation[]&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+updateMode(): Promise&lt;void&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+updateStatus(): Promise&lt;void&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+linkAssessment(): Promise&lt;void&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+updateContext(): Promise&lt;void&gt;</text>
+<text x="0.0" y="127.5" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+updateActivity(): Promise&lt;void&gt;</text>
+<text x="0.0" y="143.7" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">+delete(): Promise&lt;void&gt;</text>
+<text x="0.0" y="159.9" stroke="none" data-name="DrizzleConversationRepository" data-compartment="2">-toDomain(): Conversation</text>
+
+</g>
+</g>
+</g>
+<g data-name="IConversationRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IConversationRepository">
+<rect x="1546.0" y="0.0" height="32.0" width="211.0" data-name="IConversationRepository"></rect>
+</g>
+<g transform="translate(1546, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IConversationRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IConversationRepository" data-compartment="0">
+<text x="97.5" y="14.1" stroke="none" text-anchor="middle" data-name="IConversationRepository" data-compartment="0">IConversationRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleDimensionScoreRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleDimensionScoreRepository">
+<rect x="2340.0" y="128.5" height="137.0" width="515.0" data-name="DrizzleDimensionScoreRepository"></rect>
+<path d="M2340.0 160.5 L2855.0 160.5" fill="none" data-name="DrizzleDimensionScoreRepository"></path>
+<path d="M2340.0 168.5 L2855.0 168.5" fill="none" data-name="DrizzleDimensionScoreRepository"></path>
+</g>
+<g transform="translate(2340, 128.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleDimensionScoreRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleDimensionScoreRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleDimensionScoreRepository.ts.DrizzleDimensionScoreRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleDimensionScoreRepository.ts"><text x="249.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleDimensionScoreRepository" data-compartment="0">DrizzleDimensionScoreRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(2340, 160.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleDimensionScoreRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="DrizzleDimensionScoreRepository" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(2340, 168.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleDimensionScoreRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleDimensionScoreRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleDimensionScoreRepository" data-compartment="2">+createBatch(): Promise&lt;DimensionScoreDTO[]&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleDimensionScoreRepository" data-compartment="2">+findByAssessmentId(): Promise&lt;DimensionScoreDTO[]&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleDimensionScoreRepository" data-compartment="2">+findByBatchId(): Promise&lt;DimensionScoreDTO[]&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleDimensionScoreRepository" data-compartment="2">+findLatestByAssessmentId(): Promise&lt;DimensionScoreDTO[]&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleDimensionScoreRepository" data-compartment="2">-toDTO(): DimensionScoreDTO</text>
+
+</g>
+</g>
+</g>
+<g data-name="IDimensionScoreRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IDimensionScoreRepository">
+<rect x="2480.0" y="0.0" height="32.0" width="235.0" data-name="IDimensionScoreRepository"></rect>
+</g>
+<g transform="translate(2480, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IDimensionScoreRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IDimensionScoreRepository" data-compartment="0">
+<text x="109.5" y="14.1" stroke="none" text-anchor="middle" data-name="IDimensionScoreRepository" data-compartment="0">IDimensionScoreRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleFileRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleFileRepository">
+<rect x="2895.0" y="100.5" height="193.0" width="1297.0" data-name="DrizzleFileRepository"></rect>
+<path d="M2895.0 132.5 L4192.0 132.5" fill="none" data-name="DrizzleFileRepository"></path>
+<path d="M2895.0 164.5 L4192.0 164.5" fill="none" data-name="DrizzleFileRepository"></path>
+</g>
+<g transform="translate(2895, 100.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleFileRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleFileRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleFileRepository.ts.DrizzleFileRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleFileRepository.ts"><text x="640.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleFileRepository" data-compartment="0">DrizzleFileRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(2895, 132.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleFileRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleFileRepository" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleFileRepository" data-compartment="1">-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;</text>
+
+</g>
+</g>
+<g transform="translate(2895, 164.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleFileRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleFileRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">+create(): Promise&lt;FileRecord&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">+findById(): Promise&lt;FileRecord&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">+findByIdAndUser(): Promise&lt;FileRecord&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">+findByIdAndConversation(): Promise&lt;FileRecord&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">+updateIntakeContext(): Promise&lt;void&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">+findByConversationWithContext(): Promise&lt;FileWithIntakeContext[]&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DrizzleFileRepository" data-compartment="2">-toDomain(): FileRecord</text>
+
+</g>
+</g>
+</g>
+<g data-name="IFileRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IFileRepository">
+<rect x="3476.5" y="0.0" height="32.0" width="134.0" data-name="IFileRepository"></rect>
+</g>
+<g transform="translate(3476.5, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IFileRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IFileRepository" data-compartment="0">
+<text x="59.0" y="14.1" stroke="none" text-anchor="middle" data-name="IFileRepository" data-compartment="0">IFileRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleMessageRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleMessageRepository">
+<rect x="4232.0" y="92.0" height="210.0" width="1297.0" data-name="DrizzleMessageRepository"></rect>
+<path d="M4232.0 124.0 L5529.0 124.0" fill="none" data-name="DrizzleMessageRepository"></path>
+<path d="M4232.0 156.0 L5529.0 156.0" fill="none" data-name="DrizzleMessageRepository"></path>
+</g>
+<g transform="translate(4232, 92)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleMessageRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleMessageRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleMessageRepository.ts.DrizzleMessageRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleMessageRepository.ts"><text x="640.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleMessageRepository" data-compartment="0">DrizzleMessageRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(4232, 124)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleMessageRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleMessageRepository" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleMessageRepository" data-compartment="1">-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;</text>
+
+</g>
+</g>
+<g transform="translate(4232, 156)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleMessageRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleMessageRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+create(): Promise&lt;Message&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+findById(): Promise&lt;Message&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+findByConversationId(): Promise&lt;Message[]&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+getHistory(): Promise&lt;Message[]&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+count(): Promise&lt;number&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+findFirstUserMessage(): Promise&lt;Message&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">+delete(): Promise&lt;void&gt;</text>
+<text x="0.0" y="127.5" stroke="none" data-name="DrizzleMessageRepository" data-compartment="2">-toDomain(): Message</text>
+
+</g>
+</g>
+</g>
+<g data-name="IMessageRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IMessageRepository">
+<rect x="4791.5" y="0.0" height="32.0" width="178.0" data-name="IMessageRepository"></rect>
+</g>
+<g transform="translate(4791.5, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IMessageRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IMessageRepository" data-compartment="0">
+<text x="81.0" y="14.1" stroke="none" text-anchor="middle" data-name="IMessageRepository" data-compartment="0">IMessageRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleQuestionRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleQuestionRepository">
+<rect x="5569.0" y="128.5" height="137.0" width="413.0" data-name="DrizzleQuestionRepository"></rect>
+<path d="M5569.0 160.5 L5982.0 160.5" fill="none" data-name="DrizzleQuestionRepository"></path>
+<path d="M5569.0 168.5 L5982.0 168.5" fill="none" data-name="DrizzleQuestionRepository"></path>
+</g>
+<g transform="translate(5569, 128.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleQuestionRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleQuestionRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleQuestionRepository.ts.DrizzleQuestionRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleQuestionRepository.ts"><text x="198.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleQuestionRepository" data-compartment="0">DrizzleQuestionRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(5569, 160.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleQuestionRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="DrizzleQuestionRepository" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(5569, 168.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleQuestionRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleQuestionRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleQuestionRepository" data-compartment="2">+bulkCreate(): Promise&lt;Question[]&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleQuestionRepository" data-compartment="2">+findByAssessmentId(): Promise&lt;Question[]&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleQuestionRepository" data-compartment="2">+findById(): Promise&lt;Question&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleQuestionRepository" data-compartment="2">+deleteByAssessmentId(): Promise&lt;void&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleQuestionRepository" data-compartment="2">+replaceAllForAssessment(): Promise&lt;Question[]&gt;</text>
+
+</g>
+</g>
+</g>
+<g data-name="IQuestionRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IQuestionRepository">
+<rect x="5687.0" y="0.0" height="32.0" width="177.0" data-name="IQuestionRepository"></rect>
+</g>
+<g transform="translate(5687, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IQuestionRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IQuestionRepository" data-compartment="0">
+<text x="80.5" y="14.1" stroke="none" text-anchor="middle" data-name="IQuestionRepository" data-compartment="0">IQuestionRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleResponseRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleResponseRepository">
+<rect x="6022.0" y="128.5" height="137.0" width="417.0" data-name="DrizzleResponseRepository"></rect>
+<path d="M6022.0 160.5 L6439.0 160.5" fill="none" data-name="DrizzleResponseRepository"></path>
+<path d="M6022.0 168.5 L6439.0 168.5" fill="none" data-name="DrizzleResponseRepository"></path>
+</g>
+<g transform="translate(6022, 128.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleResponseRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleResponseRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts.DrizzleResponseRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts"><text x="200.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleResponseRepository" data-compartment="0">DrizzleResponseRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(6022, 160.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleResponseRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="DrizzleResponseRepository" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(6022, 168.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleResponseRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleResponseRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleResponseRepository" data-compartment="2">+createBatch(): Promise&lt;ResponseDTO[]&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleResponseRepository" data-compartment="2">+findByAssessmentId(): Promise&lt;ResponseDTO[]&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleResponseRepository" data-compartment="2">+findByBatchId(): Promise&lt;ResponseDTO[]&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleResponseRepository" data-compartment="2">+deleteByBatchId(): Promise&lt;void&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleResponseRepository" data-compartment="2">-toDTO(): ResponseDTO</text>
+
+</g>
+</g>
+</g>
+<g data-name="IResponseRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IResponseRepository">
+<rect x="6137.5" y="0.0" height="32.0" width="186.0" data-name="IResponseRepository"></rect>
+</g>
+<g transform="translate(6137.5, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IResponseRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IResponseRepository" data-compartment="0">
+<text x="85.0" y="14.1" stroke="none" text-anchor="middle" data-name="IResponseRepository" data-compartment="0">IResponseRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleUserRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleUserRepository">
+<rect x="6479.0" y="108.5" height="177.0" width="1297.0" data-name="DrizzleUserRepository"></rect>
+<path d="M6479.0 140.5 L7776.0 140.5" fill="none" data-name="DrizzleUserRepository"></path>
+<path d="M6479.0 172.5 L7776.0 172.5" fill="none" data-name="DrizzleUserRepository"></path>
+</g>
+<g transform="translate(6479, 108.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleUserRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleUserRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleUserRepository.ts.DrizzleUserRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleUserRepository.ts"><text x="640.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleUserRepository" data-compartment="0">DrizzleUserRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(6479, 140.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleUserRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleUserRepository" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleUserRepository" data-compartment="1">-db: PostgresJsDatabase&lt;typeof import(&quot;/Users/mazradwan/Documents/PROJECTS/guardian-app/packages/backend/src/infrastructure/database/schema/index&quot;)&gt;</text>
+
+</g>
+</g>
+<g transform="translate(6479, 172.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleUserRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleUserRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleUserRepository" data-compartment="2">+create(): Promise&lt;User&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleUserRepository" data-compartment="2">+findByEmail(): Promise&lt;User&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleUserRepository" data-compartment="2">+findById(): Promise&lt;User&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleUserRepository" data-compartment="2">+update(): Promise&lt;User&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleUserRepository" data-compartment="2">+delete(): Promise&lt;boolean&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleUserRepository" data-compartment="2">+listAll(): Promise&lt;User[]&gt;</text>
+
+</g>
+</g>
+</g>
+<g data-name="IUserRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IUserRepository">
+<rect x="7056.0" y="0.0" height="32.0" width="143.0" data-name="IUserRepository"></rect>
+</g>
+<g transform="translate(7056, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IUserRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IUserRepository" data-compartment="0">
+<text x="63.5" y="14.1" stroke="none" text-anchor="middle" data-name="IUserRepository" data-compartment="0">IUserRepository</text>
+
+</g>
+</g>
+</g>
+<g data-name="DrizzleVendorRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="DrizzleVendorRepository">
+<rect x="7816.0" y="112.5" height="169.0" width="319.0" data-name="DrizzleVendorRepository"></rect>
+<path d="M7816.0 144.5 L8135.0 144.5" fill="none" data-name="DrizzleVendorRepository"></path>
+<path d="M7816.0 152.5 L8135.0 152.5" fill="none" data-name="DrizzleVendorRepository"></path>
+</g>
+<g transform="translate(7816, 112.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DrizzleVendorRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DrizzleVendorRepository" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/database/repositories/DrizzleVendorRepository.ts.DrizzleVendorRepository" xlink:href="../../packages/backend/src/infrastructure/database/repositories/DrizzleVendorRepository.ts"><text x="151.5" y="14.1" stroke="none" text-anchor="middle" data-name="DrizzleVendorRepository" data-compartment="0">DrizzleVendorRepository</text></a>
+
+</g>
+</g>
+<g transform="translate(7816, 144.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleVendorRepository" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="DrizzleVendorRepository" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(7816, 152.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DrizzleVendorRepository" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DrizzleVendorRepository" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+create(): Promise&lt;Vendor&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+findById(): Promise&lt;Vendor&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+findByName(): Promise&lt;Vendor&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+update(): Promise&lt;Vendor&gt;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+delete(): Promise&lt;void&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+list(): Promise&lt;Vendor[]&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DrizzleVendorRepository" data-compartment="2">+searchByName(): Promise&lt;Vendor[]&gt;</text>
+
+</g>
+</g>
+</g>
+<g data-name="IVendorRepository">
+<g fill="#eee8d5" stroke="#33322E" data-name="IVendorRepository">
+<rect x="7894.0" y="0.0" height="32.0" width="163.0" data-name="IVendorRepository"></rect>
+</g>
+<g transform="translate(7894, 0)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IVendorRepository" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IVendorRepository" data-compartment="0">
+<text x="73.5" y="14.1" stroke="none" text-anchor="middle" data-name="IVendorRepository" data-compartment="0">IVendorRepository</text>
+
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>

@@ -1,0 +1,168 @@
+@startuml Guardian ERD
+!define TABLE(name) entity name << (T,#FFAAAA) >>
+!define PK(x) <b><color:#b8860b>x</color></b>
+!define FK(x) <color:#aaaaaa>x</color>
+
+skinparam entity {
+    BackgroundColor White
+    BorderColor Black
+    ArrowColor #333333
+}
+
+skinparam linetype ortho
+left to right direction
+
+TABLE(users) {
+    PK(id) : uuid <<PK>>
+    --
+    email : text <<unique>>
+    password_hash : text
+    name : text
+    role : text
+    last_login_at : timestamp
+    created_at : timestamp
+    updated_at : timestamp
+}
+
+TABLE(vendors) {
+    PK(id) : uuid <<PK>>
+    --
+    name : text
+    industry : text
+    website : text
+    contact_info : jsonb
+    created_at : timestamp
+    updated_at : timestamp
+}
+
+TABLE(assessments) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(vendor_id) : uuid <<FK>>
+    FK(created_by) : uuid <<FK>>
+    assessment_type : text
+    solution_name : text
+    solution_type : text
+    status : text
+    assessment_metadata : jsonb
+    created_at : timestamp
+    updated_at : timestamp
+}
+
+TABLE(conversations) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(user_id) : uuid <<FK>>
+    FK(assessment_id) : uuid <<FK>>
+    mode : text
+    status : text
+    context : jsonb
+    started_at : timestamp
+    last_activity_at : timestamp
+    completed_at : timestamp
+}
+
+TABLE(messages) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(conversation_id) : uuid <<FK>>
+    role : text
+    content : jsonb
+    attachments : jsonb
+    created_at : timestamp
+}
+
+TABLE(files) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(user_id) : uuid <<FK>>
+    FK(conversation_id) : uuid <<FK>>
+    filename : text
+    mime_type : text
+    size : integer
+    storage_path : text
+    intake_context : jsonb
+    intake_gap_categories : text[]
+    intake_parsed_at : timestamp
+    created_at : timestamp
+}
+
+TABLE(questions) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(assessment_id) : uuid <<FK>>
+    section_name : text
+    section_number : integer
+    question_number : integer
+    question_text : text
+    question_type : text
+    question_metadata : jsonb
+    created_at : timestamp
+}
+
+TABLE(responses) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(assessment_id) : uuid <<FK>>
+    FK(file_id) : uuid <<FK>>
+    batch_id : uuid
+    section_number : integer
+    question_number : integer
+    question_text : text
+    response_text : text
+    confidence : real
+    has_visual_content : boolean
+    visual_content_description : text
+    created_at : timestamp
+}
+
+TABLE(assessment_results) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(assessment_id) : uuid <<FK>>
+    batch_id : uuid
+    composite_score : integer
+    recommendation : text
+    overall_risk_rating : text
+    narrative_report : text
+    executive_summary : text
+    key_findings : jsonb
+    disqualifying_factors : jsonb
+    rubric_version : text
+    model_id : text
+    raw_tool_payload : jsonb
+    scored_at : timestamp
+    scoring_duration_ms : integer
+}
+
+TABLE(dimension_scores) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(assessment_id) : uuid <<FK>>
+    batch_id : uuid
+    dimension : text
+    score : integer
+    risk_rating : text
+    findings : jsonb
+    created_at : timestamp
+}
+
+' Relationships
+users ||--o{ conversations : "creates"
+users ||--o{ assessments : "creates"
+users ||--o{ files : "uploads"
+
+vendors ||--o{ assessments : "has"
+
+assessments ||--o{ conversations : "linked to"
+assessments ||--o{ questions : "contains"
+assessments ||--o{ responses : "has"
+assessments ||--o{ assessment_results : "has"
+assessments ||--o{ dimension_scores : "has"
+
+conversations ||--o{ messages : "contains"
+conversations ||--o{ files : "has"
+
+files ||--o{ responses : "source for"
+
+@enduml

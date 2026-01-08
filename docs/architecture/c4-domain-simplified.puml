@@ -1,0 +1,113 @@
+@startuml Guardian Domain Model
+top to bottom direction
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+package "Entities" {
+    class User {
+        +id: string
+        +email: Email
+        +name: string
+        +role: UserRole
+    }
+
+    class Vendor {
+        +id: string
+        +name: VendorName
+        +industry: string
+        +website: string
+    }
+
+    class Assessment {
+        +id: string
+        +vendorId: string
+        +assessmentType: AssessmentType
+        +status: AssessmentStatus
+        +solutionName: string
+    }
+
+    class Conversation {
+        +id: string
+        +userId: string
+        +assessmentId: string
+        +mode: ConversationMode
+        +status: ConversationStatus
+    }
+
+    class Message {
+        +id: string
+        +conversationId: string
+        +role: MessageRole
+        +content: MessageContent
+    }
+
+    class Question {
+        +id: string
+        +assessmentId: string
+        +sectionName: string
+        +questionText: string
+        +questionType: QuestionType
+    }
+}
+
+package "Value Objects" {
+    class Email {
+        -value: string
+        +getValue(): string
+    }
+
+    class VendorName {
+        -value: string
+        +getValue(): string
+    }
+
+    class AssessmentStatus {
+        -value: AssessmentStatusValue
+        +canTransitionTo(): boolean
+    }
+
+    class AssessmentType {
+        -value: AssessmentTypeValue
+        +isQuick(): boolean
+        +isComprehensive(): boolean
+    }
+}
+
+package "Scoring" {
+    interface ScoringCompletePayload {
+        +compositeScore: number
+        +recommendation: Recommendation
+        +overallRiskRating: RiskRating
+        +dimensionScores: DimensionScoreData[]
+    }
+
+    interface DimensionScoreData {
+        +dimension: RiskDimension
+        +score: number
+        +riskRating: RiskRating
+    }
+
+    class ScoringPayloadValidator {
+        +validate(): ValidationResult
+    }
+}
+
+' Relationships
+User "1" --> "*" Conversation : creates
+Vendor "1" --> "*" Assessment : has
+Assessment "1" --> "*" Question : contains
+Assessment "1" --> "1" Vendor
+Conversation "1" --> "*" Message : contains
+Conversation "*" --> "1" Assessment : linked to
+Assessment --> AssessmentStatus : has
+Assessment --> AssessmentType : has
+Vendor --> VendorName : has
+User --> Email : has
+ScoringCompletePayload --> "*" DimensionScoreData : contains
+
+@enduml

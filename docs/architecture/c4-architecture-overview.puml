@@ -1,0 +1,193 @@
+@startuml Guardian Architecture Overview
+allowmixing
+top to bottom direction
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+skinparam package {
+    BackgroundColor<<http>> #E8F4FD
+    BackgroundColor<<websocket>> #FDE8E8
+    BackgroundColor<<service>> #E8FDE8
+    BackgroundColor<<domain>> #FDF8E8
+    BackgroundColor<<repo>> #F0E8FD
+    BackgroundColor<<infra>> #E8E8E8
+}
+
+package "HTTP Layer" <<http>> {
+    class AuthController {
+        +login()
+        +register()
+        +logout()
+    }
+
+    class AssessmentController {
+        +create()
+        +getById()
+        +list()
+    }
+
+    class ExportController {
+        +exportPDF()
+        +exportWord()
+        +exportExcel()
+    }
+
+    class VendorController {
+        +create()
+        +update()
+        +list()
+    }
+}
+
+package "WebSocket Layer" <<websocket>> {
+    class ChatServer {
+        +handleConnection()
+        +handleMessage()
+        +broadcastResponse()
+    }
+}
+
+package "Application Services" <<service>> {
+    class AuthService {
+        +authenticate()
+        +createUser()
+        +validateToken()
+    }
+
+    class ConversationService {
+        +create()
+        +sendMessage()
+        +getHistory()
+    }
+
+    class AssessmentService {
+        +create()
+        +updateStatus()
+        +linkToConversation()
+    }
+
+    class QuestionnaireGenerationService {
+        +generate()
+        +parseQuestions()
+    }
+
+    class ScoringService {
+        +scoreAssessment()
+        +validatePayload()
+    }
+
+    class ExportService {
+        +exportToPDF()
+        +exportToWord()
+        +exportToExcel()
+    }
+}
+
+package "Domain Entities" <<domain>> {
+    class User
+    class Vendor
+    class Assessment
+    class Conversation
+    class Message
+    class Question
+}
+
+package "Repositories" <<repo>> {
+    class UserRepository
+    class VendorRepository
+    class AssessmentRepository
+    class ConversationRepository
+    class MessageRepository
+    class QuestionRepository
+}
+
+package "Infrastructure" <<infra>> {
+    class ClaudeClient {
+        +chat()
+        +streamResponse()
+        +useTools()
+    }
+
+    class PromptCacheManager {
+        +getCachedPrompt()
+        +invalidate()
+    }
+
+    class PDFExporter {
+        +generate()
+    }
+
+    class WordExporter {
+        +generate()
+    }
+
+    class LocalFileStorage {
+        +save()
+        +retrieve()
+    }
+
+    class JWTProvider {
+        +sign()
+        +verify()
+    }
+}
+
+database "PostgreSQL" as DB {
+}
+
+' HTTP Layer -> Services
+AuthController --> AuthService
+AssessmentController --> AssessmentService
+ExportController --> ExportService
+VendorController --> AssessmentService
+
+' WebSocket -> Services
+ChatServer --> ConversationService
+ChatServer --> QuestionnaireGenerationService
+ChatServer --> ScoringService
+
+' Services -> Services
+ConversationService --> AssessmentService
+QuestionnaireGenerationService --> AssessmentService
+ScoringService --> AssessmentService
+
+' Services -> Repositories
+AuthService --> UserRepository
+ConversationService --> ConversationRepository
+ConversationService --> MessageRepository
+AssessmentService --> AssessmentRepository
+AssessmentService --> VendorRepository
+QuestionnaireGenerationService --> QuestionRepository
+ExportService --> QuestionRepository
+
+' Services -> Infrastructure
+AuthService --> JWTProvider
+ConversationService --> ClaudeClient
+QuestionnaireGenerationService --> ClaudeClient
+ScoringService --> ClaudeClient
+ClaudeClient --> PromptCacheManager
+ExportService --> PDFExporter
+ExportService --> WordExporter
+ExportService --> LocalFileStorage
+
+' Repositories -> Database
+UserRepository --> DB
+VendorRepository --> DB
+AssessmentRepository --> DB
+ConversationRepository --> DB
+MessageRepository --> DB
+QuestionRepository --> DB
+
+' Repositories use Domain Entities
+UserRepository ..> User : manages
+VendorRepository ..> Vendor : manages
+AssessmentRepository ..> Assessment : manages
+ConversationRepository ..> Conversation : manages
+MessageRepository ..> Message : manages
+QuestionRepository ..> Question : manages
+
+@enduml

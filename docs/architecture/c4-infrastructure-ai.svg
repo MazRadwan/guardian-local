@@ -1,0 +1,646 @@
+<svg version="1.1" baseProfile="full" width="5858.0" height="799.0" viewBox="0 0 5858 799" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:ev="http://www.w3.org/2001/xml-events">
+<desc >#.interface: fill=lightblue
+#.enumeration: fill=lightgreen
+#.type: fill=lightgray
+
+[ClaudeClient|-client: Anthropic;-model: &quot;claude-sonnet-4-5-20250929&quot;;-maxTokens: 4096;-retryAttempts: 3;-retryDelays: number\[\]|+sendMessage(): Promise&lt;ClaudeResponse&gt;;+streamMessage(): AsyncGenerator&lt;StreamChunk, any, unknown&gt;;-sleep(): Promise&lt;void&gt;;-buildSystemPrompt(): string \| { type: &quot;text&quot;; text: string; cache_control: { type: &quot;ephemeral&quot;; }; }\[\];+analyzeImages(): Promise&lt;VisionResponse&gt;;+prepareDocument(): Promise&lt;VisionContent\[\]&gt;;-preparePdfDocument(): Promise&lt;VisionContent\[\]&gt;;-prepareImageDocument(): VisionContent\[\];+getModelId(): string;+streamWithTool(): Promise&lt;void&gt;]
+[ClaudeAPIError|+originalError?: Error|]
+[IClaudeClient]&lt;:--[ClaudeClient]
+[IVisionClient]&lt;:--[ClaudeClient]
+[ILLMClient]&lt;:--[ClaudeClient]
+[DocumentParserService|-claudeClient: IClaudeClient;-visionClient: IVisionClient|+parseForContext(): Promise&lt;IntakeParseResult&gt;;+parseForResponses(): Promise&lt;ScoringParseResult&gt;;-extractContent(): Promise&lt;{ text: string; visionContent: VisionContent\[\]; }&gt;;-extractPdfText(): Promise&lt;string&gt;;-extractDocxText(): Promise&lt;string&gt;;-parseJsonResponse(): Record&lt;string, unknown&gt;;-attemptJsonRepair(): string;-truncateText(): string;-createFailedIntakeResult(): IntakeParseResult;-createFailedScoringResult(): ScoringParseResult]
+[&lt;interface&gt;IntakeExtractionResponse|+vendorName: string;+solutionName: string;+solutionType: string;+industry: string;+features: string\[\];+claims: string\[\];+integrations: string\[\];+complianceMentions: string\[\];+architectureNotes: string\[\];+securityMentions: string\[\];+confidence: number;+suggestedQuestions: string\[\];+coveredCategories: string\[\];+gapCategories: string\[\]|]
+[&lt;interface&gt;ScoringExtractionResponse|+assessmentId: string;+vendorName: string;+solutionName: string;+responses: { sectionNumber: number; sectionTitle: string; questionNumber: number; questionText: string; responseText: string; confidence: number; hasVisualContent: boolean; visualContentDescription: string; }\[\];+expectedQuestionCount: number;+parsedQuestionCount: number;+unparsedQuestions: string\[\];+isComplete: boolean;+overallConfidence: number|]
+[IIntakeDocumentParser]&lt;:--[DocumentParserService]
+[IScoringDocumentParser]&lt;:--[DocumentParserService]
+[PromptCacheManager|-cache: Map&lt;string, PromptCacheEntry&gt;;-enabled: boolean;-prefix: string;-getPrompt: SystemPromptProvider|+ensureCached(): PromptCacheEntry;-hashPrompt(): string]
+[&lt;interface&gt;PromptCacheConfig|+enabled: boolean;+prefix?: string|]
+[&lt;interface&gt;PromptCacheEntry|+mode: ConversationMode;+hash: string;+systemPrompt: string;+cachedPromptId?: string;+usePromptCache: boolean|]
+[ScoringPromptBuilder||+buildScoringSystemPrompt(): string;+buildScoringUserPrompt(): string]
+[IPromptBuilder]&lt;:--[ScoringPromptBuilder]
+[MarkdownQuestionnaireConverter|-static SECTION_REGEX: RegExp;-static QUESTION_REGEX: RegExp|+static convert(): ConvertedQuestionnaire;-static extractSections(): { sectionNumber: number; sectionName: string; content: string; }\[\];-static extractQuestions(): ConvertedQuestion\[\];-static inferQuestionType(): &quot;boolean&quot; \| &quot;text&quot; \| &quot;enum&quot;]
+[&lt;interface&gt;ConvertedQuestion|+sectionName: string;+sectionNumber: number;+questionNumber: number;+questionText: string;+questionType: &quot;boolean&quot; \| &quot;text&quot; \| &quot;enum&quot;;+questionMetadata?: { required?: boolean; helpText?: string; enumOptions?: string\[\]; }|]
+[&lt;interface&gt;ConvertedQuestionnaire|+questions: ConvertedQuestion\[\]|]
+[QuestionParser||+static parse(): { sectionName?: string; sectionNumber?: number; questionNumber?: number; questionText?: string; questionType?: &quot;boolean&quot; \| &quot;text&quot; \| &quot;enum&quot;; questionMetadata?: { required?: boolean; helpText?: string; enumOptions?: string\[\]; }; }\[\];-static extractJSON(): string;-static validateUniquePositions(): void;+static validateEnumQuestions(): void]
+[QuestionParseError||]
+[&lt;interface&gt;IntakeExtractionContext|+focusCategories?: string\[\];+filename?: string|]
+[&lt;interface&gt;QuestionGenerationContext|+vendorType: string;+solutionType: string;+vendorName?: string;+solutionName?: string;+assessmentFocus?: string;+industry?: string;+assessmentType?: &quot;quick&quot; \| &quot;comprehensive&quot; \| &quot;category_focused&quot;;+category?: string|]
+[&lt;interface&gt;ScoringExtractionContext|+expectedAssessmentId?: string;+filename?: string;+expectedQuestionCount?: number|]</desc>
+<g stroke-width="1.0" text-align="left" font="12pt Helvetica, Arial, sans-serif" font-size="12pt" font-family="Helvetica" font-weight="normal" font-style="normal">
+<g font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" stroke="#33322E">
+<g stroke="transparent" fill="transparent">
+<rect x="0.0" y="0.0" height="799.0" width="5858.0" stroke="none"></rect>
+</g>
+<g transform="translate(8, 8)" fill="#33322E">
+<g transform="translate(20, 20)" fill="#eee8d5" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal">
+<g stroke-dasharray="6 6">
+<path d="M283.0 194.8 L283 351 L298.3398058252427 371 L298.3 371.0 " fill="none"></path>
+</g>
+<path d="M288.3 194.8 L283.0 194.8 L277.7 194.8 L283.0 181.5 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M441.0 194.8 L441 351 L441 371 L441.0 371.0 " fill="none"></path>
+</g>
+<path d="M446.3 194.8 L441.0 194.8 L435.7 194.8 L441.0 181.5 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M588.0 194.8 L588 351 L573.7281553398059 371 L573.7 371.0 " fill="none"></path>
+</g>
+<path d="M593.3 194.8 L588.0 194.8 L582.7 194.8 L588.0 181.5 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M1431.0 194.8 L1431 351 L1467.6444174757282 412 L1467.6 412.0 " fill="none"></path>
+</g>
+<path d="M1436.3 194.8 L1431.0 194.8 L1425.7 194.8 L1431.0 181.5 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M1678.5 194.8 L1678.5 351 L1641.8555825242718 412 L1641.9 412.0 " fill="none"></path>
+</g>
+<path d="M1683.8 194.8 L1678.5 194.8 L1673.2 194.8 L1678.5 181.5 Z"></path>
+<g stroke-dasharray="6 6">
+<path d="M2757.0 194.8 L2757 351 L2757 513 L2757.0 513.0 " fill="none"></path>
+</g>
+<path d="M2762.3 194.8 L2757.0 194.8 L2751.7 194.8 L2757.0 181.5 Z"></path>
+<g data-name="ClaudeClient">
+<g fill="#eee8d5" stroke="#33322E" data-name="ClaudeClient">
+<rect x="166.5" y="371.0" height="372.0" width="549.0" data-name="ClaudeClient"></rect>
+<path d="M166.5 403.0 L715.5 403.0" fill="none" data-name="ClaudeClient"></path>
+<path d="M166.5 500.0 L715.5 500.0" fill="none" data-name="ClaudeClient"></path>
+</g>
+<g transform="translate(166.5, 371)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="ClaudeClient" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ClaudeClient" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/ClaudeClient.ts.ClaudeClient" xlink:href="../../packages/backend/src/infrastructure/ai/ClaudeClient.ts"><text x="266.5" y="14.1" stroke="none" text-anchor="middle" data-name="ClaudeClient" data-compartment="0">ClaudeClient</text></a>
+
+</g>
+</g>
+<g transform="translate(166.5, 403)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ClaudeClient" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ClaudeClient" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ClaudeClient" data-compartment="1">-client: Anthropic</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ClaudeClient" data-compartment="1">-model: &quot;claude-sonnet-4-5-20250929&quot;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="ClaudeClient" data-compartment="1">-maxTokens: 4096</text>
+<text x="0.0" y="62.7" stroke="none" data-name="ClaudeClient" data-compartment="1">-retryAttempts: 3</text>
+<text x="0.0" y="78.9" stroke="none" data-name="ClaudeClient" data-compartment="1">-retryDelays: number[]</text>
+
+</g>
+</g>
+<g transform="translate(166.5, 500)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ClaudeClient" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ClaudeClient" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="ClaudeClient" data-compartment="2">+sendMessage(): Promise&lt;ClaudeResponse&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ClaudeClient" data-compartment="2">+streamMessage(): AsyncGenerator&lt;StreamChunk, any, unknown&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="ClaudeClient" data-compartment="2">-sleep(): Promise&lt;void&gt;</text>
+<text x="0.0" y="62.7" stroke="none" data-name="ClaudeClient" data-compartment="2">-buildSystemPrompt(): string | { type: &quot;text&quot;</text>
+<text x="0.0" y="78.9" stroke="none" data-name="ClaudeClient" data-compartment="2">text: string</text>
+<text x="0.0" y="95.1" stroke="none" data-name="ClaudeClient" data-compartment="2">cache_control: { type: &quot;ephemeral&quot;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="ClaudeClient" data-compartment="2">}</text>
+<text x="0.0" y="127.5" stroke="none" data-name="ClaudeClient" data-compartment="2">}[]</text>
+<text x="0.0" y="143.7" stroke="none" data-name="ClaudeClient" data-compartment="2">+analyzeImages(): Promise&lt;VisionResponse&gt;</text>
+<text x="0.0" y="159.9" stroke="none" data-name="ClaudeClient" data-compartment="2">+prepareDocument(): Promise&lt;VisionContent[]&gt;</text>
+<text x="0.0" y="176.1" stroke="none" data-name="ClaudeClient" data-compartment="2">-preparePdfDocument(): Promise&lt;VisionContent[]&gt;</text>
+<text x="0.0" y="192.3" stroke="none" data-name="ClaudeClient" data-compartment="2">-prepareImageDocument(): VisionContent[]</text>
+<text x="0.0" y="208.5" stroke="none" data-name="ClaudeClient" data-compartment="2">+getModelId(): string</text>
+<text x="0.0" y="224.7" stroke="none" data-name="ClaudeClient" data-compartment="2">+streamWithTool(): Promise&lt;void&gt;</text>
+
+</g>
+</g>
+</g>
+<g data-name="ClaudeAPIError">
+<g fill="#eee8d5" stroke="#33322E" data-name="ClaudeAPIError">
+<rect x="0.0" y="129.5" height="72.0" width="182.0" data-name="ClaudeAPIError"></rect>
+<path d="M0.0 161.5 L182.0 161.5" fill="none" data-name="ClaudeAPIError"></path>
+<path d="M0.0 193.5 L182.0 193.5" fill="none" data-name="ClaudeAPIError"></path>
+</g>
+<g transform="translate(0, 129.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="ClaudeAPIError" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ClaudeAPIError" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/ClaudeClient.ts.ClaudeAPIError" xlink:href="../../packages/backend/src/infrastructure/ai/ClaudeClient.ts"><text x="83.0" y="14.1" stroke="none" text-anchor="middle" data-name="ClaudeAPIError" data-compartment="0">ClaudeAPIError</text></a>
+
+</g>
+</g>
+<g transform="translate(0, 161.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ClaudeAPIError" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ClaudeAPIError" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ClaudeAPIError" data-compartment="1">+originalError?: Error</text>
+
+</g>
+</g>
+<g transform="translate(0, 193.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ClaudeAPIError" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ClaudeAPIError" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="IClaudeClient">
+<g fill="#eee8d5" stroke="#33322E" data-name="IClaudeClient">
+<rect x="222.0" y="149.5" height="32.0" width="122.0" data-name="IClaudeClient"></rect>
+</g>
+<g transform="translate(222, 149.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IClaudeClient" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IClaudeClient" data-compartment="0">
+<text x="53.0" y="14.1" stroke="none" text-anchor="middle" data-name="IClaudeClient" data-compartment="0">IClaudeClient</text>
+
+</g>
+</g>
+</g>
+<g data-name="IVisionClient">
+<g fill="#eee8d5" stroke="#33322E" data-name="IVisionClient">
+<rect x="384.0" y="149.5" height="32.0" width="114.0" data-name="IVisionClient"></rect>
+</g>
+<g transform="translate(384, 149.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IVisionClient" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IVisionClient" data-compartment="0">
+<text x="49.0" y="14.1" stroke="none" text-anchor="middle" data-name="IVisionClient" data-compartment="0">IVisionClient</text>
+
+</g>
+</g>
+</g>
+<g data-name="ILLMClient">
+<g fill="#eee8d5" stroke="#33322E" data-name="ILLMClient">
+<rect x="538.0" y="149.5" height="32.0" width="100.0" data-name="ILLMClient"></rect>
+</g>
+<g transform="translate(538, 149.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="ILLMClient" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ILLMClient" data-compartment="0">
+<text x="42.0" y="14.1" stroke="none" text-anchor="middle" data-name="ILLMClient" data-compartment="0">ILLMClient</text>
+
+</g>
+</g>
+</g>
+<g data-name="DocumentParserService">
+<g fill="#eee8d5" stroke="#33322E" data-name="DocumentParserService">
+<rect x="1330.8" y="412.0" height="290.0" width="448.0" data-name="DocumentParserService"></rect>
+<path d="M1330.8 444.0 L1778.8 444.0" fill="none" data-name="DocumentParserService"></path>
+<path d="M1330.8 492.0 L1778.8 492.0" fill="none" data-name="DocumentParserService"></path>
+</g>
+<g transform="translate(1330.75, 412)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="DocumentParserService" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="DocumentParserService" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/DocumentParserService.ts.DocumentParserService" xlink:href="../../packages/backend/src/infrastructure/ai/DocumentParserService.ts"><text x="216.0" y="14.1" stroke="none" text-anchor="middle" data-name="DocumentParserService" data-compartment="0">DocumentParserService</text></a>
+
+</g>
+</g>
+<g transform="translate(1330.75, 444)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DocumentParserService" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DocumentParserService" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="DocumentParserService" data-compartment="1">-claudeClient: IClaudeClient</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DocumentParserService" data-compartment="1">-visionClient: IVisionClient</text>
+
+</g>
+</g>
+<g transform="translate(1330.75, 492)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="DocumentParserService" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="DocumentParserService" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="DocumentParserService" data-compartment="2">+parseForContext(): Promise&lt;IntakeParseResult&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="DocumentParserService" data-compartment="2">+parseForResponses(): Promise&lt;ScoringParseResult&gt;</text>
+<text x="0.0" y="46.5" stroke="none" data-name="DocumentParserService" data-compartment="2">-extractContent(): Promise&lt;{ text: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="DocumentParserService" data-compartment="2">visionContent: VisionContent[]</text>
+<text x="0.0" y="78.9" stroke="none" data-name="DocumentParserService" data-compartment="2">}&gt;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="DocumentParserService" data-compartment="2">-extractPdfText(): Promise&lt;string&gt;</text>
+<text x="0.0" y="111.3" stroke="none" data-name="DocumentParserService" data-compartment="2">-extractDocxText(): Promise&lt;string&gt;</text>
+<text x="0.0" y="127.5" stroke="none" data-name="DocumentParserService" data-compartment="2">-parseJsonResponse(): Record&lt;string, unknown&gt;</text>
+<text x="0.0" y="143.7" stroke="none" data-name="DocumentParserService" data-compartment="2">-attemptJsonRepair(): string</text>
+<text x="0.0" y="159.9" stroke="none" data-name="DocumentParserService" data-compartment="2">-truncateText(): string</text>
+<text x="0.0" y="176.1" stroke="none" data-name="DocumentParserService" data-compartment="2">-createFailedIntakeResult(): IntakeParseResult</text>
+<text x="0.0" y="192.3" stroke="none" data-name="DocumentParserService" data-compartment="2">-createFailedScoringResult(): ScoringParseResult</text>
+
+</g>
+</g>
+</g>
+<g data-name="IntakeExtractionResponse">
+<g fill="lightblue" stroke="#33322E" data-name="IntakeExtractionResponse">
+<rect x="678.0" y="24.0" height="283.0" width="253.0" data-name="IntakeExtractionResponse"></rect>
+<path d="M678.0 56.0 L931.0 56.0" fill="none" data-name="IntakeExtractionResponse"></path>
+<path d="M678.0 299.0 L931.0 299.0" fill="none" data-name="IntakeExtractionResponse"></path>
+</g>
+<g transform="translate(678, 24)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="IntakeExtractionResponse" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IntakeExtractionResponse" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/DocumentParserService.ts.IntakeExtractionResponse" xlink:href="../../packages/backend/src/infrastructure/ai/DocumentParserService.ts"><text x="118.5" y="14.1" stroke="none" text-anchor="middle" data-name="IntakeExtractionResponse" data-compartment="0">IntakeExtractionResponse</text></a>
+
+</g>
+</g>
+<g transform="translate(678, 56)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="IntakeExtractionResponse" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="IntakeExtractionResponse" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+vendorName: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+solutionName: string</text>
+<text x="0.0" y="46.5" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+solutionType: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+industry: string</text>
+<text x="0.0" y="78.9" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+features: string[]</text>
+<text x="0.0" y="95.1" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+claims: string[]</text>
+<text x="0.0" y="111.3" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+integrations: string[]</text>
+<text x="0.0" y="127.5" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+complianceMentions: string[]</text>
+<text x="0.0" y="143.7" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+architectureNotes: string[]</text>
+<text x="0.0" y="159.9" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+securityMentions: string[]</text>
+<text x="0.0" y="176.1" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+confidence: number</text>
+<text x="0.0" y="192.3" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+suggestedQuestions: string[]</text>
+<text x="0.0" y="208.5" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+coveredCategories: string[]</text>
+<text x="0.0" y="224.7" stroke="none" data-name="IntakeExtractionResponse" data-compartment="1">+gapCategories: string[]</text>
+
+</g>
+</g>
+<g transform="translate(678, 299)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="IntakeExtractionResponse" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="IntakeExtractionResponse" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringExtractionResponse">
+<g fill="lightblue" stroke="#33322E" data-name="ScoringExtractionResponse">
+<rect x="971.0" y="0.0" height="331.0" width="319.0" data-name="ScoringExtractionResponse"></rect>
+<path d="M971.0 32.0 L1290.0 32.0" fill="none" data-name="ScoringExtractionResponse"></path>
+<path d="M971.0 323.0 L1290.0 323.0" fill="none" data-name="ScoringExtractionResponse"></path>
+</g>
+<g transform="translate(971, 0)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringExtractionResponse" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ScoringExtractionResponse" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/DocumentParserService.ts.ScoringExtractionResponse" xlink:href="../../packages/backend/src/infrastructure/ai/DocumentParserService.ts"><text x="151.5" y="14.1" stroke="none" text-anchor="middle" data-name="ScoringExtractionResponse" data-compartment="0">ScoringExtractionResponse</text></a>
+
+</g>
+</g>
+<g transform="translate(971, 32)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringExtractionResponse" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ScoringExtractionResponse" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+vendorName: string</text>
+<text x="0.0" y="46.5" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+solutionName: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+responses: { sectionNumber: number</text>
+<text x="0.0" y="78.9" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">sectionTitle: string</text>
+<text x="0.0" y="95.1" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">questionNumber: number</text>
+<text x="0.0" y="111.3" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">questionText: string</text>
+<text x="0.0" y="127.5" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">responseText: string</text>
+<text x="0.0" y="143.7" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">confidence: number</text>
+<text x="0.0" y="159.9" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">hasVisualContent: boolean</text>
+<text x="0.0" y="176.1" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">visualContentDescription: string</text>
+<text x="0.0" y="192.3" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">}[]</text>
+<text x="0.0" y="208.5" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+expectedQuestionCount: number</text>
+<text x="0.0" y="224.7" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+parsedQuestionCount: number</text>
+<text x="0.0" y="240.9" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+unparsedQuestions: string[]</text>
+<text x="0.0" y="257.1" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+isComplete: boolean</text>
+<text x="0.0" y="273.3" stroke="none" data-name="ScoringExtractionResponse" data-compartment="1">+overallConfidence: number</text>
+
+</g>
+</g>
+<g transform="translate(971, 323)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringExtractionResponse" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ScoringExtractionResponse" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="IIntakeDocumentParser">
+<g fill="#eee8d5" stroke="#33322E" data-name="IIntakeDocumentParser">
+<rect x="1330.0" y="149.5" height="32.0" width="202.0" data-name="IIntakeDocumentParser"></rect>
+</g>
+<g transform="translate(1330, 149.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IIntakeDocumentParser" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IIntakeDocumentParser" data-compartment="0">
+<text x="93.0" y="14.1" stroke="none" text-anchor="middle" data-name="IIntakeDocumentParser" data-compartment="0">IIntakeDocumentParser</text>
+
+</g>
+</g>
+</g>
+<g data-name="IScoringDocumentParser">
+<g fill="#eee8d5" stroke="#33322E" data-name="IScoringDocumentParser">
+<rect x="1572.0" y="149.5" height="32.0" width="213.0" data-name="IScoringDocumentParser"></rect>
+</g>
+<g transform="translate(1572, 149.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IScoringDocumentParser" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IScoringDocumentParser" data-compartment="0">
+<text x="98.5" y="14.1" stroke="none" text-anchor="middle" data-name="IScoringDocumentParser" data-compartment="0">IScoringDocumentParser</text>
+
+</g>
+</g>
+</g>
+<g data-name="PromptCacheManager">
+<g fill="#eee8d5" stroke="#33322E" data-name="PromptCacheManager">
+<rect x="1825.0" y="85.0" height="161.0" width="336.0" data-name="PromptCacheManager"></rect>
+<path d="M1825.0 117.0 L2161.0 117.0" fill="none" data-name="PromptCacheManager"></path>
+<path d="M1825.0 198.0 L2161.0 198.0" fill="none" data-name="PromptCacheManager"></path>
+</g>
+<g transform="translate(1825, 85)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="PromptCacheManager" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="PromptCacheManager" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/PromptCacheManager.ts.PromptCacheManager" xlink:href="../../packages/backend/src/infrastructure/ai/PromptCacheManager.ts"><text x="160.0" y="14.1" stroke="none" text-anchor="middle" data-name="PromptCacheManager" data-compartment="0">PromptCacheManager</text></a>
+
+</g>
+</g>
+<g transform="translate(1825, 117)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheManager" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="PromptCacheManager" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="PromptCacheManager" data-compartment="1">-cache: Map&lt;string, PromptCacheEntry&gt;</text>
+<text x="0.0" y="30.3" stroke="none" data-name="PromptCacheManager" data-compartment="1">-enabled: boolean</text>
+<text x="0.0" y="46.5" stroke="none" data-name="PromptCacheManager" data-compartment="1">-prefix: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="PromptCacheManager" data-compartment="1">-getPrompt: SystemPromptProvider</text>
+
+</g>
+</g>
+<g transform="translate(1825, 198)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheManager" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="PromptCacheManager" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="PromptCacheManager" data-compartment="2">+ensureCached(): PromptCacheEntry</text>
+<text x="0.0" y="30.3" stroke="none" data-name="PromptCacheManager" data-compartment="2">-hashPrompt(): string</text>
+
+</g>
+</g>
+</g>
+<g data-name="PromptCacheConfig">
+<g fill="lightblue" stroke="#33322E" data-name="PromptCacheConfig">
+<rect x="2201.0" y="121.5" height="88.0" width="174.0" data-name="PromptCacheConfig"></rect>
+<path d="M2201.0 153.5 L2375.0 153.5" fill="none" data-name="PromptCacheConfig"></path>
+<path d="M2201.0 201.5 L2375.0 201.5" fill="none" data-name="PromptCacheConfig"></path>
+</g>
+<g transform="translate(2201, 121.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheConfig" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="PromptCacheConfig" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/PromptCacheManager.ts.PromptCacheConfig" xlink:href="../../packages/backend/src/infrastructure/ai/PromptCacheManager.ts"><text x="79.0" y="14.1" stroke="none" text-anchor="middle" data-name="PromptCacheConfig" data-compartment="0">PromptCacheConfig</text></a>
+
+</g>
+</g>
+<g transform="translate(2201, 153.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheConfig" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="PromptCacheConfig" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="PromptCacheConfig" data-compartment="1">+enabled: boolean</text>
+<text x="0.0" y="30.3" stroke="none" data-name="PromptCacheConfig" data-compartment="1">+prefix?: string</text>
+
+</g>
+</g>
+<g transform="translate(2201, 201.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheConfig" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="PromptCacheConfig" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="PromptCacheEntry">
+<g fill="lightblue" stroke="#33322E" data-name="PromptCacheEntry">
+<rect x="2415.0" y="97.0" height="137.0" width="236.0" data-name="PromptCacheEntry"></rect>
+<path d="M2415.0 129.0 L2651.0 129.0" fill="none" data-name="PromptCacheEntry"></path>
+<path d="M2415.0 226.0 L2651.0 226.0" fill="none" data-name="PromptCacheEntry"></path>
+</g>
+<g transform="translate(2415, 97)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheEntry" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="PromptCacheEntry" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/PromptCacheManager.ts.PromptCacheEntry" xlink:href="../../packages/backend/src/infrastructure/ai/PromptCacheManager.ts"><text x="110.0" y="14.1" stroke="none" text-anchor="middle" data-name="PromptCacheEntry" data-compartment="0">PromptCacheEntry</text></a>
+
+</g>
+</g>
+<g transform="translate(2415, 129)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheEntry" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="PromptCacheEntry" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="PromptCacheEntry" data-compartment="1">+mode: ConversationMode</text>
+<text x="0.0" y="30.3" stroke="none" data-name="PromptCacheEntry" data-compartment="1">+hash: string</text>
+<text x="0.0" y="46.5" stroke="none" data-name="PromptCacheEntry" data-compartment="1">+systemPrompt: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="PromptCacheEntry" data-compartment="1">+cachedPromptId?: string</text>
+<text x="0.0" y="78.9" stroke="none" data-name="PromptCacheEntry" data-compartment="1">+usePromptCache: boolean</text>
+
+</g>
+</g>
+<g transform="translate(2415, 226)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="PromptCacheEntry" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="PromptCacheEntry" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringPromptBuilder">
+<g fill="#eee8d5" stroke="#33322E" data-name="ScoringPromptBuilder">
+<rect x="2605.0" y="513.0" height="88.0" width="304.0" data-name="ScoringPromptBuilder"></rect>
+<path d="M2605.0 545.0 L2909.0 545.0" fill="none" data-name="ScoringPromptBuilder"></path>
+<path d="M2605.0 553.0 L2909.0 553.0" fill="none" data-name="ScoringPromptBuilder"></path>
+</g>
+<g transform="translate(2605, 513)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="ScoringPromptBuilder" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ScoringPromptBuilder" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts.ScoringPromptBuilder" xlink:href="../../packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts"><text x="144.0" y="14.1" stroke="none" text-anchor="middle" data-name="ScoringPromptBuilder" data-compartment="0">ScoringPromptBuilder</text></a>
+
+</g>
+</g>
+<g transform="translate(2605, 545)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringPromptBuilder" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ScoringPromptBuilder" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(2605, 553)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringPromptBuilder" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ScoringPromptBuilder" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="ScoringPromptBuilder" data-compartment="2">+buildScoringSystemPrompt(): string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ScoringPromptBuilder" data-compartment="2">+buildScoringUserPrompt(): string</text>
+
+</g>
+</g>
+</g>
+<g data-name="IPromptBuilder">
+<g fill="#eee8d5" stroke="#33322E" data-name="IPromptBuilder">
+<rect x="2691.0" y="149.5" height="32.0" width="132.0" data-name="IPromptBuilder"></rect>
+</g>
+<g transform="translate(2691, 149.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="IPromptBuilder" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IPromptBuilder" data-compartment="0">
+<text x="58.0" y="14.1" stroke="none" text-anchor="middle" data-name="IPromptBuilder" data-compartment="0">IPromptBuilder</text>
+
+</g>
+</g>
+</g>
+<g data-name="MarkdownQuestionnaireConverter">
+<g fill="#eee8d5" stroke="#33322E" data-name="MarkdownQuestionnaireConverter">
+<rect x="2863.0" y="61.0" height="209.0" width="439.0" data-name="MarkdownQuestionnaireConverter"></rect>
+<path d="M2863.0 93.0 L3302.0 93.0" fill="none" data-name="MarkdownQuestionnaireConverter"></path>
+<path d="M2863.0 141.0 L3302.0 141.0" fill="none" data-name="MarkdownQuestionnaireConverter"></path>
+</g>
+<g transform="translate(2863, 61)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="MarkdownQuestionnaireConverter" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="MarkdownQuestionnaireConverter" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/converters/MarkdownQuestionnaireConverter.ts.MarkdownQuestionnaireConverter" xlink:href="../../packages/backend/src/infrastructure/ai/converters/MarkdownQuestionnaireConverter.ts"><text x="211.5" y="14.1" stroke="none" text-anchor="middle" data-name="MarkdownQuestionnaireConverter" data-compartment="0">MarkdownQuestionnaireConverter</text></a>
+
+</g>
+</g>
+<g transform="translate(2863, 93)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="MarkdownQuestionnaireConverter" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="MarkdownQuestionnaireConverter" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="1">-static SECTION_REGEX: RegExp</text>
+<text x="0.0" y="30.3" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="1">-static QUESTION_REGEX: RegExp</text>
+
+</g>
+</g>
+<g transform="translate(2863, 141)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="MarkdownQuestionnaireConverter" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="MarkdownQuestionnaireConverter" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">+static convert(): ConvertedQuestionnaire</text>
+<text x="0.0" y="30.3" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">-static extractSections(): { sectionNumber: number</text>
+<text x="0.0" y="46.5" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">sectionName: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">content: string</text>
+<text x="0.0" y="78.9" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">}[]</text>
+<text x="0.0" y="95.1" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">-static extractQuestions(): ConvertedQuestion[]</text>
+<text x="0.0" y="111.3" stroke="none" data-name="MarkdownQuestionnaireConverter" data-compartment="2">-static inferQuestionType(): &quot;boolean&quot; | &quot;text&quot; | &quot;enum&quot;</text>
+
+</g>
+</g>
+</g>
+<g data-name="ConvertedQuestion">
+<g fill="lightblue" stroke="#33322E" data-name="ConvertedQuestion">
+<rect x="3342.0" y="64.5" height="202.0" width="349.0" data-name="ConvertedQuestion"></rect>
+<path d="M3342.0 96.5 L3691.0 96.5" fill="none" data-name="ConvertedQuestion"></path>
+<path d="M3342.0 258.5 L3691.0 258.5" fill="none" data-name="ConvertedQuestion"></path>
+</g>
+<g transform="translate(3342, 64.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ConvertedQuestion" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ConvertedQuestion" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/converters/MarkdownQuestionnaireConverter.ts.ConvertedQuestion" xlink:href="../../packages/backend/src/infrastructure/ai/converters/MarkdownQuestionnaireConverter.ts"><text x="166.5" y="14.1" stroke="none" text-anchor="middle" data-name="ConvertedQuestion" data-compartment="0">ConvertedQuestion</text></a>
+
+</g>
+</g>
+<g transform="translate(3342, 96.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ConvertedQuestion" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ConvertedQuestion" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ConvertedQuestion" data-compartment="1">+sectionName: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ConvertedQuestion" data-compartment="1">+sectionNumber: number</text>
+<text x="0.0" y="46.5" stroke="none" data-name="ConvertedQuestion" data-compartment="1">+questionNumber: number</text>
+<text x="0.0" y="62.7" stroke="none" data-name="ConvertedQuestion" data-compartment="1">+questionText: string</text>
+<text x="0.0" y="78.9" stroke="none" data-name="ConvertedQuestion" data-compartment="1">+questionType: &quot;boolean&quot; | &quot;text&quot; | &quot;enum&quot;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="ConvertedQuestion" data-compartment="1">+questionMetadata?: { required?: boolean</text>
+<text x="0.0" y="111.3" stroke="none" data-name="ConvertedQuestion" data-compartment="1">helpText?: string</text>
+<text x="0.0" y="127.5" stroke="none" data-name="ConvertedQuestion" data-compartment="1">enumOptions?: string[]</text>
+<text x="0.0" y="143.7" stroke="none" data-name="ConvertedQuestion" data-compartment="1">}</text>
+
+</g>
+</g>
+<g transform="translate(3342, 258.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ConvertedQuestion" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ConvertedQuestion" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ConvertedQuestionnaire">
+<g fill="lightblue" stroke="#33322E" data-name="ConvertedQuestionnaire">
+<rect x="3731.0" y="129.5" height="72.0" width="276.0" data-name="ConvertedQuestionnaire"></rect>
+<path d="M3731.0 161.5 L4007.0 161.5" fill="none" data-name="ConvertedQuestionnaire"></path>
+<path d="M3731.0 193.5 L4007.0 193.5" fill="none" data-name="ConvertedQuestionnaire"></path>
+</g>
+<g transform="translate(3731, 129.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ConvertedQuestionnaire" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ConvertedQuestionnaire" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/converters/MarkdownQuestionnaireConverter.ts.ConvertedQuestionnaire" xlink:href="../../packages/backend/src/infrastructure/ai/converters/MarkdownQuestionnaireConverter.ts"><text x="130.0" y="14.1" stroke="none" text-anchor="middle" data-name="ConvertedQuestionnaire" data-compartment="0">ConvertedQuestionnaire</text></a>
+
+</g>
+</g>
+<g transform="translate(3731, 161.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ConvertedQuestionnaire" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ConvertedQuestionnaire" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ConvertedQuestionnaire" data-compartment="1">+questions: ConvertedQuestion[]</text>
+
+</g>
+</g>
+<g transform="translate(3731, 193.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ConvertedQuestionnaire" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ConvertedQuestionnaire" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionParser">
+<g fill="#eee8d5" stroke="#33322E" data-name="QuestionParser">
+<rect x="4047.0" y="32.0" height="267.0" width="346.0" data-name="QuestionParser"></rect>
+<path d="M4047.0 64.0 L4393.0 64.0" fill="none" data-name="QuestionParser"></path>
+<path d="M4047.0 72.0 L4393.0 72.0" fill="none" data-name="QuestionParser"></path>
+</g>
+<g transform="translate(4047, 32)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="QuestionParser" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="QuestionParser" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/parsers/QuestionParser.ts.QuestionParser" xlink:href="../../packages/backend/src/infrastructure/ai/parsers/QuestionParser.ts"><text x="165.0" y="14.1" stroke="none" text-anchor="middle" data-name="QuestionParser" data-compartment="0">QuestionParser</text></a>
+
+</g>
+</g>
+<g transform="translate(4047, 64)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionParser" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="QuestionParser" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(4047, 72)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionParser" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="QuestionParser" data-compartment="2">
+<text x="0.0" y="14.1" stroke="none" data-name="QuestionParser" data-compartment="2">+static parse(): { sectionName?: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="QuestionParser" data-compartment="2">sectionNumber?: number</text>
+<text x="0.0" y="46.5" stroke="none" data-name="QuestionParser" data-compartment="2">questionNumber?: number</text>
+<text x="0.0" y="62.7" stroke="none" data-name="QuestionParser" data-compartment="2">questionText?: string</text>
+<text x="0.0" y="78.9" stroke="none" data-name="QuestionParser" data-compartment="2">questionType?: &quot;boolean&quot; | &quot;text&quot; | &quot;enum&quot;</text>
+<text x="0.0" y="95.1" stroke="none" data-name="QuestionParser" data-compartment="2">questionMetadata?: { required?: boolean</text>
+<text x="0.0" y="111.3" stroke="none" data-name="QuestionParser" data-compartment="2">helpText?: string</text>
+<text x="0.0" y="127.5" stroke="none" data-name="QuestionParser" data-compartment="2">enumOptions?: string[]</text>
+<text x="0.0" y="143.7" stroke="none" data-name="QuestionParser" data-compartment="2">}</text>
+<text x="0.0" y="159.9" stroke="none" data-name="QuestionParser" data-compartment="2">}[]</text>
+<text x="0.0" y="176.1" stroke="none" data-name="QuestionParser" data-compartment="2">-static extractJSON(): string</text>
+<text x="0.0" y="192.3" stroke="none" data-name="QuestionParser" data-compartment="2">-static validateUniquePositions(): void</text>
+<text x="0.0" y="208.5" stroke="none" data-name="QuestionParser" data-compartment="2">+static validateEnumQuestions(): void</text>
+
+</g>
+</g>
+</g>
+<g data-name="QuestionParseError">
+<g fill="#eee8d5" stroke="#33322E" data-name="QuestionParseError">
+<rect x="4433.0" y="141.5" height="48.0" width="172.0" data-name="QuestionParseError"></rect>
+<path d="M4433.0 173.5 L4605.0 173.5" fill="none" data-name="QuestionParseError"></path>
+<path d="M4433.0 181.5 L4605.0 181.5" fill="none" data-name="QuestionParseError"></path>
+</g>
+<g transform="translate(4433, 141.5)" font-family="Helvetica" font-size="12pt" font-weight="bold" font-style="normal" data-name="QuestionParseError" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="QuestionParseError" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/parsers/QuestionParser.ts.QuestionParseError" xlink:href="../../packages/backend/src/infrastructure/ai/parsers/QuestionParser.ts"><text x="78.0" y="14.1" stroke="none" text-anchor="middle" data-name="QuestionParseError" data-compartment="0">QuestionParseError</text></a>
+
+</g>
+</g>
+<g transform="translate(4433, 173.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionParseError" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" data-name="QuestionParseError" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(4433, 181.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionParseError" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="QuestionParseError" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="IntakeExtractionContext">
+<g fill="lightblue" stroke="#33322E" data-name="IntakeExtractionContext">
+<rect x="4645.0" y="121.5" height="88.0" width="229.0" data-name="IntakeExtractionContext"></rect>
+<path d="M4645.0 153.5 L4874.0 153.5" fill="none" data-name="IntakeExtractionContext"></path>
+<path d="M4645.0 201.5 L4874.0 201.5" fill="none" data-name="IntakeExtractionContext"></path>
+</g>
+<g transform="translate(4645, 121.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="IntakeExtractionContext" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="IntakeExtractionContext" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/prompts/intakeExtraction.ts.IntakeExtractionContext" xlink:href="../../packages/backend/src/infrastructure/ai/prompts/intakeExtraction.ts"><text x="106.5" y="14.1" stroke="none" text-anchor="middle" data-name="IntakeExtractionContext" data-compartment="0">IntakeExtractionContext</text></a>
+
+</g>
+</g>
+<g transform="translate(4645, 153.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="IntakeExtractionContext" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="IntakeExtractionContext" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="IntakeExtractionContext" data-compartment="1">+focusCategories?: string[]</text>
+<text x="0.0" y="30.3" stroke="none" data-name="IntakeExtractionContext" data-compartment="1">+filename?: string</text>
+
+</g>
+</g>
+<g transform="translate(4645, 201.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="IntakeExtractionContext" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="IntakeExtractionContext" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionGenerationContext">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionGenerationContext">
+<rect x="4914.0" y="72.5" height="186.0" width="551.0" data-name="QuestionGenerationContext"></rect>
+<path d="M4914.0 104.5 L5465.0 104.5" fill="none" data-name="QuestionGenerationContext"></path>
+<path d="M4914.0 250.5 L5465.0 250.5" fill="none" data-name="QuestionGenerationContext"></path>
+</g>
+<g transform="translate(4914, 72.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionGenerationContext" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="QuestionGenerationContext" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/prompts/questionGeneration.ts.QuestionGenerationContext" xlink:href="../../packages/backend/src/infrastructure/ai/prompts/questionGeneration.ts"><text x="267.5" y="14.1" stroke="none" text-anchor="middle" data-name="QuestionGenerationContext" data-compartment="0">QuestionGenerationContext</text></a>
+
+</g>
+</g>
+<g transform="translate(4914, 104.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionGenerationContext" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="QuestionGenerationContext" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+vendorType: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+solutionType: string</text>
+<text x="0.0" y="46.5" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+vendorName?: string</text>
+<text x="0.0" y="62.7" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+solutionName?: string</text>
+<text x="0.0" y="78.9" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+assessmentFocus?: string</text>
+<text x="0.0" y="95.1" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+industry?: string</text>
+<text x="0.0" y="111.3" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+assessmentType?: &quot;quick&quot; | &quot;comprehensive&quot; | &quot;category_focused&quot;</text>
+<text x="0.0" y="127.5" stroke="none" data-name="QuestionGenerationContext" data-compartment="1">+category?: string</text>
+
+</g>
+</g>
+<g transform="translate(4914, 250.5)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="QuestionGenerationContext" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="QuestionGenerationContext" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringExtractionContext">
+<g fill="lightblue" stroke="#33322E" data-name="ScoringExtractionContext">
+<rect x="5505.0" y="113.0" height="105.0" width="297.0" data-name="ScoringExtractionContext"></rect>
+<path d="M5505.0 145.0 L5802.0 145.0" fill="none" data-name="ScoringExtractionContext"></path>
+<path d="M5505.0 210.0 L5802.0 210.0" fill="none" data-name="ScoringExtractionContext"></path>
+</g>
+<g transform="translate(5505, 113)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringExtractionContext" data-compartment="0">
+<g transform="translate(8, 8)" fill="#33322E" text-align="center" data-name="ScoringExtractionContext" data-compartment="0">
+<a id="../../packages/backend/src/infrastructure/ai/prompts/scoringExtraction.ts.ScoringExtractionContext" xlink:href="../../packages/backend/src/infrastructure/ai/prompts/scoringExtraction.ts"><text x="140.5" y="14.1" stroke="none" text-anchor="middle" data-name="ScoringExtractionContext" data-compartment="0">ScoringExtractionContext</text></a>
+
+</g>
+</g>
+<g transform="translate(5505, 145)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringExtractionContext" data-compartment="1">
+<g transform="translate(8, 8)" fill="#33322E" text-align="left" data-name="ScoringExtractionContext" data-compartment="1">
+<text x="0.0" y="14.1" stroke="none" data-name="ScoringExtractionContext" data-compartment="1">+expectedAssessmentId?: string</text>
+<text x="0.0" y="30.3" stroke="none" data-name="ScoringExtractionContext" data-compartment="1">+filename?: string</text>
+<text x="0.0" y="46.5" stroke="none" data-name="ScoringExtractionContext" data-compartment="1">+expectedQuestionCount?: number</text>
+
+</g>
+</g>
+<g transform="translate(5505, 210)" font-family="Helvetica" font-size="12pt" font-weight="normal" font-style="normal" data-name="ScoringExtractionContext" data-compartment="2">
+<g transform="translate(8, 8)" fill="#33322E" data-name="ScoringExtractionContext" data-compartment="2">
+
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>

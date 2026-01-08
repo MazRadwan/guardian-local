@@ -1,0 +1,200 @@
+@startuml Guardian Infrastructure Layer
+allowmixing
+top to bottom direction
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam class {
+    BackgroundColor White
+    BorderColor Black
+}
+
+package "HTTP / Controllers" {
+    class AuthController {
+        -authService: AuthService
+        +POST /auth/login
+        +POST /auth/register
+        +POST /auth/logout
+    }
+
+    class AssessmentController {
+        -assessmentService: AssessmentService
+        +POST /assessments
+        +GET /assessments/:id
+        +GET /assessments
+        +PATCH /assessments/:id
+    }
+
+    class VendorController {
+        -vendorService: VendorService
+        +POST /vendors
+        +GET /vendors
+        +GET /vendors/:id
+        +PATCH /vendors/:id
+    }
+
+    class ExportController {
+        -exportService: ExportService
+        +GET /export/:assessmentId/pdf
+        +GET /export/:assessmentId/word
+        +GET /export/:assessmentId/excel
+    }
+
+    class ScoringExportController {
+        -scoringExportService: ScoringExportService
+        +GET /scoring/:assessmentId/pdf
+        +GET /scoring/:assessmentId/word
+    }
+}
+
+package "WebSocket" {
+    class ChatServer {
+        -conversationService: ConversationService
+        -questionnaireService: QuestionnaireGenerationService
+        -scoringService: ScoringService
+        +onConnection(socket)
+        +onMessage(socket, data)
+        +onDisconnect(socket)
+        +emitStreamChunk(chunk)
+        +emitToolUse(tool, data)
+    }
+
+    class RateLimiter {
+        -windowMs: number
+        -maxRequests: number
+        +checkLimit(userId): boolean
+        +resetLimit(userId): void
+    }
+}
+
+package "AI / Claude Integration" {
+    class ClaudeClient {
+        -client: Anthropic
+        -promptCache: PromptCacheManager
+        +chat(messages): Response
+        +streamChat(messages, onChunk): void
+        +useTools(messages, tools): ToolResult
+    }
+
+    class PromptCacheManager {
+        -cache: Map<string, CachedPrompt>
+        -ttlMs: number
+        +get(key): string
+        +set(key, prompt): void
+        +invalidate(key): void
+    }
+
+    class DocumentParserService {
+        -visionClient: IVisionClient
+        +parseDocument(file): ParsedContent
+        +extractText(file): string
+    }
+
+    class ScoringPromptBuilder {
+        +buildPrompt(assessment, responses): string
+        +buildSystemPrompt(): string
+    }
+}
+
+package "Database / Repositories" {
+    class DrizzleUserRepository {
+        -db: DrizzleClient
+        +findById(id): User
+        +findByEmail(email): User
+        +save(user): User
+        +delete(id): void
+    }
+
+    class DrizzleConversationRepository {
+        -db: DrizzleClient
+        +findById(id): Conversation
+        +findByUserId(userId): Conversation[]
+        +save(conversation): Conversation
+    }
+
+    class DrizzleAssessmentRepository {
+        -db: DrizzleClient
+        +findById(id): Assessment
+        +findByVendorId(vendorId): Assessment[]
+        +save(assessment): Assessment
+    }
+
+    class DrizzleMessageRepository {
+        -db: DrizzleClient
+        +findByConversationId(id): Message[]
+        +save(message): Message
+    }
+}
+
+package "Export" {
+    class PDFExporter {
+        +generate(data): Buffer
+        +addHeader(doc)
+        +addScores(doc, scores)
+    }
+
+    class WordExporter {
+        +generate(data): Buffer
+    }
+
+    class ExcelExporter {
+        +generate(data): Buffer
+        +createWorksheet(data)
+    }
+
+    class ScoringPDFExporter {
+        +generate(result): Buffer
+        +renderDimensionScores(scores)
+        +renderExecutiveSummary(summary)
+    }
+}
+
+package "Storage" {
+    class LocalFileStorage {
+        -basePath: string
+        +save(file, path): string
+        +retrieve(path): Buffer
+        +delete(path): void
+    }
+
+    class S3FileStorage {
+        -bucket: string
+        -client: S3Client
+        +save(file, key): string
+        +retrieve(key): Buffer
+        +getSignedUrl(key): string
+    }
+}
+
+package "Auth" {
+    class JWTProvider {
+        -secret: string
+        -expiresIn: string
+        +sign(payload): string
+        +verify(token): TokenPayload
+    }
+}
+
+database "PostgreSQL" as DB
+
+' Controllers use services (shown conceptually)
+AuthController ..> JWTProvider
+ChatServer --> ClaudeClient
+ChatServer --> RateLimiter
+
+' AI components
+ClaudeClient --> PromptCacheManager
+DocumentParserService --> ClaudeClient
+ScoringPromptBuilder ..> ClaudeClient : builds prompts for
+
+' Repositories -> DB
+DrizzleUserRepository --> DB
+DrizzleConversationRepository --> DB
+DrizzleAssessmentRepository --> DB
+DrizzleMessageRepository --> DB
+
+' Export relationships
+PDFExporter --> LocalFileStorage
+ScoringPDFExporter --> LocalFileStorage
+
+@enduml
