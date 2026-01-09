@@ -10,7 +10,7 @@ Improve perceived upload performance by decoupling file attachment from backgrou
 
 ---
 
-## Architecture Summary
+## Architecture
 
 ### Current State
 ```
@@ -34,188 +34,179 @@ Upload → Store (2s) → file_attached → User sees "Attached" ✓
 
 | Mode | Attach | Background Work | Can Message Before Complete? |
 |------|--------|-----------------|------------------------------|
-| **Consult** | Instant (~2-3s) | Optional enrichment (suggested questions) | Yes - gets raw text excerpt |
-| **Assessment** | Instant (~2-3s) | Light preprocessing (vendor/solution ID) | Yes - gets raw text excerpt |
-| **Scoring** | Instant (~2-3s) | Mandatory parse + score (full workflow) | Draft yes, send after parse |
+| **Consult** | Instant (~2-3s) | Optional enrichment | Yes - gets text excerpt |
+| **Assessment** | Instant (~2-3s) | Light preprocessing | Yes - gets text excerpt |
+| **Scoring** | Instant (~2-3s) | Mandatory parse + score | Draft yes, send gated |
 
 ---
 
-## Key Design Decisions
-
-1. **New event `file_attached`**: Emitted after S3 storage, before parsing. Contains full metadata for UI display.
-2. **Preserve backward compatibility**: Existing `upload_progress` events remain unchanged.
-3. **Text excerpt storage**: Store first 10k chars during upload for immediate context injection.
-4. **Graceful degradation**: If user messages before enrichment, Claude gets text excerpt instead of structured context.
-
----
-
-## Event Flow
-
-### New Event: `file_attached`
-
-```typescript
-interface FileAttachedEvent {
-  conversationId: string;
-  uploadId: string;
-  fileId: string;
-  filename: string;
-  mimeType: string;
-  size: number;
-}
-```
-
-### Timeline
+## Sprint Dependency Chart
 
 ```
-[0ms]     HTTP POST accepted (202)
-[1-2s]    S3 store complete
-[2-3s]    Text extraction complete → emit file_attached
-[2-3s]    UI shows "Attached ✓"
-[bg]      Claude enrichment runs
-[60-120s] emit intake_context_ready / scoring_complete
-[60-120s] UI updates with suggested questions (optional)
+┌─────────────────────────────────────────────────────────────────────┐
+│                         SPRINT 0 (Blocking)                         │
+│                      Discovery Spike & Decisions                    │
+│         Decisions: SLO, storage strategy, event contract,           │
+│                   legacy files, scoring UX                          │
+└─────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+        ┌──────────────────────────┴──────────────────────────┐
+        │                                                      │
+        ▼                                                      ▼
+┌───────────────────┐                              ┌───────────────────┐
+│    SPRINT 1A      │                              │    SPRINT 1B      │
+│  Backend: Events  │                              │ Frontend: Types   │
+│  & Storage Layer  │                              │   & Hook Shell    │
+│                   │                              │                   │
+│ - file_attached   │                              │ - WS types        │
+│ - excerpt storage │                              │ - State machine   │
+│ - two-phase flow  │                              │ - FileChip states │
+└───────────────────┘                              └───────────────────┘
+        │                                                      │
+        └──────────────────────────┬──────────────────────────┘
+                                   │
+                                   ▼
+                    ┌───────────────────────────────┐
+                    │          SPRINT 2             │
+                    │     Integration & Wiring      │
+                    │                               │
+                    │ - Connect frontend to backend │
+                    │ - Context injection fallback  │
+                    │ - Event ordering guards       │
+                    └───────────────────────────────┘
+                                   │
+                                   ▼
+                    ┌───────────────────────────────┐
+                    │          SPRINT 3             │
+                    │    Mode-Specific Behavior     │
+                    │                               │
+                    │ - Consult: immediate send     │
+                    │ - Assessment: light enrich    │
+                    │ - Scoring: gated + progress   │
+                    └───────────────────────────────┘
 ```
 
----
+### Parallel Execution Summary
 
-## Sprint Plan
-
-### Sprint 0: Design Validation (Spike)
-
-**Story 0.1: Measure text extraction latency**
-- Test pdf-parse on representative files (10, 50, 100 pages)
-- Test mammoth on representative DOCX files
-- Define latency SLO: `file_attached` must emit within 3s P95
-- Decision: If extraction >3s, emit without excerpt and fetch lazily
-
-**Story 0.2: Decide excerpt storage strategy**
-- Option A: `text_excerpt` column in files table
-- Option B: Store in S3 as `{storagePath}.excerpt.txt`
-- Option C: Redis cache with TTL
-
-### Sprint 1: Backend - Fast Attach Infrastructure
-
-**Story 1.1: Add `file_attached` WebSocket event**
-- Emit after S3 storage + text extraction
-- Payload: `{ conversationId, uploadId, fileId, filename, mimeType, size }`
-- File: `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts`
-
-**Story 1.2: Add text excerpt storage**
-- Migration: Add storage for text excerpt (per Sprint 0 decision)
-- Extract text during storage phase (pdf-parse/mammoth)
-- Store first 10k chars for immediate context injection
-
-**Story 1.3: Refactor `processUpload()` into two phases**
-- Phase 1: Store + extract text + emit `file_attached` (~2-3s)
-- Phase 2: Claude enrichment + emit completion events (background)
-- Keep existing `upload_progress` events for backward compat
-
-**Story 1.4: ChatServer fallback context injection**
-- If `intakeContext` exists → use it (current behavior)
-- Else if `textExcerpt` exists → inject raw text
-- Else → re-read from S3 (fallback, log warning)
-
-### Sprint 2: Frontend - Instant Attach UI
-
-**Story 2.1: Update WebSocket types**
-- Add `FileAttachedEvent` to `apps/web/src/lib/websocket.ts`
-- Include full metadata for UI display
-
-**Story 2.2: Update `useMultiFileUpload` hook**
-- Listen for `file_attached` event
-- New file state: `attached` (between `storing` and `parsing`)
-- File shows as ready at `attached`, parsing continues in background
-- Handle out-of-order events gracefully
-
-**Story 2.3: Update `useFileUpload` hook**
-- Same changes for single-file upload (backward compat)
-
-**Story 2.4: Update `FileChip` component**
-- Show "Attached ✓" at `attached` state
-- Optional: Show "Enriching..." indicator if parsing still running
-- Mode-specific styling
-
-### Sprint 3: Mode-Specific Behavior
-
-**Story 3.1: Consult mode - immediate messaging**
-- Allow send when file is `attached`
-- ChatServer injects `textExcerpt` if `intakeContext` not yet available
-- Enrichment updates context when complete (non-blocking)
-
-**Story 3.2: Assessment mode - light preprocessing**
-- Same as consult
-- Background enrichment focuses on vendor/solution ID
-- Skip full gap analysis for faster completion
-
-**Story 3.3: Scoring mode - mandatory parse with progress**
-- File shows `attached` immediately
-- UI shows "Scoring in progress..." overlay
-- Send blocked until parse complete (or allow draft-only)
-- Granular progress: "Extracting responses (12/111)..."
-
-### Sprint 4: Resilience & Edge Cases
-
-**Story 4.1: Background job resilience**
-- Wrap enrichment in try/catch with logging
-- If conversation deleted mid-parse: detect and abort gracefully
-- If user revoked: check ownership before emitting events
-
-**Story 4.2: Handle existing files without excerpt**
-- Lazy backfill: Extract on first access if missing
-- Log warning for monitoring
-
-**Story 4.3: Retry logic for failed enrichment**
-- Store enrichment status: `pending | processing | complete | failed`
-- Manual retry button in UI for failed enrichment
-- Don't block user on enrichment failures
-
-**Story 4.4: Graceful degradation tests**
-- Test: User sends message before enrichment complete
-- Test: Enrichment fails, user continues conversation
-- Test: Scoring parse fails, user can re-upload
-- Test: Out-of-order WebSocket events
+| Phase | Sprints | Can Run In Parallel |
+|-------|---------|---------------------|
+| 1 | Sprint 0 | No - blocking decisions |
+| 2 | Sprint 1A, Sprint 1B | Yes - independent tracks |
+| 3 | Sprint 2 | No - requires 1A + 1B |
+| 4 | Sprint 3 | No - requires Sprint 2 |
 
 ---
 
-## File Changes Summary
+## Open Decisions (Sprint 0)
 
-| File | Changes |
-|------|---------|
-| `schema/files.ts` | Add `textExcerpt` column (or alternative per Sprint 0) |
-| `DocumentUploadController.ts` | Split processUpload, emit `file_attached` |
-| `DrizzleFileRepository.ts` | Store/retrieve textExcerpt |
-| `ChatServer.ts` | Inject textExcerpt fallback for context |
-| `websocket.ts` (frontend) | Add `FileAttachedEvent` type |
-| `useMultiFileUpload.ts` | Handle `file_attached` event, new state |
-| `useFileUpload.ts` | Same updates for single-file hook |
-| `FileChip.tsx` | Show "Attached" state, mode indicators |
-| `Composer.tsx` | Mode-specific send enablement |
+These must be resolved before implementation sprints begin:
+
+### D1: Text Extraction SLO
+- **Question:** What is the P95 latency target for `file_attached`?
+- **Proposed:** 3 seconds
+- **If exceeded:** Emit `file_attached` without excerpt, fetch lazily
+
+### D2: Excerpt Storage Strategy
+- **Option A:** `text_excerpt TEXT` column in files table (simple, risk of bloat)
+- **Option B:** S3 sidecar file `{storagePath}.excerpt.txt` (clean separation)
+- **Option C:** Redis cache with 24h TTL (ephemeral, regenerate if missing)
+- **Recommendation:** TBD after Sprint 0 measurements
+
+### D3: Event Ordering Contract
+- **Question:** How should frontend handle `file_attached` arriving before/after `upload_progress`?
+- **Options:**
+  - A) Backend guarantees ordering (sequence numbers)
+  - B) Frontend handles any order (state machine guards)
+- **Recommendation:** Option B (simpler backend, robust frontend)
+
+### D4: Legacy Files (No Excerpt)
+- **Question:** How to handle files uploaded before Epic 18?
+- **Options:**
+  - A) Lazy backfill: Extract on first message
+  - B) Accept fallback: Re-read from S3 (slower)
+  - C) Batch migration job
+- **Recommendation:** Option A with Option B as fallback
+
+### D5: Scoring UX - Auto-Trigger vs Gate
+- **Question:** Should scoring start automatically after parse, or require user confirmation?
+- **Current:** Auto-trigger (Epic 15)
+- **Concern:** Wasted compute if wrong file uploaded
+- **Options:**
+  - A) Keep auto-trigger (current behavior)
+  - B) Add "Start Scoring" confirmation button
+  - C) Auto-trigger with 5s cancel window
+- **Recommendation:** TBD based on product input
 
 ---
 
-## Risk Assessment
+## Design Constraints (Non-Negotiable)
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Text extraction slower than expected | Medium | High | Sprint 0 spike, set timeout |
-| Out-of-order WebSocket events | Medium | Medium | Frontend guards, event sequencing |
-| Old files missing excerpt | Certain | Low | Lazy backfill on access |
-| Scoring auto-trigger on wrong file | Medium | Medium | Consider confirmation step |
+### C1: Backward Compatibility
+- Existing `upload_progress` events MUST continue working
+- Existing clients that don't handle `file_attached` MUST NOT break
+- `file_attached` is additive, not replacing existing events
+
+### C2: Resilience Requirements
+- Background enrichment MUST NOT block user interaction
+- Conversation deletion mid-parse: abort gracefully, no orphan jobs
+- User session expiry: check ownership before emitting events
+- Enrichment failure: user can still send messages (degraded mode)
+
+### C3: Security Invariants
+- `fileId` (database UUID) exposed to client, NOT `storagePath`
+- Conversation ownership validated before any operation
+- Text excerpt subject to same access controls as full file
+
+### C4: No Regression in Scoring
+- Scoring persistence unchanged (exports depend on stored results)
+- Dimension scores and assessment results MUST still be written
+- Progress events MUST still be emitted for scoring workflow
+
+---
+
+## Sprint Files
+
+| Sprint | File | Focus | Dependencies |
+|--------|------|-------|--------------|
+| 0 | `sprint-0-discovery-spike.md` | Decisions & measurements | None |
+| 1A | `sprint-1a-backend-events.md` | Backend event + storage | Sprint 0 |
+| 1B | `sprint-1b-frontend-types.md` | Frontend types + states | Sprint 0 |
+| 2 | `sprint-2-integration.md` | Wiring + fallbacks | Sprint 1A, 1B |
+| 3 | `sprint-3-mode-behavior.md` | Mode-specific UX | Sprint 2 |
 
 ---
 
 ## Success Metrics
 
 - `file_attached` latency: <3s P95
-- User can see "Attached" status within 3s of selecting file
+- User sees "Attached" status within 3s of selecting file
 - Consult/Assessment: User can send message within 5s of upload start
-- Scoring: Clear progress indication, no UI freeze
+- Scoring: Clear progress indication, no perceived freeze
+- Zero regressions in existing upload functionality
+
+---
+
+## Key Files Reference
+
+**Backend:**
+- `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts`
+- `packages/backend/src/infrastructure/http/routes/document.routes.ts`
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts`
+- `packages/backend/src/infrastructure/database/schema/files.ts`
+- `packages/backend/src/infrastructure/database/repositories/DrizzleFileRepository.ts`
+
+**Frontend:**
+- `apps/web/src/hooks/useMultiFileUpload.ts`
+- `apps/web/src/hooks/useFileUpload.ts`
+- `apps/web/src/components/chat/FileChip.tsx`
+- `apps/web/src/components/chat/Composer.tsx`
+- `apps/web/src/lib/websocket.ts`
 
 ---
 
 ## References
 
-- Epic 16: Document Parser Infrastructure (current implementation)
+- Epic 16: Document Parser Infrastructure
 - Epic 17: Multi-File Upload
-- `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts`
-- `apps/web/src/hooks/useMultiFileUpload.ts`
+- Epic 15: Scoring Analysis (auto-trigger behavior)
