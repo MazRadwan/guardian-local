@@ -1,0 +1,1498 @@
+<svg version="1.1" baseProfile="full" width="16835.0" height="627.0" viewBox="0 0 16835 627" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:ev="http://www.w3.org/2001/xml-events">
+<desc >#.interface: fill=lightblue
+#.enumeration: fill=lightgreen
+#.type: fill=lightgray
+#direction: down
+#ranker: longest-path
+#spacing: 80
+#padding: 12
+#fontSize: 11
+#acyclicer: greedy
+[Assessment|+id: string;+vendorId: string;-_assessmentType: AssessmentType;-_solutionName: string;-_solutionType: string;-_status: AssessmentStatus;-_assessmentMetadata: AssessmentMetadata;+createdAt: Date;-_updatedAt: Date;+createdBy: string|+static create(): Assessment;+static fromPersistence(): Assessment;+toPersistence(): { id: string; vendorId: string; assessmentType: AssessmentTypeValue; solutionName: string; solutionType: string; status: AssessmentStatusValue; assessmentMetadata: AssessmentMetadata; createdAt: Date; updatedAt: Date; createdBy: string; };+updateSolutionName(): void;+updateSolutionType(): void;+updateMetadata(): void;+updateStatus(): void;+markQuestionsGenerated(): void;+markExported(): void;+cancel(): void;+canBeModified(): boolean;+canGenerateQuestions(): boolean]
+[&lt;interface&gt;AssessmentMetadata|+assessorName?: string;+stakeholders?: string\[\];+notes?: string|]
+[&lt;interface&gt;CreateAssessmentData|+vendorId: string;+assessmentType: AssessmentTypeValue;+solutionName?: string;+solutionType?: string;+assessmentMetadata?: AssessmentMetadata;+createdBy: string|]
+[Conversation|+id: string;+userId: string;+mode: ConversationMode;+assessmentId: string;+status: ConversationStatus;+context: ConversationContext;+startedAt: Date;+lastActivityAt: Date;+completedAt: Date|+static create(): Omit&lt;Conversation, &quot;id&quot; \| &quot;startedAt&quot;&gt;;+static fromPersistence(): Conversation;+switchMode(): void;+linkAssessment(): void;+updateContext(): void;+complete(): void;+isActive(): boolean;-updateActivity(): void]
+[&lt;interface&gt;IntakeDocumentContext|+vendorName: string;+solutionName: string;+solutionType: string;+industry: string;+features: string\[\];+claims: string\[\];+complianceMentions: string\[\]|]
+[&lt;interface&gt;ConversationContext|+lastIntent?: string;+currentStep?: string;+intakeContext?: IntakeDocumentContext;+intakeGapCategories?: string\[\];+intakeParsedAt?: string|]
+[&lt;interface&gt;CreateConversationData|+userId: string;+mode?: ConversationMode;+assessmentId?: string;+context?: ConversationContext|]
+[Message|+id: string;+conversationId: string;+role: MessageRole;+content: MessageContent;+createdAt: Date;+attachments?: MessageAttachment\[\]|+static create(): Omit&lt;Message, &quot;id&quot; \| &quot;createdAt&quot;&gt;;+static fromPersistence(): Message;+hasComponents(): boolean;+getText(): string;+getComponents(): MessageComponent\[\];+hasAttachments(): boolean;+getAttachments(): MessageAttachment\[\]]
+[&lt;interface&gt;MessageComponent|+type: &quot;button&quot; \| &quot;link&quot; \| &quot;form&quot; \| &quot;download&quot; \| &quot;error&quot; \| &quot;scoring_result&quot;;+data: unknown|]
+[&lt;interface&gt;MessageAttachment|+fileId: string;+filename: string;+mimeType: string;+size: number|]
+[&lt;interface&gt;MessageContent|+text: string;+components?: MessageComponent\[\]|]
+[&lt;interface&gt;CreateMessageData|+conversationId: string;+role: MessageRole;+content: MessageContent;+attachments?: MessageAttachment\[\]|]
+[Question|+id?: string;+assessmentId: string;+sectionName: string;+sectionNumber: number;+questionNumber: number;+questionText: string;+questionType: QuestionType;+questionMetadata?: QuestionMetadata;+createdAt?: Date|+static create(): Question;+static fromPersistence(): Question;+toPersistence(): { id?: string; assessmentId: string; sectionName: string; sectionNumber: number; questionNumber: number; questionText: string; questionType: QuestionType; questionMetadata?: QuestionMetadata; }]
+[&lt;interface&gt;QuestionMetadata|+required?: boolean;+helpText?: string;+enumOptions?: string\[\]|]
+[&lt;interface&gt;QuestionProps|+id?: string;+assessmentId: string;+sectionName: string;+sectionNumber: number;+questionNumber: number;+questionText: string;+questionType: QuestionType;+questionMetadata?: QuestionMetadata;+createdAt?: Date|]
+[User|+id: string;+email: Email;+passwordHash: string;+name: string;+role: UserRole;+lastLoginAt: Date;+createdAt: Date;+updatedAt: Date|+static create(): User;+static fromPersistence(): User;+updatePassword(): void;+updateName(): void;+updateRole(): void;+recordLogin(): void;+isAdmin(): boolean;+canCreateAssessments(): boolean;+getEmail(): string;+toPersistence(): UserData]
+[&lt;interface&gt;CreateUserData|+email: string;+name: string;+passwordHash: string;+role?: UserRole|]
+[&lt;interface&gt;UserData|+id: string;+email: string;+passwordHash: string;+name: string;+role: UserRole;+lastLoginAt: Date;+createdAt: Date;+updatedAt: Date|]
+[Vendor|+id: string;-_name: VendorName;-_industry: string;-_website: string;-_contactInfo: VendorContactInfo;+createdAt: Date;-_updatedAt: Date|+static create(): Vendor;+static fromPersistence(): Vendor;+toPersistence(): { id: string; name: string; industry: string; website: string; contactInfo: VendorContactInfo; createdAt: Date; updatedAt: Date; };+updateName(): void;+updateIndustry(): void;+updateWebsite(): void;+updateContactInfo(): void;+update(): void]
+[&lt;interface&gt;VendorContactInfo|+primaryContact?: string;+email?: string;+phone?: string|]
+[&lt;interface&gt;CreateVendorData|+name: string;+industry?: string;+website?: string;+contactInfo?: VendorContactInfo|]
+[&lt;interface&gt;ResponseDTO|+id: string;+assessmentId: string;+batchId: string;+fileId?: string;+sectionNumber: number;+questionNumber: number;+questionText: string;+responseText: string;+confidence?: number;+hasVisualContent: boolean;+visualContentDescription?: string;+createdAt: Date|]
+[&lt;interface&gt;CreateResponseDTO|+assessmentId: string;+batchId: string;+fileId?: string;+sectionNumber: number;+questionNumber: number;+questionText: string;+responseText: string;+confidence?: number;+hasVisualContent?: boolean;+visualContentDescription?: string|]
+[&lt;interface&gt;DimensionScoreDTO|+id: string;+assessmentId: string;+batchId: string;+dimension: string;+score: number;+riskRating: RiskRating;+findings?: { subScores: { name: string; score: number; maxScore: number; notes: string; }\[\]; keyRisks: string\[\]; mitigations: string\[\]; evidenceRefs: { sectionNumber: number; questionNumber: number; quote: string; }\[\]; };+createdAt: Date|]
+[&lt;interface&gt;CreateDimensionScoreDTO|+assessmentId: string;+batchId: string;+dimension: string;+score: number;+riskRating: RiskRating;+findings?: { subScores: { name: string; score: number; maxScore: number; notes: string; }\[\]; keyRisks: string\[\]; mitigations: string\[\]; evidenceRefs: { sectionNumber: number; questionNumber: number; quote: string; }\[\]; }|]
+[&lt;interface&gt;AssessmentResultDTO|+id: string;+assessmentId: string;+batchId: string;+compositeScore: number;+recommendation: Recommendation;+overallRiskRating: RiskRating;+narrativeReport?: string;+executiveSummary?: string;+keyFindings?: string\[\];+disqualifyingFactors?: string\[\];+rubricVersion: string;+modelId: string;+rawToolPayload?: unknown;+scoredAt: Date;+scoringDurationMs?: number|]
+[&lt;interface&gt;CreateAssessmentResultDTO|+assessmentId: string;+batchId: string;+compositeScore: number;+recommendation: Recommendation;+overallRiskRating: RiskRating;+narrativeReport?: string;+executiveSummary?: string;+keyFindings?: string\[\];+disqualifyingFactors?: string\[\];+rubricVersion: string;+modelId: string;+rawToolPayload?: unknown;+scoringDurationMs?: number|]
+[ScoringError|+code: ScoringErrorCode|]
+[UnauthorizedError||]
+[ScoringPayloadValidator||+validate(): ValidationResult;-validateDimensionScores(): string\[\];-isValidScore(): boolean;-isValidRiskRating(): boolean;-isValidRecommendation(): boolean]
+[&lt;interface&gt;ValidationResult|+valid: boolean;+errors: string\[\];+sanitized?: ScoringCompletePayload|]
+[&lt;interface&gt;DimensionScoreData|+dimension: RiskDimension;+score: number;+riskRating: RiskRating;+findings?: { subScores: { name: string; score: number; maxScore: number; notes: string; }\[\]; keyRisks: string\[\]; mitigations: string\[\]; evidenceRefs: { sectionNumber: number; questionNumber: number; quote: string; }\[\]; }|]
+[&lt;interface&gt;ScoringCompletePayload|+compositeScore: number;+recommendation: Recommendation;+overallRiskRating: RiskRating;+executiveSummary: string;+keyFindings: string\[\];+disqualifyingFactors: string\[\];+dimensionScores: DimensionScoreData\[\]|]
+[&lt;interface&gt;ScoringReportData|+assessmentId: string;+batchId: string;+payload: ScoringCompletePayload;+narrativeReport: string;+rubricVersion: string;+modelId: string;+scoringDurationMs: number|]
+[&lt;interface&gt;ScoringProgressEvent|+status: ScoringStatus;+message: string;+progress?: number;+error?: string|]
+[&lt;interface&gt;QuestionnaireQuestion|+id: string;+text: string;+category: string;+riskDimension: RiskDimension;+questionType: QuestionType;+required: boolean;+guidance?: string;+options?: string\[\]|]
+[&lt;interface&gt;QuestionnaireSection|+id: string;+title: string;+riskDimension: RiskDimension;+description: string;+questions: QuestionnaireQuestion\[\]|]
+[&lt;interface&gt;QuestionnaireMetadata|+assessmentId: string;+assessmentType: AssessmentType;+vendorName: string;+solutionName: string;+generatedAt: string;+questionCount: number;+focusCategories?: string\[\]|]
+[&lt;interface&gt;QuestionnaireSchema|+version: &quot;1.0&quot;;+metadata: QuestionnaireMetadata;+sections: QuestionnaireSection\[\]|]
+[&lt;interface&gt;QuestionnaireSchemaValidationResult|+isValid: boolean;+error?: string|]
+[AssessmentStatus|-static VALID_STATUSES: AssessmentStatusValue\[\];-static VALID_TRANSITIONS: Record&lt;AssessmentStatusValue, AssessmentStatusValue\[\]&gt;;-value: AssessmentStatusValue|+static create(): AssessmentStatus;+static draft(): AssessmentStatus;+static questionsGenerated(): AssessmentStatus;+static exported(): AssessmentStatus;+static scored(): AssessmentStatus;+static cancelled(): AssessmentStatus;+getValue(): AssessmentStatusValue;+canTransitionTo(): boolean;+validateTransition(): void;+isDraft(): boolean;+isQuestionsGenerated(): boolean;+isExported(): boolean;+isScored(): boolean;+isCancelled(): boolean;+isTerminal(): boolean;+equals(): boolean;+toString(): string]
+[AssessmentType|-static VALID_TYPES: AssessmentTypeValue\[\];-value: AssessmentTypeValue|+static create(): AssessmentType;+static quick(): AssessmentType;+static comprehensive(): AssessmentType;+static categoryFocused(): AssessmentType;+getValue(): AssessmentTypeValue;+isQuick(): boolean;+isComprehensive(): boolean;+isCategoryFocused(): boolean;+equals(): boolean;+toString(): string]
+[Email|-value: string|+static create(): Email;+getValue(): string;+equals(): boolean;+toString(): string]
+[VendorName|-value: string|+static create(): VendorName;+getValue(): string;+equals(): boolean;+toString(): string]
+[&lt;type&gt;ScoringCompleteInput|+compositeScore: number;+recommendation: &quot;approve&quot; \| &quot;conditional&quot; \| &quot;decline&quot; \| &quot;more_info&quot;;+overallRiskRating: &quot;low&quot; \| &quot;medium&quot; \| &quot;high&quot; \| &quot;critical&quot;;+executiveSummary: string;+keyFindings?: string\[\];+disqualifyingFactors?: string\[\];+dimensionScores: { dimension: string; score: number; riskRating: &quot;low&quot; \| &quot;medium&quot; \| &quot;high&quot; \| &quot;critical&quot;; findings?: object; }\[\]|]</desc>
+<g stroke-width="1.0" text-align="left" font="12pt Helvetica, Arial, sans-serif" font-size="11pt" font-family="Helvetica" font-weight="normal" font-style="normal">
+<g font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" stroke-width="3.0" stroke-linejoin="round" stroke-linecap="round" stroke="#33322E">
+<g stroke="transparent" fill="transparent">
+<rect x="0.0" y="0.0" height="627.0" width="16835.0" stroke="none"></rect>
+</g>
+<g transform="translate(12, 12)" fill="#33322E">
+<g transform="translate(20, 20)">
+<g data-name="Assessment">
+<g fill="#eee8d5" stroke="#33322E" data-name="Assessment">
+<rect x="0.0" y="0.0" height="563.0" width="359.0" data-name="Assessment"></rect>
+<path d="M0.0 39.0 L359.0 39.0" fill="none" data-name="Assessment"></path>
+<path d="M0.0 212.0 L359.0 212.0" fill="none" data-name="Assessment"></path>
+</g>
+<g transform="translate(0, 0)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="Assessment" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="Assessment" data-compartment="0">
+<a id="src/domain/entities/Assessment.ts.Assessment" xlink:href="src/domain/entities/Assessment.ts"><text x="167.5" y="12.9" stroke="none" text-anchor="middle" data-name="Assessment" data-compartment="0">Assessment</text></a>
+
+</g>
+</g>
+<g transform="translate(0, 39)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Assessment" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Assessment" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="Assessment" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Assessment" data-compartment="1">+vendorId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Assessment" data-compartment="1">-_assessmentType: AssessmentType</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Assessment" data-compartment="1">-_solutionName: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Assessment" data-compartment="1">-_solutionType: string</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Assessment" data-compartment="1">-_status: AssessmentStatus</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Assessment" data-compartment="1">-_assessmentMetadata: AssessmentMetadata</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Assessment" data-compartment="1">+createdAt: Date</text>
+<text x="0.0" y="131.7" stroke="none" data-name="Assessment" data-compartment="1">-_updatedAt: Date</text>
+<text x="0.0" y="146.6" stroke="none" data-name="Assessment" data-compartment="1">+createdBy: string</text>
+
+</g>
+</g>
+<g transform="translate(0, 212)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Assessment" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Assessment" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="Assessment" data-compartment="2">+static create(): Assessment</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Assessment" data-compartment="2">+static fromPersistence(): Assessment</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Assessment" data-compartment="2">+toPersistence(): { id: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Assessment" data-compartment="2">vendorId: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Assessment" data-compartment="2">assessmentType: AssessmentTypeValue</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Assessment" data-compartment="2">solutionName: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Assessment" data-compartment="2">solutionType: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Assessment" data-compartment="2">status: AssessmentStatusValue</text>
+<text x="0.0" y="131.7" stroke="none" data-name="Assessment" data-compartment="2">assessmentMetadata: AssessmentMetadata</text>
+<text x="0.0" y="146.6" stroke="none" data-name="Assessment" data-compartment="2">createdAt: Date</text>
+<text x="0.0" y="161.4" stroke="none" data-name="Assessment" data-compartment="2">updatedAt: Date</text>
+<text x="0.0" y="176.3" stroke="none" data-name="Assessment" data-compartment="2">createdBy: string</text>
+<text x="0.0" y="191.1" stroke="none" data-name="Assessment" data-compartment="2">}</text>
+<text x="0.0" y="206.0" stroke="none" data-name="Assessment" data-compartment="2">+updateSolutionName(): void</text>
+<text x="0.0" y="220.8" stroke="none" data-name="Assessment" data-compartment="2">+updateSolutionType(): void</text>
+<text x="0.0" y="235.7" stroke="none" data-name="Assessment" data-compartment="2">+updateMetadata(): void</text>
+<text x="0.0" y="250.5" stroke="none" data-name="Assessment" data-compartment="2">+updateStatus(): void</text>
+<text x="0.0" y="265.4" stroke="none" data-name="Assessment" data-compartment="2">+markQuestionsGenerated(): void</text>
+<text x="0.0" y="280.2" stroke="none" data-name="Assessment" data-compartment="2">+markExported(): void</text>
+<text x="0.0" y="295.1" stroke="none" data-name="Assessment" data-compartment="2">+cancel(): void</text>
+<text x="0.0" y="309.9" stroke="none" data-name="Assessment" data-compartment="2">+canBeModified(): boolean</text>
+<text x="0.0" y="324.8" stroke="none" data-name="Assessment" data-compartment="2">+canGenerateQuestions(): boolean</text>
+
+</g>
+</g>
+</g>
+<g data-name="AssessmentMetadata">
+<g fill="lightblue" stroke="#33322E" data-name="AssessmentMetadata">
+<rect x="439.0" y="221.5" height="120.0" width="200.0" data-name="AssessmentMetadata"></rect>
+<path d="M439.0 260.5 L639.0 260.5" fill="none" data-name="AssessmentMetadata"></path>
+<path d="M439.0 329.5 L639.0 329.5" fill="none" data-name="AssessmentMetadata"></path>
+</g>
+<g transform="translate(439, 221.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentMetadata" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="AssessmentMetadata" data-compartment="0">
+<a id="src/domain/entities/Assessment.ts.AssessmentMetadata" xlink:href="src/domain/entities/Assessment.ts"><text x="88.0" y="12.9" stroke="none" text-anchor="middle" data-name="AssessmentMetadata" data-compartment="0">AssessmentMetadata</text></a>
+
+</g>
+</g>
+<g transform="translate(439, 260.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentMetadata" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="AssessmentMetadata" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="AssessmentMetadata" data-compartment="1">+assessorName?: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="AssessmentMetadata" data-compartment="1">+stakeholders?: string[]</text>
+<text x="0.0" y="42.6" stroke="none" data-name="AssessmentMetadata" data-compartment="1">+notes?: string</text>
+
+</g>
+</g>
+<g transform="translate(439, 329.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentMetadata" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="AssessmentMetadata" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateAssessmentData">
+<g fill="lightblue" stroke="#33322E" data-name="CreateAssessmentData">
+<rect x="719.0" y="199.5" height="164.0" width="362.0" data-name="CreateAssessmentData"></rect>
+<path d="M719.0 238.5 L1081.0 238.5" fill="none" data-name="CreateAssessmentData"></path>
+<path d="M719.0 351.5 L1081.0 351.5" fill="none" data-name="CreateAssessmentData"></path>
+</g>
+<g transform="translate(719, 199.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateAssessmentData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateAssessmentData" data-compartment="0">
+<a id="src/domain/entities/Assessment.ts.CreateAssessmentData" xlink:href="src/domain/entities/Assessment.ts"><text x="169.0" y="12.9" stroke="none" text-anchor="middle" data-name="CreateAssessmentData" data-compartment="0">CreateAssessmentData</text></a>
+
+</g>
+</g>
+<g transform="translate(719, 238.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateAssessmentData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateAssessmentData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateAssessmentData" data-compartment="1">+vendorId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateAssessmentData" data-compartment="1">+assessmentType: AssessmentTypeValue</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateAssessmentData" data-compartment="1">+solutionName?: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateAssessmentData" data-compartment="1">+solutionType?: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="CreateAssessmentData" data-compartment="1">+assessmentMetadata?: AssessmentMetadata</text>
+<text x="0.0" y="87.2" stroke="none" data-name="CreateAssessmentData" data-compartment="1">+createdBy: string</text>
+
+</g>
+</g>
+<g transform="translate(719, 351.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateAssessmentData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateAssessmentData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="Conversation">
+<g fill="#eee8d5" stroke="#33322E" data-name="Conversation">
+<rect x="1161.0" y="111.5" height="340.0" width="413.0" data-name="Conversation"></rect>
+<path d="M1161.0 150.5 L1574.0 150.5" fill="none" data-name="Conversation"></path>
+<path d="M1161.0 308.5 L1574.0 308.5" fill="none" data-name="Conversation"></path>
+</g>
+<g transform="translate(1161, 111.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="Conversation" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="Conversation" data-compartment="0">
+<a id="src/domain/entities/Conversation.ts.Conversation" xlink:href="src/domain/entities/Conversation.ts"><text x="194.5" y="12.9" stroke="none" text-anchor="middle" data-name="Conversation" data-compartment="0">Conversation</text></a>
+
+</g>
+</g>
+<g transform="translate(1161, 150.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Conversation" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Conversation" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="Conversation" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Conversation" data-compartment="1">+userId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Conversation" data-compartment="1">+mode: ConversationMode</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Conversation" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Conversation" data-compartment="1">+status: ConversationStatus</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Conversation" data-compartment="1">+context: ConversationContext</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Conversation" data-compartment="1">+startedAt: Date</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Conversation" data-compartment="1">+lastActivityAt: Date</text>
+<text x="0.0" y="131.7" stroke="none" data-name="Conversation" data-compartment="1">+completedAt: Date</text>
+
+</g>
+</g>
+<g transform="translate(1161, 308.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Conversation" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Conversation" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="Conversation" data-compartment="2">+static create(): Omit&lt;Conversation, &quot;id&quot; | &quot;startedAt&quot;&gt;</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Conversation" data-compartment="2">+static fromPersistence(): Conversation</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Conversation" data-compartment="2">+switchMode(): void</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Conversation" data-compartment="2">+linkAssessment(): void</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Conversation" data-compartment="2">+updateContext(): void</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Conversation" data-compartment="2">+complete(): void</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Conversation" data-compartment="2">+isActive(): boolean</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Conversation" data-compartment="2">-updateActivity(): void</text>
+
+</g>
+</g>
+</g>
+<g data-name="IntakeDocumentContext">
+<g fill="lightblue" stroke="#33322E" data-name="IntakeDocumentContext">
+<rect x="1654.0" y="192.0" height="179.0" width="240.0" data-name="IntakeDocumentContext"></rect>
+<path d="M1654.0 231.0 L1894.0 231.0" fill="none" data-name="IntakeDocumentContext"></path>
+<path d="M1654.0 359.0 L1894.0 359.0" fill="none" data-name="IntakeDocumentContext"></path>
+</g>
+<g transform="translate(1654, 192)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="IntakeDocumentContext" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="IntakeDocumentContext" data-compartment="0">
+<a id="src/domain/entities/Conversation.ts.IntakeDocumentContext" xlink:href="src/domain/entities/Conversation.ts"><text x="108.0" y="12.9" stroke="none" text-anchor="middle" data-name="IntakeDocumentContext" data-compartment="0">IntakeDocumentContext</text></a>
+
+</g>
+</g>
+<g transform="translate(1654, 231)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="IntakeDocumentContext" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="IntakeDocumentContext" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+vendorName: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+solutionName: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+solutionType: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+industry: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+features: string[]</text>
+<text x="0.0" y="87.2" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+claims: string[]</text>
+<text x="0.0" y="102.0" stroke="none" data-name="IntakeDocumentContext" data-compartment="1">+complianceMentions: string[]</text>
+
+</g>
+</g>
+<g transform="translate(1654, 359)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="IntakeDocumentContext" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="IntakeDocumentContext" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ConversationContext">
+<g fill="lightblue" stroke="#33322E" data-name="ConversationContext">
+<rect x="1974.0" y="207.0" height="149.0" width="326.0" data-name="ConversationContext"></rect>
+<path d="M1974.0 246.0 L2300.0 246.0" fill="none" data-name="ConversationContext"></path>
+<path d="M1974.0 344.0 L2300.0 344.0" fill="none" data-name="ConversationContext"></path>
+</g>
+<g transform="translate(1974, 207)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ConversationContext" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ConversationContext" data-compartment="0">
+<a id="src/domain/entities/Conversation.ts.ConversationContext" xlink:href="src/domain/entities/Conversation.ts"><text x="151.0" y="12.9" stroke="none" text-anchor="middle" data-name="ConversationContext" data-compartment="0">ConversationContext</text></a>
+
+</g>
+</g>
+<g transform="translate(1974, 246)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ConversationContext" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ConversationContext" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ConversationContext" data-compartment="1">+lastIntent?: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ConversationContext" data-compartment="1">+currentStep?: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ConversationContext" data-compartment="1">+intakeContext?: IntakeDocumentContext</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ConversationContext" data-compartment="1">+intakeGapCategories?: string[]</text>
+<text x="0.0" y="72.3" stroke="none" data-name="ConversationContext" data-compartment="1">+intakeParsedAt?: string</text>
+
+</g>
+</g>
+<g transform="translate(1974, 344)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ConversationContext" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ConversationContext" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateConversationData">
+<g fill="lightblue" stroke="#33322E" data-name="CreateConversationData">
+<rect x="2380.0" y="214.5" height="134.0" width="257.0" data-name="CreateConversationData"></rect>
+<path d="M2380.0 253.5 L2637.0 253.5" fill="none" data-name="CreateConversationData"></path>
+<path d="M2380.0 336.5 L2637.0 336.5" fill="none" data-name="CreateConversationData"></path>
+</g>
+<g transform="translate(2380, 214.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateConversationData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateConversationData" data-compartment="0">
+<a id="src/domain/entities/Conversation.ts.CreateConversationData" xlink:href="src/domain/entities/Conversation.ts"><text x="116.5" y="12.9" stroke="none" text-anchor="middle" data-name="CreateConversationData" data-compartment="0">CreateConversationData</text></a>
+
+</g>
+</g>
+<g transform="translate(2380, 253.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateConversationData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateConversationData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateConversationData" data-compartment="1">+userId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateConversationData" data-compartment="1">+mode?: ConversationMode</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateConversationData" data-compartment="1">+assessmentId?: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateConversationData" data-compartment="1">+context?: ConversationContext</text>
+
+</g>
+</g>
+<g transform="translate(2380, 336.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateConversationData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateConversationData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="Message">
+<g fill="#eee8d5" stroke="#33322E" data-name="Message">
+<rect x="2717.0" y="141.5" height="280.0" width="387.0" data-name="Message"></rect>
+<path d="M2717.0 180.5 L3104.0 180.5" fill="none" data-name="Message"></path>
+<path d="M2717.0 293.5 L3104.0 293.5" fill="none" data-name="Message"></path>
+</g>
+<g transform="translate(2717, 141.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="Message" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="Message" data-compartment="0">
+<a id="src/domain/entities/Message.ts.Message" xlink:href="src/domain/entities/Message.ts"><text x="181.5" y="12.9" stroke="none" text-anchor="middle" data-name="Message" data-compartment="0">Message</text></a>
+
+</g>
+</g>
+<g transform="translate(2717, 180.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Message" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Message" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="Message" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Message" data-compartment="1">+conversationId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Message" data-compartment="1">+role: MessageRole</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Message" data-compartment="1">+content: MessageContent</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Message" data-compartment="1">+createdAt: Date</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Message" data-compartment="1">+attachments?: MessageAttachment[]</text>
+
+</g>
+</g>
+<g transform="translate(2717, 293.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Message" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Message" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="Message" data-compartment="2">+static create(): Omit&lt;Message, &quot;id&quot; | &quot;createdAt&quot;&gt;</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Message" data-compartment="2">+static fromPersistence(): Message</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Message" data-compartment="2">+hasComponents(): boolean</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Message" data-compartment="2">+getText(): string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Message" data-compartment="2">+getComponents(): MessageComponent[]</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Message" data-compartment="2">+hasAttachments(): boolean</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Message" data-compartment="2">+getAttachments(): MessageAttachment[]</text>
+
+</g>
+</g>
+</g>
+<g data-name="MessageComponent">
+<g fill="lightblue" stroke="#33322E" data-name="MessageComponent">
+<rect x="3184.0" y="229.0" height="105.0" width="518.0" data-name="MessageComponent"></rect>
+<path d="M3184.0 268.0 L3702.0 268.0" fill="none" data-name="MessageComponent"></path>
+<path d="M3184.0 322.0 L3702.0 322.0" fill="none" data-name="MessageComponent"></path>
+</g>
+<g transform="translate(3184, 229)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageComponent" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="MessageComponent" data-compartment="0">
+<a id="src/domain/entities/Message.ts.MessageComponent" xlink:href="src/domain/entities/Message.ts"><text x="247.0" y="12.9" stroke="none" text-anchor="middle" data-name="MessageComponent" data-compartment="0">MessageComponent</text></a>
+
+</g>
+</g>
+<g transform="translate(3184, 268)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageComponent" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="MessageComponent" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="MessageComponent" data-compartment="1">+type: &quot;button&quot; | &quot;link&quot; | &quot;form&quot; | &quot;download&quot; | &quot;error&quot; | &quot;scoring_result&quot;</text>
+<text x="0.0" y="27.8" stroke="none" data-name="MessageComponent" data-compartment="1">+data: unknown</text>
+
+</g>
+</g>
+<g transform="translate(3184, 322)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageComponent" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="MessageComponent" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="MessageAttachment">
+<g fill="lightblue" stroke="#33322E" data-name="MessageAttachment">
+<rect x="3782.0" y="214.5" height="134.0" width="172.0" data-name="MessageAttachment"></rect>
+<path d="M3782.0 253.5 L3954.0 253.5" fill="none" data-name="MessageAttachment"></path>
+<path d="M3782.0 336.5 L3954.0 336.5" fill="none" data-name="MessageAttachment"></path>
+</g>
+<g transform="translate(3782, 214.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageAttachment" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="MessageAttachment" data-compartment="0">
+<a id="src/domain/entities/Message.ts.MessageAttachment" xlink:href="src/domain/entities/Message.ts"><text x="74.0" y="12.9" stroke="none" text-anchor="middle" data-name="MessageAttachment" data-compartment="0">MessageAttachment</text></a>
+
+</g>
+</g>
+<g transform="translate(3782, 253.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageAttachment" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="MessageAttachment" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="MessageAttachment" data-compartment="1">+fileId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="MessageAttachment" data-compartment="1">+filename: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="MessageAttachment" data-compartment="1">+mimeType: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="MessageAttachment" data-compartment="1">+size: number</text>
+
+</g>
+</g>
+<g transform="translate(3782, 336.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageAttachment" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="MessageAttachment" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="MessageContent">
+<g fill="lightblue" stroke="#33322E" data-name="MessageContent">
+<rect x="4034.0" y="229.0" height="105.0" width="299.0" data-name="MessageContent"></rect>
+<path d="M4034.0 268.0 L4333.0 268.0" fill="none" data-name="MessageContent"></path>
+<path d="M4034.0 322.0 L4333.0 322.0" fill="none" data-name="MessageContent"></path>
+</g>
+<g transform="translate(4034, 229)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageContent" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="MessageContent" data-compartment="0">
+<a id="src/domain/entities/Message.ts.MessageContent" xlink:href="src/domain/entities/Message.ts"><text x="137.5" y="12.9" stroke="none" text-anchor="middle" data-name="MessageContent" data-compartment="0">MessageContent</text></a>
+
+</g>
+</g>
+<g transform="translate(4034, 268)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageContent" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="MessageContent" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="MessageContent" data-compartment="1">+text: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="MessageContent" data-compartment="1">+components?: MessageComponent[]</text>
+
+</g>
+</g>
+<g transform="translate(4034, 322)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="MessageContent" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="MessageContent" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateMessageData">
+<g fill="lightblue" stroke="#33322E" data-name="CreateMessageData">
+<rect x="4413.0" y="214.5" height="134.0" width="297.0" data-name="CreateMessageData"></rect>
+<path d="M4413.0 253.5 L4710.0 253.5" fill="none" data-name="CreateMessageData"></path>
+<path d="M4413.0 336.5 L4710.0 336.5" fill="none" data-name="CreateMessageData"></path>
+</g>
+<g transform="translate(4413, 214.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateMessageData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateMessageData" data-compartment="0">
+<a id="src/domain/entities/Message.ts.CreateMessageData" xlink:href="src/domain/entities/Message.ts"><text x="136.5" y="12.9" stroke="none" text-anchor="middle" data-name="CreateMessageData" data-compartment="0">CreateMessageData</text></a>
+
+</g>
+</g>
+<g transform="translate(4413, 253.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateMessageData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateMessageData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateMessageData" data-compartment="1">+conversationId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateMessageData" data-compartment="1">+role: MessageRole</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateMessageData" data-compartment="1">+content: MessageContent</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateMessageData" data-compartment="1">+attachments?: MessageAttachment[]</text>
+
+</g>
+</g>
+<g transform="translate(4413, 336.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateMessageData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateMessageData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="Question">
+<g fill="#eee8d5" stroke="#33322E" data-name="Question">
+<rect x="4790.0" y="89.5" height="384.0" width="315.0" data-name="Question"></rect>
+<path d="M4790.0 128.5 L5105.0 128.5" fill="none" data-name="Question"></path>
+<path d="M4790.0 286.5 L5105.0 286.5" fill="none" data-name="Question"></path>
+</g>
+<g transform="translate(4790, 89.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="Question" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="Question" data-compartment="0">
+<a id="src/domain/entities/Question.ts.Question" xlink:href="src/domain/entities/Question.ts"><text x="145.5" y="12.9" stroke="none" text-anchor="middle" data-name="Question" data-compartment="0">Question</text></a>
+
+</g>
+</g>
+<g transform="translate(4790, 128.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Question" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Question" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="Question" data-compartment="1">+id?: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Question" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Question" data-compartment="1">+sectionName: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Question" data-compartment="1">+sectionNumber: number</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Question" data-compartment="1">+questionNumber: number</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Question" data-compartment="1">+questionText: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Question" data-compartment="1">+questionType: QuestionType</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Question" data-compartment="1">+questionMetadata?: QuestionMetadata</text>
+<text x="0.0" y="131.7" stroke="none" data-name="Question" data-compartment="1">+createdAt?: Date</text>
+
+</g>
+</g>
+<g transform="translate(4790, 286.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Question" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Question" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="Question" data-compartment="2">+static create(): Question</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Question" data-compartment="2">+static fromPersistence(): Question</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Question" data-compartment="2">+toPersistence(): { id?: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Question" data-compartment="2">assessmentId: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Question" data-compartment="2">sectionName: string</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Question" data-compartment="2">sectionNumber: number</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Question" data-compartment="2">questionNumber: number</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Question" data-compartment="2">questionText: string</text>
+<text x="0.0" y="131.7" stroke="none" data-name="Question" data-compartment="2">questionType: QuestionType</text>
+<text x="0.0" y="146.6" stroke="none" data-name="Question" data-compartment="2">questionMetadata?: QuestionMetadata</text>
+<text x="0.0" y="161.4" stroke="none" data-name="Question" data-compartment="2">}</text>
+
+</g>
+</g>
+</g>
+<g data-name="QuestionMetadata">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionMetadata">
+<rect x="5185.0" y="221.5" height="120.0" width="197.0" data-name="QuestionMetadata"></rect>
+<path d="M5185.0 260.5 L5382.0 260.5" fill="none" data-name="QuestionMetadata"></path>
+<path d="M5185.0 329.5 L5382.0 329.5" fill="none" data-name="QuestionMetadata"></path>
+</g>
+<g transform="translate(5185, 221.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionMetadata" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionMetadata" data-compartment="0">
+<a id="src/domain/entities/Question.ts.QuestionMetadata" xlink:href="src/domain/entities/Question.ts"><text x="86.5" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionMetadata" data-compartment="0">QuestionMetadata</text></a>
+
+</g>
+</g>
+<g transform="translate(5185, 260.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionMetadata" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionMetadata" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionMetadata" data-compartment="1">+required?: boolean</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionMetadata" data-compartment="1">+helpText?: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="QuestionMetadata" data-compartment="1">+enumOptions?: string[]</text>
+
+</g>
+</g>
+<g transform="translate(5185, 329.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionMetadata" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionMetadata" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionProps">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionProps">
+<rect x="5462.0" y="177.0" height="209.0" width="315.0" data-name="QuestionProps"></rect>
+<path d="M5462.0 216.0 L5777.0 216.0" fill="none" data-name="QuestionProps"></path>
+<path d="M5462.0 374.0 L5777.0 374.0" fill="none" data-name="QuestionProps"></path>
+</g>
+<g transform="translate(5462, 177)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionProps" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionProps" data-compartment="0">
+<a id="src/domain/entities/Question.ts.QuestionProps" xlink:href="src/domain/entities/Question.ts"><text x="145.5" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionProps" data-compartment="0">QuestionProps</text></a>
+
+</g>
+</g>
+<g transform="translate(5462, 216)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionProps" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionProps" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionProps" data-compartment="1">+id?: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionProps" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="QuestionProps" data-compartment="1">+sectionName: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="QuestionProps" data-compartment="1">+sectionNumber: number</text>
+<text x="0.0" y="72.3" stroke="none" data-name="QuestionProps" data-compartment="1">+questionNumber: number</text>
+<text x="0.0" y="87.2" stroke="none" data-name="QuestionProps" data-compartment="1">+questionText: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="QuestionProps" data-compartment="1">+questionType: QuestionType</text>
+<text x="0.0" y="116.9" stroke="none" data-name="QuestionProps" data-compartment="1">+questionMetadata?: QuestionMetadata</text>
+<text x="0.0" y="131.7" stroke="none" data-name="QuestionProps" data-compartment="1">+createdAt?: Date</text>
+
+</g>
+</g>
+<g transform="translate(5462, 374)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionProps" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionProps" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="User">
+<g fill="#eee8d5" stroke="#33322E" data-name="User">
+<rect x="5857.0" y="104.0" height="355.0" width="283.0" data-name="User"></rect>
+<path d="M5857.0 143.0 L6140.0 143.0" fill="none" data-name="User"></path>
+<path d="M5857.0 286.0 L6140.0 286.0" fill="none" data-name="User"></path>
+</g>
+<g transform="translate(5857, 104)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="User" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="User" data-compartment="0">
+<a id="src/domain/entities/User.ts.User" xlink:href="src/domain/entities/User.ts"><text x="129.5" y="12.9" stroke="none" text-anchor="middle" data-name="User" data-compartment="0">User</text></a>
+
+</g>
+</g>
+<g transform="translate(5857, 143)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="User" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="User" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="User" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="User" data-compartment="1">+email: Email</text>
+<text x="0.0" y="42.6" stroke="none" data-name="User" data-compartment="1">+passwordHash: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="User" data-compartment="1">+name: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="User" data-compartment="1">+role: UserRole</text>
+<text x="0.0" y="87.2" stroke="none" data-name="User" data-compartment="1">+lastLoginAt: Date</text>
+<text x="0.0" y="102.0" stroke="none" data-name="User" data-compartment="1">+createdAt: Date</text>
+<text x="0.0" y="116.9" stroke="none" data-name="User" data-compartment="1">+updatedAt: Date</text>
+
+</g>
+</g>
+<g transform="translate(5857, 286)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="User" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="User" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="User" data-compartment="2">+static create(): User</text>
+<text x="0.0" y="27.8" stroke="none" data-name="User" data-compartment="2">+static fromPersistence(): User</text>
+<text x="0.0" y="42.6" stroke="none" data-name="User" data-compartment="2">+updatePassword(): void</text>
+<text x="0.0" y="57.5" stroke="none" data-name="User" data-compartment="2">+updateName(): void</text>
+<text x="0.0" y="72.3" stroke="none" data-name="User" data-compartment="2">+updateRole(): void</text>
+<text x="0.0" y="87.2" stroke="none" data-name="User" data-compartment="2">+recordLogin(): void</text>
+<text x="0.0" y="102.0" stroke="none" data-name="User" data-compartment="2">+isAdmin(): boolean</text>
+<text x="0.0" y="116.9" stroke="none" data-name="User" data-compartment="2">+canCreateAssessments(): boolean</text>
+<text x="0.0" y="131.7" stroke="none" data-name="User" data-compartment="2">+getEmail(): string</text>
+<text x="0.0" y="146.6" stroke="none" data-name="User" data-compartment="2">+toPersistence(): UserData</text>
+
+</g>
+</g>
+</g>
+<g data-name="CreateUserData">
+<g fill="lightblue" stroke="#33322E" data-name="CreateUserData">
+<rect x="6220.0" y="214.5" height="134.0" width="190.0" data-name="CreateUserData"></rect>
+<path d="M6220.0 253.5 L6410.0 253.5" fill="none" data-name="CreateUserData"></path>
+<path d="M6220.0 336.5 L6410.0 336.5" fill="none" data-name="CreateUserData"></path>
+</g>
+<g transform="translate(6220, 214.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateUserData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateUserData" data-compartment="0">
+<a id="src/domain/entities/User.ts.CreateUserData" xlink:href="src/domain/entities/User.ts"><text x="83.0" y="12.9" stroke="none" text-anchor="middle" data-name="CreateUserData" data-compartment="0">CreateUserData</text></a>
+
+</g>
+</g>
+<g transform="translate(6220, 253.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateUserData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateUserData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateUserData" data-compartment="1">+email: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateUserData" data-compartment="1">+name: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateUserData" data-compartment="1">+passwordHash: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateUserData" data-compartment="1">+role?: UserRole</text>
+
+</g>
+</g>
+<g transform="translate(6220, 336.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateUserData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateUserData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="UserData">
+<g fill="lightblue" stroke="#33322E" data-name="UserData">
+<rect x="6490.0" y="184.5" height="194.0" width="190.0" data-name="UserData"></rect>
+<path d="M6490.0 223.5 L6680.0 223.5" fill="none" data-name="UserData"></path>
+<path d="M6490.0 366.5 L6680.0 366.5" fill="none" data-name="UserData"></path>
+</g>
+<g transform="translate(6490, 184.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="UserData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="UserData" data-compartment="0">
+<a id="src/domain/entities/User.ts.UserData" xlink:href="src/domain/entities/User.ts"><text x="83.0" y="12.9" stroke="none" text-anchor="middle" data-name="UserData" data-compartment="0">UserData</text></a>
+
+</g>
+</g>
+<g transform="translate(6490, 223.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="UserData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="UserData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="UserData" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="UserData" data-compartment="1">+email: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="UserData" data-compartment="1">+passwordHash: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="UserData" data-compartment="1">+name: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="UserData" data-compartment="1">+role: UserRole</text>
+<text x="0.0" y="87.2" stroke="none" data-name="UserData" data-compartment="1">+lastLoginAt: Date</text>
+<text x="0.0" y="102.0" stroke="none" data-name="UserData" data-compartment="1">+createdAt: Date</text>
+<text x="0.0" y="116.9" stroke="none" data-name="UserData" data-compartment="1">+updatedAt: Date</text>
+
+</g>
+</g>
+<g transform="translate(6490, 366.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="UserData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="UserData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="Vendor">
+<g fill="#eee8d5" stroke="#33322E" data-name="Vendor">
+<rect x="6760.0" y="74.5" height="414.0" width="266.0" data-name="Vendor"></rect>
+<path d="M6760.0 113.5 L7026.0 113.5" fill="none" data-name="Vendor"></path>
+<path d="M6760.0 241.5 L7026.0 241.5" fill="none" data-name="Vendor"></path>
+</g>
+<g transform="translate(6760, 74.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="Vendor" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="Vendor" data-compartment="0">
+<a id="src/domain/entities/Vendor.ts.Vendor" xlink:href="src/domain/entities/Vendor.ts"><text x="121.0" y="12.9" stroke="none" text-anchor="middle" data-name="Vendor" data-compartment="0">Vendor</text></a>
+
+</g>
+</g>
+<g transform="translate(6760, 113.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Vendor" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Vendor" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="Vendor" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Vendor" data-compartment="1">-_name: VendorName</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Vendor" data-compartment="1">-_industry: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Vendor" data-compartment="1">-_website: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Vendor" data-compartment="1">-_contactInfo: VendorContactInfo</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Vendor" data-compartment="1">+createdAt: Date</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Vendor" data-compartment="1">-_updatedAt: Date</text>
+
+</g>
+</g>
+<g transform="translate(6760, 241.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Vendor" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Vendor" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="Vendor" data-compartment="2">+static create(): Vendor</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Vendor" data-compartment="2">+static fromPersistence(): Vendor</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Vendor" data-compartment="2">+toPersistence(): { id: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Vendor" data-compartment="2">name: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="Vendor" data-compartment="2">industry: string</text>
+<text x="0.0" y="87.2" stroke="none" data-name="Vendor" data-compartment="2">website: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="Vendor" data-compartment="2">contactInfo: VendorContactInfo</text>
+<text x="0.0" y="116.9" stroke="none" data-name="Vendor" data-compartment="2">createdAt: Date</text>
+<text x="0.0" y="131.7" stroke="none" data-name="Vendor" data-compartment="2">updatedAt: Date</text>
+<text x="0.0" y="146.6" stroke="none" data-name="Vendor" data-compartment="2">}</text>
+<text x="0.0" y="161.4" stroke="none" data-name="Vendor" data-compartment="2">+updateName(): void</text>
+<text x="0.0" y="176.3" stroke="none" data-name="Vendor" data-compartment="2">+updateIndustry(): void</text>
+<text x="0.0" y="191.1" stroke="none" data-name="Vendor" data-compartment="2">+updateWebsite(): void</text>
+<text x="0.0" y="206.0" stroke="none" data-name="Vendor" data-compartment="2">+updateContactInfo(): void</text>
+<text x="0.0" y="220.8" stroke="none" data-name="Vendor" data-compartment="2">+update(): void</text>
+
+</g>
+</g>
+</g>
+<g data-name="VendorContactInfo">
+<g fill="lightblue" stroke="#33322E" data-name="VendorContactInfo">
+<rect x="7106.0" y="221.5" height="120.0" width="202.0" data-name="VendorContactInfo"></rect>
+<path d="M7106.0 260.5 L7308.0 260.5" fill="none" data-name="VendorContactInfo"></path>
+<path d="M7106.0 329.5 L7308.0 329.5" fill="none" data-name="VendorContactInfo"></path>
+</g>
+<g transform="translate(7106, 221.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="VendorContactInfo" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="VendorContactInfo" data-compartment="0">
+<a id="src/domain/entities/Vendor.ts.VendorContactInfo" xlink:href="src/domain/entities/Vendor.ts"><text x="89.0" y="12.9" stroke="none" text-anchor="middle" data-name="VendorContactInfo" data-compartment="0">VendorContactInfo</text></a>
+
+</g>
+</g>
+<g transform="translate(7106, 260.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="VendorContactInfo" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="VendorContactInfo" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="VendorContactInfo" data-compartment="1">+primaryContact?: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="VendorContactInfo" data-compartment="1">+email?: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="VendorContactInfo" data-compartment="1">+phone?: string</text>
+
+</g>
+</g>
+<g transform="translate(7106, 329.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="VendorContactInfo" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="VendorContactInfo" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateVendorData">
+<g fill="lightblue" stroke="#33322E" data-name="CreateVendorData">
+<rect x="7388.0" y="214.5" height="134.0" width="268.0" data-name="CreateVendorData"></rect>
+<path d="M7388.0 253.5 L7656.0 253.5" fill="none" data-name="CreateVendorData"></path>
+<path d="M7388.0 336.5 L7656.0 336.5" fill="none" data-name="CreateVendorData"></path>
+</g>
+<g transform="translate(7388, 214.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateVendorData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateVendorData" data-compartment="0">
+<a id="src/domain/entities/Vendor.ts.CreateVendorData" xlink:href="src/domain/entities/Vendor.ts"><text x="122.0" y="12.9" stroke="none" text-anchor="middle" data-name="CreateVendorData" data-compartment="0">CreateVendorData</text></a>
+
+</g>
+</g>
+<g transform="translate(7388, 253.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateVendorData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateVendorData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateVendorData" data-compartment="1">+name: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateVendorData" data-compartment="1">+industry?: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateVendorData" data-compartment="1">+website?: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateVendorData" data-compartment="1">+contactInfo?: VendorContactInfo</text>
+
+</g>
+</g>
+<g transform="translate(7388, 336.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateVendorData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateVendorData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ResponseDTO">
+<g fill="lightblue" stroke="#33322E" data-name="ResponseDTO">
+<rect x="7736.0" y="155.0" height="253.0" width="272.0" data-name="ResponseDTO"></rect>
+<path d="M7736.0 194.0 L8008.0 194.0" fill="none" data-name="ResponseDTO"></path>
+<path d="M7736.0 396.0 L8008.0 396.0" fill="none" data-name="ResponseDTO"></path>
+</g>
+<g transform="translate(7736, 155)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ResponseDTO" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ResponseDTO" data-compartment="0">
+<a id="src/domain/scoring/dtos.ts.ResponseDTO" xlink:href="src/domain/scoring/dtos.ts"><text x="124.0" y="12.9" stroke="none" text-anchor="middle" data-name="ResponseDTO" data-compartment="0">ResponseDTO</text></a>
+
+</g>
+</g>
+<g transform="translate(7736, 194)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ResponseDTO" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ResponseDTO" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ResponseDTO" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ResponseDTO" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ResponseDTO" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ResponseDTO" data-compartment="1">+fileId?: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="ResponseDTO" data-compartment="1">+sectionNumber: number</text>
+<text x="0.0" y="87.2" stroke="none" data-name="ResponseDTO" data-compartment="1">+questionNumber: number</text>
+<text x="0.0" y="102.0" stroke="none" data-name="ResponseDTO" data-compartment="1">+questionText: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="ResponseDTO" data-compartment="1">+responseText: string</text>
+<text x="0.0" y="131.7" stroke="none" data-name="ResponseDTO" data-compartment="1">+confidence?: number</text>
+<text x="0.0" y="146.6" stroke="none" data-name="ResponseDTO" data-compartment="1">+hasVisualContent: boolean</text>
+<text x="0.0" y="161.4" stroke="none" data-name="ResponseDTO" data-compartment="1">+visualContentDescription?: string</text>
+<text x="0.0" y="176.3" stroke="none" data-name="ResponseDTO" data-compartment="1">+createdAt: Date</text>
+
+</g>
+</g>
+<g transform="translate(7736, 396)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ResponseDTO" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ResponseDTO" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateResponseDTO">
+<g fill="lightblue" stroke="#33322E" data-name="CreateResponseDTO">
+<rect x="8088.0" y="169.5" height="224.0" width="272.0" data-name="CreateResponseDTO"></rect>
+<path d="M8088.0 208.5 L8360.0 208.5" fill="none" data-name="CreateResponseDTO"></path>
+<path d="M8088.0 381.5 L8360.0 381.5" fill="none" data-name="CreateResponseDTO"></path>
+</g>
+<g transform="translate(8088, 169.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateResponseDTO" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateResponseDTO" data-compartment="0">
+<a id="src/domain/scoring/dtos.ts.CreateResponseDTO" xlink:href="src/domain/scoring/dtos.ts"><text x="124.0" y="12.9" stroke="none" text-anchor="middle" data-name="CreateResponseDTO" data-compartment="0">CreateResponseDTO</text></a>
+
+</g>
+</g>
+<g transform="translate(8088, 208.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateResponseDTO" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateResponseDTO" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+fileId?: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+sectionNumber: number</text>
+<text x="0.0" y="72.3" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+questionNumber: number</text>
+<text x="0.0" y="87.2" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+questionText: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+responseText: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+confidence?: number</text>
+<text x="0.0" y="131.7" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+hasVisualContent?: boolean</text>
+<text x="0.0" y="146.6" stroke="none" data-name="CreateResponseDTO" data-compartment="1">+visualContentDescription?: string</text>
+
+</g>
+</g>
+<g transform="translate(8088, 381.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateResponseDTO" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateResponseDTO" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="DimensionScoreDTO">
+<g fill="lightblue" stroke="#33322E" data-name="DimensionScoreDTO">
+<rect x="8440.0" y="103.0" height="357.0" width="316.0" data-name="DimensionScoreDTO"></rect>
+<path d="M8440.0 142.0 L8756.0 142.0" fill="none" data-name="DimensionScoreDTO"></path>
+<path d="M8440.0 448.0 L8756.0 448.0" fill="none" data-name="DimensionScoreDTO"></path>
+</g>
+<g transform="translate(8440, 103)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="DimensionScoreDTO" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="DimensionScoreDTO" data-compartment="0">
+<a id="src/domain/scoring/dtos.ts.DimensionScoreDTO" xlink:href="src/domain/scoring/dtos.ts"><text x="146.0" y="12.9" stroke="none" text-anchor="middle" data-name="DimensionScoreDTO" data-compartment="0">DimensionScoreDTO</text></a>
+
+</g>
+</g>
+<g transform="translate(8440, 142)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="DimensionScoreDTO" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="DimensionScoreDTO" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+dimension: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+score: number</text>
+<text x="0.0" y="87.2" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+riskRating: RiskRating</text>
+<text x="0.0" y="102.0" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+findings?: { subScores: { name: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">score: number</text>
+<text x="0.0" y="131.7" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">maxScore: number</text>
+<text x="0.0" y="146.6" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">notes: string</text>
+<text x="0.0" y="161.4" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">}[]</text>
+<text x="0.0" y="176.3" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">keyRisks: string[]</text>
+<text x="0.0" y="191.1" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">mitigations: string[]</text>
+<text x="0.0" y="206.0" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">evidenceRefs: { sectionNumber: number</text>
+<text x="0.0" y="220.8" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">questionNumber: number</text>
+<text x="0.0" y="235.7" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">quote: string</text>
+<text x="0.0" y="250.5" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">}[]</text>
+<text x="0.0" y="265.4" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">}</text>
+<text x="0.0" y="280.2" stroke="none" data-name="DimensionScoreDTO" data-compartment="1">+createdAt: Date</text>
+
+</g>
+</g>
+<g transform="translate(8440, 448)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="DimensionScoreDTO" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="DimensionScoreDTO" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateDimensionScoreDTO">
+<g fill="lightblue" stroke="#33322E" data-name="CreateDimensionScoreDTO">
+<rect x="8836.0" y="118.0" height="327.0" width="316.0" data-name="CreateDimensionScoreDTO"></rect>
+<path d="M8836.0 157.0 L9152.0 157.0" fill="none" data-name="CreateDimensionScoreDTO"></path>
+<path d="M8836.0 433.0 L9152.0 433.0" fill="none" data-name="CreateDimensionScoreDTO"></path>
+</g>
+<g transform="translate(8836, 118)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateDimensionScoreDTO" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateDimensionScoreDTO" data-compartment="0">
+<a id="src/domain/scoring/dtos.ts.CreateDimensionScoreDTO" xlink:href="src/domain/scoring/dtos.ts"><text x="146.0" y="12.9" stroke="none" text-anchor="middle" data-name="CreateDimensionScoreDTO" data-compartment="0">CreateDimensionScoreDTO</text></a>
+
+</g>
+</g>
+<g transform="translate(8836, 157)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateDimensionScoreDTO" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateDimensionScoreDTO" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">+dimension: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">+score: number</text>
+<text x="0.0" y="72.3" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">+riskRating: RiskRating</text>
+<text x="0.0" y="87.2" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">+findings?: { subScores: { name: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">score: number</text>
+<text x="0.0" y="116.9" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">maxScore: number</text>
+<text x="0.0" y="131.7" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">notes: string</text>
+<text x="0.0" y="146.6" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">}[]</text>
+<text x="0.0" y="161.4" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">keyRisks: string[]</text>
+<text x="0.0" y="176.3" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">mitigations: string[]</text>
+<text x="0.0" y="191.1" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">evidenceRefs: { sectionNumber: number</text>
+<text x="0.0" y="206.0" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">questionNumber: number</text>
+<text x="0.0" y="220.8" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">quote: string</text>
+<text x="0.0" y="235.7" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">}[]</text>
+<text x="0.0" y="250.5" stroke="none" data-name="CreateDimensionScoreDTO" data-compartment="1">}</text>
+
+</g>
+</g>
+<g transform="translate(8836, 433)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateDimensionScoreDTO" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateDimensionScoreDTO" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="AssessmentResultDTO">
+<g fill="lightblue" stroke="#33322E" data-name="AssessmentResultDTO">
+<rect x="9232.0" y="132.5" height="298.0" width="290.0" data-name="AssessmentResultDTO"></rect>
+<path d="M9232.0 171.5 L9522.0 171.5" fill="none" data-name="AssessmentResultDTO"></path>
+<path d="M9232.0 418.5 L9522.0 418.5" fill="none" data-name="AssessmentResultDTO"></path>
+</g>
+<g transform="translate(9232, 132.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentResultDTO" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="AssessmentResultDTO" data-compartment="0">
+<a id="src/domain/scoring/dtos.ts.AssessmentResultDTO" xlink:href="src/domain/scoring/dtos.ts"><text x="133.0" y="12.9" stroke="none" text-anchor="middle" data-name="AssessmentResultDTO" data-compartment="0">AssessmentResultDTO</text></a>
+
+</g>
+</g>
+<g transform="translate(9232, 171.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentResultDTO" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="AssessmentResultDTO" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+compositeScore: number</text>
+<text x="0.0" y="72.3" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+recommendation: Recommendation</text>
+<text x="0.0" y="87.2" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+overallRiskRating: RiskRating</text>
+<text x="0.0" y="102.0" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+narrativeReport?: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+executiveSummary?: string</text>
+<text x="0.0" y="131.7" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+keyFindings?: string[]</text>
+<text x="0.0" y="146.6" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+disqualifyingFactors?: string[]</text>
+<text x="0.0" y="161.4" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+rubricVersion: string</text>
+<text x="0.0" y="176.3" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+modelId: string</text>
+<text x="0.0" y="191.1" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+rawToolPayload?: unknown</text>
+<text x="0.0" y="206.0" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+scoredAt: Date</text>
+<text x="0.0" y="220.8" stroke="none" data-name="AssessmentResultDTO" data-compartment="1">+scoringDurationMs?: number</text>
+
+</g>
+</g>
+<g transform="translate(9232, 418.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentResultDTO" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="AssessmentResultDTO" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="CreateAssessmentResultDTO">
+<g fill="lightblue" stroke="#33322E" data-name="CreateAssessmentResultDTO">
+<rect x="9602.0" y="147.5" height="268.0" width="290.0" data-name="CreateAssessmentResultDTO"></rect>
+<path d="M9602.0 186.5 L9892.0 186.5" fill="none" data-name="CreateAssessmentResultDTO"></path>
+<path d="M9602.0 403.5 L9892.0 403.5" fill="none" data-name="CreateAssessmentResultDTO"></path>
+</g>
+<g transform="translate(9602, 147.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateAssessmentResultDTO" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="CreateAssessmentResultDTO" data-compartment="0">
+<a id="src/domain/scoring/dtos.ts.CreateAssessmentResultDTO" xlink:href="src/domain/scoring/dtos.ts"><text x="133.0" y="12.9" stroke="none" text-anchor="middle" data-name="CreateAssessmentResultDTO" data-compartment="0">CreateAssessmentResultDTO</text></a>
+
+</g>
+</g>
+<g transform="translate(9602, 186.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateAssessmentResultDTO" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="CreateAssessmentResultDTO" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+compositeScore: number</text>
+<text x="0.0" y="57.5" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+recommendation: Recommendation</text>
+<text x="0.0" y="72.3" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+overallRiskRating: RiskRating</text>
+<text x="0.0" y="87.2" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+narrativeReport?: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+executiveSummary?: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+keyFindings?: string[]</text>
+<text x="0.0" y="131.7" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+disqualifyingFactors?: string[]</text>
+<text x="0.0" y="146.6" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+rubricVersion: string</text>
+<text x="0.0" y="161.4" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+modelId: string</text>
+<text x="0.0" y="176.3" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+rawToolPayload?: unknown</text>
+<text x="0.0" y="191.1" stroke="none" data-name="CreateAssessmentResultDTO" data-compartment="1">+scoringDurationMs?: number</text>
+
+</g>
+</g>
+<g transform="translate(9602, 403.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="CreateAssessmentResultDTO" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="CreateAssessmentResultDTO" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringError">
+<g fill="#eee8d5" stroke="#33322E" data-name="ScoringError">
+<rect x="9972.0" y="236.5" height="90.0" width="207.0" data-name="ScoringError"></rect>
+<path d="M9972.0 275.5 L10179.0 275.5" fill="none" data-name="ScoringError"></path>
+<path d="M9972.0 314.5 L10179.0 314.5" fill="none" data-name="ScoringError"></path>
+</g>
+<g transform="translate(9972, 236.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="ScoringError" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ScoringError" data-compartment="0">
+<a id="src/domain/scoring/errors.ts.ScoringError" xlink:href="src/domain/scoring/errors.ts"><text x="91.5" y="12.9" stroke="none" text-anchor="middle" data-name="ScoringError" data-compartment="0">ScoringError</text></a>
+
+</g>
+</g>
+<g transform="translate(9972, 275.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringError" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ScoringError" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ScoringError" data-compartment="1">+code: ScoringErrorCode</text>
+
+</g>
+</g>
+<g transform="translate(9972, 314.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringError" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ScoringError" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="UnauthorizedError">
+<g fill="#eee8d5" stroke="#33322E" data-name="UnauthorizedError">
+<rect x="10259.0" y="250.0" height="63.0" width="157.0" data-name="UnauthorizedError"></rect>
+<path d="M10259.0 289.0 L10416.0 289.0" fill="none" data-name="UnauthorizedError"></path>
+<path d="M10259.0 301.0 L10416.0 301.0" fill="none" data-name="UnauthorizedError"></path>
+</g>
+<g transform="translate(10259, 250)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="UnauthorizedError" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="UnauthorizedError" data-compartment="0">
+<a id="src/domain/scoring/errors.ts.UnauthorizedError" xlink:href="src/domain/scoring/errors.ts"><text x="66.5" y="12.9" stroke="none" text-anchor="middle" data-name="UnauthorizedError" data-compartment="0">UnauthorizedError</text></a>
+
+</g>
+</g>
+<g transform="translate(10259, 289)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="UnauthorizedError" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" data-name="UnauthorizedError" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(10259, 301)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="UnauthorizedError" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="UnauthorizedError" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringPayloadValidator">
+<g fill="#eee8d5" stroke="#33322E" data-name="ScoringPayloadValidator">
+<rect x="10496.0" y="207.0" height="149.0" width="283.0" data-name="ScoringPayloadValidator"></rect>
+<path d="M10496.0 246.0 L10779.0 246.0" fill="none" data-name="ScoringPayloadValidator"></path>
+<path d="M10496.0 258.0 L10779.0 258.0" fill="none" data-name="ScoringPayloadValidator"></path>
+</g>
+<g transform="translate(10496, 207)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="ScoringPayloadValidator" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ScoringPayloadValidator" data-compartment="0">
+<a id="src/domain/scoring/ScoringPayloadValidator.ts.ScoringPayloadValidator" xlink:href="src/domain/scoring/ScoringPayloadValidator.ts"><text x="129.5" y="12.9" stroke="none" text-anchor="middle" data-name="ScoringPayloadValidator" data-compartment="0">ScoringPayloadValidator</text></a>
+
+</g>
+</g>
+<g transform="translate(10496, 246)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringPayloadValidator" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ScoringPayloadValidator" data-compartment="1">
+
+</g>
+</g>
+<g transform="translate(10496, 258)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringPayloadValidator" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ScoringPayloadValidator" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="ScoringPayloadValidator" data-compartment="2">+validate(): ValidationResult</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ScoringPayloadValidator" data-compartment="2">-validateDimensionScores(): string[]</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ScoringPayloadValidator" data-compartment="2">-isValidScore(): boolean</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ScoringPayloadValidator" data-compartment="2">-isValidRiskRating(): boolean</text>
+<text x="0.0" y="72.3" stroke="none" data-name="ScoringPayloadValidator" data-compartment="2">-isValidRecommendation(): boolean</text>
+
+</g>
+</g>
+</g>
+<g data-name="ValidationResult">
+<g fill="lightblue" stroke="#33322E" data-name="ValidationResult">
+<rect x="10859.0" y="221.5" height="120.0" width="299.0" data-name="ValidationResult"></rect>
+<path d="M10859.0 260.5 L11158.0 260.5" fill="none" data-name="ValidationResult"></path>
+<path d="M10859.0 329.5 L11158.0 329.5" fill="none" data-name="ValidationResult"></path>
+</g>
+<g transform="translate(10859, 221.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ValidationResult" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ValidationResult" data-compartment="0">
+<a id="src/domain/scoring/ScoringPayloadValidator.ts.ValidationResult" xlink:href="src/domain/scoring/ScoringPayloadValidator.ts"><text x="137.5" y="12.9" stroke="none" text-anchor="middle" data-name="ValidationResult" data-compartment="0">ValidationResult</text></a>
+
+</g>
+</g>
+<g transform="translate(10859, 260.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ValidationResult" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ValidationResult" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ValidationResult" data-compartment="1">+valid: boolean</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ValidationResult" data-compartment="1">+errors: string[]</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ValidationResult" data-compartment="1">+sanitized?: ScoringCompletePayload</text>
+
+</g>
+</g>
+<g transform="translate(10859, 329.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ValidationResult" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ValidationResult" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="DimensionScoreData">
+<g fill="lightblue" stroke="#33322E" data-name="DimensionScoreData">
+<rect x="11238.0" y="132.5" height="298.0" width="316.0" data-name="DimensionScoreData"></rect>
+<path d="M11238.0 171.5 L11554.0 171.5" fill="none" data-name="DimensionScoreData"></path>
+<path d="M11238.0 418.5 L11554.0 418.5" fill="none" data-name="DimensionScoreData"></path>
+</g>
+<g transform="translate(11238, 132.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="DimensionScoreData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="DimensionScoreData" data-compartment="0">
+<a id="src/domain/scoring/types.ts.DimensionScoreData" xlink:href="src/domain/scoring/types.ts"><text x="146.0" y="12.9" stroke="none" text-anchor="middle" data-name="DimensionScoreData" data-compartment="0">DimensionScoreData</text></a>
+
+</g>
+</g>
+<g transform="translate(11238, 171.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="DimensionScoreData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="DimensionScoreData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="DimensionScoreData" data-compartment="1">+dimension: RiskDimension</text>
+<text x="0.0" y="27.8" stroke="none" data-name="DimensionScoreData" data-compartment="1">+score: number</text>
+<text x="0.0" y="42.6" stroke="none" data-name="DimensionScoreData" data-compartment="1">+riskRating: RiskRating</text>
+<text x="0.0" y="57.5" stroke="none" data-name="DimensionScoreData" data-compartment="1">+findings?: { subScores: { name: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="DimensionScoreData" data-compartment="1">score: number</text>
+<text x="0.0" y="87.2" stroke="none" data-name="DimensionScoreData" data-compartment="1">maxScore: number</text>
+<text x="0.0" y="102.0" stroke="none" data-name="DimensionScoreData" data-compartment="1">notes: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="DimensionScoreData" data-compartment="1">}[]</text>
+<text x="0.0" y="131.7" stroke="none" data-name="DimensionScoreData" data-compartment="1">keyRisks: string[]</text>
+<text x="0.0" y="146.6" stroke="none" data-name="DimensionScoreData" data-compartment="1">mitigations: string[]</text>
+<text x="0.0" y="161.4" stroke="none" data-name="DimensionScoreData" data-compartment="1">evidenceRefs: { sectionNumber: number</text>
+<text x="0.0" y="176.3" stroke="none" data-name="DimensionScoreData" data-compartment="1">questionNumber: number</text>
+<text x="0.0" y="191.1" stroke="none" data-name="DimensionScoreData" data-compartment="1">quote: string</text>
+<text x="0.0" y="206.0" stroke="none" data-name="DimensionScoreData" data-compartment="1">}[]</text>
+<text x="0.0" y="220.8" stroke="none" data-name="DimensionScoreData" data-compartment="1">}</text>
+
+</g>
+</g>
+<g transform="translate(11238, 418.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="DimensionScoreData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="DimensionScoreData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringCompletePayload">
+<g fill="lightblue" stroke="#33322E" data-name="ScoringCompletePayload">
+<rect x="11634.0" y="192.0" height="179.0" width="328.0" data-name="ScoringCompletePayload"></rect>
+<path d="M11634.0 231.0 L11962.0 231.0" fill="none" data-name="ScoringCompletePayload"></path>
+<path d="M11634.0 359.0 L11962.0 359.0" fill="none" data-name="ScoringCompletePayload"></path>
+</g>
+<g transform="translate(11634, 192)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringCompletePayload" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ScoringCompletePayload" data-compartment="0">
+<a id="src/domain/scoring/types.ts.ScoringCompletePayload" xlink:href="src/domain/scoring/types.ts"><text x="152.0" y="12.9" stroke="none" text-anchor="middle" data-name="ScoringCompletePayload" data-compartment="0">ScoringCompletePayload</text></a>
+
+</g>
+</g>
+<g transform="translate(11634, 231)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringCompletePayload" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ScoringCompletePayload" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+compositeScore: number</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+recommendation: Recommendation</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+overallRiskRating: RiskRating</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+executiveSummary: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+keyFindings: string[]</text>
+<text x="0.0" y="87.2" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+disqualifyingFactors: string[]</text>
+<text x="0.0" y="102.0" stroke="none" data-name="ScoringCompletePayload" data-compartment="1">+dimensionScores: DimensionScoreData[]</text>
+
+</g>
+</g>
+<g transform="translate(11634, 359)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringCompletePayload" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ScoringCompletePayload" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringReportData">
+<g fill="lightblue" stroke="#33322E" data-name="ScoringReportData">
+<rect x="12042.0" y="192.0" height="179.0" width="282.0" data-name="ScoringReportData"></rect>
+<path d="M12042.0 231.0 L12324.0 231.0" fill="none" data-name="ScoringReportData"></path>
+<path d="M12042.0 359.0 L12324.0 359.0" fill="none" data-name="ScoringReportData"></path>
+</g>
+<g transform="translate(12042, 192)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringReportData" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ScoringReportData" data-compartment="0">
+<a id="src/domain/scoring/types.ts.ScoringReportData" xlink:href="src/domain/scoring/types.ts"><text x="129.0" y="12.9" stroke="none" text-anchor="middle" data-name="ScoringReportData" data-compartment="0">ScoringReportData</text></a>
+
+</g>
+</g>
+<g transform="translate(12042, 231)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringReportData" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ScoringReportData" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ScoringReportData" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ScoringReportData" data-compartment="1">+batchId: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ScoringReportData" data-compartment="1">+payload: ScoringCompletePayload</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ScoringReportData" data-compartment="1">+narrativeReport: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="ScoringReportData" data-compartment="1">+rubricVersion: string</text>
+<text x="0.0" y="87.2" stroke="none" data-name="ScoringReportData" data-compartment="1">+modelId: string</text>
+<text x="0.0" y="102.0" stroke="none" data-name="ScoringReportData" data-compartment="1">+scoringDurationMs: number</text>
+
+</g>
+</g>
+<g transform="translate(12042, 359)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringReportData" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ScoringReportData" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="ScoringProgressEvent">
+<g fill="lightblue" stroke="#33322E" data-name="ScoringProgressEvent">
+<rect x="12404.0" y="214.5" height="134.0" width="187.0" data-name="ScoringProgressEvent"></rect>
+<path d="M12404.0 253.5 L12591.0 253.5" fill="none" data-name="ScoringProgressEvent"></path>
+<path d="M12404.0 336.5 L12591.0 336.5" fill="none" data-name="ScoringProgressEvent"></path>
+</g>
+<g transform="translate(12404, 214.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringProgressEvent" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ScoringProgressEvent" data-compartment="0">
+<a id="src/domain/scoring/types.ts.ScoringProgressEvent" xlink:href="src/domain/scoring/types.ts"><text x="81.5" y="12.9" stroke="none" text-anchor="middle" data-name="ScoringProgressEvent" data-compartment="0">ScoringProgressEvent</text></a>
+
+</g>
+</g>
+<g transform="translate(12404, 253.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringProgressEvent" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ScoringProgressEvent" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ScoringProgressEvent" data-compartment="1">+status: ScoringStatus</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ScoringProgressEvent" data-compartment="1">+message: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ScoringProgressEvent" data-compartment="1">+progress?: number</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ScoringProgressEvent" data-compartment="1">+error?: string</text>
+
+</g>
+</g>
+<g transform="translate(12404, 336.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringProgressEvent" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ScoringProgressEvent" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionnaireQuestion">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionnaireQuestion">
+<rect x="12671.0" y="184.5" height="194.0" width="251.0" data-name="QuestionnaireQuestion"></rect>
+<path d="M12671.0 223.5 L12922.0 223.5" fill="none" data-name="QuestionnaireQuestion"></path>
+<path d="M12671.0 366.5 L12922.0 366.5" fill="none" data-name="QuestionnaireQuestion"></path>
+</g>
+<g transform="translate(12671, 184.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireQuestion" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionnaireQuestion" data-compartment="0">
+<a id="src/domain/types/QuestionnaireSchema.ts.QuestionnaireQuestion" xlink:href="src/domain/types/QuestionnaireSchema.ts"><text x="113.5" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionnaireQuestion" data-compartment="0">QuestionnaireQuestion</text></a>
+
+</g>
+</g>
+<g transform="translate(12671, 223.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireQuestion" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionnaireQuestion" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+text: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+category: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+riskDimension: RiskDimension</text>
+<text x="0.0" y="72.3" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+questionType: QuestionType</text>
+<text x="0.0" y="87.2" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+required: boolean</text>
+<text x="0.0" y="102.0" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+guidance?: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="QuestionnaireQuestion" data-compartment="1">+options?: string[]</text>
+
+</g>
+</g>
+<g transform="translate(12671, 366.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireQuestion" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionnaireQuestion" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionnaireSection">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionnaireSection">
+<rect x="13002.0" y="207.0" height="149.0" width="289.0" data-name="QuestionnaireSection"></rect>
+<path d="M13002.0 246.0 L13291.0 246.0" fill="none" data-name="QuestionnaireSection"></path>
+<path d="M13002.0 344.0 L13291.0 344.0" fill="none" data-name="QuestionnaireSection"></path>
+</g>
+<g transform="translate(13002, 207)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSection" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionnaireSection" data-compartment="0">
+<a id="src/domain/types/QuestionnaireSchema.ts.QuestionnaireSection" xlink:href="src/domain/types/QuestionnaireSchema.ts"><text x="132.5" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionnaireSection" data-compartment="0">QuestionnaireSection</text></a>
+
+</g>
+</g>
+<g transform="translate(13002, 246)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSection" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionnaireSection" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionnaireSection" data-compartment="1">+id: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionnaireSection" data-compartment="1">+title: string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="QuestionnaireSection" data-compartment="1">+riskDimension: RiskDimension</text>
+<text x="0.0" y="57.5" stroke="none" data-name="QuestionnaireSection" data-compartment="1">+description: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="QuestionnaireSection" data-compartment="1">+questions: QuestionnaireQuestion[]</text>
+
+</g>
+</g>
+<g transform="translate(13002, 344)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSection" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionnaireSection" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionnaireMetadata">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionnaireMetadata">
+<rect x="13371.0" y="192.0" height="179.0" width="289.0" data-name="QuestionnaireMetadata"></rect>
+<path d="M13371.0 231.0 L13660.0 231.0" fill="none" data-name="QuestionnaireMetadata"></path>
+<path d="M13371.0 359.0 L13660.0 359.0" fill="none" data-name="QuestionnaireMetadata"></path>
+</g>
+<g transform="translate(13371, 192)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireMetadata" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionnaireMetadata" data-compartment="0">
+<a id="src/domain/types/QuestionnaireSchema.ts.QuestionnaireMetadata" xlink:href="src/domain/types/QuestionnaireSchema.ts"><text x="132.5" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionnaireMetadata" data-compartment="0">QuestionnaireMetadata</text></a>
+
+</g>
+</g>
+<g transform="translate(13371, 231)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireMetadata" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionnaireMetadata" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+assessmentId: string</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+assessmentType: AssessmentType</text>
+<text x="0.0" y="42.6" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+vendorName: string</text>
+<text x="0.0" y="57.5" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+solutionName: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+generatedAt: string</text>
+<text x="0.0" y="87.2" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+questionCount: number</text>
+<text x="0.0" y="102.0" stroke="none" data-name="QuestionnaireMetadata" data-compartment="1">+focusCategories?: string[]</text>
+
+</g>
+</g>
+<g transform="translate(13371, 359)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireMetadata" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionnaireMetadata" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionnaireSchema">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionnaireSchema">
+<rect x="13740.0" y="221.5" height="120.0" width="280.0" data-name="QuestionnaireSchema"></rect>
+<path d="M13740.0 260.5 L14020.0 260.5" fill="none" data-name="QuestionnaireSchema"></path>
+<path d="M13740.0 329.5 L14020.0 329.5" fill="none" data-name="QuestionnaireSchema"></path>
+</g>
+<g transform="translate(13740, 221.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSchema" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionnaireSchema" data-compartment="0">
+<a id="src/domain/types/QuestionnaireSchema.ts.QuestionnaireSchema" xlink:href="src/domain/types/QuestionnaireSchema.ts"><text x="128.0" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionnaireSchema" data-compartment="0">QuestionnaireSchema</text></a>
+
+</g>
+</g>
+<g transform="translate(13740, 260.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSchema" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionnaireSchema" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionnaireSchema" data-compartment="1">+version: &quot;1.0&quot;</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionnaireSchema" data-compartment="1">+metadata: QuestionnaireMetadata</text>
+<text x="0.0" y="42.6" stroke="none" data-name="QuestionnaireSchema" data-compartment="1">+sections: QuestionnaireSection[]</text>
+
+</g>
+</g>
+<g transform="translate(13740, 329.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSchema" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionnaireSchema" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="QuestionnaireSchemaValidationResult">
+<g fill="lightblue" stroke="#33322E" data-name="QuestionnaireSchemaValidationResult">
+<rect x="14100.0" y="229.0" height="105.0" width="302.0" data-name="QuestionnaireSchemaValidationResult"></rect>
+<path d="M14100.0 268.0 L14402.0 268.0" fill="none" data-name="QuestionnaireSchemaValidationResult"></path>
+<path d="M14100.0 322.0 L14402.0 322.0" fill="none" data-name="QuestionnaireSchemaValidationResult"></path>
+</g>
+<g transform="translate(14100, 229)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSchemaValidationResult" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="QuestionnaireSchemaValidationResult" data-compartment="0">
+<a id="src/domain/types/QuestionnaireSchema.ts.QuestionnaireSchemaValidationResult" xlink:href="src/domain/types/QuestionnaireSchema.ts"><text x="139.0" y="12.9" stroke="none" text-anchor="middle" data-name="QuestionnaireSchemaValidationResult" data-compartment="0">QuestionnaireSchemaValidationResult</text></a>
+
+</g>
+</g>
+<g transform="translate(14100, 268)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSchemaValidationResult" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="QuestionnaireSchemaValidationResult" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="QuestionnaireSchemaValidationResult" data-compartment="1">+isValid: boolean</text>
+<text x="0.0" y="27.8" stroke="none" data-name="QuestionnaireSchemaValidationResult" data-compartment="1">+error?: string</text>
+
+</g>
+</g>
+<g transform="translate(14100, 322)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="QuestionnaireSchemaValidationResult" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="QuestionnaireSchemaValidationResult" data-compartment="2">
+
+</g>
+</g>
+</g>
+<g data-name="AssessmentStatus">
+<g fill="#eee8d5" stroke="#33322E" data-name="AssessmentStatus">
+<rect x="14482.0" y="89.5" height="384.0" width="678.0" data-name="AssessmentStatus"></rect>
+<path d="M14482.0 128.5 L15160.0 128.5" fill="none" data-name="AssessmentStatus"></path>
+<path d="M14482.0 197.5 L15160.0 197.5" fill="none" data-name="AssessmentStatus"></path>
+</g>
+<g transform="translate(14482, 89.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="AssessmentStatus" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="AssessmentStatus" data-compartment="0">
+<a id="src/domain/value-objects/AssessmentStatus.ts.AssessmentStatus" xlink:href="src/domain/value-objects/AssessmentStatus.ts"><text x="327.0" y="12.9" stroke="none" text-anchor="middle" data-name="AssessmentStatus" data-compartment="0">AssessmentStatus</text></a>
+
+</g>
+</g>
+<g transform="translate(14482, 128.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentStatus" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="AssessmentStatus" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="AssessmentStatus" data-compartment="1">-static VALID_STATUSES: AssessmentStatusValue[]</text>
+<text x="0.0" y="27.8" stroke="none" data-name="AssessmentStatus" data-compartment="1">-static VALID_TRANSITIONS: Record&lt;AssessmentStatusValue, AssessmentStatusValue[]&gt;</text>
+<text x="0.0" y="42.6" stroke="none" data-name="AssessmentStatus" data-compartment="1">-value: AssessmentStatusValue</text>
+
+</g>
+</g>
+<g transform="translate(14482, 197.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentStatus" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="AssessmentStatus" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="AssessmentStatus" data-compartment="2">+static create(): AssessmentStatus</text>
+<text x="0.0" y="27.8" stroke="none" data-name="AssessmentStatus" data-compartment="2">+static draft(): AssessmentStatus</text>
+<text x="0.0" y="42.6" stroke="none" data-name="AssessmentStatus" data-compartment="2">+static questionsGenerated(): AssessmentStatus</text>
+<text x="0.0" y="57.5" stroke="none" data-name="AssessmentStatus" data-compartment="2">+static exported(): AssessmentStatus</text>
+<text x="0.0" y="72.3" stroke="none" data-name="AssessmentStatus" data-compartment="2">+static scored(): AssessmentStatus</text>
+<text x="0.0" y="87.2" stroke="none" data-name="AssessmentStatus" data-compartment="2">+static cancelled(): AssessmentStatus</text>
+<text x="0.0" y="102.0" stroke="none" data-name="AssessmentStatus" data-compartment="2">+getValue(): AssessmentStatusValue</text>
+<text x="0.0" y="116.9" stroke="none" data-name="AssessmentStatus" data-compartment="2">+canTransitionTo(): boolean</text>
+<text x="0.0" y="131.7" stroke="none" data-name="AssessmentStatus" data-compartment="2">+validateTransition(): void</text>
+<text x="0.0" y="146.6" stroke="none" data-name="AssessmentStatus" data-compartment="2">+isDraft(): boolean</text>
+<text x="0.0" y="161.4" stroke="none" data-name="AssessmentStatus" data-compartment="2">+isQuestionsGenerated(): boolean</text>
+<text x="0.0" y="176.3" stroke="none" data-name="AssessmentStatus" data-compartment="2">+isExported(): boolean</text>
+<text x="0.0" y="191.1" stroke="none" data-name="AssessmentStatus" data-compartment="2">+isScored(): boolean</text>
+<text x="0.0" y="206.0" stroke="none" data-name="AssessmentStatus" data-compartment="2">+isCancelled(): boolean</text>
+<text x="0.0" y="220.8" stroke="none" data-name="AssessmentStatus" data-compartment="2">+isTerminal(): boolean</text>
+<text x="0.0" y="235.7" stroke="none" data-name="AssessmentStatus" data-compartment="2">+equals(): boolean</text>
+<text x="0.0" y="250.5" stroke="none" data-name="AssessmentStatus" data-compartment="2">+toString(): string</text>
+
+</g>
+</g>
+</g>
+<g data-name="AssessmentType">
+<g fill="#eee8d5" stroke="#33322E" data-name="AssessmentType">
+<rect x="15240.0" y="148.5" height="266.0" width="360.0" data-name="AssessmentType"></rect>
+<path d="M15240.0 187.5 L15600.0 187.5" fill="none" data-name="AssessmentType"></path>
+<path d="M15240.0 241.5 L15600.0 241.5" fill="none" data-name="AssessmentType"></path>
+</g>
+<g transform="translate(15240, 148.5)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="AssessmentType" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="AssessmentType" data-compartment="0">
+<a id="src/domain/value-objects/AssessmentType.ts.AssessmentType" xlink:href="src/domain/value-objects/AssessmentType.ts"><text x="168.0" y="12.9" stroke="none" text-anchor="middle" data-name="AssessmentType" data-compartment="0">AssessmentType</text></a>
+
+</g>
+</g>
+<g transform="translate(15240, 187.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentType" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="AssessmentType" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="AssessmentType" data-compartment="1">-static VALID_TYPES: AssessmentTypeValue[]</text>
+<text x="0.0" y="27.8" stroke="none" data-name="AssessmentType" data-compartment="1">-value: AssessmentTypeValue</text>
+
+</g>
+</g>
+<g transform="translate(15240, 241.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="AssessmentType" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="AssessmentType" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="AssessmentType" data-compartment="2">+static create(): AssessmentType</text>
+<text x="0.0" y="27.8" stroke="none" data-name="AssessmentType" data-compartment="2">+static quick(): AssessmentType</text>
+<text x="0.0" y="42.6" stroke="none" data-name="AssessmentType" data-compartment="2">+static comprehensive(): AssessmentType</text>
+<text x="0.0" y="57.5" stroke="none" data-name="AssessmentType" data-compartment="2">+static categoryFocused(): AssessmentType</text>
+<text x="0.0" y="72.3" stroke="none" data-name="AssessmentType" data-compartment="2">+getValue(): AssessmentTypeValue</text>
+<text x="0.0" y="87.2" stroke="none" data-name="AssessmentType" data-compartment="2">+isQuick(): boolean</text>
+<text x="0.0" y="102.0" stroke="none" data-name="AssessmentType" data-compartment="2">+isComprehensive(): boolean</text>
+<text x="0.0" y="116.9" stroke="none" data-name="AssessmentType" data-compartment="2">+isCategoryFocused(): boolean</text>
+<text x="0.0" y="131.7" stroke="none" data-name="AssessmentType" data-compartment="2">+equals(): boolean</text>
+<text x="0.0" y="146.6" stroke="none" data-name="AssessmentType" data-compartment="2">+toString(): string</text>
+
+</g>
+</g>
+</g>
+<g data-name="Email">
+<g fill="#eee8d5" stroke="#33322E" data-name="Email">
+<rect x="15680.0" y="201.0" height="161.0" width="182.0" data-name="Email"></rect>
+<path d="M15680.0 240.0 L15862.0 240.0" fill="none" data-name="Email"></path>
+<path d="M15680.0 279.0 L15862.0 279.0" fill="none" data-name="Email"></path>
+</g>
+<g transform="translate(15680, 201)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="Email" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="Email" data-compartment="0">
+<a id="src/domain/value-objects/Email.ts.Email" xlink:href="src/domain/value-objects/Email.ts"><text x="79.0" y="12.9" stroke="none" text-anchor="middle" data-name="Email" data-compartment="0">Email</text></a>
+
+</g>
+</g>
+<g transform="translate(15680, 240)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Email" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Email" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="Email" data-compartment="1">-value: string</text>
+
+</g>
+</g>
+<g transform="translate(15680, 279)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="Email" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="Email" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="Email" data-compartment="2">+static create(): Email</text>
+<text x="0.0" y="27.8" stroke="none" data-name="Email" data-compartment="2">+getValue(): string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="Email" data-compartment="2">+equals(): boolean</text>
+<text x="0.0" y="57.5" stroke="none" data-name="Email" data-compartment="2">+toString(): string</text>
+
+</g>
+</g>
+</g>
+<g data-name="VendorName">
+<g fill="#eee8d5" stroke="#33322E" data-name="VendorName">
+<rect x="15942.0" y="201.0" height="161.0" width="237.0" data-name="VendorName"></rect>
+<path d="M15942.0 240.0 L16179.0 240.0" fill="none" data-name="VendorName"></path>
+<path d="M15942.0 279.0 L16179.0 279.0" fill="none" data-name="VendorName"></path>
+</g>
+<g transform="translate(15942, 201)" font-family="Helvetica" font-size="11pt" font-weight="bold" font-style="normal" data-name="VendorName" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="VendorName" data-compartment="0">
+<a id="src/domain/value-objects/VendorName.ts.VendorName" xlink:href="src/domain/value-objects/VendorName.ts"><text x="106.5" y="12.9" stroke="none" text-anchor="middle" data-name="VendorName" data-compartment="0">VendorName</text></a>
+
+</g>
+</g>
+<g transform="translate(15942, 240)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="VendorName" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="VendorName" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="VendorName" data-compartment="1">-value: string</text>
+
+</g>
+</g>
+<g transform="translate(15942, 279)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="VendorName" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="VendorName" data-compartment="2">
+<text x="0.0" y="12.9" stroke="none" data-name="VendorName" data-compartment="2">+static create(): VendorName</text>
+<text x="0.0" y="27.8" stroke="none" data-name="VendorName" data-compartment="2">+getValue(): string</text>
+<text x="0.0" y="42.6" stroke="none" data-name="VendorName" data-compartment="2">+equals(): boolean</text>
+<text x="0.0" y="57.5" stroke="none" data-name="VendorName" data-compartment="2">+toString(): string</text>
+
+</g>
+</g>
+</g>
+<g data-name="ScoringCompleteInput">
+<g fill="lightgray" stroke="#33322E" data-name="ScoringCompleteInput">
+<rect x="16259.0" y="162.5" height="238.0" width="512.0" data-name="ScoringCompleteInput"></rect>
+<path d="M16259.0 201.5 L16771.0 201.5" fill="none" data-name="ScoringCompleteInput"></path>
+<path d="M16259.0 388.5 L16771.0 388.5" fill="none" data-name="ScoringCompleteInput"></path>
+</g>
+<g transform="translate(16259, 162.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringCompleteInput" data-compartment="0">
+<g transform="translate(12, 12)" fill="#33322E" text-align="center" data-name="ScoringCompleteInput" data-compartment="0">
+<a id="src/domain/scoring/tools/scoringComplete.ts.ScoringCompleteInput" xlink:href="src/domain/scoring/tools/scoringComplete.ts"><text x="244.0" y="12.9" stroke="none" text-anchor="middle" data-name="ScoringCompleteInput" data-compartment="0">ScoringCompleteInput</text></a>
+
+</g>
+</g>
+<g transform="translate(16259, 201.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringCompleteInput" data-compartment="1">
+<g transform="translate(12, 12)" fill="#33322E" text-align="left" data-name="ScoringCompleteInput" data-compartment="1">
+<text x="0.0" y="12.9" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+compositeScore: number</text>
+<text x="0.0" y="27.8" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+recommendation: &quot;approve&quot; | &quot;conditional&quot; | &quot;decline&quot; | &quot;more_info&quot;</text>
+<text x="0.0" y="42.6" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+overallRiskRating: &quot;low&quot; | &quot;medium&quot; | &quot;high&quot; | &quot;critical&quot;</text>
+<text x="0.0" y="57.5" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+executiveSummary: string</text>
+<text x="0.0" y="72.3" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+keyFindings?: string[]</text>
+<text x="0.0" y="87.2" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+disqualifyingFactors?: string[]</text>
+<text x="0.0" y="102.0" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">+dimensionScores: { dimension: string</text>
+<text x="0.0" y="116.9" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">score: number</text>
+<text x="0.0" y="131.7" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">riskRating: &quot;low&quot; | &quot;medium&quot; | &quot;high&quot; | &quot;critical&quot;</text>
+<text x="0.0" y="146.6" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">findings?: object</text>
+<text x="0.0" y="161.4" stroke="none" data-name="ScoringCompleteInput" data-compartment="1">}[]</text>
+
+</g>
+</g>
+<g transform="translate(16259, 388.5)" font-family="Helvetica" font-size="11pt" font-weight="normal" font-style="normal" data-name="ScoringCompleteInput" data-compartment="2">
+<g transform="translate(12, 12)" fill="#33322E" data-name="ScoringCompleteInput" data-compartment="2">
+
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</g>
+</svg>

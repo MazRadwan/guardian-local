@@ -31,4 +31,18 @@
   .animate-fadeIn {
     animation: fadeIn 0.3s ease-out forwards;
   }
+
+  /* Epic 18 Story 18.2.5: Subtle pulse animation for progress messages */
+  @keyframes pulse-subtle {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.95;
+    }
+  }
+
+  .animate-pulse-subtle {
+    animation: pulse-subtle 2s ease-in-out infinite;
+  }
 }

@@ -15,18 +15,18 @@ Guardian development uses **specialized sub-agents** with **automated code revie
 
 ## Sub-Agents
 
-### Specialist Agents (Sonnet)
+### Specialist Agents
 
-| Agent | Epic | Scope | Model |
-|-------|------|-------|-------|
-| `setup-agent` | Epic 1 | Project setup, database, Docker | Sonnet |
-| `auth-agent` | Epic 2 | Authentication, user management | Sonnet |
-| `chat-backend-agent` | Epic 3 | Chat infrastructure (backend) | Sonnet |
-| `frontend-agent` | Epic 4 | Chat UI (frontend) | Sonnet |
-| `assessment-agent` | Epic 5 | Vendor/assessment management | Sonnet |
-| `question-gen-agent` | Epic 6 | Question generation (Claude integration) | Sonnet |
-| `export-agent` | Epic 7 | Export functionality | Sonnet |
-| `ui-ux-agent` | Epic 9 | UI/UX upgrade (25 stories) | Sonnet |
+| Agent | Scope | When to Use | Model |
+|-------|-------|-------------|-------|
+| `setup-agent` | Project setup, database, Docker | Infrastructure tasks | Sonnet |
+| `auth-agent` | Authentication, user management | Auth-related features | Sonnet |
+| `backend-agent` | Express, WebSocket, Drizzle, APIs | Any backend implementation | Opus |
+| `frontend-agent` | React, Next.js, UI components | Any frontend implementation | Sonnet |
+| `assessment-agent` | Vendor/assessment management | Assessment domain features | Sonnet |
+| `question-gen-agent` | Question generation (Claude) | Questionnaire features | Sonnet |
+| `export-agent` | PDF, Word, Excel export | Export functionality | Sonnet |
+| `ui-ux-agent` | UI/UX polish, layouts, styling | UI improvements | Sonnet |
 
 ### Review Agent (Opus)
 
@@ -544,17 +544,17 @@ If you override a code review warning, document why in commit message or review 
 ## Files
 
 **Agent definitions:**
-- `.claude/agents/setup-agent.md` (Epic 1)
-- `.claude/agents/auth-agent.md` (Epic 2)
-- `.claude/agents/login-agent.md` (Epic 2.5)
-- `.claude/agents/chat-backend-agent.md` (Epic 3)
-- `.claude/agents/frontend-agent.md` (Epic 4)
-- `.claude/agents/assessment-agent.md` (Epic 5)
-- `.claude/agents/question-gen-agent.md` (Epic 6)
-- `.claude/agents/export-agent.md` (Epic 7)
-- `.claude/agents/ui-ux-agent.md` (Epic 9) ⭐ NEW
-- `.claude/agents/code-reviewer.md` (Review agent)
-- `.claude/agents/bug-fix-agent.md` (Bug fixes)
+- `.claude/agents/setup-agent.md` - Infrastructure setup
+- `.claude/agents/auth-agent.md` - Authentication features
+- `.claude/agents/login-agent.md` - Login UI
+- `.claude/agents/backend-agent.md` - Backend (Express, WebSocket, DB)
+- `.claude/agents/frontend-agent.md` - Frontend (React, Next.js)
+- `.claude/agents/assessment-agent.md` - Assessment domain
+- `.claude/agents/question-gen-agent.md` - Question generation
+- `.claude/agents/export-agent.md` - Export functionality
+- `.claude/agents/ui-ux-agent.md` - UI/UX improvements
+- `.claude/agents/code-reviewer.md` - Code review (Opus)
+- `.claude/agents/bug-fix-agent.md` - Bug fixes
 
 **Review outputs:**
 - `.claude/review-approved.md` (ephemeral, created per story review)

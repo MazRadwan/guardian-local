@@ -5,7 +5,7 @@ import { ChatMessage, MessageAttachment } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { QuestionnaireMessage } from './QuestionnaireMessage';
 import { ScoringResultCard } from './ScoringResultCard';
-import { RotatingStatus } from './RotatingStatus';
+import { ProgressMessage } from './ProgressMessage';
 import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload } from '@/lib/websocket';
 import { ChevronDown } from 'lucide-react';
 import type { Step } from '@/types/stepper';
@@ -249,12 +249,13 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
               </div>
             )}
 
-            {/* Epic 15 Story 5b: Scoring progress indicator - shows during active scoring */}
-            {scoringProgress && scoringProgress.status !== 'idle' && scoringProgress.status !== 'complete' && (
+            {/* Epic 18 Story 18.2.5: Progress-in-chat UX - shows during parsing/scoring */}
+            {scoringProgress && (scoringProgress.status === 'parsing' || scoringProgress.status === 'scoring') && (
               <div className="py-4" data-testid="scoring-progress">
-                <RotatingStatus
+                <ProgressMessage
                   status={scoringProgress.status}
-                  currentMessage={scoringProgress.message}
+                  progress={scoringProgress.progress}
+                  message={scoringProgress.message}
                 />
               </div>
             )}

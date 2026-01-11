@@ -115,12 +115,19 @@ describe('ScoringService', () => {
         size: 1024,
         storagePath: '/storage/path/file.pdf',
         createdAt: new Date(),
+        textExcerpt: null, // Epic 18
+        parseStatus: 'pending', // Epic 18
       }),
       create: jest.fn(),
       findById: jest.fn(),
       findByIdAndConversation: jest.fn(),
       updateIntakeContext: jest.fn(),
       findByConversationWithContext: jest.fn(),
+      // Epic 18 methods
+      updateTextExcerpt: jest.fn(),
+      updateParseStatus: jest.fn(),
+      tryStartParsing: jest.fn(),
+      findByConversationWithExcerpt: jest.fn(),
     } as jest.Mocked<IFileRepository>
 
     // Mock file storage for retrieving file content
@@ -416,6 +423,8 @@ describe('ScoringService', () => {
           size: 1024,
           storagePath: '/storage/path/file.xyz',
           createdAt: new Date(),
+          textExcerpt: null, // Epic 18
+          parseStatus: 'pending', // Epic 18
         })
 
         const result = await service.score(defaultInput, jest.fn())

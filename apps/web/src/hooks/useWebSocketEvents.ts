@@ -613,6 +613,7 @@ export function useWebSocketEvents({
         ASSESSMENT_NOT_FOUND: 'Assessment not found. Please try again.',
         UNAUTHORIZED_ASSESSMENT: 'You do not have permission to score this assessment.',
         ASSESSMENT_NOT_EXPORTED: 'This assessment has not been exported yet. Please export the questionnaire first.',
+        NO_ASSESSMENT: 'No assessment linked to this conversation. Please generate a questionnaire first in Assessment mode, then upload the completed responses here.',
         PARSE_FAILED: 'Failed to extract responses from the document. Please ensure you uploaded a valid Guardian questionnaire.',
         PARSE_CONFIDENCE_TOO_LOW: 'Document quality is too low. Please upload a text-based PDF or Word document instead of a scanned image.',
         RATE_LIMITED: 'Too many requests. Please wait a moment and try again.',
@@ -630,8 +631,24 @@ export function useWebSocketEvents({
         message: userMessage,
         error: data.error,
       });
+
+      // Epic 18: Clear loading/streaming state so UI doesn't hang
+      finishStreaming();
+      setLoading(false);
+
+      // Add error message to chat so user sees feedback
+      addMessage({
+        id: `scoring-error-${Date.now()}`,
+        role: 'assistant',
+        content: `⚠️ **Scoring Error**\n\n${userMessage}`,
+        conversationId: data.conversationId,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Re-focus composer so user can try again
+      focusComposer();
     },
-    [activeConversationId]
+    [activeConversationId, finishStreaming, setLoading, addMessage, focusComposer]
   );
 
   return {

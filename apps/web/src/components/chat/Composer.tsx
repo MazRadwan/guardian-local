@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect, useCallback, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Send, Paperclip, Square, Loader2 } from 'lucide-react';
@@ -17,6 +17,7 @@ const DISCONNECTED_UPLOAD_ADAPTER = {
   subscribeUploadProgress: () => () => {},
   subscribeIntakeContextReady: () => () => {},
   subscribeScoringParseReady: () => () => {},
+  subscribeFileAttached: () => () => {}, // Epic 18
 };
 
 export interface ComposerProps {
@@ -146,7 +147,13 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
       // Need either text or files to send
       if (!trimmedMessage && !hasFiles) return;
-      if (disabled || isUploading) return; // Prevent send during upload
+
+      // Epic 18 Sprint 3: Allow send when files are ready (attached/parsing/complete)
+      // Only block send if files are in early upload stages (pending/uploading/storing)
+      const hasEarlyStageFiles = files.some(f =>
+        f.stage === 'pending' || f.stage === 'uploading' || f.stage === 'storing'
+      );
+      if (disabled || hasEarlyStageFiles) return; // Prevent send during early upload
 
       // Sprint 2 Fix: Use attachments returned directly from waitForCompletion()
       // This avoids stale closure - the returned value is read from latest state
@@ -166,9 +173,22 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
           return;
         }
       } else if (hasFiles) {
-        // Files already uploaded, get attachments from current state
-        // Still use waitForCompletion() to get latest state (returns immediately if nothing in-flight)
-        attachments = await waitForCompletion();
+        // Epic 18 Sprint 3: Trigger-on-send flow
+        // Send with files that have fileId (attached, parsing, or complete)
+        // Don't wait - parsing/scoring will continue in background after send
+        attachments = files
+          .filter(f => f.fileId != null) // Has fileId = ready for send
+          .map(f => ({
+            fileId: f.fileId!,
+            filename: f.filename,
+            mimeType: f.mimeType,
+            size: f.size,
+          }));
+
+        // If no files have fileId yet (still in early stages), send without attachments
+        if (attachments.length === 0) {
+          attachments = undefined;
+        }
       }
 
       // Sprint 2 Fix: Don't send empty message if all files failed
@@ -218,9 +238,33 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Epic 17: Determine layout variant based on file count
     const useCompactChips = files.length > 3;
 
-    // Epic 17: Enable send if we have text OR files (including pending)
-    // Sprint 2 Fix: Disable send during upload to prevent double-click
-    const isSendEnabled = (message.trim().length > 0 || hasFiles) && !disabled && !isUploading;
+    // Epic 18 Story 18.3.1: Mode-aware send enablement (trigger-on-send)
+    // ALL modes allow send when files are 'attached' (not waiting for enrichment)
+    // Uses 'stage' field per Sprint 1B
+    const canSendWithAttachments = useMemo(() => {
+      if (files.length === 0) return true;
+
+      // ALL modes allow send at 'attached' stage (trigger-on-send)
+      // User can send message with files that are attached/parsing/complete
+      // (parsing may continue in background after send)
+      return files.every(f =>
+        f.stage === 'attached' ||
+        f.stage === 'parsing' ||
+        f.stage === 'complete'
+      );
+    }, [files]);
+
+    // Epic 18 Story 18.3.4: Check for incomplete files (show warning on mode change)
+    // Files are incomplete if they're not in 'complete' or 'error' terminal states
+    const hasIncompleteFiles = useMemo(() => {
+      return files.some(f =>
+        f.stage !== 'complete' && f.stage !== 'error'
+      );
+    }, [files]);
+
+    // Enable send if we have text OR files that are ready for sending
+    // Epic 18: Changed from hasFiles to canSendWithAttachments
+    const isSendEnabled = (message.trim().length > 0 || (hasFiles && canSendWithAttachments)) && !disabled;
     const isBusy = isStreaming || isLoading;
 
     return (
@@ -296,6 +340,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                         selectedMode={currentMode}
                         onModeChange={onModeChange}
                         disabled={disabled || modeChangeDisabled}
+                        hasIncompleteFiles={hasIncompleteFiles}
                       />
                     )}
 

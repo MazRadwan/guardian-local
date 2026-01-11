@@ -139,6 +139,8 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
         createdAt: new Date(),
       }),
       findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      // Epic 18: Context injection needs excerpt-enabled files
+      findByConversationWithExcerpt: jest.fn().mockResolvedValue([]),
       updateIntakeContext: jest.fn().mockResolvedValue(undefined),
     };
 

@@ -257,7 +257,7 @@ Sample_assessment_YAML_COMPLETED.yaml # Test data example
 - ❌ **NEVER implement stories yourself when specialist exists**
 
 **Delegation Pattern:**
-1. **Epic 1-8:** Invoke respective specialist (setup-agent, auth-agent, chat-backend-agent, frontend-agent, assessment-agent, question-gen-agent, export-agent, login-agent)
+1. **Epic 1-8:** Invoke respective specialist (setup-agent, auth-agent, backend-agent, frontend-agent, assessment-agent, question-gen-agent, export-agent, login-agent)
 2. **Epic 9:** Invoke `ui-ux-agent` for ALL 25 stories
 3. **Bug fixes:** Invoke `bug-fix-agent`
 4. **Code review:** Specialists invoke `code-reviewer` automatically after each story

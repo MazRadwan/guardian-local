@@ -87,6 +87,8 @@ export interface WebSocketAdapterInterface {
   subscribeUploadProgress: (handler: (data: UploadProgressEvent) => void) => () => void;
   subscribeIntakeContextReady: (handler: (data: IntakeContextResult) => void) => () => void;
   subscribeScoringParseReady: (handler: (data: ScoringParseResult) => void) => () => void;
+  // Epic 18: File attached subscription
+  subscribeFileAttached: (handler: (data: import('@/lib/websocket').FileAttachedEvent) => void) => () => void;
 }
 
 /**
@@ -219,6 +221,8 @@ export function useWebSocketAdapter({
     subscribeUploadProgress: wsHook.subscribeUploadProgress,
     subscribeIntakeContextReady: wsHook.subscribeIntakeContextReady,
     subscribeScoringParseReady: wsHook.subscribeScoringParseReady,
+    // Epic 18: File attached subscription
+    subscribeFileAttached: wsHook.subscribeFileAttached,
   }), [
     wsHook.isConnected,
     wsHook.isConnecting,
@@ -236,5 +240,6 @@ export function useWebSocketAdapter({
     wsHook.subscribeUploadProgress,
     wsHook.subscribeIntakeContextReady,
     wsHook.subscribeScoringParseReady,
+    wsHook.subscribeFileAttached,
   ]);
 }

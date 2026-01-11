@@ -21,6 +21,7 @@ import { DocumentMetadata } from '../../../application/interfaces/IDocumentParse
 import { User } from '../../../domain/entities/User.js';
 import { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
 import { ScoringProgressEvent } from '../../../domain/scoring/types.js';
+import { ITextExtractionService, ValidatedDocumentType } from '../../../application/interfaces/ITextExtractionService.js';
 
 /**
  * Sanitize filename for use in Content-Disposition header.
@@ -98,6 +99,25 @@ interface FileUploadResult {
   error?: string;
 }
 
+/**
+ * Epic 18: file_attached event - emitted when file is stored and ready for UI display
+ * Does NOT wait for Claude enrichment to complete.
+ *
+ * SECURITY NOTE:
+ * - Event contains ONLY metadata (hasExcerpt: boolean)
+ * - textExcerpt content is NEVER emitted to clients
+ * - textExcerpt is used internally only for context injection
+ */
+interface FileAttachedEvent {
+  conversationId: string;
+  uploadId: string;
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  hasExcerpt: boolean;
+}
+
 export class DocumentUploadController {
   constructor(
     private readonly fileStorage: IFileStorage,
@@ -111,7 +131,9 @@ export class DocumentUploadController {
     /** FileRepository for registering uploaded files (Epic 16.6.9) */
     private readonly fileRepository: IFileRepository,
     /** ScoringService for auto-triggering scoring after parse (Epic 15 Sprint 5a) */
-    private readonly scoringService?: IScoringService
+    private readonly scoringService: IScoringService | undefined,
+    /** Epic 18: Text extraction service for fast context injection */
+    private readonly textExtractionService: ITextExtractionService
   ) {}
 
   /**
@@ -279,6 +301,19 @@ export class DocumentUploadController {
 
   /**
    * Process upload asynchronously with WebSocket progress updates
+   *
+   * Epic 18: Two-phase upload processing (Trigger-on-Send)
+   *
+   * UPLOAD PHASE (this method - target: <3s):
+   * 1. Store file to S3
+   * 2. Extract text excerpt (for immediate context injection)
+   * 3. Create file record with excerpt (parseStatus: 'pending')
+   * 4. Emit file_attached - UPLOAD COMPLETE
+   *
+   * PARSING PHASE (Sprint 2 - triggers on user Send):
+   * - Parsing/scoring happens when user clicks Send
+   * - This handler does NOT do parsing
+   *
    * Epic 16.6.9: Creates file record in database after storage, uses UUID as fileId
    */
   private async processUpload(
@@ -292,10 +327,13 @@ export class DocumentUploadController {
     const socketRoom = `user:${userId}`;
 
     try {
-      // Emit: storing
-      this.emitProgress(socketRoom, conversationId, uploadId, 30, 'storing', 'Storing file...');
+      // =========================================
+      // UPLOAD PHASE: Fast Attach (target: <3s)
+      // =========================================
+      // This is ALL the upload handler does. Parsing triggers on Send.
 
-      // Store file
+      // 1. Store file to S3
+      this.emitProgress(socketRoom, conversationId, uploadId, 30, 'storing', 'Storing file...');
       const storagePath = await this.fileStorage.store(file.buffer, {
         filename: file.originalname,
         mimeType: file.mimetype,
@@ -303,7 +341,14 @@ export class DocumentUploadController {
         conversationId,
       });
 
-      // Epic 16.6.9: Register file in database after storage
+      // 2. Extract text excerpt (with timeout, for context injection)
+      this.emitProgress(socketRoom, conversationId, uploadId, 60, 'storing', 'Extracting text...');
+      const extraction = await this.textExtractionService.extract(
+        file.buffer,
+        documentType as ValidatedDocumentType
+      );
+
+      // 3. Create file record with excerpt (parseStatus: 'pending')
       const fileRecord = await this.fileRepository.create({
         userId,
         conversationId,
@@ -311,50 +356,37 @@ export class DocumentUploadController {
         mimeType: file.mimetype,
         size: file.size,
         storagePath,
+        textExcerpt: extraction.excerpt || null,
+        // parseStatus defaults to 'pending' in schema
       });
 
-      // Use database UUID as fileId
       const fileId = fileRecord.id;
 
-      // Build metadata (storagePath is internal-only, never emitted to client)
-      const metadata: DocumentMetadata = {
-        filename: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-        documentType: documentType as 'pdf' | 'docx' | 'image',
-        storagePath,
-        uploadedAt: new Date(),
-        uploadedBy: userId,
-      };
+      // 4. Emit file_attached - UPLOAD COMPLETE
+      // Frontend shows "Attached", Send button enabled
+      // NO parsing/scoring here - that happens on Send (Sprint 2)
+      this.emitFileAttached(
+        socketRoom,
+        conversationId,
+        uploadId,
+        fileId,
+        file.originalname,
+        file.mimetype,
+        file.size,
+        extraction.success && extraction.excerpt.length > 0
+      );
 
-      // Emit: parsing
-      this.emitProgress(socketRoom, conversationId, uploadId, 50, 'parsing', 'Analyzing document...');
+      // =========================================
+      // END OF UPLOAD HANDLER
+      // =========================================
+      // Parsing/scoring triggers in ChatServer.handleMessage()
+      // when user clicks Send (see Sprint 2)
 
-      // Parse based on mode - track success and error for correct stage emission
-      // Epic 16.6.9: Pass fileId (database UUID) for attachment metadata
-      // Epic 15 Sprint 5a: Pass userId for auto-triggering scoring
-      let parseResult: { success: boolean; error?: string };
-      if (mode === 'intake') {
-        parseResult = await this.parseForIntake(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId);
+      // Log extraction result for debugging
+      if (extraction.success) {
+        console.log(`[DocumentUpload] Text extracted: ${extraction.excerpt.length} chars in ${extraction.extractionMs}ms`);
       } else {
-        parseResult = await this.parseForScoring(socketRoom, file.buffer, metadata, conversationId, uploadId, fileId, userId);
-      }
-
-      // Emit final stage based on parse result
-      if (parseResult.success) {
-        this.emitProgress(socketRoom, conversationId, uploadId, 100, 'complete', 'Document processed successfully');
-      } else {
-        // Parser failed - emit error stage with specific error message
-        // Note: *_ready event with success:false was already emitted by parser
-        this.emitProgress(
-          socketRoom,
-          conversationId,
-          uploadId,
-          0,
-          'error',
-          'Document parsing failed',
-          parseResult.error
-        );
+        console.warn(`[DocumentUpload] Text extraction failed: ${extraction.error}`);
       }
 
     } catch (error) {
@@ -368,34 +400,49 @@ export class DocumentUploadController {
         uploadId,
         0,
         'error',
-        'Processing failed',
+        'Upload failed',
         errorMessage
       );
-
-      // IMPORTANT: Also emit the *_ready event with success: false
-      // This ensures clients have a consistent contract for completion
-      if (mode === 'intake') {
-        this.chatNamespace.to(socketRoom).emit('intake_context_ready', {
-          conversationId,
-          uploadId,
-          success: false,
-          context: null,
-          error: errorMessage,
-        });
-      } else {
-        this.chatNamespace.to(socketRoom).emit('scoring_parse_ready', {
-          conversationId,
-          uploadId,
-          success: false,
-          assessmentId: null,
-          error: errorMessage,
-        });
-      }
     }
   }
 
   /**
+   * Epic 18: Emit file_attached event
+   *
+   * Called after S3 storage + text extraction, marks upload phase complete.
+   * Allows frontend to show "Attached" state immediately.
+   *
+   * SECURITY: Only emits hasExcerpt (boolean), never the excerpt content.
+   */
+  private emitFileAttached(
+    socketRoom: string,
+    conversationId: string,
+    uploadId: string,
+    fileId: string,
+    filename: string,
+    mimeType: string,
+    size: number,
+    hasExcerpt: boolean
+  ): void {
+    const event: FileAttachedEvent = {
+      conversationId,
+      uploadId,
+      fileId,
+      filename,
+      mimeType,
+      size,
+      hasExcerpt,
+    };
+
+    this.chatNamespace.to(socketRoom).emit('file_attached', event);
+  }
+
+  /**
    * Parse document for intake context
+   *
+   * @deprecated Epic 18: This method is LEGACY and NOT called in trigger-on-send pattern.
+   * Parsing now happens in ChatServer.buildFileContext() when user clicks Send.
+   * Kept for reference and potential rollback - do not use in new code.
    *
    * Epic 16.6.1: Silent context storage (no visible assistant message)
    * - Store context in conversation.context using existing updateContext()
@@ -478,6 +525,11 @@ export class DocumentUploadController {
 
   /**
    * Parse document for scoring responses and auto-trigger scoring
+   *
+   * @deprecated Epic 18: This method is LEGACY and NOT called in trigger-on-send pattern.
+   * Scoring parsing now happens in ChatServer.handleScoringModeMessage() when user clicks Send.
+   * Kept for reference and potential rollback - do not use in new code.
+   *
    * Epic 16.6.9: File metadata includes fileId (database UUID), NOT storagePath
    * Epic 15 Sprint 5a: Auto-trigger scoring after successful parse (no manual button click)
    * @returns { success: boolean, error?: string } - parse result with error details

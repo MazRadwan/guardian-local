@@ -393,6 +393,14 @@ export function useWebSocket({
     []
   );
 
+  // Epic 18: Subscribe to file_attached events
+  const subscribeFileAttached = useCallback(
+    (handler: (data: import('@/lib/websocket').FileAttachedEvent) => void) => {
+      return clientRef.current?.onFileAttached(handler) ?? (() => {});
+    },
+    []
+  );
+
   return useMemo(() => ({
     isConnected,
     isConnecting,
@@ -411,6 +419,8 @@ export function useWebSocket({
     subscribeUploadProgress,
     subscribeIntakeContextReady,
     subscribeScoringParseReady,
+    // Epic 18: File attached subscription
+    subscribeFileAttached,
   }), [
     isConnected,
     isConnecting,
@@ -428,5 +438,6 @@ export function useWebSocket({
     subscribeUploadProgress,
     subscribeIntakeContextReady,
     subscribeScoringParseReady,
+    subscribeFileAttached,
   ]);
 }
