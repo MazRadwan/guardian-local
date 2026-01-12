@@ -9,6 +9,11 @@ import type { IntakeDocumentContext } from '../../domain/entities/Conversation.j
  */
 export type ParseStatus = 'pending' | 'in_progress' | 'completed' | 'failed'
 
+/**
+ * Epic 18.4: Detected document type for smart scoring UX
+ */
+export type DetectedDocType = 'questionnaire' | 'document' | 'unknown'
+
 export interface FileRecord {
   id: string
   userId: string
@@ -22,6 +27,9 @@ export interface FileRecord {
   textExcerpt: string | null
   // Epic 18: Idempotency guard for parse/scoring operations
   parseStatus: ParseStatus
+  // Epic 18.4: Document type detection (heuristics)
+  detectedDocType: DetectedDocType | null
+  detectedVendorName: string | null
 }
 
 export interface FileWithIntakeContext {
@@ -38,6 +46,7 @@ export interface FileWithIntakeContext {
 /**
  * Data required to create a file record
  * Epic 18: textExcerpt is optional on create (can be set during upload)
+ * Epic 18.4: detectedDocType and detectedVendorName for classification
  */
 export interface CreateFileData {
   userId: string
@@ -47,6 +56,9 @@ export interface CreateFileData {
   size: number
   storagePath: string
   textExcerpt?: string | null
+  // Epic 18.4: Document type detection (heuristics)
+  detectedDocType?: DetectedDocType | null
+  detectedVendorName?: string | null
 }
 
 /**
@@ -73,6 +85,13 @@ export interface IFileRepository {
    * Find file by ID
    */
   findById(fileId: string): Promise<FileRecord | null>
+
+  /**
+   * Epic 18.4: Find multiple files by their IDs
+   * Used for batch operations like vendor validation.
+   * Returns only files that exist (skips non-existent IDs).
+   */
+  findByIds(fileIds: string[]): Promise<FileRecord[]>
 
   /**
    * Find file by ID and user (for authorization)

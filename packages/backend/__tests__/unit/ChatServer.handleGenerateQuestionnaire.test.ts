@@ -246,9 +246,10 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
         'test-user'
       );
 
+      // Phase 1 fix: assistant_done now emits fullText instead of content
       expect(mockSocket.emit).toHaveBeenCalledWith('assistant_done', {
         conversationId: 'conv-123',
-        content: expect.stringContaining('# Test Questionnaire'),
+        fullText: expect.stringContaining('# Test Questionnaire'),
       });
     });
 

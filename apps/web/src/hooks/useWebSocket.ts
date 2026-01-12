@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 
 export interface UseWebSocketOptions {
@@ -33,6 +33,8 @@ export interface UseWebSocketOptions {
   onScoringProgress?: (data: ScoringProgressPayload) => void;
   onScoringComplete?: (data: ScoringCompletePayload) => void;
   onScoringError?: (data: ScoringErrorPayload) => void;
+  // Epic 18.4.2b: Vendor clarification callback
+  onVendorClarificationNeeded?: (data: VendorClarificationNeededPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -63,6 +65,7 @@ export function useWebSocket({
   onScoringProgress,
   onScoringComplete,
   onScoringError,
+  onVendorClarificationNeeded,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -185,6 +188,15 @@ export function useWebSocket({
       return;
     }
     clientRef.current.requestExportStatus(conversationId);
+  }, [isConnected]);
+
+  // Epic 18.4.2b: Select vendor for scoring when multiple vendors detected
+  const selectVendor = useCallback((conversationId: string, vendorName: string) => {
+    if (!clientRef.current || !isConnected) {
+      console.warn('[useWebSocket] Cannot select vendor - not connected');
+      return;
+    }
+    clientRef.current.selectVendor(conversationId, vendorName);
   }, [isConnected]);
 
   // Setup event listeners
@@ -350,11 +362,19 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // Epic 18.4.2b: Vendor clarification subscription
+    if (onVendorClarificationNeeded) {
+      const unsub = client.onVendorClarificationNeeded((data) => {
+        onVendorClarificationNeeded(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
   // NOTE: onConnectionReady is NOT in deps - it's registered in connect() before the socket connects
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError, onVendorClarificationNeeded]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -421,6 +441,8 @@ export function useWebSocket({
     subscribeScoringParseReady,
     // Epic 18: File attached subscription
     subscribeFileAttached,
+    // Epic 18.4.2b: Vendor clarification selection
+    selectVendor,
   }), [
     isConnected,
     isConnecting,
@@ -439,5 +461,6 @@ export function useWebSocket({
     subscribeIntakeContextReady,
     subscribeScoringParseReady,
     subscribeFileAttached,
+    selectVendor,
   ]);
 }

@@ -85,6 +85,17 @@ Upload → Store (2s) → file_attached → User sees "Attached" ✓
                     │ - Assessment: light enrich    │
                     │ - Scoring: gated + progress   │
                     └───────────────────────────────┘
+                                   │
+                                   ▼
+                    ┌───────────────────────────────┐
+                    │          SPRINT 4             │
+                    │    Scoring UX Enhancements    │
+                    │                               │
+                    │ - Document type detection     │
+                    │ - Clarification prompts       │
+                    │ - Single-vendor validation    │
+                    │ - User query post-scoring     │
+                    └───────────────────────────────┘
 ```
 
 ### Parallel Execution Summary
@@ -95,6 +106,7 @@ Upload → Store (2s) → file_attached → User sees "Attached" ✓
 | 2 | Sprint 1A, Sprint 1B | Yes - independent tracks |
 | 3 | Sprint 2 | No - requires 1A + 1B |
 | 4 | Sprint 3 | No - requires Sprint 2 |
+| 5 | Sprint 4 | No - requires Sprint 3 |
 
 ---
 
@@ -174,6 +186,22 @@ These must be resolved before implementation sprints begin:
 | 1B | `sprint-1b-frontend-types.md` | Frontend types + states | Sprint 0 |
 | 2 | `sprint-2-integration.md` | Wiring + fallbacks | Sprint 1A, 1B |
 | 3 | `sprint-3-mode-behavior.md` | Mode-specific UX | Sprint 2 |
+| 4 | `sprint-4-overview.md` | Scoring UX enhancements | Sprint 3 |
+
+### Sprint 4 Story Files
+
+| Story | File | Focus |
+|-------|------|-------|
+| 18.4.2a | `sprint-4-story-18.4.2a-events.md` | Clarification events (backend) |
+| 18.4.2b | `sprint-4-story-18.4.2b-ui.md` | Clarification UI (frontend) |
+| 18.4.3 | `sprint-4-story-18.4.3-query.md` | User query post-scoring |
+| 18.4.4 | `sprint-4-story-18.4.4-vendor-validation.md` | Single-vendor validation |
+| 18.4.5 | `sprint-4-story-18.4.5-summarize.md` | Consult auto-summarize |
+
+**Notes:**
+- Stories 18.4.1a, 18.4.1b, 18.4.1c are already implemented (DocumentClassifier)
+- Multi-vendor parallel scoring (18.4.4a-c) was replaced with single-vendor validation
+- When multiple vendors detected, user chooses which to score first
 
 ---
 

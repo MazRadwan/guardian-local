@@ -1,4 +1,4 @@
-import { eq, and, isNotNull, asc } from 'drizzle-orm'
+import { eq, and, isNotNull, asc, inArray } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { db } from '../client.js'
 import { files } from '../schema/index.js'
@@ -9,6 +9,7 @@ import {
   FileWithExcerpt,
   CreateFileData,
   ParseStatus,
+  DetectedDocType,
 } from '../../../application/interfaces/IFileRepository.js'
 import type { IntakeDocumentContext } from '../../../domain/entities/Conversation.js'
 import * as schema from '../schema/index.js'
@@ -23,6 +24,7 @@ export class DrizzleFileRepository implements IFileRepository {
   /**
    * Create a new file record
    * Epic 18: Now accepts optional textExcerpt for setting during upload
+   * Epic 18.4: Accepts detectedDocType and detectedVendorName for classification
    */
   async create(file: CreateFileData): Promise<FileRecord> {
     const id = crypto.randomUUID()
@@ -40,6 +42,9 @@ export class DrizzleFileRepository implements IFileRepository {
         // Epic 18: Set text excerpt if provided
         textExcerpt: file.textExcerpt ?? null,
         // Epic 18: Default parse status is 'pending' (set in schema)
+        // Epic 18.4: Document classification
+        detectedDocType: file.detectedDocType ?? null,
+        detectedVendorName: file.detectedVendorName ?? null,
       })
       .returning()
 
@@ -50,6 +55,24 @@ export class DrizzleFileRepository implements IFileRepository {
     const [row] = await this.db.select().from(files).where(eq(files.id, fileId))
 
     return row ? this.toDomain(row) : null
+  }
+
+  /**
+   * Epic 18.4: Find multiple files by their IDs
+   * Used for batch operations like vendor validation.
+   * Returns only files that exist (skips non-existent IDs).
+   */
+  async findByIds(fileIds: string[]): Promise<FileRecord[]> {
+    if (fileIds.length === 0) {
+      return []
+    }
+
+    const rows = await this.db
+      .select()
+      .from(files)
+      .where(inArray(files.id, fileIds))
+
+    return rows.map((row) => this.toDomain(row))
   }
 
   async findByIdAndUser(fileId: string, userId: string): Promise<FileRecord | null> {
@@ -200,6 +223,9 @@ export class DrizzleFileRepository implements IFileRepository {
       // Epic 18: Include text excerpt and parse status
       textExcerpt: row.textExcerpt ?? null,
       parseStatus: (row.parseStatus as ParseStatus) ?? 'pending',
+      // Epic 18.4: Document classification
+      detectedDocType: (row.detectedDocType as DetectedDocType) ?? null,
+      detectedVendorName: row.detectedVendorName ?? null,
     }
   }
 }

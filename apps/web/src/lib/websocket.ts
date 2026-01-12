@@ -234,6 +234,23 @@ export interface ScoringErrorPayload {
 }
 
 /**
+ * Epic 18.4.2: Vendor clarification event payload
+ *
+ * Emitted when multiple vendors are detected in uploaded files.
+ * Frontend should display vendor selection UI for user to choose
+ * which vendor to score first.
+ */
+export interface VendorClarificationNeededPayload {
+  conversationId: string;
+  vendors: Array<{
+    name: string;
+    fileCount: number;
+    fileIds: string[];
+  }>;
+  message: string;
+}
+
+/**
  * Payload for questionnaire_ready event from backend
  */
 export interface QuestionnaireReadyPayload {
@@ -959,6 +976,32 @@ export class WebSocketClient {
 
     this.socket.on('file_attached', handler);
     return () => this.socket?.off('file_attached', handler);
+  }
+
+  /**
+   * Epic 18.4.2: Subscribe to vendor_clarification_needed events
+   * Emitted when multiple vendors are detected in uploaded files
+   */
+  onVendorClarificationNeeded(callback: (data: VendorClarificationNeededPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: VendorClarificationNeededPayload) => {
+      console.log('[WebSocket] Vendor clarification needed:', data.vendors.length, 'vendors');
+      callback(data);
+    };
+
+    this.socket.on('vendor_clarification_needed', handler);
+    return () => this.socket?.off('vendor_clarification_needed', handler);
+  }
+
+  /**
+   * Epic 18.4.2: Send vendor selection to backend
+   * Called when user clicks on a vendor option in clarification UI
+   */
+  selectVendor(conversationId: string, vendorName: string): void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+    console.log('[WebSocket] Selecting vendor:', vendorName);
+    this.socket.emit('vendor_selected', { conversationId, vendorName });
   }
 
 }

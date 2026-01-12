@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
@@ -83,6 +83,8 @@ export interface UseWebSocketEventsReturn {
   handleScoringProgress: (data: ScoringProgressPayload) => void;
   handleScoringComplete: (data: ScoringCompletePayload) => void;
   handleScoringError: (data: ScoringErrorPayload) => void;
+  // Epic 18.4.2b: Vendor clarification handler
+  handleVendorClarificationNeeded: (data: VendorClarificationNeededPayload) => void;
 }
 
 /**
@@ -542,6 +544,11 @@ export function useWebSocketEvents({
       }
 
       console.log('[useWebSocketEvents] Scoring started:', data.assessmentId);
+
+      // Epic 18.4.2b: Clear vendor clarification when scoring starts
+      // This confirms vendor selection was successful (if there was one)
+      useChatStore.getState().clearVendorClarification();
+
       // Update scoring progress state to 'parsing' (first status)
       useChatStore.getState().updateScoringProgress({
         status: 'parsing',
@@ -651,6 +658,27 @@ export function useWebSocketEvents({
     [activeConversationId, finishStreaming, setLoading, addMessage, focusComposer]
   );
 
+  // Epic 18.4.2b: Vendor clarification needed handler
+  const handleVendorClarificationNeeded = useCallback(
+    (data: VendorClarificationNeededPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring vendor_clarification_needed for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Vendor clarification needed:', data.vendors.length, 'vendors detected');
+
+      // Store vendor clarification data for UI to display
+      useChatStore.getState().setVendorClarification(data);
+
+      // Clear loading/streaming state so UI shows clarification card
+      finishStreaming();
+      setLoading(false);
+    },
+    [activeConversationId, finishStreaming, setLoading]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -671,5 +699,6 @@ export function useWebSocketEvents({
     handleScoringProgress,
     handleScoringComplete,
     handleScoringError,
+    handleVendorClarificationNeeded,
   };
 }

@@ -120,6 +120,7 @@ describe('ScoringService', () => {
       }),
       create: jest.fn(),
       findById: jest.fn(),
+      findByIds: jest.fn(), // Epic 18.4
       findByIdAndConversation: jest.fn(),
       updateIntakeContext: jest.fn(),
       findByConversationWithContext: jest.fn(),
@@ -425,6 +426,9 @@ describe('ScoringService', () => {
           createdAt: new Date(),
           textExcerpt: null, // Epic 18
           parseStatus: 'pending', // Epic 18
+          // Epic 18.4: Document classification
+          detectedDocType: null,
+          detectedVendorName: null,
         })
 
         const result = await service.score(defaultInput, jest.fn())

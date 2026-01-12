@@ -22,6 +22,7 @@ import { User } from '../../../domain/entities/User.js';
 import { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
 import { ScoringProgressEvent } from '../../../domain/scoring/types.js';
 import { ITextExtractionService, ValidatedDocumentType } from '../../../application/interfaces/ITextExtractionService.js';
+import { detectDocumentType, extractVendorName, DetectedDocType } from '../../extraction/DocumentClassifier.js';
 
 /**
  * Sanitize filename for use in Content-Disposition header.
@@ -107,6 +108,8 @@ interface FileUploadResult {
  * - Event contains ONLY metadata (hasExcerpt: boolean)
  * - textExcerpt content is NEVER emitted to clients
  * - textExcerpt is used internally only for context injection
+ *
+ * Epic 18.4: Includes document type detection results for smart scoring UX
  */
 interface FileAttachedEvent {
   conversationId: string;
@@ -116,6 +119,9 @@ interface FileAttachedEvent {
   mimeType: string;
   size: number;
   hasExcerpt: boolean;
+  // Epic 18.4: Document classification (heuristics)
+  detectedDocType: DetectedDocType | null;
+  detectedVendorName: string | null;
 }
 
 export class DocumentUploadController {
@@ -348,7 +354,20 @@ export class DocumentUploadController {
         documentType as ValidatedDocumentType
       );
 
-      // 3. Create file record with excerpt (parseStatus: 'pending')
+      // 3. Epic 18.4: Classify document type using heuristics (<100ms, regex only)
+      // This runs synchronously on the excerpt, no external API calls
+      let detectedDocType: DetectedDocType | null = null;
+      let detectedVendorName: string | null = null;
+
+      if (extraction.success && extraction.excerpt.length > 0) {
+        const classifyStart = Date.now();
+        detectedDocType = detectDocumentType(extraction.excerpt, file.mimetype);
+        detectedVendorName = extractVendorName(extraction.excerpt);
+        const classifyMs = Date.now() - classifyStart;
+        console.log(`[DocumentUpload] Document classified: type=${detectedDocType}, vendor=${detectedVendorName || 'none'}, ms=${classifyMs}`);
+      }
+
+      // 4. Create file record with excerpt and classification (parseStatus: 'pending')
       const fileRecord = await this.fileRepository.create({
         userId,
         conversationId,
@@ -357,12 +376,15 @@ export class DocumentUploadController {
         size: file.size,
         storagePath,
         textExcerpt: extraction.excerpt || null,
+        // Epic 18.4: Document classification
+        detectedDocType,
+        detectedVendorName,
         // parseStatus defaults to 'pending' in schema
       });
 
       const fileId = fileRecord.id;
 
-      // 4. Emit file_attached - UPLOAD COMPLETE
+      // 5. Emit file_attached - UPLOAD COMPLETE
       // Frontend shows "Attached", Send button enabled
       // NO parsing/scoring here - that happens on Send (Sprint 2)
       this.emitFileAttached(
@@ -373,7 +395,9 @@ export class DocumentUploadController {
         file.originalname,
         file.mimetype,
         file.size,
-        extraction.success && extraction.excerpt.length > 0
+        extraction.success && extraction.excerpt.length > 0,
+        detectedDocType,
+        detectedVendorName
       );
 
       // =========================================
@@ -413,6 +437,7 @@ export class DocumentUploadController {
    * Allows frontend to show "Attached" state immediately.
    *
    * SECURITY: Only emits hasExcerpt (boolean), never the excerpt content.
+   * Epic 18.4: Includes document classification results for smart scoring UX.
    */
   private emitFileAttached(
     socketRoom: string,
@@ -422,7 +447,9 @@ export class DocumentUploadController {
     filename: string,
     mimeType: string,
     size: number,
-    hasExcerpt: boolean
+    hasExcerpt: boolean,
+    detectedDocType: DetectedDocType | null,
+    detectedVendorName: string | null
   ): void {
     const event: FileAttachedEvent = {
       conversationId,
@@ -432,6 +459,9 @@ export class DocumentUploadController {
       mimeType,
       size,
       hasExcerpt,
+      // Epic 18.4: Document classification
+      detectedDocType,
+      detectedVendorName,
     };
 
     this.chatNamespace.to(socketRoom).emit('file_attached', event);

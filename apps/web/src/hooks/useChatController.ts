@@ -171,6 +171,7 @@ export function useChatController(): UseChatControllerReturn {
     handleScoringProgress,
     handleScoringComplete,
     handleScoringError,
+    handleVendorClarificationNeeded,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
@@ -249,6 +250,7 @@ export function useChatController(): UseChatControllerReturn {
     onScoringProgress: handleScoringProgress,
     onScoringComplete: handleScoringComplete,
     onScoringError: handleScoringError,
+    onVendorClarificationNeeded: handleVendorClarificationNeeded,
   }), [
     handleMessage,
     handleMessageStream,
@@ -272,6 +274,7 @@ export function useChatController(): UseChatControllerReturn {
     handleScoringProgress,
     handleScoringComplete,
     handleScoringError,
+    handleVendorClarificationNeeded,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket

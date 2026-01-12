@@ -32,6 +32,10 @@ export const files = pgTable(
     // Epic 18: Idempotency guard for parse/scoring operations
     parseStatus: varchar('parse_status', { length: 20 }).default('pending'),
 
+    // Epic 18.4: Document type detection (heuristics)
+    detectedDocType: varchar('detected_doc_type', { length: 20 }), // 'questionnaire' | 'document' | 'unknown'
+    detectedVendorName: varchar('detected_vendor_name', { length: 255 }),
+
     // Timestamps
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },

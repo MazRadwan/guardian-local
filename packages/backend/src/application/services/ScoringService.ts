@@ -47,7 +47,7 @@ export class ScoringService implements IScoringService {
     input: ScoringInput,
     onProgress: (event: ScoringProgressEvent) => void
   ): Promise<ScoringOutput> {
-    const { assessmentId, conversationId, fileId, userId } = input;
+    const { assessmentId: inputAssessmentId, conversationId, fileId, userId } = input;
     const batchId = randomUUID();
     const startTime = Date.now();
 
@@ -56,28 +56,8 @@ export class ScoringService implements IScoringService {
     this.abortControllers.set(conversationId, abortController);
 
     try {
-      // 1. AUTHORIZATION: Verify user owns the assessment
-      const assessment = await this.assessmentRepo.findById(assessmentId);
-      if (!assessment) {
-        throw new ScoringError('ASSESSMENT_NOT_FOUND', `Assessment not found: ${assessmentId}`);
-      }
-      // Assessment entity uses 'createdBy' for the owner
-      if (assessment.createdBy !== userId) {
-        throw new ScoringError('UNAUTHORIZED_ASSESSMENT', `User ${userId} does not own assessment ${assessmentId}`);
-      }
-
-      // 2. VALIDATION GATE: Check assessment status >= 'exported'
-      // Epic 15 Story 5a.4: Security - prevent scoring non-exported assessments
-      // Only 'exported' and 'scored' are valid - cannot score before export
-      const validStatuses = ['exported', 'scored'];
-      if (!validStatuses.includes(assessment.status)) {
-        throw new ScoringError(
-          'ASSESSMENT_NOT_EXPORTED',
-          `Assessment must be exported before scoring (current status: ${assessment.status})`
-        );
-      }
-
-      // 3. AUTHORIZATION: Verify user owns the file
+      // 1. AUTHORIZATION: Verify user owns the file
+      // Epic 18: Move file retrieval before assessment check since assessmentId may come from file
       onProgress({ status: 'parsing', message: 'Retrieving uploaded document...' });
       const fileRecord = await this.fileRepo.findByIdAndUser(fileId, userId);
       if (!fileRecord) {
@@ -88,10 +68,11 @@ export class ScoringService implements IScoringService {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // 3. Retrieve file buffer from storage
+      // 2. Retrieve file buffer from storage
       const fileBuffer = await this.fileStorage.retrieve(fileRecord.storagePath);
 
-      // 4. Parse document using existing interface signature
+      // 3. Parse document to extract assessmentId and responses
+      // Epic 18: Parse first to extract assessmentId from document when not provided in input
       onProgress({ status: 'parsing', message: 'Extracting responses from document...' });
 
       // Build full DocumentMetadata as required by IScoringDocumentParser
@@ -105,8 +86,9 @@ export class ScoringService implements IScoringService {
         uploadedBy: userId,
       };
 
+      // Epic 18: Only set expectedAssessmentId if provided in input
       const parseOptions: ScoringParseOptions = {
-        expectedAssessmentId: assessmentId,
+        expectedAssessmentId: inputAssessmentId, // May be undefined - that's OK
         minConfidence: 0.7,
       };
       const parseResult = await this.documentParser.parseForResponses(
@@ -115,11 +97,21 @@ export class ScoringService implements IScoringService {
         parseOptions
       );
 
-      // Validate assessment ID from parsed document
-      if (parseResult.assessmentId !== assessmentId) {
+      // Epic 18: Determine assessmentId - use from document if not provided in input
+      const assessmentId = inputAssessmentId || parseResult.assessmentId;
+
+      if (!assessmentId) {
         throw new ScoringError(
           'PARSE_FAILED',
-          `Assessment ID mismatch: document contains ${parseResult.assessmentId}, expected ${assessmentId}`
+          'No assessment ID found. Please ensure this is a Guardian-exported questionnaire with an embedded Assessment ID.'
+        );
+      }
+
+      // Validate assessment ID match if both provided
+      if (inputAssessmentId && parseResult.assessmentId && parseResult.assessmentId !== inputAssessmentId) {
+        throw new ScoringError(
+          'PARSE_FAILED',
+          `Assessment ID mismatch: document contains ${parseResult.assessmentId}, expected ${inputAssessmentId}`
         );
       }
 
@@ -137,7 +129,29 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 5. VALIDATION GATE: Rate limit (5 per day per assessment)
+      // 5. AUTHORIZATION: Verify assessment exists and user owns it
+      // Epic 18: Moved after parsing since assessmentId may come from document
+      const assessment = await this.assessmentRepo.findById(assessmentId);
+      if (!assessment) {
+        throw new ScoringError('ASSESSMENT_NOT_FOUND', `Assessment not found: ${assessmentId}`);
+      }
+      // Assessment entity uses 'createdBy' for the owner
+      if (assessment.createdBy !== userId) {
+        throw new ScoringError('UNAUTHORIZED_ASSESSMENT', `User ${userId} does not own assessment ${assessmentId}`);
+      }
+
+      // 6. VALIDATION GATE: Check assessment status >= 'exported'
+      // Epic 15 Story 5a.4: Security - prevent scoring non-exported assessments
+      // Only 'exported' and 'scored' are valid - cannot score before export
+      const validStatuses = ['exported', 'scored'];
+      if (!validStatuses.includes(assessment.status)) {
+        throw new ScoringError(
+          'ASSESSMENT_NOT_EXPORTED',
+          `Assessment must be exported before scoring (current status: ${assessment.status})`
+        );
+      }
+
+      // 7. VALIDATION GATE: Rate limit (5 per day per assessment)
       // Epic 15 Story 5a.4: Cost - prevent abuse
       const todayCount = await this.assessmentResultRepo.countTodayForAssessment(assessmentId);
       if (todayCount >= 5) {

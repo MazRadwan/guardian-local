@@ -249,6 +249,9 @@ describe('ChatServer Mode-Specific Behavior (Epic 18 Sprint 3)', () => {
       createdAt: new Date(),
       textExcerpt: 'Sample text excerpt',
       parseStatus,
+      // Epic 18.4: Document classification fields
+      detectedDocType: null,
+      detectedVendorName: null,
     });
 
     const createMockIntakeContext = (): IntakeDocumentContext => ({
@@ -448,6 +451,9 @@ describe('ChatServer Mode-Specific Behavior (Epic 18 Sprint 3)', () => {
       createdAt: new Date(),
       textExcerpt: null,
       parseStatus,
+      // Epic 18.4: Document classification fields
+      detectedDocType: null,
+      detectedVendorName: null,
     });
 
     describe('idempotency checks', () => {
