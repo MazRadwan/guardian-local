@@ -67,6 +67,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const prevScoringProgressActiveRef = useRef<boolean>(false);
     // Epic 18.4.2b: Track previous vendor clarification visibility to scroll when it appears
     const prevVendorClarificationVisibleRef = useRef<boolean>(false);
+    // Epic 18: Track message count to detect when new messages arrive
+    const prevMessageCountRef = useRef<number>(0);
 
     // Merged ref callback to ensure both parent ref and local ref point to same DOM node
     const mergedRef = useCallback((node: HTMLDivElement | null) => {
@@ -132,9 +134,15 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       const vendorClarificationJustAppeared = isVendorClarificationVisible && !prevVendorClarificationVisibleRef.current;
       prevVendorClarificationVisibleRef.current = isVendorClarificationVisible;
 
-      // If streaming OR near bottom OR questionnaire/scoring progress/typing indicator/vendor clarification just appeared, force scroll to bottom
+      // Epic 18: Detect when new messages arrive (especially assistant responses)
+      // This ensures responses scroll into view even when isNearBottom is false
+      const currentMessageCount = messages.length;
+      const newMessageArrived = currentMessageCount > prevMessageCountRef.current;
+      prevMessageCountRef.current = currentMessageCount;
+
+      // If streaming OR near bottom OR new content just appeared, force scroll to bottom
       // This ensures new content scrolls into view
-      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared || scoringProgressJustAppeared || vendorClarificationJustAppeared) {
+      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared || scoringProgressJustAppeared || vendorClarificationJustAppeared || newMessageArrived) {
         container.scrollTop = container.scrollHeight;
       }
     }, [messages, isStreaming, isNearBottom, isLoading, questionnaire?.uiState, questionnaire?.insertIndex, scoringProgress?.status, vendorClarification]);
