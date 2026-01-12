@@ -68,6 +68,10 @@ export function ChatInterface() {
   const scoringResultByConversation = useChatStore((state) => state.scoringResultByConversation);
   const setScoringResult = useChatStore((state) => state.setScoringResult);
 
+  // Epic 18.4.2b: Vendor clarification state
+  const vendorClarification = useChatStore((state) => state.vendorClarification);
+  const clearVendorClarification = useChatStore((state) => state.clearVendorClarification);
+
   // Get export data for active conversation
   const exportData = activeConversationId
     ? exportReadyByConversation[activeConversationId]
@@ -323,6 +327,22 @@ export function ChatInterface() {
     }
   }, [token, setError]);
 
+  /**
+   * Epic 18.4.2b: Handle vendor selection from clarification card
+   * Sends vendor_selected event to backend.
+   * State is NOT cleared here - it's cleared in handleScoringStarted when
+   * scoring begins, ensuring users can re-select if there's an error.
+   */
+  const handleSelectVendor = useCallback((vendorName: string) => {
+    if (!adapter || !vendorClarification) return;
+
+    console.log('[ChatInterface] User selected vendor:', vendorName);
+
+    // Emit vendor_selected event to backend
+    // Note: State cleared when scoring_started received (confirms success)
+    adapter.selectVendor(vendorClarification.conversationId, vendorName);
+  }, [adapter, vendorClarification]);
+
   return (
     <div className="flex h-full flex-col relative">
       {/* Error banner */}
@@ -396,6 +416,15 @@ export function ChatInterface() {
             }
             scoringResult={scoringResult}
             scoringProgress={scoringProgress}
+            vendorClarification={
+              vendorClarification &&
+              vendorClarification.conversationId === activeConversationId
+                ? {
+                    payload: vendorClarification,
+                    onSelectVendor: handleSelectVendor,
+                  }
+                : undefined
+            }
           />
         </div>
       )}

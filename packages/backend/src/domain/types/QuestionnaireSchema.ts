@@ -308,3 +308,18 @@ export function validateQuestionnaireSchemaDetailed(
 export function validateQuestionnaireSchema(schema: unknown): schema is QuestionnaireSchema {
   return validateQuestionnaireSchemaDetailed(schema).isValid;
 }
+
+/**
+ * Epic 18.4: Vendor information for multi-vendor clarification
+ *
+ * Used by VendorValidationService to report when uploaded files
+ * belong to multiple different vendors.
+ */
+export interface VendorInfo {
+  /** Vendor name (from detectedVendorName) */
+  name: string;
+  /** Number of files belonging to this vendor */
+  fileCount: number;
+  /** IDs of files belonging to this vendor */
+  fileIds: string[];
+}

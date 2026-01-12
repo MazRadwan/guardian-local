@@ -38,6 +38,7 @@ describe('useMultiFileUpload', () => {
   let uploadProgressHandler: ((data: unknown) => void) | null;
   let intakeContextHandler: ((data: unknown) => void) | null;
   let scoringParseHandler: ((data: unknown) => void) | null;
+  let fileAttachedHandler: ((data: unknown) => void) | null; // Epic 18
 
   const createMockAdapter = (isConnected: boolean) => ({
     isConnected,
@@ -65,6 +66,13 @@ describe('useMultiFileUpload', () => {
         scoringParseHandler = null;
       };
     }),
+    subscribeFileAttached: jest.fn((handler) => { // Epic 18
+      fileAttachedHandler = handler;
+      return () => {
+        unsubscribeCalls++;
+        fileAttachedHandler = null;
+      };
+    }),
   });
 
   beforeEach(() => {
@@ -75,6 +83,7 @@ describe('useMultiFileUpload', () => {
     uploadProgressHandler = null;
     intakeContextHandler = null;
     scoringParseHandler = null;
+    fileAttachedHandler = null; // Epic 18
     jest.clearAllMocks();
   });
 
@@ -903,8 +912,8 @@ describe('useMultiFileUpload', () => {
 
       unmount();
 
-      // Should unsubscribe all 3 event types
-      expect(unsubscribeCalls).toBe(3);
+      // Should unsubscribe all 4 event types (Epic 18: added file_attached)
+      expect(unsubscribeCalls).toBe(4);
     });
   });
 

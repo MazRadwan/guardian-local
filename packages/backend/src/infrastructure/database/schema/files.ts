@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, jsonb, index } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, integer, timestamp, jsonb, index, varchar } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { conversations } from './conversations'
 
@@ -25,6 +25,16 @@ export const files = pgTable(
     intakeContext: jsonb('intake_context'),
     intakeGapCategories: text('intake_gap_categories').array(),
     intakeParsedAt: timestamp('intake_parsed_at', { withTimezone: true }),
+
+    // Epic 18: Text excerpt for fast context injection
+    textExcerpt: text('text_excerpt'),
+
+    // Epic 18: Idempotency guard for parse/scoring operations
+    parseStatus: varchar('parse_status', { length: 20 }).default('pending'),
+
+    // Epic 18.4: Document type detection (heuristics)
+    detectedDocType: varchar('detected_doc_type', { length: 20 }), // 'questionnaire' | 'document' | 'unknown'
+    detectedVendorName: varchar('detected_vendor_name', { length: 255 }),
 
     // Timestamps
     createdAt: timestamp('created_at').defaultNow().notNull(),

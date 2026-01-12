@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload, ScoringCompletePayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload, ScoringCompletePayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import type { Step } from '@/types/stepper';
 import { GENERATION_STEPS } from '@/types/stepper';
 import type { ScoringStatus, ScoringProgressEvent } from '@/types/scoring';
@@ -115,6 +115,14 @@ export interface ChatState {
    * Contains composite score, dimension scores, and recommendations
    */
   scoringResult: ScoringCompletePayload['result'] | null;
+
+  /**
+   * Epic 18.4.2b: Vendor clarification state
+   * Set when multiple vendors detected in uploaded files
+   * Contains vendor options for user selection
+   * Cleared when user selects a vendor or cancels
+   */
+  vendorClarification: VendorClarificationNeededPayload | null;
 
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
@@ -231,6 +239,16 @@ export interface ChatState {
    * Epic 15 Story 5c: Clear scoring result for specific conversation
    */
   clearScoringResultForConversation: (conversationId: string) => void;
+
+  /**
+   * Epic 18.4.2b: Set vendor clarification (from vendor_clarification_needed event)
+   */
+  setVendorClarification: (payload: VendorClarificationNeededPayload) => void;
+
+  /**
+   * Epic 18.4.2b: Clear vendor clarification (after selection or cancel)
+   */
+  clearVendorClarification: () => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -283,6 +301,9 @@ export const useChatStore = create<ChatState>()(
         message: '',
       },
       scoringResult: null,
+
+      // Epic 18.4.2b: Vendor clarification - defaults
+      vendorClarification: null,
 
       addMessage: (message) =>
         set((state) => ({
@@ -607,6 +628,17 @@ export const useChatStore = create<ChatState>()(
           const { [conversationId]: _, ...rest } = state.scoringResultByConversation;
           return { scoringResultByConversation: rest };
         });
+      },
+
+      // Epic 18.4.2b: Vendor clarification actions
+      setVendorClarification: (payload) => {
+        console.log('[chatStore] Setting vendor clarification:', payload.vendors.length, 'vendors');
+        set({ vendorClarification: payload });
+      },
+
+      clearVendorClarification: () => {
+        console.log('[chatStore] Clearing vendor clarification');
+        set({ vendorClarification: null });
       },
     }),
     {

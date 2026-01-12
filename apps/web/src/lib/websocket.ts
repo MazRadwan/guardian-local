@@ -104,6 +104,53 @@ export interface UploadProgressEvent {
   error?: string;
 }
 
+/**
+ * Epic 18: file_attached event
+ *
+ * Emitted when file is stored and ready for UI display.
+ * Does NOT wait for Claude enrichment to complete.
+ *
+ * Event ordering: May arrive before or after upload_progress events.
+ * Frontend must handle any ordering.
+ */
+export interface FileAttachedEvent {
+  conversationId: string;
+  uploadId: string;
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  hasExcerpt: boolean;
+}
+
+/**
+ * Epic 18: Extended file upload stages
+ *
+ * IMPORTANT: Keep existing stages (idle, selecting) to avoid breaking UI
+ * New stage: 'attached' - file stored, ready for display, enrichment may continue
+ */
+export type FileUploadStage =
+  | 'idle'        // EXISTING: No file selected
+  | 'selecting'   // EXISTING: File picker open
+  | 'pending'     // Not yet started
+  | 'uploading'   // HTTP POST in flight
+  | 'storing'     // S3 storage in progress
+  | 'attached'    // NEW: File stored, ready for display
+  | 'parsing'     // Claude enrichment in progress
+  | 'complete'    // All done
+  | 'error';      // Failed
+
+/**
+ * Epic 18: File metadata received from file_attached event
+ */
+export interface AttachedFileMetadata {
+  fileId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  hasExcerpt: boolean;
+}
+
 export interface IntakeContextResult {
   conversationId: string;
   uploadId: string;
@@ -156,6 +203,7 @@ export interface ScoringProgressPayload {
   message: string;
   progress?: number;
   error?: string;
+  fileId?: string; // Epic 18: Track file being processed
 }
 
 export interface ScoringCompletePayload {
@@ -183,6 +231,23 @@ export interface ScoringErrorPayload {
   code?: string;
   assessmentId?: string;
   fileId?: string;
+}
+
+/**
+ * Epic 18.4.2: Vendor clarification event payload
+ *
+ * Emitted when multiple vendors are detected in uploaded files.
+ * Frontend should display vendor selection UI for user to choose
+ * which vendor to score first.
+ */
+export interface VendorClarificationNeededPayload {
+  conversationId: string;
+  vendors: Array<{
+    name: string;
+    fileCount: number;
+    fileIds: string[];
+  }>;
+  message: string;
 }
 
 /**
@@ -895,6 +960,48 @@ export class WebSocketClient {
 
     this.socket.on('scoring_error', handler);
     return () => this.socket?.off('scoring_error', handler);
+  }
+
+  /**
+   * Epic 18: Subscribe to file_attached events
+   * Emitted when file is stored and ready for display (before enrichment completes)
+   */
+  onFileAttached(callback: (data: FileAttachedEvent) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: FileAttachedEvent) => {
+      console.log('[WebSocket] File attached:', data.fileId, data.filename);
+      callback(data);
+    };
+
+    this.socket.on('file_attached', handler);
+    return () => this.socket?.off('file_attached', handler);
+  }
+
+  /**
+   * Epic 18.4.2: Subscribe to vendor_clarification_needed events
+   * Emitted when multiple vendors are detected in uploaded files
+   */
+  onVendorClarificationNeeded(callback: (data: VendorClarificationNeededPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: VendorClarificationNeededPayload) => {
+      console.log('[WebSocket] Vendor clarification needed:', data.vendors.length, 'vendors');
+      callback(data);
+    };
+
+    this.socket.on('vendor_clarification_needed', handler);
+    return () => this.socket?.off('vendor_clarification_needed', handler);
+  }
+
+  /**
+   * Epic 18.4.2: Send vendor selection to backend
+   * Called when user clicks on a vendor option in clarification UI
+   */
+  selectVendor(conversationId: string, vendorName: string): void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+    console.log('[WebSocket] Selecting vendor:', vendorName);
+    this.socket.emit('vendor_selected', { conversationId, vendorName });
   }
 
 }

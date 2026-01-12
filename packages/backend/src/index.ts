@@ -62,6 +62,8 @@ import { FileValidationService } from './application/services/FileValidationServ
 import { ScoringService } from './application/services/ScoringService.js';
 import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidator.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
+import { TextExtractionService } from './infrastructure/extraction/TextExtractionService.js';
+import { VendorValidationService } from './application/services/VendorValidationService.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -165,6 +167,12 @@ const documentParserService = new DocumentParserService(
   claudeClient   // IVisionClient - ClaudeClient implements both
 );
 
+// Epic 18: Initialize text extraction service for fast context injection
+const textExtractionService = new TextExtractionService();
+
+// Epic 18.4: Initialize vendor validation service
+const vendorValidationService = new VendorValidationService(fileRepo);
+
 // Initialize scoring components (Epic 15)
 const scoringPromptBuilder = new ScoringPromptBuilder();
 const scoringPayloadValidator = new ScoringPayloadValidator();
@@ -226,7 +234,11 @@ const chatServer = new ChatServer(
   questionnaireGenerationService,
   questionService,
   fileRepo,
-  scoringService  // Epic 15
+  scoringService,           // Epic 15
+  fileStorage,              // Epic 18: Context injection fallback
+  textExtractionService,    // Epic 18: Context injection fallback
+  documentParserService,    // Epic 18: Background enrichment (implements IIntakeDocumentParser)
+  vendorValidationService   // Epic 18.4: Vendor validation for multi-vendor clarification
 );
 
 console.log('[App] ChatServer initialized');
@@ -242,7 +254,8 @@ const documentUploadController = new DocumentUploadController(
   conversationService,    // Ownership validation + save assistant messages
   chatNamespace,
   fileRepo,               // Epic 16.6.9: File registration in database
-  scoringService          // Epic 15 Sprint 5a: Auto-trigger scoring after parse
+  scoringService,         // Epic 15 Sprint 5a: Auto-trigger scoring after parse
+  textExtractionService   // Epic 18: Fast text extraction during upload
 );
 
 // Register document routes (Epic 16)

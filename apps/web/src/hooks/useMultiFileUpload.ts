@@ -24,6 +24,9 @@ import type {
   IntakeContextResult,
   ScoringParseResult,
   MessageAttachment,
+  FileAttachedEvent,
+  AttachedFileMetadata,
+  FileUploadStage,
 } from '@/lib/websocket';
 
 /** Backend API base URL from environment */
@@ -43,8 +46,43 @@ const VALID_TYPES = [
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB per file
 
 /**
+ * Epic 18: Stage precedence for monotonic transitions
+ *
+ * Guards prevent backward stage transitions due to out-of-order events.
+ * Higher number = more progressed stage.
+ *
+ * IMPORTANT: Includes existing 'idle'/'selecting' stages to avoid breaking UI
+ */
+const STAGE_PRECEDENCE: Record<FileUploadStage, number> = {
+  idle: -1,       // EXISTING: Not in upload flow
+  selecting: -1,  // EXISTING: Not in upload flow
+  pending: 0,
+  uploading: 1,
+  storing: 2,
+  attached: 3,    // NEW: After storing, before parsing
+  parsing: 4,
+  complete: 5,
+  error: 5,       // Terminal stage (same level as complete)
+};
+
+/**
+ * Epic 18: Check if transition is allowed (forward only, except error)
+ */
+function canTransitionTo(currentStage: FileUploadStage, newStage: FileUploadStage): boolean {
+  // Error can always be set (to report failures)
+  if (newStage === 'error') return true;
+
+  // idle/selecting are outside upload flow, always allow transition from them
+  if (currentStage === 'idle' || currentStage === 'selecting') return true;
+
+  // Only allow forward transitions
+  return STAGE_PRECEDENCE[newStage] > STAGE_PRECEDENCE[currentStage];
+}
+
+/**
  * Per-file state tracking
  * Story 17.3.1: Multi-File State Interface
+ * Epic 18: Extended with 'attached' stage and metadata
  */
 export interface FileState {
   /** Local array index (stable identifier for this session) */
@@ -59,19 +97,22 @@ export interface FileState {
   mimeType: string;
   /** Server-generated correlation ID (set after HTTP 202) */
   uploadId: string | null;
-  /** Database UUID (set on complete) */
+  /** Database UUID (set when file_attached received) - Epic 18 */
   fileId: string | null;
-  /** Current stage */
-  stage: 'pending' | 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
+  /** Current stage - Epic 18: Now includes 'attached' */
+  stage: FileUploadStage;
   /** Progress 0-100 */
   progress: number;
   /** Error message if failed */
   error?: string;
+  /** File metadata from file_attached event - Epic 18 */
+  metadata?: AttachedFileMetadata;
 }
 
 /**
  * Hook options
  * Story 17.3.1: Multi-File State Interface
+ * Epic 18: Extended with subscribeFileAttached
  */
 export interface UseMultiFileUploadOptions {
   /** Max files allowed (default: 10) */
@@ -87,6 +128,10 @@ export interface UseMultiFileUploadOptions {
     ) => () => void;
     subscribeScoringParseReady: (
       handler: (data: ScoringParseResult) => void
+    ) => () => void;
+    /** Epic 18: Subscribe to file_attached events */
+    subscribeFileAttached: (
+      handler: (data: FileAttachedEvent) => void
     ) => () => void;
   };
   /** Called on validation/upload errors */
@@ -174,6 +219,11 @@ export function useMultiFileUpload(
   // Only process WS events for uploadIds in this set
   const knownUploadIdsRef = useRef<Set<string>>(new Set());
 
+  // Epic 18: Buffer for early file_attached events
+  // If file_attached arrives before addFiles() completes (race condition),
+  // buffer the event and process when uploadId is registered.
+  const earlyFileAttachedEventsRef = useRef<Map<string, FileAttachedEvent>>(new Map());
+
   // AbortController for batch upload
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -233,21 +283,23 @@ export function useMultiFileUpload(
    * Remove file by localIndex
    * Only allowed for pending/error/complete files (not during upload)
    * Story 17.3.2: Core Operations
+   * Epic 18: Clean up buffered events
    */
   const removeFile = useCallback((localIndex: number) => {
     setFiles((prev) => {
       const file = prev.find((f) => f.localIndex === localIndex);
       if (!file) return prev;
 
-      // Can't remove during active upload
-      if (['uploading', 'storing', 'parsing'].includes(file.stage)) {
+      // Can't remove during active upload (Epic 18: includes 'attached')
+      if (['uploading', 'storing', 'attached', 'parsing'].includes(file.stage)) {
         onErrorRef.current?.('Cannot remove file during upload');
         return prev;
       }
 
-      // Clear uploadId from known set
+      // Clear uploadId from known set and clean up buffered events
       if (file.uploadId) {
         knownUploadIdsRef.current.delete(file.uploadId);
+        earlyFileAttachedEventsRef.current.delete(file.uploadId); // Epic 18: Cleanup
       }
 
       return prev.filter((f) => f.localIndex !== localIndex);
@@ -257,14 +309,16 @@ export function useMultiFileUpload(
   /**
    * Clear all files
    * Story 17.3.2: Core Operations
+   * Epic 18: Clean up buffered events
    */
   const clearAll = useCallback(() => {
     // Abort any in-progress upload
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
 
-    // Clear known uploadIds
+    // Clear known uploadIds and buffered events
     knownUploadIdsRef.current.clear();
+    earlyFileAttachedEventsRef.current.clear(); // Epic 18: Cleanup
 
     // Sprint 2 Fix: Resolve any pending waiters with empty array
     // This prevents waitForCompletion() from hanging/leaking
@@ -280,8 +334,66 @@ export function useMultiFileUpload(
   }, []);
 
   /**
+   * Epic 18: Handle file_attached event with monotonic guards
+   */
+  const handleFileAttached = useCallback((event: FileAttachedEvent) => {
+    // Check if uploadId is known
+    if (!knownUploadIdsRef.current.has(event.uploadId)) {
+      // Buffer event for later processing (race condition)
+      console.debug('[useMultiFileUpload] Buffering early file_attached:', event.uploadId);
+      earlyFileAttachedEventsRef.current.set(event.uploadId, event);
+      return;
+    }
+
+    setFiles((prev) =>
+      prev.map((f) => {
+        if (f.uploadId !== event.uploadId) return f;
+
+        // Use monotonic guard - only transition if allowed
+        const shouldTransition = canTransitionTo(f.stage, 'attached');
+
+        if (!shouldTransition) {
+          console.debug(
+            `[useMultiFileUpload] Ignoring file_attached: ${f.stage} → attached (backward)`
+          );
+        }
+
+        return {
+          ...f,
+          // Always capture fileId and metadata (even if stage doesn't change)
+          fileId: event.fileId,
+          metadata: {
+            fileId: event.fileId,
+            filename: event.filename,
+            mimeType: event.mimeType,
+            size: event.size,
+            hasExcerpt: event.hasExcerpt,
+          },
+          // Only update stage if transition is allowed
+          stage: shouldTransition ? 'attached' : f.stage,
+        };
+      })
+    );
+  }, []);
+
+  /**
+   * Epic 18: Process early buffered events when uploadId is registered
+   */
+  const processEarlyEvents = useCallback(
+    (uploadId: string) => {
+      const bufferedEvent = earlyFileAttachedEventsRef.current.get(uploadId);
+      if (bufferedEvent) {
+        earlyFileAttachedEventsRef.current.delete(uploadId);
+        handleFileAttached(bufferedEvent);
+      }
+    },
+    [handleFileAttached]
+  );
+
+  /**
    * Upload all pending files
    * Story 17.3.3: Upload Implementation
+   * Epic 18: Process early buffered events after uploadId registration
    */
   const uploadAll = useCallback(
     async (conversationId: string, mode: UploadMode) => {
@@ -359,6 +471,9 @@ export function useMultiFileUpload(
                   progress: 30,
                 };
                 knownUploadIdsRef.current.add(serverFile.uploadId);
+
+                // Epic 18: Process any buffered file_attached events for this uploadId
+                processEarlyEvents(serverFile.uploadId);
               } else {
                 // Server rejected file during validation
                 updated[fileIndex] = {
@@ -402,17 +517,18 @@ export function useMultiFileUpload(
         abortControllerRef.current = null;
       }
     },
-    [files, token]
+    [files, token, processEarlyEvents]
   );
 
   /**
    * WebSocket event subscriptions
    * Story 17.3.4: WebSocket Progress Handling
+   * Epic 18: Added file_attached subscription and monotonic guards
    */
   useEffect(() => {
     if (!wsAdapter.isConnected) return;
 
-    // Upload progress events
+    // Upload progress events with monotonic guards
     const unsubProgress = wsAdapter.subscribeUploadProgress((data) => {
       // "Never adopt" - only accept events for known uploadIds
       if (!knownUploadIdsRef.current.has(data.uploadId)) return;
@@ -421,11 +537,22 @@ export function useMultiFileUpload(
         prev.map((f) => {
           if (f.uploadId !== data.uploadId) return f;
 
+          const targetStage = data.stage as FileState['stage'];
+
+          // Use monotonic guard
+          const shouldTransition = canTransitionTo(f.stage, targetStage);
+
+          if (!shouldTransition && targetStage !== 'error') {
+            console.debug(
+              `[useMultiFileUpload] Ignoring progress: ${f.stage} → ${targetStage} (backward)`
+            );
+          }
+
           return {
             ...f,
-            stage: data.stage as FileState['stage'],
+            stage: shouldTransition ? targetStage : f.stage,
             progress: data.progress,
-            error: data.error,
+            error: data.error ?? f.error,
           };
         })
       );
@@ -504,24 +631,33 @@ export function useMultiFileUpload(
       });
     });
 
+    // Epic 18: File attached subscription
+    const unsubAttached = wsAdapter.subscribeFileAttached(handleFileAttached);
+
     return () => {
       unsubProgress();
       unsubIntake();
       unsubScoring();
+      unsubAttached();
     };
   }, [
     wsAdapter.isConnected,
     wsAdapter.subscribeUploadProgress,
     wsAdapter.subscribeIntakeContextReady,
     wsAdapter.subscribeScoringParseReady,
+    wsAdapter.subscribeFileAttached,
+    handleFileAttached,
   ]);
 
   /**
    * Computed values
    * Story 17.3.5: Computed Values and Tests
+   * Epic 18: Only uploading/storing are upload-in-flight stages
+   * 'attached' = upload complete (ready to send)
+   * 'parsing' = enrichment after send (not upload)
    */
   const isUploading = files.some((f) =>
-    ['uploading', 'storing', 'parsing'].includes(f.stage)
+    ['uploading', 'storing'].includes(f.stage)
   );
 
   const aggregateProgress =
@@ -566,9 +702,10 @@ export function useMultiFileUpload(
   const waitForCompletionResolversRef = useRef<Array<(attachments: MessageAttachment[]) => void>>([]);
 
   // Check and resolve pending waiters when files state changes
+  // Epic 18: Updated to include 'attached' as in-flight
   useEffect(() => {
     const hasInFlight = files.some((f) =>
-      ['uploading', 'storing', 'parsing'].includes(f.stage)
+      ['uploading', 'storing', 'attached', 'parsing'].includes(f.stage)
     );
 
     // Resolve waiters when nothing in-flight (all done or all pending/error/complete)
@@ -594,13 +731,14 @@ export function useMultiFileUpload(
 
   /**
    * Wait for all in-flight files to complete, then return attachments
+   * Epic 18: Updated to include 'attached' as in-flight
    * @param timeoutMs - Timeout in ms (default 30000, 0 = no timeout)
    * @returns Promise<MessageAttachment[]> - completed attachments (latest state)
    */
   const waitForCompletion = useCallback((timeoutMs: number = 30000): Promise<MessageAttachment[]> => {
     // If nothing in flight, resolve immediately with current attachments
     const hasInFlight = filesRef.current.some((f) =>
-      ['uploading', 'storing', 'parsing'].includes(f.stage)
+      ['uploading', 'storing', 'attached', 'parsing'].includes(f.stage)
     );
     if (!hasInFlight) {
       return Promise.resolve(buildAttachmentsFromRef());
@@ -628,9 +766,10 @@ export function useMultiFileUpload(
 
           // UX Recovery: Force in-flight files to error so UI isn't stuck
           // This allows the user to remove failed files and try again
+          // Epic 18: Include 'attached' as in-flight
           setFiles((prev) =>
             prev.map((f) =>
-              ['uploading', 'storing', 'parsing'].includes(f.stage)
+              ['uploading', 'storing', 'attached', 'parsing'].includes(f.stage)
                 ? { ...f, stage: 'error' as const, error: 'Upload timed out' }
                 : f
             )

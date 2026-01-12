@@ -143,6 +143,8 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
       findByIdAndUser: jest.fn(),
       findByIdAndConversation: jest.fn(),
       findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      // Epic 18: Context injection needs excerpt-enabled files
+      findByConversationWithExcerpt: jest.fn().mockResolvedValue([]),
       updateIntakeContext: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -244,9 +246,10 @@ describe('ChatServer.handleGenerateQuestionnaire', () => {
         'test-user'
       );
 
+      // Phase 1 fix: assistant_done now emits fullText instead of content
       expect(mockSocket.emit).toHaveBeenCalledWith('assistant_done', {
         conversationId: 'conv-123',
-        content: expect.stringContaining('# Test Questionnaire'),
+        fullText: expect.stringContaining('# Test Questionnaire'),
       });
     });
 

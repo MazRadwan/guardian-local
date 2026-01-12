@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ChevronDown, Check, MessageSquare, ClipboardList, BarChart3 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { ChevronDown, Check, MessageSquare, ClipboardList, BarChart3, AlertTriangle } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export type ConversationMode = 'consult' | 'assessment' | 'scoring';
@@ -17,6 +17,8 @@ export interface ModeSelectorProps {
   selectedMode: ConversationMode;
   onModeChange: (mode: ConversationMode) => void;
   disabled?: boolean;
+  /** Epic 18 Story 18.3.4: Files in progress (show warning on mode change) */
+  hasIncompleteFiles?: boolean;
 }
 
 const MODE_OPTIONS: ModeOption[] = [
@@ -44,6 +46,7 @@ export function ModeSelector({
   selectedMode,
   onModeChange,
   disabled = false,
+  hasIncompleteFiles = false,
 }: ModeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = MODE_OPTIONS.find((opt) => opt.value === selectedMode);
@@ -71,10 +74,15 @@ export function ModeSelector({
           type="button"
           disabled={disabled}
           className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${modeColors[selectedMode]}`}
-          aria-label={`Mode: ${selectedOption?.name}`}
+          aria-label={`Mode: ${selectedOption?.name}${hasIncompleteFiles ? ' (files still processing)' : ''}`}
+          title={hasIncompleteFiles ? 'Files are still processing. Switching modes may affect analysis.' : undefined}
         >
           {selectedOption?.icon}
           <span>{selectedOption?.name}</span>
+          {/* Epic 18 Story 18.3.4: Warning when files incomplete */}
+          {hasIncompleteFiles && (
+            <AlertTriangle className="h-3.5 w-3.5 text-yellow-600" aria-hidden="true" />
+          )}
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </button>
       </PopoverTrigger>

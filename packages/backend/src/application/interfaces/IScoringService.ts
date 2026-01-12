@@ -2,7 +2,12 @@ import { ScoringReportData, ScoringProgressEvent } from '../../domain/scoring/ty
 import type { ScoringErrorCode } from '../../domain/scoring/errors.js';
 
 export interface ScoringInput {
-  assessmentId: string;
+  /**
+   * Assessment ID to score. If not provided, will be extracted from the uploaded document.
+   * Epic 18: Made optional to support Scoring mode in new conversations where the
+   * assessment ID is embedded in the questionnaire file, not linked to the conversation.
+   */
+  assessmentId?: string;
   conversationId: string;
   fileId: string;
   userId: string;

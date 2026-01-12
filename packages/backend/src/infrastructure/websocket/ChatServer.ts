@@ -4,9 +4,12 @@ import { AssessmentService } from '../../application/services/AssessmentService.
 import { VendorService } from '../../application/services/VendorService.js';
 import { QuestionnaireGenerationService } from '../../application/services/QuestionnaireGenerationService.js';
 import { QuestionService } from '../../application/services/QuestionService.js';
-import type { IScoringService } from '../../application/interfaces/IScoringService.js';
+import type { IScoringService, ScoringInput } from '../../application/interfaces/IScoringService.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock } from '../../application/interfaces/IClaudeClient.js';
-import type { IFileRepository, FileWithIntakeContext } from '../../application/interfaces/IFileRepository.js';
+import type { IFileRepository, FileWithIntakeContext, FileWithExcerpt, FileRecord } from '../../application/interfaces/IFileRepository.js';
+import type { IFileStorage } from '../../application/interfaces/IFileStorage.js';
+import type { ITextExtractionService, ValidatedDocumentType } from '../../application/interfaces/ITextExtractionService.js';
+import type { IIntakeDocumentParser } from '../../application/interfaces/IIntakeDocumentParser.js';
 import { PromptCacheManager } from '../ai/PromptCacheManager.js';
 import { RateLimiter } from './RateLimiter.js';
 import jwt from 'jsonwebtoken';
@@ -15,8 +18,23 @@ import { assessmentModeTools } from '../ai/tools/index.js';
 import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
 import type { IntakeDocumentContext } from '../../domain/entities/Conversation.js';
 import type { MessageAttachment } from '../../domain/entities/Message.js';
-// NOTE: ScoringProgressEvent, ScoringReportData imports removed - scoring now
-// handled by DocumentUploadController.runScoring() (Sprint 5a)
+import { sanitizeForPrompt } from '../../utils/sanitize.js';
+import type { ScoringProgressEvent } from '../../domain/scoring/types.js';
+import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
+// Epic 18: Scoring now triggered on user Send (trigger-on-send pattern)
+
+/**
+ * Epic 18: MIME type to validated document type mapping
+ * Used for context injection fallback when re-reading from S3.
+ * Handles DOCX-as-ZIP edge case by mapping to correct type.
+ */
+const MIME_TYPE_MAP: Record<string, ValidatedDocumentType> = {
+  'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'image/png': 'image',
+  'image/jpeg': 'image',
+  'image/webp': 'image',
+};
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -84,7 +102,14 @@ export class ChatServer {
     private readonly questionnaireGenerationService: QuestionnaireGenerationService,
     private readonly questionService: QuestionService,
     private readonly fileRepository: IFileRepository,
-    private readonly scoringService?: IScoringService
+    private readonly scoringService?: IScoringService,
+    // Epic 18: Dependencies for context injection fallback and background enrichment
+    private readonly fileStorage?: IFileStorage,
+    private readonly textExtractionService?: ITextExtractionService,
+    // Epic 18 Sprint 3: Intake parser for background enrichment
+    private readonly intakeParser?: IIntakeDocumentParser,
+    // Epic 18.4: Vendor validation for multi-vendor clarification
+    private readonly vendorValidationService?: VendorValidationService
   ) {
     this.io = io;
     this.conversationService = conversationService;
@@ -361,6 +386,692 @@ export class ChatServer {
   }
 
   /**
+   * Epic 18: Build context for Claude from attached files using fallback hierarchy
+   *
+   * Fallback hierarchy:
+   * 1. intakeContext (structured, from Claude enrichment) - best
+   * 2. textExcerpt (raw text, from upload extraction) - good
+   * 3. Re-read from S3 (slow fallback for missing excerpt)
+   *
+   * @param conversationId - Conversation to get files for
+   * @param scopeToFileIds - Optional array of file IDs to limit context to (for auto-summarize)
+   * @returns Formatted context string for Claude (empty if no files)
+   */
+  private async buildFileContext(conversationId: string, scopeToFileIds?: string[]): Promise<string> {
+    // Use new method that returns ALL files (not just those with intakeContext)
+    let files = await this.fileRepository.findByConversationWithExcerpt(conversationId);
+
+    // If scoped to specific files, filter to only those
+    if (scopeToFileIds && scopeToFileIds.length > 0) {
+      const scopeSet = new Set(scopeToFileIds);
+      files = files.filter(f => scopeSet.has(f.id));
+    }
+
+    if (files.length === 0) {
+      return '';
+    }
+
+    const contextParts: string[] = [];
+
+    for (const file of files) {
+      // Priority 1: Structured intake context (best)
+      if (file.intakeContext) {
+        contextParts.push(this.formatIntakeContextFile(file));
+        continue;
+      }
+
+      // Priority 2: Text excerpt (good, fast)
+      if (file.textExcerpt) {
+        contextParts.push(this.formatTextExcerptFile(file));
+        continue;
+      }
+
+      // Priority 3: Re-read from S3 (slow fallback for missing excerpt)
+      console.warn(`[ChatServer] File ${file.id} has no excerpt, falling back to S3 read`);
+      try {
+        const excerpt = await this.extractExcerptFromStorage(file);
+        if (excerpt) {
+          contextParts.push(this.formatTextExcerptFile({ ...file, textExcerpt: excerpt }));
+
+          // Lazy backfill: Store for next time (fire-and-forget)
+          this.fileRepository.updateTextExcerpt(file.id, excerpt).catch(err => {
+            console.error(`[ChatServer] Failed to backfill excerpt for ${file.id}:`, err);
+          });
+        }
+      } catch (err) {
+        console.error(`[ChatServer] Failed to extract excerpt for ${file.id}:`, err);
+        // Continue without this file's context
+      }
+    }
+
+    if (contextParts.length === 0) {
+      return '';
+    }
+
+    return `\n\n--- Attached Documents ---\n${contextParts.join('\n\n')}`;
+  }
+
+  /**
+   * Epic 18: Format structured intake context for a single file
+   */
+  private formatIntakeContextFile(file: FileWithExcerpt): string {
+    const ctx = file.intakeContext!;
+    const parts: string[] = [`[Document: ${this.sanitizeForPrompt(file.filename, 100)}]`];
+
+    if (ctx.vendorName) parts.push(`Vendor: ${this.sanitizeForPrompt(ctx.vendorName)}`);
+    if (ctx.solutionName) parts.push(`Solution: ${this.sanitizeForPrompt(ctx.solutionName)}`);
+    if (ctx.solutionType) parts.push(`Type: ${this.sanitizeForPrompt(ctx.solutionType)}`);
+    if (ctx.features?.length) {
+      const features = ctx.features.slice(0, 5).map(f => this.sanitizeForPrompt(f, 100)).filter(Boolean);
+      if (features.length) parts.push(`Features: ${features.join(', ')}`);
+    }
+    if (ctx.claims?.length) {
+      const claims = ctx.claims.slice(0, 3).map(c => this.sanitizeForPrompt(c, 100)).filter(Boolean);
+      if (claims.length) parts.push(`Claims: ${claims.join(', ')}`);
+    }
+    if (ctx.complianceMentions?.length) {
+      const compliance = ctx.complianceMentions.map(c => this.sanitizeForPrompt(c, 50)).filter(Boolean);
+      if (compliance.length) parts.push(`Compliance: ${compliance.join(', ')}`);
+    }
+
+    return parts.join('\n');
+  }
+
+  /**
+   * Epic 18: Format raw text excerpt for a single file
+   *
+   * SECURITY: Uses sanitizeForPrompt to avoid injecting raw/malicious text
+   */
+  private formatTextExcerptFile(file: FileWithExcerpt): string {
+    // Sanitize excerpt before injecting into Claude prompt
+    const sanitizedExcerpt = sanitizeForPrompt(file.textExcerpt || '', {
+      maxLength: 10000,
+      stripControlChars: true,
+      escapePromptInjection: true,
+    });
+
+    return `[Document: ${this.sanitizeForPrompt(file.filename, 100)}]
+(Raw text excerpt - enrichment pending)
+
+${sanitizedExcerpt}`;
+  }
+
+  /**
+   * Epic 18: Extract excerpt from S3 storage (slow fallback)
+   *
+   * IMPORTANT: Uses validated documentType via MIME_TYPE_MAP
+   * (not raw mimeType) to handle DOCX-as-ZIP edge case correctly.
+   *
+   * @param file - File record to extract from
+   * @returns Extracted excerpt or null if extraction fails
+   */
+  private async extractExcerptFromStorage(file: FileWithExcerpt): Promise<string | null> {
+    // Check if dependencies are available
+    if (!this.fileStorage || !this.textExtractionService) {
+      console.warn('[ChatServer] File storage or text extraction service not configured, skipping S3 fallback');
+      return null;
+    }
+
+    const buffer = await this.fileStorage.retrieve(file.storagePath);
+
+    // Map MIME type to validated document type (handles DOCX-as-ZIP)
+    const documentType = MIME_TYPE_MAP[file.mimeType];
+    if (!documentType) {
+      console.warn(`[ChatServer] Unknown MIME type for extraction: ${file.mimeType}`);
+      return null;
+    }
+
+    const result = await this.textExtractionService.extract(buffer, documentType);
+
+    if (!result.success) {
+      console.warn(`[ChatServer] Text extraction failed for ${file.id}: ${result.error}`);
+      return null;
+    }
+
+    return result.excerpt;
+  }
+
+  // =========================================================================
+  // Epic 18 Sprint 3: Mode-Specific Behavior
+  // =========================================================================
+
+  /**
+   * Epic 18 Story 18.3.2: Background enrichment for Assessment mode
+   *
+   * Runs in background (fire-and-forget) after immediate response is sent.
+   * Uses tryStartParsing() for idempotency - prevents duplicate processing.
+   *
+   * @param conversationId - Conversation containing files to enrich
+   * @param fileIds - File IDs to process
+   */
+  private async enrichInBackground(
+    conversationId: string,
+    fileIds: string[]
+  ): Promise<void> {
+    // Check dependencies
+    if (!this.intakeParser || !this.fileStorage) {
+      console.warn('[ChatServer] Intake parser or file storage not configured, skipping background enrichment');
+      return;
+    }
+
+    for (const fileId of fileIds) {
+      try {
+        // Use idempotency check (parseStatus column)
+        // Only proceeds if status was 'pending' -> 'in_progress'
+        const started = await this.fileRepository.tryStartParsing(fileId);
+        if (!started) {
+          console.log(`[ChatServer] File ${fileId} already being processed, skipping`);
+          continue;
+        }
+
+        // Get file record for storage path
+        const file = await this.fileRepository.findById(fileId);
+        if (!file) {
+          console.warn(`[ChatServer] File ${fileId} not found for enrichment`);
+          await this.fileRepository.updateParseStatus(fileId, 'failed');
+          continue;
+        }
+
+        // Retrieve file from storage
+        const buffer = await this.fileStorage.retrieve(file.storagePath);
+
+        // Map MIME type to document type
+        const documentType = MIME_TYPE_MAP[file.mimeType];
+        if (!documentType) {
+          console.warn(`[ChatServer] Unsupported MIME type for enrichment: ${file.mimeType}`);
+          await this.fileRepository.updateParseStatus(fileId, 'failed');
+          continue;
+        }
+
+        // Parse for context (assessment mode uses standard enrichment)
+        const result = await this.intakeParser.parseForContext(buffer, {
+          filename: file.filename,
+          mimeType: file.mimeType,
+          sizeBytes: file.size,
+          documentType,
+          storagePath: file.storagePath,
+          uploadedAt: file.createdAt,
+          uploadedBy: file.userId,
+        });
+
+        if (result.success && result.context) {
+          // Store enriched context
+          await this.fileRepository.updateIntakeContext(
+            fileId,
+            {
+              vendorName: result.context.vendorName,
+              solutionName: result.context.solutionName,
+              solutionType: result.context.solutionType,
+              industry: result.context.industry,
+              features: result.context.features,
+              claims: result.context.claims,
+              complianceMentions: result.context.complianceMentions,
+            },
+            result.gapCategories
+          );
+          await this.fileRepository.updateParseStatus(fileId, 'completed');
+          console.log(`[ChatServer] Background enrichment completed for file ${fileId}`);
+        } else {
+          console.warn(`[ChatServer] Background enrichment failed for file ${fileId}: ${result.error}`);
+          await this.fileRepository.updateParseStatus(fileId, 'failed');
+        }
+      } catch (err) {
+        console.error(`[ChatServer] Error during background enrichment for file ${fileId}:`, err);
+        // Mark as failed but continue with other files
+        await this.fileRepository.updateParseStatus(fileId, 'failed').catch(() => {});
+      }
+    }
+  }
+
+  /**
+   * Epic 18 Story 18.3.3: Trigger scoring on Send for Scoring mode
+   *
+   * Called when user sends a message in Scoring mode with attachments.
+   * Uses tryStartParsing() for idempotency.
+   * Emits scoring_progress events during processing.
+   *
+   * @param socket - Client socket to emit progress to
+   * @param conversationId - Conversation being scored
+   * @param userId - User who initiated scoring
+   * @param fileIds - Files to parse and score
+   */
+  private async triggerScoringOnSend(
+    socket: AuthenticatedSocket,
+    conversationId: string,
+    userId: string,
+    fileIds: string[],
+    userQuery?: string  // Epic 18.4.3: Optional user query to address after scoring
+  ): Promise<void> {
+    // Check dependencies
+    if (!this.scoringService || !this.fileStorage) {
+      console.warn('[ChatServer] Scoring service or file storage not configured');
+      socket.emit('scoring_error', {
+        conversationId,
+        error: 'Scoring is not available',
+        code: 'SERVICE_UNAVAILABLE',
+      });
+      return;
+    }
+
+    // Epic 18.4.2a: Validate single vendor before scoring
+    // If multiple vendors detected, emit clarification event for user to choose
+    if (this.vendorValidationService && fileIds.length > 0) {
+      const validationResult = await this.vendorValidationService.validateSingleVendor(fileIds);
+
+      if (!validationResult.valid && validationResult.vendors) {
+        console.log(
+          `[ChatServer] Multiple vendors detected (${validationResult.vendors.length}), requesting clarification`
+        );
+
+        // Initialize pending clarifications map if not exists (stores by conversationId)
+        if (!socket.data.pendingVendorClarifications) {
+          socket.data.pendingVendorClarifications = new Map();
+        }
+
+        // Store pending scoring request keyed by conversationId
+        // This prevents overwrites when multiple conversations have pending clarifications
+        socket.data.pendingVendorClarifications.set(conversationId, {
+          conversationId,
+          userId,
+          fileIds,
+          userQuery,
+          vendors: validationResult.vendors,
+        });
+
+        // Emit clarification event - frontend will show vendor selection UI
+        socket.emit('vendor_clarification_needed', {
+          conversationId,
+          vendors: validationResult.vendors,
+          message: `I found documents from ${validationResult.vendors.length} different vendors. Which vendor would you like to score first?`,
+        });
+
+        return; // Wait for user selection before proceeding
+      }
+    }
+
+    for (const fileId of fileIds) {
+      try {
+        // Get file record
+        const file = await this.fileRepository.findById(fileId);
+        if (!file) {
+          console.warn(`[ChatServer] File ${fileId} not found for scoring`);
+          continue;
+        }
+
+        // Check if already completed (idempotency)
+        if (file.parseStatus === 'completed') {
+          console.log(`[ChatServer] File ${fileId} already parsed, checking for scoring`);
+          // File is parsed, but we still need to get the assessmentId
+          // For now, emit an info message - scoring may have already happened
+          continue;
+        }
+
+        // Try to start parsing (atomic idempotency check)
+        const started = await this.fileRepository.tryStartParsing(fileId);
+        if (!started) {
+          console.log(`[ChatServer] File ${fileId} already being processed`);
+          socket.emit('scoring_progress', {
+            conversationId,
+            fileId, // Epic 18: Include fileId for tracking
+            status: 'parsing',
+            message: 'Document is already being processed...',
+          } as ScoringProgressEvent);
+          continue;
+        }
+
+        // Emit initial progress
+        socket.emit('scoring_progress', {
+          conversationId,
+          fileId, // Epic 18: Include fileId for tracking
+          status: 'parsing',
+          progress: 10,
+          message: 'Analyzing questionnaire responses...',
+        } as ScoringProgressEvent);
+
+        // Epic 18: No longer require conversation.assessmentId - ScoringService will extract
+        // the assessment ID from the uploaded questionnaire document. This supports the
+        // workflow where users upload completed questionnaires in Scoring mode without
+        // needing to first generate the questionnaire in the same conversation.
+
+        // Emit scoring started (assessmentId will be determined from file)
+        socket.emit('scoring_started', {
+          fileId,
+          conversationId,
+        });
+
+        // Build scoring input - assessmentId is optional, will be extracted from document
+        const scoringInput: ScoringInput = {
+          // assessmentId omitted - will be extracted from the uploaded questionnaire
+          conversationId,
+          fileId,
+          userId,
+        };
+
+        // Run scoring with progress callback
+        const scoringResult = await this.scoringService.score(scoringInput, (event: ScoringProgressEvent) => {
+          console.log(`[ChatServer] Scoring progress: ${event.status} - ${event.message}`);
+          socket.emit('scoring_progress', {
+            conversationId,
+            fileId, // Epic 18: Include fileId for tracking
+            status: event.status,
+            message: event.message,
+            progress: event.progress,
+          });
+        });
+
+        if (scoringResult.success && scoringResult.report) {
+          // Epic 18: Get assessmentId from the scoring report (extracted from document)
+          const assessmentId = scoringResult.report.assessmentId;
+
+          // Build result data for frontend
+          const resultData = {
+            compositeScore: scoringResult.report.payload.compositeScore,
+            recommendation: scoringResult.report.payload.recommendation,
+            overallRiskRating: scoringResult.report.payload.overallRiskRating,
+            executiveSummary: scoringResult.report.payload.executiveSummary,
+            keyFindings: scoringResult.report.payload.keyFindings,
+            dimensionScores: scoringResult.report.payload.dimensionScores.map(ds => ({
+              dimension: ds.dimension,
+              score: ds.score,
+              riskRating: ds.riskRating,
+            })),
+            batchId: scoringResult.batchId,
+            assessmentId,
+          };
+
+          // Emit scoring complete with results
+          socket.emit('scoring_complete', {
+            conversationId,
+            result: resultData,
+            narrativeReport: scoringResult.report.narrativeReport,
+          });
+
+          // Mark file as completed
+          await this.fileRepository.updateParseStatus(fileId, 'completed');
+
+          // Save narrative report as assistant message
+          // Note: Don't include scoring_result component here - it's already displayed
+          // from the store state set by scoring_complete event. Including it would cause
+          // duplicate card rendering.
+          const narrativeText = scoringResult.report.narrativeReport ||
+            `Risk assessment complete. Composite score: ${scoringResult.report.payload.compositeScore}/100. ` +
+            `Overall risk: ${scoringResult.report.payload.overallRiskRating}. ` +
+            `Recommendation: ${scoringResult.report.payload.recommendation}.`;
+
+          const reportMessage = await this.conversationService.sendMessage({
+            conversationId,
+            role: 'assistant',
+            content: {
+              text: narrativeText,
+              // No components - scoring card rendered from store state via scoring_complete event
+            },
+          });
+
+          // Emit the message for display (narrative only, card is from scoring_complete)
+          socket.emit('message', {
+            id: reportMessage.id,
+            conversationId: reportMessage.conversationId,
+            role: reportMessage.role,
+            content: reportMessage.content,
+            createdAt: reportMessage.createdAt,
+          });
+
+          console.log(`[ChatServer] Scoring completed: assessmentId=${assessmentId}, score=${scoringResult.report.payload.compositeScore}`);
+
+          // =========================================================
+          // Epic 18.4.3: Address user query after scoring
+          // =========================================================
+          if (userQuery && userQuery.trim().length > 0) {
+            console.log(`[ChatServer] Addressing user query after scoring: "${userQuery.slice(0, 50)}..."`);
+
+            try {
+              // Build context with scoring results
+              const scoringContext = this.buildScoringFollowUpContext(scoringResult.report);
+
+              // Get conversation history (includes scoring narrative)
+              const { messages, systemPrompt } = await this.buildConversationContext(conversationId);
+
+              // Build enhanced prompt with scoring context
+              const enhancedPrompt = `${systemPrompt}
+
+${scoringContext}
+
+The user submitted this questionnaire with a question. The scoring has completed.
+Now address their question using the scoring results above as context.
+Be specific and reference actual scores and findings from the assessment.
+If they asked about a specific dimension or topic, focus your answer on that area.`;
+
+              // Emit typing indicator
+              socket.emit('assistant_stream_start', { conversationId });
+
+              // Stream Claude response
+              let fullResponse = '';
+
+              for await (const chunk of this.claudeClient.streamMessage(messages, { systemPrompt: enhancedPrompt })) {
+                if (!chunk.isComplete && chunk.content) {
+                  fullResponse += chunk.content;
+                  socket.emit('assistant_token', {
+                    conversationId,
+                    token: chunk.content,
+                  });
+                }
+              }
+
+              // Save assistant response
+              const followUpMessage = await this.conversationService.sendMessage({
+                conversationId,
+                role: 'assistant',
+                content: { text: fullResponse },
+              });
+
+              // Emit stream complete
+              socket.emit('assistant_done', {
+                conversationId,
+                messageId: followUpMessage.id,
+                fullText: fullResponse,
+              });
+
+              console.log(`[ChatServer] User query addressed (${fullResponse.length} chars)`);
+            } catch (error) {
+              console.error('[ChatServer] Failed to address user query:', error);
+              // Non-fatal - scoring already completed
+              socket.emit('message', {
+                role: 'assistant',
+                content: "I've completed the scoring. I tried to address your question but encountered an issue. Feel free to ask again.",
+                conversationId,
+              });
+            }
+          }
+        } else {
+          // Scoring failed
+          await this.fileRepository.updateParseStatus(fileId, 'failed');
+          socket.emit('scoring_error', {
+            conversationId,
+            error: scoringResult.error || 'Scoring failed',
+            code: scoringResult.code || 'SCORING_FAILED',
+          });
+
+          // Save error as system message
+          await this.conversationService.sendMessage({
+            conversationId,
+            role: 'system',
+            content: { text: `[System: Scoring failed - ${scoringResult.error || 'Unknown error'}]` },
+          });
+        }
+      } catch (err) {
+        console.error(`[ChatServer] Error during scoring for file ${fileId}:`, err);
+        await this.fileRepository.updateParseStatus(fileId, 'failed').catch(() => {});
+        socket.emit('scoring_error', {
+          conversationId,
+          error: err instanceof Error ? err.message : 'Scoring failed',
+          code: 'SCORING_FAILED',
+        });
+      }
+    }
+  }
+
+  /**
+   * Epic 18.4.3: Build scoring context for follow-up questions
+   *
+   * Formats the scoring results as context for Claude to reference
+   * when answering user questions about the assessment.
+   */
+  private buildScoringFollowUpContext(report: {
+    payload: {
+      compositeScore: number;
+      overallRiskRating: string;
+      recommendation: string;
+      executiveSummary: string;
+      keyFindings: string[];
+      dimensionScores: Array<{
+        dimension: string;
+        score: number;
+        riskRating: string;
+      }>;
+    };
+  }): string {
+    const { payload } = report;
+
+    // Format dimension scores for context
+    const dimensionSummary = payload.dimensionScores
+      .map(ds => `- ${ds.dimension}: ${ds.score}/10 (${ds.riskRating})`)
+      .join('\n');
+
+    return `
+## Scoring Results Context
+
+**Composite Score:** ${payload.compositeScore}/100
+**Overall Risk Rating:** ${payload.overallRiskRating}
+**Recommendation:** ${payload.recommendation}
+
+### Dimension Scores:
+${dimensionSummary}
+
+### Key Findings:
+${payload.keyFindings.map(f => `- ${f}`).join('\n')}
+
+### Executive Summary:
+${payload.executiveSummary}
+`;
+  }
+
+  /**
+   * Epic 18.4.5: Auto-summarize documents in Consult mode
+   *
+   * When user sends file(s) without a message in Consult mode,
+   * automatically generate a summary to kickstart the conversation.
+   *
+   * @param socket - Client socket to emit events to
+   * @param conversationId - Conversation containing the files
+   * @param userId - User who uploaded the files
+   * @param fileIds - File IDs to summarize
+   */
+  private async autoSummarizeDocuments(
+    socket: AuthenticatedSocket,
+    conversationId: string,
+    userId: string,
+    fileIds: string[]
+  ): Promise<void> {
+    try {
+      // Build file context scoped to the specific files being summarized
+      // This prevents mixing unrelated documents from the conversation
+      const fileContext = await this.buildFileContext(conversationId, fileIds);
+
+      if (!fileContext) {
+        // No context available - ask user to try again
+        socket.emit('message', {
+          role: 'assistant',
+          content: "I received your file but couldn't extract the content. Could you try uploading it again?",
+          conversationId,
+        });
+        return;
+      }
+
+      // Get file names for personalized response
+      const files = await Promise.all(
+        fileIds.map(id => this.fileRepository.findById(id))
+      );
+      const validFiles = files.filter(Boolean) as NonNullable<typeof files[number]>[];
+      const fileNames = validFiles.map(f => f.filename).join(', ');
+
+      // Build summarization prompt
+      const isSingleFile = fileIds.length === 1;
+      const fileLabel = isSingleFile
+        ? `a document (${fileNames})`
+        : `${fileIds.length} documents (${fileNames})`;
+      const systemPrompt = this.buildAutoSummarizePrompt(fileLabel);
+
+      // Get conversation context (messages for conversation history)
+      const { messages } = await this.buildConversationContext(conversationId);
+
+      // Emit typing indicator
+      socket.emit('assistant_stream_start', { conversationId });
+
+      // Stream Claude response
+      let fullResponse = '';
+
+      for await (const chunk of this.claudeClient.streamMessage(messages, {
+        systemPrompt: `${systemPrompt}\n\n${fileContext}`,
+      })) {
+        if (!chunk.isComplete && chunk.content) {
+          fullResponse += chunk.content;
+          socket.emit('assistant_token', {
+            conversationId,
+            token: chunk.content,
+          });
+        }
+      }
+
+      // Save assistant response
+      const summaryMessage = await this.conversationService.sendMessage({
+        conversationId,
+        role: 'assistant',
+        content: { text: fullResponse },
+      });
+
+      // Emit stream complete
+      socket.emit('assistant_done', {
+        conversationId,
+        messageId: summaryMessage.id,
+        fullText: fullResponse,
+      });
+
+      console.log(`[ChatServer] Auto-summarize complete (${fullResponse.length} chars)`);
+    } catch (error) {
+      console.error('[ChatServer] Auto-summarize failed:', error);
+      socket.emit('message', {
+        role: 'assistant',
+        content: "I had trouble summarizing the document. What would you like to know about it?",
+        conversationId,
+      });
+    }
+  }
+
+  /**
+   * Epic 18.4.5: Build system prompt for auto-summarization
+   *
+   * Creates a Guardian-style prompt that produces summaries focused on
+   * AI governance and vendor assessment relevance.
+   *
+   * @param fileLabel - Description of the file(s) being summarized
+   * @returns System prompt for Claude
+   */
+  private buildAutoSummarizePrompt(fileLabel: string): string {
+    return `You are Guardian, an AI assistant helping healthcare organizations assess AI vendors.
+
+The user has uploaded ${fileLabel} and wants to understand its contents.
+
+Please provide a helpful summary that:
+1. Identifies what type of document this is (security whitepaper, compliance cert, product doc, questionnaire, etc.)
+2. Highlights key points relevant to AI governance and vendor assessment
+3. Notes any security, privacy, or compliance information mentioned
+4. Ends with an invitation to ask follow-up questions
+
+Keep the summary concise (3-5 paragraphs) and focus on information relevant to vendor assessment.
+If the document appears to be a completed questionnaire, mention that it can be scored in Scoring mode.`;
+  }
+
+  /**
    * Validate that a conversation belongs to the requesting user
    * @throws Error if conversation not found or doesn't belong to user
    */
@@ -611,10 +1322,85 @@ export class ChatServer {
           // the message we just saved above, so no need to add it again
           const { messages, systemPrompt, promptCache, mode } = await this.buildConversationContext(conversationId);
 
-          // Epic 15: In scoring mode, Claude responds with acknowledgment
-          // The scoring service handles file analysis automatically
-          // Claude's system prompt tells it to acknowledge uploads and answer questions
-          // No skip needed - Claude knows how to respond appropriately
+          // =========================================================
+          // Epic 18 Sprint 3: Mode-Specific Behavior
+          // =========================================================
+
+          // Epic 18 Story 18.3.3: Scoring mode with attachments - trigger scoring on Send
+          if (mode === 'scoring' && enrichedAttachments && enrichedAttachments.length > 0) {
+            console.log(`[ChatServer] Scoring mode with ${enrichedAttachments.length} attachments - triggering scoring`);
+
+            // Extract file IDs from enriched attachments
+            const fileIds = enrichedAttachments.map(a => a.fileId);
+
+            // Epic 18.4.3: Pass user message for follow-up addressing
+            // Only pass actual user text, not placeholder text for file-only uploads
+            const userQueryForFollowUp = messageText && !messageText.startsWith('[Uploaded file')
+              ? messageText
+              : undefined;
+
+            // Trigger scoring (async, with progress events)
+            await this.triggerScoringOnSend(
+              socket,
+              conversationId,
+              socket.userId!,
+              fileIds,
+              userQueryForFollowUp  // Epic 18.4.3: Pass user query
+            );
+
+            // Scoring mode handles its own response - don't generate Claude response
+            return;
+          }
+
+          // Epic 18 Story 18.3.2: Assessment mode with attachments - background enrichment
+          // In assessment mode, we respond immediately using buildFileContext (which uses
+          // textExcerpt), then start background enrichment for follow-up questions.
+          let fileIdsForEnrichment: string[] = [];
+
+          if (mode === 'assessment' && enrichedAttachments && enrichedAttachments.length > 0) {
+            fileIdsForEnrichment = enrichedAttachments.map(a => a.fileId);
+            console.log(`[ChatServer] Assessment mode with ${enrichedAttachments.length} attachments - will enrich in background`);
+          }
+          const shouldEnrichInBackground = fileIdsForEnrichment.length > 0;
+
+          // =========================================================
+          // Epic 18: Inject file context into Claude prompt
+          // For consult/assessment modes, append attached document content
+          // to the system prompt so Claude can answer questions about them.
+          // =========================================================
+          let enhancedSystemPrompt = systemPrompt;
+
+          if (mode === 'consult' || mode === 'assessment') {
+            const fileContext = await this.buildFileContext(conversationId);
+            if (fileContext) {
+              enhancedSystemPrompt = `${systemPrompt}${fileContext}`;
+              console.log(`[ChatServer] Injected file context (${fileContext.length} chars) into ${mode} mode prompt`);
+            }
+          }
+
+          // =========================================================
+          // Epic 18.4.5: Auto-summarize in Consult mode
+          // When user sends file(s) without a message in Consult mode,
+          // automatically generate a summary to provide immediate value.
+          // =========================================================
+          const isEmptyMessageWithFile =
+            mode === 'consult' &&
+            enrichedAttachments &&
+            enrichedAttachments.length > 0 &&
+            (!messageText || messageText.trim().length === 0);
+
+          if (isEmptyMessageWithFile && enrichedAttachments) {
+            console.log(`[ChatServer] Consult mode: empty message with ${enrichedAttachments.length} files - auto-summarizing`);
+
+            await this.autoSummarizeDocuments(
+              socket,
+              conversationId,
+              socket.userId!,
+              enrichedAttachments.map(a => a.fileId)
+            );
+
+            return; // Skip normal message handling
+          }
 
           // Stream Claude response
           let fullResponse = '';
@@ -632,8 +1418,9 @@ export class ChatServer {
             const shouldUseTool = mode === 'assessment';
 
             // Build Claude options with optional tools
+            // Epic 18: Use enhancedSystemPrompt which includes file context for consult/assessment
             const claudeOptions = {
-              systemPrompt,
+              systemPrompt: enhancedSystemPrompt,
               usePromptCache: promptCache?.usePromptCache || false,
               ...(promptCache?.cachedPromptId && { cachedPromptId: promptCache.cachedPromptId }),
               // Conditionally add tools
@@ -699,6 +1486,15 @@ export class ChatServer {
                   userId: socket.userId!,
                   assessmentId: null,
                   mode: mode,
+                });
+              }
+
+              // Epic 18 Story 18.3.2: Start background enrichment AFTER response sent
+              // This is fire-and-forget - errors are logged but don't affect the user
+              if (shouldEnrichInBackground && fileIdsForEnrichment.length > 0) {
+                this.enrichInBackground(conversationId, fileIdsForEnrichment).catch(err => {
+                  console.error('[ChatServer] Background enrichment failed:', err);
+                  // Non-fatal - conversation continues with excerpt-based context
                 });
               }
             } else {
@@ -1135,6 +1931,100 @@ Once uploaded, I'll analyze the responses and provide:
       });
 
       /**
+       * Epic 18.4.2a: Handle user selecting a vendor from clarification prompt
+       *
+       * When multiple vendors are detected in uploaded files, the user must choose
+       * which vendor to score. This handler receives their selection and resumes
+       * scoring with only that vendor's files.
+       */
+      socket.on('vendor_selected', async (payload: { conversationId: string; vendorName: string }) => {
+        const userId = socket.userId;
+        if (!userId) {
+          console.error('[ChatServer] vendor_selected called without authenticated user');
+          socket.emit('error', { event: 'vendor_selected', message: 'Not authenticated' });
+          return;
+        }
+
+        // Guard: Validate vendorName is present and non-empty
+        if (!payload.vendorName || typeof payload.vendorName !== 'string' || payload.vendorName.trim().length === 0) {
+          console.warn('[ChatServer] vendor_selected called with missing/empty vendorName');
+          socket.emit('error', {
+            event: 'vendor_selected',
+            message: 'Vendor name is required',
+          });
+          return;
+        }
+
+        // Guard: Validate conversationId is present
+        if (!payload.conversationId || typeof payload.conversationId !== 'string') {
+          console.warn('[ChatServer] vendor_selected called with missing conversationId');
+          socket.emit('error', {
+            event: 'vendor_selected',
+            message: 'Conversation ID is required',
+          });
+          return;
+        }
+
+        // Look up pending clarification by conversationId (Map-based storage)
+        const pendingMap = socket.data.pendingVendorClarifications as Map<string, {
+          conversationId: string;
+          userId: string;
+          fileIds: string[];
+          userQuery?: string;
+          vendors: Array<{ name: string; fileCount: number; fileIds: string[] }>;
+        }> | undefined;
+
+        const pending = pendingMap?.get(payload.conversationId);
+
+        if (!pending) {
+          console.warn(`[ChatServer] vendor_selected called without pending clarification for conversation ${payload.conversationId}`);
+          socket.emit('error', {
+            event: 'vendor_selected',
+            message: 'No pending vendor clarification for this conversation',
+          });
+          return;
+        }
+
+        // Find the selected vendor's files (normalize with trim() for comparison)
+        const normalizedVendorName = payload.vendorName.trim().toLowerCase();
+        const selectedVendor = pending.vendors.find(
+          v => v.name.trim().toLowerCase() === normalizedVendorName
+        );
+
+        if (!selectedVendor) {
+          console.warn(`[ChatServer] Unknown vendor selected: ${payload.vendorName}`);
+          socket.emit('error', {
+            event: 'vendor_selected',
+            message: `Unknown vendor: ${payload.vendorName}`,
+          });
+          return;
+        }
+
+        console.log(
+          `[ChatServer] User selected vendor "${selectedVendor.name}" with ${selectedVendor.fileIds.length} files`
+        );
+
+        // Clear pending clarification for this conversation
+        pendingMap?.delete(payload.conversationId);
+
+        // Emit confirmation message
+        socket.emit('message', {
+          role: 'assistant',
+          content: `Starting scoring for ${selectedVendor.name}...`,
+          conversationId: pending.conversationId,
+        });
+
+        // Resume scoring with only the selected vendor's files
+        await this.triggerScoringOnSend(
+          socket,
+          pending.conversationId,
+          pending.userId,
+          selectedVendor.fileIds,
+          pending.userQuery
+        );
+      });
+
+      /**
        * Handle user clicking "Generate Questionnaire" button
        *
        * Epic 12.5: Delegates to handleGenerateQuestionnaire public method
@@ -1507,7 +2397,7 @@ Once uploaded, I'll analyze the responses and provide:
 
     socket.emit('assistant_done', {
       conversationId,
-      content: markdown,
+      fullText: markdown,
     });
   }
 

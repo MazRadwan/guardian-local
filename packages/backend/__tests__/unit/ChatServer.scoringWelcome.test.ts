@@ -87,6 +87,8 @@ describe('ChatServer - Scoring Mode Welcome Message (Story 5a.5)', () => {
       findByIdAndUser: jest.fn(),
       findByIdAndConversation: jest.fn(),
       findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      // Epic 18: Context injection needs excerpt-enabled files
+      findByConversationWithExcerpt: jest.fn().mockResolvedValue([]),
       updateIntakeContext: jest.fn().mockResolvedValue(undefined),
     };
 

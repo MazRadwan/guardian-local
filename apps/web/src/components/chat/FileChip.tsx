@@ -16,6 +16,10 @@
  * - Shows Clock icon with "Queued" status text
  * - Allows removal while waiting
  *
+ * Epic 18: Added 'attached' stage for instant file display
+ * - Shows checkmark with "Attached" text when file is stored
+ * - File ready for display while enrichment may continue
+ *
  * Features:
  * - Light background with subtle border
  * - Truncated filename with progress bar
@@ -29,7 +33,7 @@ import { cn } from '@/lib/utils';
 
 export interface FileChipProps {
   filename: string;
-  stage: 'pending' | 'uploading' | 'storing' | 'parsing' | 'complete' | 'error';
+  stage: 'pending' | 'uploading' | 'storing' | 'attached' | 'parsing' | 'complete' | 'error'; // Epic 18: Added 'attached'
   progress: number; // 0-100
   error?: string;
   onRemove: () => void;
@@ -47,9 +51,10 @@ export function FileChip({
   variant = 'default',
 }: FileChipProps) {
   const isPending = stage === 'pending';
-  const isActive = ['uploading', 'storing', 'parsing'].includes(stage);
+  const isActive = ['uploading', 'storing', 'parsing'].includes(stage); // Epic 18: 'attached' is NOT active (shows as complete)
   const isError = stage === 'error';
   const isComplete = stage === 'complete';
+  const isAttached = stage === 'attached'; // Epic 18: New stage
   const isCompact = variant === 'compact';
 
   // Get status text based on stage
@@ -61,6 +66,8 @@ export function FileChip({
         return `${progress}%`;
       case 'storing':
         return 'Storing...';
+      case 'attached': // Epic 18: Show "Attached" status
+        return 'Attached';
       case 'parsing':
         return 'Analyzing...';
       case 'complete':
@@ -103,7 +110,8 @@ export function FileChip({
             aria-hidden="true"
           />
         )}
-        {isComplete && (
+        {/* Epic 18: Show checkmark for both 'attached' and 'complete' */}
+        {(isComplete || isAttached) && (
           <CheckCircle
             className={cn(
               'text-green-600 flex-shrink-0',
@@ -181,6 +189,11 @@ export function FileChip({
       {/* Pending indicator - only when queued, hidden in compact (icon remains) */}
       {isPending && !isCompact && (
         <span className="text-xs text-gray-500">Queued</span>
+      )}
+
+      {/* Epic 18: Attached indicator - file is stored and ready */}
+      {isAttached && !isCompact && (
+        <span className="text-xs text-green-600">Attached</span>
       )}
 
       {/* Success indicator - only when complete, hidden in compact (icon remains) */}

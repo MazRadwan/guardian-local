@@ -10,6 +10,8 @@ describe('DocumentUploadController', () => {
   let mockConversationService: jest.Mocked<any>;
   let mockChatNamespace: jest.Mocked<any>;
   let mockFileRepository: jest.Mocked<any>;
+  let mockScoringService: jest.Mocked<any>;
+  let mockTextExtractionService: jest.Mocked<any>;
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
 
@@ -69,6 +71,8 @@ describe('DocumentUploadController', () => {
         size: 1024,
         storagePath: '/uploads/test.pdf',
         createdAt: new Date(),
+        textExcerpt: 'Test document content', // Epic 18
+        parseStatus: 'pending', // Epic 18
       }),
       findByIdAndUser: jest.fn().mockResolvedValue({
         id: 'file-uuid-123',
@@ -79,10 +83,31 @@ describe('DocumentUploadController', () => {
         size: 1024,
         storagePath: '/uploads/test.pdf',
         createdAt: new Date(),
+        textExcerpt: 'Test document content', // Epic 18
+        parseStatus: 'pending', // Epic 18
       }),
       // Epic 17.3.3: Mock updateIntakeContext for storing context in file row
       updateIntakeContext: jest.fn().mockResolvedValue(undefined),
       findByConversationWithContext: jest.fn().mockResolvedValue([]),
+      // Epic 18 methods
+      findById: jest.fn(),
+      findByIdAndConversation: jest.fn(),
+      updateTextExcerpt: jest.fn().mockResolvedValue(undefined),
+      updateParseStatus: jest.fn().mockResolvedValue(undefined),
+      tryStartParsing: jest.fn().mockResolvedValue(true),
+    };
+
+    // Mock scoring service (optional)
+    mockScoringService = undefined; // Not used during upload phase
+
+    // Epic 18: Mock TextExtractionService for fast text extraction
+    mockTextExtractionService = {
+      extract: jest.fn().mockResolvedValue({
+        success: true,
+        excerpt: 'Test document content',
+        fullLength: 21,
+        extractionMs: 50,
+      }),
     };
 
     controller = new DocumentUploadController(
@@ -92,7 +117,9 @@ describe('DocumentUploadController', () => {
       mockScoringParser,
       mockConversationService, // Ownership validation + assistant messages
       mockChatNamespace,       // /chat namespace
-      mockFileRepository       // Epic 16.6.9: File registration
+      mockFileRepository,      // Epic 16.6.9: File registration
+      mockScoringService,      // Scoring service (not used in upload phase)
+      mockTextExtractionService // Epic 18: Text extraction service
     );
 
     // Auth middleware sets req.user (full User object), not req.userId
@@ -258,120 +285,104 @@ describe('DocumentUploadController', () => {
       );
     });
 
-    it('should emit intake_context_ready on successful intake parse', async () => {
+    // Epic 18: Upload phase now emits file_attached, NOT intake_context_ready
+    // Parsing happens on Send (Sprint 2)
+    it('should emit file_attached on successful upload (Epic 18)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing (setImmediate is more stable than nextTick)
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'intake_context_ready',
+        'file_attached',
         expect.objectContaining({
-          success: true,
-          context: expect.objectContaining({
-            vendorName: 'Test Vendor',
-          }),
+          conversationId: 'conv-123',
+          uploadId: expect.any(String),
+          fileId: 'file-uuid-123',
+          filename: 'test.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
+          hasExcerpt: true,
         })
       );
     });
 
-    // Epic 17.3.3: Context stored in file row (not conversation row)
-    it('should store context in file row via updateIntakeContext on successful intake parse', async () => {
+    // Epic 18: Text extraction happens during upload
+    it('should call textExtractionService.extract during upload (Epic 18)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify fileRepository.updateIntakeContext was called with intake context
-      expect(mockFileRepository.updateIntakeContext).toHaveBeenCalledWith(
-        'file-uuid-123', // fileId from create mock
-        expect.objectContaining({
-          vendorName: 'Test Vendor',
-          features: [],
-          complianceMentions: [],
-        }),
-        ['privacy_risk'] // gapCategories as third argument
-      );
-
-      // Verify conversationService.updateContext was NOT called
-      expect(mockConversationService.updateContext).not.toHaveBeenCalled();
-
-      // Verify NO 'message' event emitted (silent storage, not visible in chat)
-      const messageCall = mockChatNamespace.emit.mock.calls.find(
-        (call: any[]) => call[0] === 'message'
-      );
-      expect(messageCall).toBeUndefined();
-    });
-
-    it('should emit upload_progress with stage "complete" on successful parse', async () => {
-      await controller.upload(mockReq as any, mockRes as any);
-
-      // Wait for async processing (setImmediate is more stable than nextTick)
-      await new Promise((resolve) => setImmediate(resolve));
-
-      // Verify final stage is 'complete' for success
-      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'upload_progress',
-        expect.objectContaining({
-          stage: 'complete',
-          progress: 100,
-          message: 'Document processed successfully',
-        })
+      expect(mockTextExtractionService.extract).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'pdf' // documentType from validation
       );
     });
 
-    it('should emit upload_progress with stage "error" and error details when parsing fails', async () => {
-      // Make parser return failure (success: false, not throw)
-      mockIntakeParser.parseForContext.mockResolvedValue({
-        success: false,
-        context: null,
-        error: 'Failed to parse document',
-      });
-
+    // Epic 18: File record includes textExcerpt on create
+    it('should pass textExcerpt to fileRepository.create (Epic 18)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify intake_context_ready emitted with success: false
-      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'intake_context_ready',
+      expect(mockFileRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          success: false,
-          error: 'Failed to parse document',
+          userId: 'user-123',
+          conversationId: 'conv-123',
+          filename: 'test.pdf',
+          textExcerpt: 'Test document content', // From mockTextExtractionService
         })
       );
+    });
 
-      // Verify final stage is 'error' with specific error message
+    // Epic 18: Parsing does NOT happen during upload (moved to Sprint 2)
+    it('should NOT call intakeParser during upload (Epic 18 - parsing on Send)', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Parser should NOT be called during upload phase
+      expect(mockIntakeParser.parseForContext).not.toHaveBeenCalled();
+    });
+
+    // Epic 18: Only 'storing' stage emitted during upload
+    it('should only emit upload_progress with "storing" stage (Epic 18)', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Should emit storing stage
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'upload_progress',
         expect.objectContaining({
-          stage: 'error',
-          progress: 0,
-          message: 'Document parsing failed',
-          error: 'Failed to parse document', // Parser error included
+          stage: 'storing',
         })
       );
 
-      // Verify 'complete' was NOT emitted
+      // Should NOT emit parsing or complete stages (those happen on Send)
+      const parsingCall = mockChatNamespace.emit.mock.calls.find(
+        (call: any[]) => call[0] === 'upload_progress' && call[1]?.stage === 'parsing'
+      );
+      expect(parsingCall).toBeUndefined();
+
       const completeCall = mockChatNamespace.emit.mock.calls.find(
         (call: any[]) => call[0] === 'upload_progress' && call[1]?.stage === 'complete'
       );
       expect(completeCall).toBeUndefined();
     });
 
-    it('should emit upload_progress with stage "error" and error details when scoring parse fails', async () => {
-      // Switch to scoring mode
-      mockReq.body = {
-        conversationId: 'conv-123',
-        mode: 'scoring',
-      };
-
-      // Make scoring parser return failure
-      mockScoringParser.parseForResponses.mockResolvedValue({
+    // Epic 18: hasExcerpt is false when extraction fails
+    it('should emit hasExcerpt: false when text extraction fails (Epic 18)', async () => {
+      mockTextExtractionService.extract.mockResolvedValue({
         success: false,
-        assessmentId: null,
-        error: 'Not a Guardian questionnaire',
+        excerpt: '',
+        fullLength: 0,
+        extractionMs: 100,
+        error: 'Unsupported format',
       });
 
       await controller.upload(mockReq as any, mockRes as any);
@@ -379,75 +390,87 @@ describe('DocumentUploadController', () => {
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify scoring_parse_ready emitted with success: false
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'scoring_parse_ready',
+        'file_attached',
         expect.objectContaining({
-          success: false,
-          error: expect.stringContaining("doesn't appear to be a Guardian questionnaire"),
+          hasExcerpt: false,
         })
       );
+    });
 
-      // Verify final stage is 'error' with specific error
+    // Epic 18: Error handling during storage
+    it('should emit upload_progress with stage "error" when storage fails', async () => {
+      mockFileStorage.store.mockRejectedValue(new Error('Storage failure'));
+
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'upload_progress',
         expect.objectContaining({
           stage: 'error',
-          error: expect.stringContaining("doesn't appear to be a Guardian questionnaire"),
+          message: 'Upload failed',
+          error: 'Storage failure',
         })
       );
     });
 
     // Epic 16.6.9: File registration tests
+    // Epic 18: Updated to include textExcerpt
     it('should register file in database after storage', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify file was registered in database
-      expect(mockFileRepository.create).toHaveBeenCalledWith({
-        userId: 'user-123',
-        conversationId: 'conv-123',
-        filename: 'test.pdf',
-        mimeType: 'application/pdf',
-        size: 1024,
-        storagePath: '/uploads/test.pdf',
-      });
-    });
-
-    it('should include fileId in intake_context_ready event', async () => {
-      await controller.upload(mockReq as any, mockRes as any);
-
-      // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
-
-      // Verify intake_context_ready includes fileId from database
-      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'intake_context_ready',
+      // Verify file was registered in database with textExcerpt
+      expect(mockFileRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          fileMetadata: {
-            fileId: 'file-uuid-123',
-            filename: 'test.pdf',
-            mimeType: 'application/pdf',
-            size: 1024,
-          },
+          userId: 'user-123',
+          conversationId: 'conv-123',
+          filename: 'test.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
+          storagePath: '/uploads/test.pdf',
+          textExcerpt: 'Test document content', // Epic 18
         })
       );
     });
 
-    it('should NOT include storagePath in intake_context_ready event', async () => {
+    // Epic 18: file_attached includes fileId (replaces intake_context_ready)
+    it('should include fileId in file_attached event', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify storagePath is NOT in fileMetadata
-      const intakeReadyCall = mockChatNamespace.emit.mock.calls.find(
-        (call: any[]) => call[0] === 'intake_context_ready'
+      // Verify file_attached includes fileId from database
+      expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+        'file_attached',
+        expect.objectContaining({
+          fileId: 'file-uuid-123',
+          filename: 'test.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
+        })
       );
-      expect(intakeReadyCall).toBeDefined();
-      expect(intakeReadyCall![1].fileMetadata).not.toHaveProperty('storagePath');
+    });
+
+    // Epic 18: file_attached never includes storagePath
+    it('should NOT include storagePath in file_attached event', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Verify storagePath is NOT in file_attached event
+      const fileAttachedCall = mockChatNamespace.emit.mock.calls.find(
+        (call: any[]) => call[0] === 'file_attached'
+      );
+      expect(fileAttachedCall).toBeDefined();
+      expect(fileAttachedCall![1]).not.toHaveProperty('storagePath');
     });
 
     it('should NOT include storagePath in HTTP 202 response', async () => {
@@ -461,40 +484,32 @@ describe('DocumentUploadController', () => {
       expect(response.files[0]).not.toHaveProperty('storagePath');
     });
 
-    it('should include fileId in scoring_parse_ready event', async () => {
+    // Epic 18: scoring mode also emits file_attached (parsing on Send)
+    it('should emit file_attached for scoring mode (Epic 18)', async () => {
       // Switch to scoring mode
       mockReq.body = {
         conversationId: 'conv-123',
         mode: 'scoring',
       };
 
-      mockScoringParser.parseForResponses.mockResolvedValue({
-        success: true,
-        assessmentId: 'assess-123',
-        vendorName: 'Test Vendor',
-        responses: [],
-        expectedQuestionCount: 0,
-        isComplete: true,
-        confidence: 0.9,
-      });
-
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
       await new Promise((resolve) => setImmediate(resolve));
 
-      // Verify scoring_parse_ready includes fileId
+      // Epic 18: Both modes emit file_attached; scoring_parse_ready comes on Send
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
-        'scoring_parse_ready',
+        'file_attached',
         expect.objectContaining({
-          fileMetadata: {
-            fileId: 'file-uuid-123',
-            filename: 'test.pdf',
-            mimeType: 'application/pdf',
-            size: 1024,
-          },
+          fileId: 'file-uuid-123',
+          filename: 'test.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
         })
       );
+
+      // Verify scoringParser was NOT called during upload
+      expect(mockScoringParser.parseForResponses).not.toHaveBeenCalled();
     });
 
     // Epic 17.1.4: Multi-file upload tests
@@ -756,6 +771,8 @@ describe('DocumentUploadController', () => {
         size: 2048,
         storagePath: '/uploads/document.docx',
         createdAt: new Date(),
+        textExcerpt: 'DOCX content', // Epic 18
+        parseStatus: 'pending', // Epic 18
       });
       mockFileStorage.retrieve.mockResolvedValue(docxBuffer);
 

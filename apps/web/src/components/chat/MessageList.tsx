@@ -5,8 +5,9 @@ import { ChatMessage, MessageAttachment } from './ChatMessage';
 import { SkeletonMessage } from './SkeletonMessage';
 import { QuestionnaireMessage } from './QuestionnaireMessage';
 import { ScoringResultCard } from './ScoringResultCard';
-import { RotatingStatus } from './RotatingStatus';
-import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload } from '@/lib/websocket';
+import { ProgressMessage } from './ProgressMessage';
+import { VendorClarificationCard } from './VendorClarificationCard';
+import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import { ChevronDown } from 'lucide-react';
 import type { Step } from '@/types/stepper';
 import type { QuestionnaireUIState } from './QuestionnairePromptCard';
@@ -44,10 +45,15 @@ export interface MessageListProps {
     progress?: number;
     error?: string;
   };
+  /** Epic 18.4.2b: Vendor clarification card props */
+  vendorClarification?: {
+    payload: VendorClarificationNeededPayload;
+    onSelectVendor: (vendorName: string) => void;
+  };
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire, scoringResult, scoringProgress }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire, scoringResult, scoringProgress, vendorClarification }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -59,6 +65,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     const prevIsLoadingRef = useRef<boolean>(false);
     // Epic 15 Story 5b: Track previous scoring progress visibility to scroll when it appears
     const prevScoringProgressActiveRef = useRef<boolean>(false);
+    // Epic 18.4.2b: Track previous vendor clarification visibility to scroll when it appears
+    const prevVendorClarificationVisibleRef = useRef<boolean>(false);
 
     // Merged ref callback to ensure both parent ref and local ref point to same DOM node
     const mergedRef = useCallback((node: HTMLDivElement | null) => {
@@ -119,12 +127,17 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       const scoringProgressJustAppeared = isScoringActive && !prevScoringProgressActiveRef.current;
       prevScoringProgressActiveRef.current = isScoringActive;
 
-      // If streaming OR near bottom OR questionnaire/scoring progress/typing indicator just appeared, force scroll to bottom
+      // Epic 18.4.2b: Detect when vendor clarification card appears
+      const isVendorClarificationVisible = !!vendorClarification;
+      const vendorClarificationJustAppeared = isVendorClarificationVisible && !prevVendorClarificationVisibleRef.current;
+      prevVendorClarificationVisibleRef.current = isVendorClarificationVisible;
+
+      // If streaming OR near bottom OR questionnaire/scoring progress/typing indicator/vendor clarification just appeared, force scroll to bottom
       // This ensures new content scrolls into view
-      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared || scoringProgressJustAppeared) {
+      if (isStreaming || isNearBottom || questionnaireJustAppeared || typingIndicatorJustAppeared || scoringProgressJustAppeared || vendorClarificationJustAppeared) {
         container.scrollTop = container.scrollHeight;
       }
-    }, [messages, isStreaming, isNearBottom, isLoading, questionnaire?.uiState, questionnaire?.insertIndex, scoringProgress?.status]);
+    }, [messages, isStreaming, isNearBottom, isLoading, questionnaire?.uiState, questionnaire?.insertIndex, scoringProgress?.status, vendorClarification]);
 
     // Scroll to bottom when button clicked
     const handleScrollToBottom = () => {
@@ -249,12 +262,30 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
               </div>
             )}
 
-            {/* Epic 15 Story 5b: Scoring progress indicator - shows during active scoring */}
-            {scoringProgress && scoringProgress.status !== 'idle' && scoringProgress.status !== 'complete' && (
+            {/* Epic 18.4.2b: Vendor clarification card - shows when multiple vendors detected */}
+            {vendorClarification && (
+              <div className="py-4" data-testid="vendor-clarification-container">
+                <div className="flex gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+                    </svg>
+                  </div>
+                  <VendorClarificationCard
+                    payload={vendorClarification.payload}
+                    onSelectVendor={vendorClarification.onSelectVendor}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Epic 18 Story 18.2.5: Progress-in-chat UX - shows during parsing/scoring */}
+            {scoringProgress && (scoringProgress.status === 'parsing' || scoringProgress.status === 'scoring') && (
               <div className="py-4" data-testid="scoring-progress">
-                <RotatingStatus
+                <ProgressMessage
                   status={scoringProgress.status}
-                  currentMessage={scoringProgress.message}
+                  progress={scoringProgress.progress}
+                  message={scoringProgress.message}
                 />
               </div>
             )}

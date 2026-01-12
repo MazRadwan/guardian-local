@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
@@ -83,6 +83,8 @@ export interface UseWebSocketEventsReturn {
   handleScoringProgress: (data: ScoringProgressPayload) => void;
   handleScoringComplete: (data: ScoringCompletePayload) => void;
   handleScoringError: (data: ScoringErrorPayload) => void;
+  // Epic 18.4.2b: Vendor clarification handler
+  handleVendorClarificationNeeded: (data: VendorClarificationNeededPayload) => void;
 }
 
 /**
@@ -542,6 +544,11 @@ export function useWebSocketEvents({
       }
 
       console.log('[useWebSocketEvents] Scoring started:', data.assessmentId);
+
+      // Epic 18.4.2b: Clear vendor clarification when scoring starts
+      // This confirms vendor selection was successful (if there was one)
+      useChatStore.getState().clearVendorClarification();
+
       // Update scoring progress state to 'parsing' (first status)
       useChatStore.getState().updateScoringProgress({
         status: 'parsing',
@@ -613,6 +620,7 @@ export function useWebSocketEvents({
         ASSESSMENT_NOT_FOUND: 'Assessment not found. Please try again.',
         UNAUTHORIZED_ASSESSMENT: 'You do not have permission to score this assessment.',
         ASSESSMENT_NOT_EXPORTED: 'This assessment has not been exported yet. Please export the questionnaire first.',
+        NO_ASSESSMENT: 'No assessment linked to this conversation. Please generate a questionnaire first in Assessment mode, then upload the completed responses here.',
         PARSE_FAILED: 'Failed to extract responses from the document. Please ensure you uploaded a valid Guardian questionnaire.',
         PARSE_CONFIDENCE_TOO_LOW: 'Document quality is too low. Please upload a text-based PDF or Word document instead of a scanned image.',
         RATE_LIMITED: 'Too many requests. Please wait a moment and try again.',
@@ -630,8 +638,45 @@ export function useWebSocketEvents({
         message: userMessage,
         error: data.error,
       });
+
+      // Epic 18: Clear loading/streaming state so UI doesn't hang
+      finishStreaming();
+      setLoading(false);
+
+      // Add error message to chat so user sees feedback
+      addMessage({
+        id: `scoring-error-${Date.now()}`,
+        role: 'assistant',
+        content: `⚠️ **Scoring Error**\n\n${userMessage}`,
+        conversationId: data.conversationId,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Re-focus composer so user can try again
+      focusComposer();
     },
-    [activeConversationId]
+    [activeConversationId, finishStreaming, setLoading, addMessage, focusComposer]
+  );
+
+  // Epic 18.4.2b: Vendor clarification needed handler
+  const handleVendorClarificationNeeded = useCallback(
+    (data: VendorClarificationNeededPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring vendor_clarification_needed for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Vendor clarification needed:', data.vendors.length, 'vendors detected');
+
+      // Store vendor clarification data for UI to display
+      useChatStore.getState().setVendorClarification(data);
+
+      // Clear loading/streaming state so UI shows clarification card
+      finishStreaming();
+      setLoading(false);
+    },
+    [activeConversationId, finishStreaming, setLoading]
   );
 
   return {
@@ -654,5 +699,6 @@ export function useWebSocketEvents({
     handleScoringProgress,
     handleScoringComplete,
     handleScoringError,
+    handleVendorClarificationNeeded,
   };
 }

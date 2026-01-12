@@ -487,12 +487,14 @@ describe('Composer', () => {
       subscribeUploadProgress: jest.fn(() => jest.fn()),
       subscribeIntakeContextReady: jest.fn(() => jest.fn()),
       subscribeScoringParseReady: jest.fn(() => jest.fn()),
+      subscribeFileAttached: jest.fn(() => jest.fn()), // Epic 18
     };
 
     beforeEach(() => {
       mockWsAdapter.subscribeUploadProgress.mockClear();
       mockWsAdapter.subscribeIntakeContextReady.mockClear();
       mockWsAdapter.subscribeScoringParseReady.mockClear();
+      mockWsAdapter.subscribeFileAttached.mockClear(); // Epic 18
     });
 
     it('should render multiple file chips', async () => {
@@ -665,6 +667,7 @@ describe('Composer', () => {
     });
 
     it('should enable send button with files only (no text)', async () => {
+      // Epic 18 Sprint 3: Send requires files to be attached/parsing/complete (not just pending)
       render(
         <Composer
           onSendMessage={mockOnSendMessage}
@@ -687,9 +690,9 @@ describe('Composer', () => {
         expect(screen.getByText('doc.pdf')).toBeInTheDocument();
       });
 
-      // Send button should be enabled even without text
+      // Epic 18 Sprint 3: Send button disabled for pending files (need attached+)
       const sendButton = screen.getByLabelText('Send message');
-      expect(sendButton).not.toBeDisabled();
+      expect(sendButton).toBeDisabled();
     });
 
     it('should allow multiple attribute on file input', () => {
@@ -713,19 +716,21 @@ describe('Composer', () => {
       subscribeUploadProgress: jest.fn(() => jest.fn()),
       subscribeIntakeContextReady: jest.fn(() => jest.fn()),
       subscribeScoringParseReady: jest.fn(() => jest.fn()),
+      subscribeFileAttached: jest.fn(() => jest.fn()), // Epic 18
     };
 
     beforeEach(() => {
       mockWsAdapter.subscribeUploadProgress.mockClear();
       mockWsAdapter.subscribeIntakeContextReady.mockClear();
       mockWsAdapter.subscribeScoringParseReady.mockClear();
+      mockWsAdapter.subscribeFileAttached.mockClear(); // Epic 18
       // Reset any global mocks
       jest.clearAllMocks();
     });
 
     it('should disable send button during upload (isUploading)', async () => {
-      // This tests that the UI reflects the disabled state based on isUploading
-      // The actual isUploading state comes from the hook when files are in uploading/storing/parsing stage
+      // Epic 18 Sprint 3: Disable send during early upload stages (pending/uploading/storing)
+      // Send is ENABLED once file reaches attached/parsing/complete (trigger-on-send)
       render(
         <Composer
           onSendMessage={mockOnSendMessage}
@@ -750,9 +755,9 @@ describe('Composer', () => {
         expect(screen.getByText('doc.pdf')).toBeInTheDocument();
       });
 
-      // Send button should be enabled initially (file in 'pending' state)
+      // Epic 18 Sprint 3: Send button disabled during early upload (file in 'pending' state)
       const sendButton = screen.getByLabelText('Send message');
-      expect(sendButton).not.toBeDisabled();
+      expect(sendButton).toBeDisabled();
     });
 
     // Epic 17 UX Fix: Removed aggregate progress bar (per-file chips show progress)
@@ -795,6 +800,7 @@ describe('Composer', () => {
         return () => { intakeContextHandler = null; };
       }),
       subscribeScoringParseReady: jest.fn(() => jest.fn()),
+      subscribeFileAttached: jest.fn(() => jest.fn()), // Epic 18
     };
 
     const mockFetch = jest.fn();
@@ -805,6 +811,7 @@ describe('Composer', () => {
       mockWsAdapter.subscribeUploadProgress.mockClear();
       mockWsAdapter.subscribeIntakeContextReady.mockClear();
       mockWsAdapter.subscribeScoringParseReady.mockClear();
+      mockWsAdapter.subscribeFileAttached.mockClear(); // Epic 18
       uploadProgressHandler = null;
       intakeContextHandler = null;
       mockFetch.mockClear();

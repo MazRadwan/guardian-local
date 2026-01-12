@@ -80,10 +80,12 @@ export type ScoringStatus =
 
 /**
  * Progress event emitted during scoring
+ * Epic 18: Added fileId for tracking which file is being processed
  */
 export interface ScoringProgressEvent {
   status: ScoringStatus
   message: string
   progress?: number // 0-100
   error?: string
+  fileId?: string // Epic 18: Track file being processed
 }

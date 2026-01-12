@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
@@ -37,6 +37,8 @@ export interface WebSocketEventHandlers {
   onScoringProgress?: (data: ScoringProgressPayload) => void;
   onScoringComplete?: (data: ScoringCompletePayload) => void;
   onScoringError?: (data: ScoringErrorPayload) => void;
+  // Epic 18.4.2b: Vendor clarification callback
+  onVendorClarificationNeeded?: (data: VendorClarificationNeededPayload) => void;
 }
 
 /**
@@ -87,6 +89,11 @@ export interface WebSocketAdapterInterface {
   subscribeUploadProgress: (handler: (data: UploadProgressEvent) => void) => () => void;
   subscribeIntakeContextReady: (handler: (data: IntakeContextResult) => void) => () => void;
   subscribeScoringParseReady: (handler: (data: ScoringParseResult) => void) => () => void;
+  // Epic 18: File attached subscription
+  subscribeFileAttached: (handler: (data: import('@/lib/websocket').FileAttachedEvent) => void) => () => void;
+
+  // Epic 18.4.2b: Vendor clarification selection
+  selectVendor: (conversationId: string, vendorName: string) => void;
 }
 
 /**
@@ -160,6 +167,7 @@ export function useWebSocketAdapter({
     onScoringProgress: handlers.onScoringProgress,
     onScoringComplete: handlers.onScoringComplete,
     onScoringError: handlers.onScoringError,
+    onVendorClarificationNeeded: handlers.onVendorClarificationNeeded,
     autoConnect,
   });
 
@@ -219,6 +227,13 @@ export function useWebSocketAdapter({
     subscribeUploadProgress: wsHook.subscribeUploadProgress,
     subscribeIntakeContextReady: wsHook.subscribeIntakeContextReady,
     subscribeScoringParseReady: wsHook.subscribeScoringParseReady,
+    // Epic 18: File attached subscription
+    subscribeFileAttached: wsHook.subscribeFileAttached,
+
+    // Epic 18.4.2b: Vendor clarification selection
+    selectVendor: (conversationId: string, vendorName: string) => {
+      wsHook.selectVendor(conversationId, vendorName);
+    },
   }), [
     wsHook.isConnected,
     wsHook.isConnecting,
@@ -236,5 +251,7 @@ export function useWebSocketAdapter({
     wsHook.subscribeUploadProgress,
     wsHook.subscribeIntakeContextReady,
     wsHook.subscribeScoringParseReady,
+    wsHook.subscribeFileAttached,
+    wsHook.selectVendor,
   ]);
 }
