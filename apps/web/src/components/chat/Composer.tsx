@@ -304,6 +304,9 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                         onRemove={() => removeFile(file.localIndex)}
                         disabled={isFileInFlight}
                         variant={useCompactChips ? 'compact' : 'default'}
+                        // Epic 18: Pass document type for wrong-mode warnings
+                        detectedDocType={file.metadata?.detectedDocType}
+                        mode={currentMode}
                       />
                     );
                   })}

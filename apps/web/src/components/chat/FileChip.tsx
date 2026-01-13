@@ -28,8 +28,9 @@
  * - Compact variant: smaller padding/icons, hides progress/error text
  */
 
-import { Loader2, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Clock, X, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { DetectedDocType } from '@/lib/websocket';
 
 export interface FileChipProps {
   filename: string;
@@ -39,6 +40,10 @@ export interface FileChipProps {
   onRemove: () => void;
   disabled?: boolean; // Story 17.2.1: When true, X button is hidden
   variant?: 'default' | 'compact'; // Story 17.2.2: Compact mode for multi-file layouts
+  /** Epic 18: Document type classification for wrong-mode warnings */
+  detectedDocType?: DetectedDocType | null;
+  /** Epic 18: Current mode - used to show warnings for wrong document types */
+  mode?: 'consult' | 'assessment' | 'scoring';
 }
 
 export function FileChip({
@@ -49,6 +54,8 @@ export function FileChip({
   onRemove,
   disabled = false,
   variant = 'default',
+  detectedDocType,
+  mode,
 }: FileChipProps) {
   const isPending = stage === 'pending';
   const isActive = ['uploading', 'storing', 'parsing'].includes(stage); // Epic 18: 'attached' is NOT active (shows as complete)
@@ -56,6 +63,12 @@ export function FileChip({
   const isComplete = stage === 'complete';
   const isAttached = stage === 'attached'; // Epic 18: New stage
   const isCompact = variant === 'compact';
+
+  // Epic 18: Check if document type doesn't match the mode
+  // Show warning when: in Scoring mode but document is NOT a questionnaire
+  const hasDocTypeMismatch = mode === 'scoring' &&
+    detectedDocType === 'document' &&
+    (isAttached || isComplete);
 
   // Get status text based on stage
   const getStatusText = () => {
@@ -84,10 +97,14 @@ export function FileChip({
       className={cn(
         'inline-flex flex-col gap-1 rounded-lg max-w-xs border',
         isCompact ? 'px-2 py-1' : 'px-3 py-2',
-        isError ? 'bg-red-50 border-red-200' : 'bg-gray-100 border-gray-200'
+        isError
+          ? 'bg-red-50 border-red-200'
+          : hasDocTypeMismatch
+            ? 'bg-amber-50 border-amber-300'
+            : 'bg-gray-100 border-gray-200'
       )}
       role="status"
-      aria-label={`File ${filename}: ${getStatusText()}`}
+      aria-label={`File ${filename}: ${getStatusText()}${hasDocTypeMismatch ? ' - Warning: may not be a questionnaire' : ''}`}
     >
       {/* Top row: Icon + Filename + X button */}
       <div className="flex items-center gap-2">
@@ -110,11 +127,21 @@ export function FileChip({
             aria-hidden="true"
           />
         )}
-        {/* Epic 18: Show checkmark for both 'attached' and 'complete' */}
-        {(isComplete || isAttached) && (
+        {/* Epic 18: Show checkmark for 'attached'/'complete', OR warning if doc type mismatch */}
+        {(isComplete || isAttached) && !hasDocTypeMismatch && (
           <CheckCircle
             className={cn(
               'text-green-600 flex-shrink-0',
+              isCompact ? 'h-3 w-3' : 'h-4 w-4'
+            )}
+            aria-hidden="true"
+          />
+        )}
+        {/* Epic 18: Warning icon for document type mismatch */}
+        {hasDocTypeMismatch && (
+          <AlertTriangle
+            className={cn(
+              'text-amber-500 flex-shrink-0',
               isCompact ? 'h-3 w-3' : 'h-4 w-4'
             )}
             aria-hidden="true"
@@ -192,13 +219,20 @@ export function FileChip({
       )}
 
       {/* Epic 18: Attached indicator - file is stored and ready */}
-      {isAttached && !isCompact && (
+      {isAttached && !isCompact && !hasDocTypeMismatch && (
         <span className="text-xs text-green-600">Attached</span>
       )}
 
       {/* Success indicator - only when complete, hidden in compact (icon remains) */}
-      {isComplete && !isCompact && (
+      {isComplete && !isCompact && !hasDocTypeMismatch && (
         <span className="text-xs text-green-600">Ready</span>
+      )}
+
+      {/* Epic 18: Warning for document type mismatch in Scoring mode */}
+      {hasDocTypeMismatch && !isCompact && (
+        <span className="text-xs text-amber-600" title="This doesn't look like a questionnaire. Consider using Consult or Assessment mode.">
+          Not a questionnaire?
+        </span>
       )}
     </div>
   );
