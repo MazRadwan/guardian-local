@@ -698,6 +698,21 @@ ${sanitizedExcerpt}`;
           continue;
         }
 
+        // Epic 18: Short-circuit scoring if document is classified as non-questionnaire
+        // This prevents the expensive 30-second Claude parse for obviously wrong documents
+        if (file.detectedDocType === 'document') {
+          console.log(`[ChatServer] File ${fileId} classified as 'document', not a questionnaire`);
+          socket.emit('scoring_error', {
+            conversationId,
+            fileId,
+            error: 'This appears to be a general document (like a product brief or marketing material), not a completed questionnaire. Questionnaires exported from Guardian have a specific format with numbered questions and vendor responses. Try uploading in Consult mode to discuss this document, or Assessment mode to start a new vendor assessment.',
+            code: 'NOT_A_QUESTIONNAIRE',
+          });
+          // Reset parse status since we're not actually parsing
+          await this.fileRepository.updateParseStatus(fileId, 'pending');
+          continue;
+        }
+
         // Check if already completed (idempotency)
         if (file.parseStatus === 'completed') {
           console.log(`[ChatServer] File ${fileId} already parsed, checking for scoring`);

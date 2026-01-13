@@ -105,6 +105,12 @@ export interface UploadProgressEvent {
 }
 
 /**
+ * Epic 18: Detected document type from heuristic classification
+ * Used to warn users when uploading non-questionnaire documents in Scoring mode
+ */
+export type DetectedDocType = 'questionnaire' | 'document' | 'unknown';
+
+/**
  * Epic 18: file_attached event
  *
  * Emitted when file is stored and ready for UI display.
@@ -121,6 +127,10 @@ export interface FileAttachedEvent {
   mimeType: string;
   size: number;
   hasExcerpt: boolean;
+  /** Epic 18: Heuristic document classification - 'questionnaire' | 'document' | 'unknown' */
+  detectedDocType: DetectedDocType | null;
+  /** Epic 18: Extracted vendor name from document (if found) */
+  detectedVendorName: string | null;
 }
 
 /**
@@ -149,6 +159,10 @@ export interface AttachedFileMetadata {
   mimeType: string;
   size: number;
   hasExcerpt: boolean;
+  /** Epic 18: Heuristic document classification */
+  detectedDocType: DetectedDocType | null;
+  /** Epic 18: Extracted vendor name from document */
+  detectedVendorName: string | null;
 }
 
 export interface IntakeContextResult {

@@ -368,6 +368,9 @@ export function useMultiFileUpload(
             mimeType: event.mimeType,
             size: event.size,
             hasExcerpt: event.hasExcerpt,
+            // Epic 18: Document classification for wrong-mode warnings
+            detectedDocType: event.detectedDocType,
+            detectedVendorName: event.detectedVendorName,
           },
           // Only update stage if transition is allowed
           stage: shouldTransition ? 'attached' : f.stage,
