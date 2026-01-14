@@ -1,5 +1,5 @@
 import React, { createRef } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Composer, ComposerRef } from '../Composer';
 
@@ -490,11 +490,22 @@ describe('Composer', () => {
       subscribeFileAttached: jest.fn(() => jest.fn()), // Epic 18
     };
 
+    // Epic 19 Review Fix: Mock fetch to keep uploads in progress (prevent immediate error)
+    const mockFetch = jest.fn();
+    const originalFetch = global.fetch;
+
     beforeEach(() => {
       mockWsAdapter.subscribeUploadProgress.mockClear();
       mockWsAdapter.subscribeIntakeContextReady.mockClear();
       mockWsAdapter.subscribeScoringParseReady.mockClear();
       mockWsAdapter.subscribeFileAttached.mockClear(); // Epic 18
+      // Mock fetch to return a pending promise (keeps upload in progress)
+      mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+      global.fetch = mockFetch;
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
     });
 
     it('should render multiple file chips', async () => {
@@ -630,6 +641,24 @@ describe('Composer', () => {
     });
 
     it('should clear files after successful send', async () => {
+      // Override fetch mock for this test to allow file to reach 'complete' state
+      let resolveIntake: (() => void) | null = null;
+      mockFetch.mockImplementation(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            files: [{ index: 0, uploadId: 'upload-123', status: 'accepted' }],
+          }),
+        })
+      );
+
+      // Also need to capture the intake handler to simulate completion
+      let intakeHandler: ((data: unknown) => void) | null = null;
+      mockWsAdapter.subscribeIntakeContextReady.mockImplementation((handler: (data: unknown) => void) => {
+        intakeHandler = handler;
+        return jest.fn();
+      });
+
       render(
         <Composer
           onSendMessage={mockOnSendMessage}
@@ -652,11 +681,25 @@ describe('Composer', () => {
         expect(screen.getByText('doc.pdf')).toBeInTheDocument();
       });
 
+      // Simulate file reaching 'complete' state via WS event
+      await waitFor(() => {
+        expect(intakeHandler).not.toBeNull();
+      });
+
+      // Trigger intake complete to move file to 'complete' stage
+      await act(async () => {
+        intakeHandler?.({
+          uploadId: 'upload-123',
+          success: true,
+          fileMetadata: { fileId: 'file-123', filename: 'doc.pdf', mimeType: 'application/pdf', size: 1024 },
+        });
+      });
+
       // Type a message
       const textarea = screen.getByPlaceholderText('Type a message...');
       await userEvent.type(textarea, 'Here is a file');
 
-      // Send message
+      // Send message (button should now have "Send message" label since file is complete)
       const sendButton = screen.getByLabelText('Send message');
       await userEvent.click(sendButton);
 
@@ -691,7 +734,8 @@ describe('Composer', () => {
       });
 
       // Epic 18 Sprint 3: Send button disabled for pending files (need attached+)
-      const sendButton = screen.getByLabelText('Send message');
+      // Note: Button shows loader and has aria-label "Uploading files..." during upload
+      const sendButton = screen.getByLabelText('Uploading files...');
       expect(sendButton).toBeDisabled();
     });
 
@@ -719,6 +763,10 @@ describe('Composer', () => {
       subscribeFileAttached: jest.fn(() => jest.fn()), // Epic 18
     };
 
+    // Epic 19 Review Fix: Mock fetch to keep uploads in progress (prevent immediate error)
+    const mockFetch = jest.fn();
+    const originalFetch = global.fetch;
+
     beforeEach(() => {
       mockWsAdapter.subscribeUploadProgress.mockClear();
       mockWsAdapter.subscribeIntakeContextReady.mockClear();
@@ -726,6 +774,13 @@ describe('Composer', () => {
       mockWsAdapter.subscribeFileAttached.mockClear(); // Epic 18
       // Reset any global mocks
       jest.clearAllMocks();
+      // Mock fetch to return a pending promise (keeps upload in progress)
+      mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+      global.fetch = mockFetch;
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
     });
 
     it('should disable send button during upload (isUploading)', async () => {
@@ -755,8 +810,9 @@ describe('Composer', () => {
         expect(screen.getByText('doc.pdf')).toBeInTheDocument();
       });
 
-      // Epic 18 Sprint 3: Send button disabled during early upload (file in 'pending' state)
-      const sendButton = screen.getByLabelText('Send message');
+      // Epic 18 Sprint 3: Send button disabled during early upload (file in 'uploading' state)
+      // Note: Button shows loader and has aria-label "Uploading files..." during upload
+      const sendButton = screen.getByLabelText('Uploading files...');
       expect(sendButton).toBeDisabled();
     });
 

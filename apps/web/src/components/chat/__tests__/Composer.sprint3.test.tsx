@@ -290,6 +290,11 @@ describe('Epic 18 Sprint 3: Mode-Specific Frontend', () => {
 
     it('should disable send when files are in pending or uploading stage', async () => {
       // Verify send is disabled for files not yet attached
+      // Mock fetch to never resolve - keeps file in 'uploading' state
+      const mockFetch = jest.fn();
+      const originalFetch = global.fetch;
+      mockFetch.mockImplementation(() => new Promise(() => {})); // Never resolves
+      global.fetch = mockFetch;
 
       render(
         <Composer
@@ -313,16 +318,22 @@ describe('Epic 18 Sprint 3: Mode-Specific Frontend', () => {
         expect(screen.getByText('pending.pdf')).toBeInTheDocument();
       });
 
-      // File is in 'pending' stage (not attached yet)
+      // File is in 'uploading' stage (fetch never resolves)
       // Send button should be disabled (no text + files not ready)
-      const sendButton = screen.getByLabelText('Send message');
+      const sendButton = screen.getByLabelText('Uploading files...');
       expect(sendButton).toBeDisabled();
+
+      global.fetch = originalFetch;
     });
   });
 
   describe('Story 18.3.4: Mode Transition Handling', () => {
-    it('should show warning icon when files are incomplete', async () => {
-      // Test that warning icon appears in mode selector when files processing
+    // NOTE: Epic 19 Story 19.0.2 removed warning triangle from ModeSelector
+    // Per behavior-matrix.md, users can switch modes freely without warnings
+    // Original warning tests removed - mode switching is now unrestricted
+
+    it('should allow mode changes regardless of file state', async () => {
+      // Test that mode selector is always enabled (when not explicitly disabled)
 
       const mockFetch = jest.fn();
       const originalFetch = global.fetch;
@@ -331,7 +342,7 @@ describe('Epic 18 Sprint 3: Mode-Specific Frontend', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          files: [{ index: 0, uploadId: 'upload-warn', status: 'accepted' }],
+          files: [{ index: 0, uploadId: 'upload-test', status: 'accepted' }],
         }),
       });
 
@@ -360,147 +371,18 @@ describe('Epic 18 Sprint 3: Mode-Specific Frontend', () => {
         expect(mockFetch).toHaveBeenCalled();
       });
 
-      // File is processing (not complete) - warning should appear
+      // Mode selector should have clean aria-label (no warning text)
       await waitFor(() => {
         const modeButton = screen.getByLabelText(/Mode:/);
-        // Check for warning in aria-label
-        expect(modeButton).toHaveAttribute(
-          'aria-label',
-          expect.stringContaining('files still processing')
-        );
+        expect(modeButton).toHaveAttribute('aria-label', 'Mode: Consult');
+        expect(modeButton).not.toHaveAttribute('title'); // No tooltip
       });
-
-      global.fetch = originalFetch;
-    });
-
-    it('should show tooltip on mode selector when files incomplete', async () => {
-      const mockFetch = jest.fn();
-      const originalFetch = global.fetch;
-      global.fetch = mockFetch;
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [{ index: 0, uploadId: 'upload-tooltip', status: 'accepted' }],
-        }),
-      });
-
-      render(
-        <Composer
-          onSendMessage={mockOnSendMessage}
-          wsAdapter={mockWsAdapter}
-          conversationId="test-conv"
-          currentMode="assessment"
-          onModeChange={mockOnModeChange}
-        />
-      );
-
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      const file = new File(['content'], 'incomplete.pdf', { type: 'application/pdf' });
-
-      Object.defineProperty(fileInput, 'files', {
-        value: [file],
-        writable: false,
-      });
-
-      fireEvent.change(fileInput);
-
-      await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalled();
-      });
-
-      // Mode selector should have title attribute with warning
-      await waitFor(() => {
-        const modeButton = screen.getByLabelText(/Mode:/);
-        expect(modeButton).toHaveAttribute(
-          'title',
-          'Files are still processing. Switching modes may affect analysis.'
-        );
-      });
-
-      global.fetch = originalFetch;
-    });
-
-    it('should NOT show warning when files are complete', async () => {
-      const mockFetch = jest.fn();
-      const originalFetch = global.fetch;
-      global.fetch = mockFetch;
-
-      let intakeContextHandler: ((data: any) => void) | null = null;
-      mockWsAdapter.subscribeIntakeContextReady.mockImplementation((handler) => {
-        intakeContextHandler = handler;
-        return () => { intakeContextHandler = null; };
-      });
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [{ index: 0, uploadId: 'upload-complete', status: 'accepted' }],
-        }),
-      });
-
-      render(
-        <Composer
-          onSendMessage={mockOnSendMessage}
-          wsAdapter={mockWsAdapter}
-          conversationId="test-conv"
-          currentMode="consult"
-          onModeChange={mockOnModeChange}
-        />
-      );
-
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-      const file = new File(['content'], 'done.pdf', { type: 'application/pdf' });
-
-      Object.defineProperty(fileInput, 'files', {
-        value: [file],
-        writable: false,
-      });
-
-      fireEvent.change(fileInput);
-
-      await waitFor(() => {
-        expect(mockFetch).toHaveBeenCalled();
-      });
-
-      // Complete the file
-      await waitFor(() => {
-        expect(intakeContextHandler).not.toBeNull();
-      });
-
-      await act(async () => {
-        intakeContextHandler?.({
-          conversationId: 'test-conv',
-          uploadId: 'upload-complete',
-          success: true,
-          context: { vendorName: 'Test' },
-          fileMetadata: {
-            fileId: 'file-done',
-            filename: 'done.pdf',
-            mimeType: 'application/pdf',
-            size: 100,
-          },
-        });
-      });
-
-      await waitFor(() => {
-        const chip = screen.getByText('done.pdf').closest('[role="status"]');
-        expect(chip).toHaveAttribute('aria-label', expect.stringContaining('Ready'));
-      });
-
-      // Mode selector should NOT have warning
-      const modeButton = screen.getByLabelText(/Mode:/);
-      expect(modeButton).not.toHaveAttribute(
-        'aria-label',
-        expect.stringContaining('files still processing')
-      );
-      expect(modeButton).not.toHaveAttribute('title');
 
       global.fetch = originalFetch;
     });
 
     it('should allow mode change with incomplete files (no blocking)', async () => {
-      // Verify warning doesn't prevent mode change, just informs user
+      // Verify mode changes work freely regardless of file state
 
       const mockFetch = jest.fn();
       const originalFetch = global.fetch;
@@ -545,14 +427,14 @@ describe('Epic 18 Sprint 3: Mode-Specific Frontend', () => {
       const assessmentOption = screen.getByTestId('mode-option-assessment');
       await userEvent.click(assessmentOption);
 
-      // onModeChange should be called (warning doesn't block)
+      // onModeChange should be called (no blocking)
       expect(mockOnModeChange).toHaveBeenCalledWith('assessment');
 
       global.fetch = originalFetch;
     });
 
-    it('should NOT show warning when files in error state', async () => {
-      // Error is a terminal state - no warning needed
+    it('should have clean aria-label regardless of file state', async () => {
+      // Verify mode selector always has clean aria-label (no warning text)
 
       const mockFetch = jest.fn();
       const originalFetch = global.fetch;
@@ -594,8 +476,10 @@ describe('Epic 18 Sprint 3: Mode-Specific Frontend', () => {
         expect(chip).toHaveAttribute('aria-label', expect.stringContaining('Error'));
       });
 
-      // Mode selector should NOT show warning (error is terminal)
+      // Mode selector should have clean aria-label
       const modeButton = screen.getByLabelText(/Mode:/);
+      expect(modeButton).toHaveAttribute('aria-label', 'Mode: Consult');
+      expect(modeButton).not.toHaveAttribute('title');
       expect(modeButton).not.toHaveAttribute(
         'aria-label',
         expect.stringContaining('files still processing')

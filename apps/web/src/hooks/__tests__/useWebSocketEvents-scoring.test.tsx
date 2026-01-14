@@ -29,6 +29,7 @@ describe('useWebSocketEvents - Scoring Events', () => {
       setScoringResult: jest.fn(),
       resetScoring: jest.fn(),
       setScoringResultForConversation: jest.fn(), // Story 5c persistence
+      clearVendorClarification: jest.fn(), // Epic 18.4.2b: Clear clarification on scoring start
     };
 
     (useChatStore.getState as jest.Mock).mockReturnValue(mockStore);

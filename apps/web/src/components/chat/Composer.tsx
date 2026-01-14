@@ -9,6 +9,7 @@ import { FileChip } from './FileChip';
 import { useMultiFileUpload, UploadMode } from '@/hooks/useMultiFileUpload';
 import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
 import type { MessageAttachment } from '@/lib/websocket';
+import { isXButtonVisible, isBlocking, isSendable, isUploadingAriaLabel } from '@/lib/uploadStageHelpers';
 
 // Stable fallback adapter for when wsAdapter is not provided
 // Module-level constant prevents new object identity on each render
@@ -88,9 +89,10 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
       removeFile,
       clearAll,
       uploadAll,
-      waitForCompletion,
+      // waitForCompletion removed - no longer used after Epic 19 review cleanup
       hasFiles,
       hasPendingFiles,
+      isCanceled, // Epic 19 Story 19.2.3: Check if uploadId was canceled
     } = useMultiFileUpload({
       maxFiles: 10,
       wsAdapter: uploadAdapter,
@@ -150,45 +152,52 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
       // Epic 18 Sprint 3: Allow send when files are ready (attached/parsing/complete)
       // Only block send if files are in early upload stages (pending/uploading/storing)
-      const hasEarlyStageFiles = files.some(f =>
-        f.stage === 'pending' || f.stage === 'uploading' || f.stage === 'storing'
-      );
-      if (disabled || hasEarlyStageFiles) return; // Prevent send during early upload
+      // Epic 19 Review: Use isBlocking() helper for single source of truth
+      const hasBlockingFiles = files.some(f => isBlocking(f.stage));
+      if (disabled || hasBlockingFiles) return; // Prevent send during early upload
 
-      // Sprint 2 Fix: Use attachments returned directly from waitForCompletion()
-      // This avoids stale closure - the returned value is read from latest state
+      // Epic 19 Review Fix: Simplified attachment building
+      // At this point, all files are in sendable states (attached/parsing/complete/error)
+      // because hasEarlyStageFiles check above already returned if any early-stage files exist.
+      // The hasPendingFiles branch was unreachable dead code and has been removed.
       let attachments: MessageAttachment[] | undefined;
 
-      // Epic 17: Upload pending files first, then wait for WS completion
-      if (hasPendingFiles && conversationId) {
-        try {
-          await uploadAll(conversationId, uploadMode);
-          // CRITICAL: waitForCompletion() returns attachments from LATEST state
-          // This avoids the stale closure issue - we don't read from captured `files`
-          attachments = await waitForCompletion();
-        } catch (error) {
-          // Timeout or other error - show toast and abort send
-          const errorMsg = error instanceof Error ? error.message : 'Upload failed';
-          toast.error(errorMsg, { duration: 5000 });
-          return;
-        }
-      } else if (hasFiles) {
+      if (hasFiles) {
         // Epic 18 Sprint 3: Trigger-on-send flow
         // Send with files that have fileId (attached, parsing, or complete)
         // Don't wait - parsing/scoring will continue in background after send
+        // Epic 19 Review Fix: Include uploadId for cancel filtering
         attachments = files
-          .filter(f => f.fileId != null) // Has fileId = ready for send
+          .filter(f => f.fileId != null && f.stage !== 'error') // Has fileId and not errored
           .map(f => ({
             fileId: f.fileId!,
             filename: f.filename,
             mimeType: f.mimeType,
             size: f.size,
+            uploadId: f.uploadId ?? undefined, // Required for cancel filter below
           }));
 
         // If no files have fileId yet (still in early stages), send without attachments
         if (attachments.length === 0) {
           attachments = undefined;
         }
+      }
+
+      // Epic 19 Story 19.2.3: Final check - filter any late-completed canceled files
+      // Uses uploadId directly from attachment (added by buildAttachmentsFromRef)
+      // This handles race where file was removed from state but completed late
+      if (attachments && attachments.length > 0) {
+        const validAttachments = attachments.filter((att) => {
+          if (att.uploadId && isCanceled(att.uploadId)) {
+            console.debug(
+              '[Composer] Filtering canceled attachment from send:',
+              att.uploadId
+            );
+            return false;
+          }
+          return true;
+        });
+        attachments = validAttachments;
       }
 
       // Sprint 2 Fix: Don't send empty message if all files failed
@@ -199,8 +208,14 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
         return;
       }
 
+      // Epic 19 Story 19.2.3: Strip uploadId before sending - it's client-only for cancel tracking
+      // Backend does not expect uploadId in MessageAttachment and should not receive it
+      const attachmentsForSend = hasCompletedFiles
+        ? attachments!.map(({ uploadId, ...rest }) => rest)
+        : undefined;
+
       // Send message with attachments (only if we have some)
-      onSendMessage(trimmedMessage || '', hasCompletedFiles ? attachments : undefined);
+      onSendMessage(trimmedMessage || '', attachmentsForSend);
       setMessage('');
 
       // Epic 17: Clear all files after sending
@@ -241,26 +256,23 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Epic 18 Story 18.3.1: Mode-aware send enablement (trigger-on-send)
     // ALL modes allow send when files are 'attached' (not waiting for enrichment)
     // Uses 'stage' field per Sprint 1B
+    // Epic 19 Review Fix: Error files should NOT block send (per behavior-matrix.md)
+    // Epic 19 Review: Use isSendable() helper for single source of truth
     const canSendWithAttachments = useMemo(() => {
-      if (files.length === 0) return true;
+      // Filter out error files - they should not block send
+      // User can still send with other files that succeeded
+      const nonErrorFiles = files.filter(f => f.stage !== 'error');
 
-      // ALL modes allow send at 'attached' stage (trigger-on-send)
+      if (nonErrorFiles.length === 0) return true; // No non-error files = allow text-only send
+
+      // ALL non-error files must be in sendable state (attached/parsing/complete)
       // User can send message with files that are attached/parsing/complete
       // (parsing may continue in background after send)
-      return files.every(f =>
-        f.stage === 'attached' ||
-        f.stage === 'parsing' ||
-        f.stage === 'complete'
-      );
+      return nonErrorFiles.every(f => isSendable(f.stage));
     }, [files]);
 
-    // Epic 18 Story 18.3.4: Check for incomplete files (show warning on mode change)
-    // Files are incomplete if they're not in 'complete' or 'error' terminal states
-    const hasIncompleteFiles = useMemo(() => {
-      return files.some(f =>
-        f.stage !== 'complete' && f.stage !== 'error'
-      );
-    }, [files]);
+    // NOTE: hasIncompleteFiles removed in Epic 19 Story 19.0.2
+    // Per behavior-matrix.md, users can freely switch modes without warnings
 
     // Enable send if we have text OR files that are ready for sending
     // Epic 18: Changed from hasFiles to canSendWithAttachments
@@ -291,9 +303,10 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
               <div className="px-4 pt-3">
                 <div className="flex flex-wrap gap-2">
                   {files.map((file) => {
-                    // Epic 17 UX Fix: Per-file disable for remove button
-                    // Only disable on files currently in-flight, not globally
-                    const isFileInFlight = ['uploading', 'storing', 'parsing'].includes(file.stage);
+                    // Epic 19 Story 19.0.5: X button visible during uploading/storing, hidden only during parsing
+                    // Uses isXButtonVisible from 19.0.1 - single source of truth
+                    // Reference: behavior-matrix.md lines 166-179
+                    const isRemoveDisabled = !isXButtonVisible(file.stage);
                     return (
                       <FileChip
                         key={file.localIndex}
@@ -302,7 +315,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                         progress={file.progress}
                         error={file.error}
                         onRemove={() => removeFile(file.localIndex)}
-                        disabled={isFileInFlight}
+                        disabled={isRemoveDisabled}
                         variant={useCompactChips ? 'compact' : 'default'}
                         // Epic 18: Pass document type for wrong-mode warnings
                         detectedDocType={file.metadata?.detectedDocType}
@@ -343,22 +356,22 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                         selectedMode={currentMode}
                         onModeChange={onModeChange}
                         disabled={disabled || modeChangeDisabled}
-                        hasIncompleteFiles={hasIncompleteFiles}
                       />
                     )}
 
                     {/* File upload label - uses native label->input association
-                        This is more reliable than programmatic click() across browsers */}
+                        This is more reliable than programmatic click() across browsers
+                        Epic 19 Story 19.1.5: File picker enabled during upload (removed isUploading gate) */}
                     <label
                       htmlFor="composer-file-input"
                       className={`inline-flex items-center justify-center h-9 w-9 rounded-lg cursor-pointer transition-colors ${
-                        disabled || !uploadEnabled || isUploading || files.length >= 10
+                        disabled || !uploadEnabled || files.length >= 10
                           ? 'text-gray-300 cursor-not-allowed pointer-events-none'
                           : 'text-gray-500 hover:bg-gray-100'
                       }`}
                       aria-label="Attach file"
                       role="button"
-                      tabIndex={disabled || !uploadEnabled || isUploading || files.length >= 10 ? -1 : 0}
+                      tabIndex={disabled || !uploadEnabled || files.length >= 10 ? -1 : 0}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
@@ -389,10 +402,10 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                   onClick={handleSend}
                   disabled={!isSendEnabled}
                   className="h-8 w-8 rounded-full p-0 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-700 text-white"
-                  aria-label={isUploading ? 'Uploading files...' : 'Send message'}
+                  aria-label={isUploadingAriaLabel(files) ? 'Uploading files...' : 'Send message'}
                 >
-                  {/* Sprint 2 Fix: Show loader during upload */}
-                  {isUploading ? (
+                  {/* Sprint 2 Fix: Show loader during upload (includes pending stage per behavior-matrix) */}
+                  {isUploadingAriaLabel(files) ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <Send className="h-4 w-4" />
