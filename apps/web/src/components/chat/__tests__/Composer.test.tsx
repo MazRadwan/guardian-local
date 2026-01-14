@@ -322,7 +322,7 @@ describe('Composer', () => {
       render(<Composer onSendMessage={mockOnSendMessage} />);
 
       // File input should exist but be hidden
-      const fileInput = document.querySelector('input[type="file"]');
+      const fileInput = document.getElementById('composer-file-input');
       expect(fileInput).toBeTruthy();
       expect(fileInput).toHaveClass('hidden');
     });
@@ -518,7 +518,7 @@ describe('Composer', () => {
       );
 
       // Get the file input
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       expect(fileInput).toBeTruthy();
 
       // Simulate file selection
@@ -548,7 +548,7 @@ describe('Composer', () => {
         />
       );
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const file1 = new File(['content1'], 'doc1.pdf', { type: 'application/pdf' });
       const file2 = new File(['content2'], 'doc2.pdf', { type: 'application/pdf' });
 
@@ -586,7 +586,7 @@ describe('Composer', () => {
         />
       );
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const files = Array(4)
         .fill(null)
         .map((_, i) => new File([`content${i}`], `doc${i}.pdf`, { type: 'application/pdf' }));
@@ -617,18 +617,24 @@ describe('Composer', () => {
         />
       );
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      // Use specific paperclip input (dropzone adds its own hidden input)
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+
+      // Create 10 small files (small content to stay under 50MB total limit)
       const files = Array(10)
         .fill(null)
-        .map((_, i) => new File([`content${i}`], `doc${i}.pdf`, { type: 'application/pdf' }));
+        .map((_, i) => new File(['pdf'], `doc${i}.pdf`, { type: 'application/pdf' }));
 
       Object.defineProperty(fileInput, 'files', {
         value: files,
         writable: false,
+        configurable: true,
       });
 
       fireEvent.change(fileInput);
 
+      // Wait for first file chip to appear
       await waitFor(() => {
         expect(screen.getByText('doc0.pdf')).toBeInTheDocument();
       });
@@ -667,7 +673,7 @@ describe('Composer', () => {
         />
       );
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' });
 
       Object.defineProperty(fileInput, 'files', {
@@ -719,7 +725,7 @@ describe('Composer', () => {
         />
       );
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' });
 
       Object.defineProperty(fileInput, 'files', {
@@ -748,7 +754,7 @@ describe('Composer', () => {
         />
       );
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       expect(fileInput).toHaveAttribute('multiple');
     });
   });
@@ -795,7 +801,7 @@ describe('Composer', () => {
       );
 
       // Add a file
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' });
 
       Object.defineProperty(fileInput, 'files', {
@@ -906,7 +912,7 @@ describe('Composer', () => {
       );
 
       // 1. Add a file (auto-upload will trigger via useEffect)
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const file = new File(['test content'], 'test-doc.pdf', { type: 'application/pdf' });
 
       Object.defineProperty(fileInput, 'files', {
@@ -1002,7 +1008,7 @@ describe('Composer', () => {
       );
 
       // Add a file (no text) - auto-upload triggers immediately
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      const fileInput = document.getElementById('composer-file-input') as HTMLInputElement;
       const file = new File(['test content'], 'test-doc.pdf', { type: 'application/pdf' });
 
       Object.defineProperty(fileInput, 'files', {

@@ -23,6 +23,7 @@
     "next": "16.0.10",
     "react": "19.0.3",
     "react-dom": "19.0.3",
+    "react-dropzone": "^14.3.8",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "socket.io-client": "^4.8.1",
