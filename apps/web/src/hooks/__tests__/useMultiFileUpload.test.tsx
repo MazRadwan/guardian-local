@@ -401,7 +401,7 @@ describe('useMultiFileUpload', () => {
       const onError = jest.fn();
 
       // Capture upload progress handler
-      let progressHandler: ((data: UploadProgressEvent) => void) | null = null;
+      let progressHandler: ((data: unknown) => void) | null = null;
       jest.spyOn(adapter, 'subscribeUploadProgress').mockImplementation((handler) => {
         progressHandler = handler;
         return () => {};
@@ -435,7 +435,7 @@ describe('useMultiFileUpload', () => {
 
       // Start upload (async operation)
       await act(async () => {
-        await result.current.uploadAll('conv-123', 'assessment');
+        await result.current.uploadAll('conv-123', 'intake');
       });
 
       // After upload completes, file should be in 'storing' stage
@@ -1632,7 +1632,7 @@ describe('useMultiFileUpload', () => {
       // Start waiting with short timeout
       let error: Error | null = null;
       const waitPromise = result.current.waitForCompletion(100).catch((e) => {
-        error = e;
+        error = e as Error;
       });
 
       // Advance timers past timeout
@@ -1646,7 +1646,7 @@ describe('useMultiFileUpload', () => {
 
       // Should have rejected with timeout error
       expect(error).toBeInstanceOf(Error);
-      expect(error?.message).toContain('timeout');
+      expect((error as unknown as Error).message).toContain('timeout');
 
       // UX Recovery: File should be forced to error state so UI isn't stuck
       expect(result.current.files[0].stage).toBe('error');
