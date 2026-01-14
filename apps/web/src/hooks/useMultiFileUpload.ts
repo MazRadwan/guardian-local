@@ -28,9 +28,34 @@ import type {
   AttachedFileMetadata,
   FileUploadStage,
 } from '@/lib/websocket';
+import { isRemovable, requiresAbort, wouldExceedTotalSize } from '@/lib/uploadStageHelpers';
 
 /** Backend API base URL from environment */
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+/**
+ * Epic 19: Maximum concurrent uploads
+ * Reference: behavior-matrix.md Section 5 (Concurrency Limits)
+ */
+const UPLOAD_CONCURRENCY_LIMIT = 3;
+
+/**
+ * Epic 19: Maximum total size for all files combined
+ * Reference: behavior-matrix.md Section 5 (Concurrency Limits)
+ */
+const MAX_TOTAL_SIZE = 50 * 1024 * 1024; // 50MB
+
+/**
+ * Epic 19 Story 19.2.4: Orphan detection timeouts
+ * Reference: behavior-matrix.md Section 12 (Edge Cases)
+ *
+ * ORPHAN_TIMEOUT_RECONNECT_MS - Timeout for reconnect check (aggressive)
+ * ORPHAN_TIMEOUT_PERIODIC_MS - Timeout for periodic check (conservative)
+ * ORPHAN_CHECK_INTERVAL_MS - How often to run periodic check
+ */
+const ORPHAN_TIMEOUT_RECONNECT_MS = 30000; // 30 seconds
+const ORPHAN_TIMEOUT_PERIODIC_MS = 60000; // 60 seconds
+const ORPHAN_CHECK_INTERVAL_MS = 15000; // Check every 15 seconds
 
 /** Upload mode - intake or scoring */
 export type UploadMode = 'intake' | 'scoring';
@@ -177,6 +202,8 @@ export interface UseMultiFileUploadReturn {
   hasPendingFiles: boolean;
   /** True if any files have errors */
   hasErrors: boolean;
+  /** Epic 19 Story 19.2.1: Check if an uploadId was canceled */
+  isCanceled: (uploadId: string) => boolean;
 }
 
 /**
@@ -224,26 +251,117 @@ export function useMultiFileUpload(
   // buffer the event and process when uploadId is registered.
   const earlyFileAttachedEventsRef = useRef<Map<string, FileAttachedEvent>>(new Map());
 
-  // AbortController for batch upload
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Epic 19: Per-file AbortController map
+  // Maps localIndex → AbortController for individual file cancellation
+  // Reference: behavior-matrix.md Section 4 (Cancel/Remove Action)
+  const abortControllerMapRef = useRef<Map<number, AbortController>>(new Map());
+
+  // Epic 19: Track currently uploading file indices for concurrency control
+  const activeUploadsRef = useRef<Set<number>>(new Set());
+
+  // Epic 19 Story 19.1.5: Track if upload session is active
+  const isUploadingRef = useRef<boolean>(false);
+
+  // Store current upload params for new file workers
+  const uploadParamsRef = useRef<{ conversationId: string; mode: UploadMode } | null>(null);
+
+  // CRITICAL: Track files that are QUEUED (in uploadQueue but not yet in activeUploads)
+  // This prevents the useEffect from starting the same file that a queue worker is about to start
+  const queuedUploadsRef = useRef<Set<number>>(new Set());
+
+  // Epic 19 Story 19.2.1: Track canceled uploadIds to filter late WS events
+  // When a file is canceled, its uploadId is added here to prevent
+  // late file_attached/upload_progress from resurrecting the file.
+  // Reference: behavior-matrix.md Section 12 (Edge Cases)
+  const canceledUploadIdsRef = useRef<Set<string>>(new Set());
+
+  // Epic 19 Story 19.2.4: Track when uploads started for orphan detection
+  // Maps localIndex → timestamp when upload entered 'uploading' stage
+  const uploadStartTimesRef = useRef<Map<number, number>>(new Map());
+
+  /**
+   * Epic 19 Story 19.2.1: Check if uploadId was canceled
+   * Used by WS handlers to filter late events
+   */
+  const isCanceled = useCallback((uploadId: string): boolean => {
+    return canceledUploadIdsRef.current.has(uploadId);
+  }, []);
+
+  /**
+   * Epic 19: Create and store AbortController for a file
+   * @param localIndex - File's local index
+   * @returns The created AbortController
+   */
+  const createAbortController = useCallback((localIndex: number): AbortController => {
+    const controller = new AbortController();
+    abortControllerMapRef.current.set(localIndex, controller);
+    return controller;
+  }, []);
+
+  /**
+   * Epic 19: Get AbortController for a file
+   * @param localIndex - File's local index
+   * @returns The AbortController or undefined if not found
+   */
+  const getAbortController = useCallback((localIndex: number): AbortController | undefined => {
+    return abortControllerMapRef.current.get(localIndex);
+  }, []);
+
+  /**
+   * Epic 19: Abort and remove controller for a file
+   * @param localIndex - File's local index
+   * @returns true if controller existed and was aborted
+   */
+  const abortAndRemoveController = useCallback((localIndex: number): boolean => {
+    const controller = abortControllerMapRef.current.get(localIndex);
+    if (controller) {
+      controller.abort();
+      abortControllerMapRef.current.delete(localIndex);
+      return true;
+    }
+    return false;
+  }, []);
+
+  /**
+   * Epic 19: Clean up all AbortControllers
+   * Called by clearAll() and on unmount
+   */
+  const abortAllControllers = useCallback(() => {
+    abortControllerMapRef.current.forEach((controller) => {
+      controller.abort();
+    });
+    abortControllerMapRef.current.clear();
+  }, []);
 
   /**
    * Add files to queue (validates but doesn't upload)
    * Story 17.3.2: Core Operations
+   * Epic 19 Story 19.1.4: Client-side total size validation
    */
   const addFiles = useCallback(
     (fileList: FileList) => {
+      // Convert FileList to array for easier handling
+      const filesToAdd = Array.from(fileList);
+
+      // Epic 19 Story 19.1.4: Check total size limit FIRST (before any individual validation)
+      // This prevents partially adding files when total would exceed limit
+      const newFileSizes = filesToAdd.map((f) => ({ size: f.size }));
+      if (wouldExceedTotalSize(filesRef.current, newFileSizes, MAX_TOTAL_SIZE)) {
+        onErrorRef.current?.('Total size exceeds 50MB limit');
+        return; // Reject ALL new files
+      }
+
       const newFiles: FileState[] = [];
       const currentCount = files.length;
 
-      for (let i = 0; i < fileList.length; i++) {
+      for (let i = 0; i < filesToAdd.length; i++) {
         // Check max files limit
         if (currentCount + newFiles.length >= maxFiles) {
           onErrorRef.current?.(`Maximum ${maxFiles} files allowed`);
           break;
         }
 
-        const file = fileList[i];
+        const file = filesToAdd[i];
 
         // Validate file type
         if (!VALID_TYPES.includes(file.type)) {
@@ -251,7 +369,7 @@ export function useMultiFileUpload(
           continue;
         }
 
-        // Validate file size
+        // Validate individual file size (20MB per file)
         if (file.size > MAX_FILE_SIZE) {
           onErrorRef.current?.(`${file.name}: File too large (max 20MB)`);
           continue;
@@ -281,44 +399,83 @@ export function useMultiFileUpload(
 
   /**
    * Remove file by localIndex
-   * Only allowed for pending/error/complete files (not during upload)
+   * Allowed at all stages except 'parsing' (cannot cancel enrichment)
+   *
    * Story 17.3.2: Core Operations
    * Epic 18: Clean up buffered events
+   * Epic 19 Story 19.1.1: Abort HTTP request if in cancelable stage
+   *
+   * Reference: behavior-matrix.md Section 4 (Action Matrix - Remove/Cancel)
    */
   const removeFile = useCallback((localIndex: number) => {
     setFiles((prev) => {
       const file = prev.find((f) => f.localIndex === localIndex);
       if (!file) return prev;
 
-      // Can't remove during active upload (Epic 18: includes 'attached')
-      if (['uploading', 'storing', 'attached', 'parsing'].includes(file.stage)) {
-        onErrorRef.current?.('Cannot remove file during upload');
+      // Check if stage allows removal (all except parsing)
+      if (!isRemovable(file.stage)) {
+        onErrorRef.current?.('Cannot cancel during analysis');
         return prev;
       }
+
+      // Epic 19: Abort HTTP request if in cancelable stage
+      if (requiresAbort(file.stage)) {
+        abortAndRemoveController(localIndex);
+      } else {
+        // Clean up controller even if not aborting (may exist from earlier stage)
+        abortControllerMapRef.current.delete(localIndex);
+      }
+
+      // Epic 19 Story 19.2.4: Clear timestamp on removal
+      uploadStartTimesRef.current.delete(localIndex);
 
       // Clear uploadId from known set and clean up buffered events
       if (file.uploadId) {
         knownUploadIdsRef.current.delete(file.uploadId);
-        earlyFileAttachedEventsRef.current.delete(file.uploadId); // Epic 18: Cleanup
+        earlyFileAttachedEventsRef.current.delete(file.uploadId);
+
+        // Epic 19 Story 19.2.1: Track canceled uploadId for late event filtering
+        // This prevents late WS events from resurrecting the file
+        canceledUploadIdsRef.current.add(file.uploadId);
       }
+
+      // Epic 19 Story 19.1.5: Remove from queued set if present
+      // This handles the case where file was added to uploadQueue but worker hasn't
+      // started it yet. Without this, session cleanup can get stuck.
+      queuedUploadsRef.current.delete(localIndex);
 
       return prev.filter((f) => f.localIndex !== localIndex);
     });
-  }, []);
+  }, [abortAndRemoveController]);
 
   /**
    * Clear all files
    * Story 17.3.2: Core Operations
    * Epic 18: Clean up buffered events
+   * Epic 19 Story 19.1.1: Abort all per-file controllers
+   * Epic 19 Story 19.1.3: Clear active uploads tracking
    */
   const clearAll = useCallback(() => {
-    // Abort any in-progress upload
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = null;
+    // Epic 19: Abort all per-file controllers
+    abortAllControllers();
+
+    // Epic 19: Clear active uploads tracking
+    activeUploadsRef.current.clear();
+
+    // Epic 19 Story 19.1.5: Reset upload session state
+    isUploadingRef.current = false;
+    uploadParamsRef.current = null;
+    queuedUploadsRef.current.clear();
 
     // Clear known uploadIds and buffered events
     knownUploadIdsRef.current.clear();
-    earlyFileAttachedEventsRef.current.clear(); // Epic 18: Cleanup
+    earlyFileAttachedEventsRef.current.clear();
+
+    // Epic 19 Story 19.2.1: Clear canceled tracking (new conversation = fresh state)
+    canceledUploadIdsRef.current.clear();
+
+    // Epic 19 Story 19.2.4: Clear timestamp tracking
+    uploadStartTimesRef.current.clear();
 
     // Sprint 2 Fix: Resolve any pending waiters with empty array
     // This prevents waitForCompletion() from hanging/leaking
@@ -331,17 +488,36 @@ export function useMultiFileUpload(
     // Reset state
     setFiles([]);
     nextIndexRef.current = 0;
-  }, []);
+  }, [abortAllControllers]);
 
   /**
    * Epic 18: Handle file_attached event with monotonic guards
+   * Epic 19 Story 19.2.2: Filter late events for canceled uploads
    */
   const handleFileAttached = useCallback((event: FileAttachedEvent) => {
     // Check if uploadId is known
     if (!knownUploadIdsRef.current.has(event.uploadId)) {
+      // Epic 19 Story 19.2.2: Don't buffer events for canceled uploads
+      if (canceledUploadIdsRef.current.has(event.uploadId)) {
+        console.debug(
+          '[useMultiFileUpload] Ignoring file_attached for canceled:',
+          event.uploadId
+        );
+        return;
+      }
+
       // Buffer event for later processing (race condition)
       console.debug('[useMultiFileUpload] Buffering early file_attached:', event.uploadId);
       earlyFileAttachedEventsRef.current.set(event.uploadId, event);
+      return;
+    }
+
+    // Epic 19 Story 19.2.2: Filter late events for canceled uploads
+    if (canceledUploadIdsRef.current.has(event.uploadId)) {
+      console.debug(
+        '[useMultiFileUpload] Ignoring file_attached for canceled:',
+        event.uploadId
+      );
       return;
     }
 
@@ -394,43 +570,52 @@ export function useMultiFileUpload(
   );
 
   /**
-   * Upload all pending files
-   * Story 17.3.3: Upload Implementation
-   * Epic 18: Process early buffered events after uploadId registration
+   * Epic 19: Upload a single file
+   *
+   * Uploads one file via HTTP POST, handling its complete lifecycle:
+   * - Creates AbortController for this file
+   * - Sets stage to 'uploading'
+   * - Makes HTTP request
+   * - Updates stage based on response
+   * - Cleans up AbortController
+   *
+   * @param file - FileState to upload
+   * @param conversationId - Target conversation
+   * @param mode - Upload mode (intake or scoring)
+   *
+   * Reference: behavior-matrix.md Section 3 (Stage Transitions)
    */
-  const uploadAll = useCallback(
-    async (conversationId: string, mode: UploadMode) => {
+  const uploadSingleFile = useCallback(
+    async (file: FileState, conversationId: string, mode: UploadMode): Promise<void> => {
       if (!token) {
-        onErrorRef.current?.('Not authenticated');
-        return;
+        throw new Error('Not authenticated');
       }
 
-      const pendingFiles = files.filter((f) => f.stage === 'pending');
-      if (pendingFiles.length === 0) return;
+      const { localIndex } = file;
 
-      // Create AbortController for this batch
-      abortControllerRef.current = new AbortController();
+      // Create AbortController for this file
+      const controller = createAbortController(localIndex);
 
-      // Mark as uploading
+      // Epic 19 Story 19.2.4: Track upload start time
+      // IMPORTANT: Timestamp persists until file reaches terminal state (complete/error)
+      // Do NOT clear when HTTP resolves - file may still be in 'storing' awaiting WS events
+      uploadStartTimesRef.current.set(localIndex, Date.now());
+
+      // Mark this file as uploading
       setFiles((prev) =>
         prev.map((f) =>
-          f.stage === 'pending'
+          f.localIndex === localIndex
             ? { ...f, stage: 'uploading' as const, progress: 10 }
             : f
         )
       );
 
       try {
-        // Build FormData
+        // Build FormData for single file
         const formData = new FormData();
         formData.append('conversationId', conversationId);
         formData.append('mode', mode);
-
-        // Add files in order (server returns uploadIds in same order)
-        const pendingIndices = pendingFiles.map((f) => f.localIndex);
-        pendingFiles.forEach((fileState) => {
-          formData.append('files', fileState.file); // Field name is 'files' (plural)
-        });
+        formData.append('files', file.file); // Single file
 
         // POST upload
         const response = await fetch(`${API_BASE_URL}/api/documents/upload`, {
@@ -439,88 +624,190 @@ export function useMultiFileUpload(
             Authorization: `Bearer ${token}`,
           },
           body: formData,
-          signal: abortControllerRef.current.signal,
+          signal: controller.signal,
         });
 
         if (!response.ok) {
-          const errorData = await response
-            .json()
-            .catch(() => ({ error: 'Upload failed' }));
+          const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
           throw new Error(errorData.error || `Upload failed: ${response.status}`);
         }
 
-        // Parse response to get uploadIds
+        // Parse response
         const result = await response.json();
-        // result.files: [{ index, filename, uploadId, status, error? }]
 
-        // Map uploadIds to our files by index
-        setFiles((prev) => {
-          const updated = [...prev];
+        // Response should have exactly one file (index 0)
+        const serverFile = result.files?.[0];
 
-          result.files.forEach((serverFile: any) => {
-            // serverFile.index corresponds to position in FormData
-            const localIndex = pendingIndices[serverFile.index];
-            const fileIndex = updated.findIndex(
-              (f) => f.localIndex === localIndex
-            );
+        if (!serverFile) {
+          throw new Error('Invalid server response');
+        }
 
-            if (fileIndex !== -1) {
-              if (serverFile.status === 'accepted') {
-                // Store uploadId and register for WS tracking
-                updated[fileIndex] = {
-                  ...updated[fileIndex],
-                  uploadId: serverFile.uploadId,
-                  stage: 'storing',
-                  progress: 30,
-                };
-                knownUploadIdsRef.current.add(serverFile.uploadId);
+        // Update file state based on response
+        setFiles((prev) =>
+          prev.map((f) => {
+            if (f.localIndex !== localIndex) return f;
 
-                // Epic 18: Process any buffered file_attached events for this uploadId
-                processEarlyEvents(serverFile.uploadId);
-              } else {
-                // Server rejected file during validation
-                updated[fileIndex] = {
-                  ...updated[fileIndex],
-                  stage: 'error',
-                  progress: 0,
-                  error: serverFile.error || 'Rejected by server',
-                };
-              }
+            if (serverFile.status === 'accepted') {
+              // Register uploadId for WebSocket event tracking
+              knownUploadIdsRef.current.add(serverFile.uploadId);
+
+              // Process any buffered file_attached events
+              processEarlyEvents(serverFile.uploadId);
+
+              return {
+                ...f,
+                uploadId: serverFile.uploadId,
+                stage: 'storing' as const,
+                progress: 30,
+              };
+            } else {
+              // Epic 19 Story 19.2.4: Clear timestamp on rejection (terminal state)
+              uploadStartTimesRef.current.delete(f.localIndex);
+
+              return {
+                ...f,
+                stage: 'error' as const,
+                progress: 0,
+                error: serverFile.error || 'Rejected by server',
+              };
             }
-          });
-
-          return updated;
-        });
-
-        // Progress continues via WebSocket
+          })
+        );
       } catch (error) {
-        // Handle abort gracefully
+        // Handle abort gracefully - file was canceled by user
         if (error instanceof Error && error.name === 'AbortError') {
-          setFiles((prev) =>
-            prev.map((f) =>
-              f.stage === 'uploading'
-                ? { ...f, stage: 'pending' as const, progress: 0, uploadId: null }
-                : f
-            )
-          );
+          // File already removed by removeFile() - nothing to do
+          // The setFiles filter in removeFile already removed this file
+          // Timestamp already cleared by removeFile()
           return;
         }
 
-        // Mark all uploading as error
+        // Epic 19 Story 19.2.4: Clear timestamp on error (terminal state)
+        uploadStartTimesRef.current.delete(localIndex);
+
+        // Mark this file as error
         const errorMsg = error instanceof Error ? error.message : 'Upload failed';
         setFiles((prev) =>
           prev.map((f) =>
-            f.stage === 'uploading'
+            f.localIndex === localIndex
               ? { ...f, stage: 'error' as const, progress: 0, error: errorMsg }
               : f
           )
         );
+
+        // Report error via callback
         onErrorRef.current?.(errorMsg);
       } finally {
-        abortControllerRef.current = null;
+        // Clean up AbortController
+        abortControllerMapRef.current.delete(localIndex);
       }
     },
-    [files, token, processEarlyEvents]
+    [token, createAbortController, processEarlyEvents]
+  );
+
+  /**
+   * Upload all pending files with concurrency limit
+   *
+   * Epic 19 Story 19.1.3: Implements concurrent queue pattern.
+   * Epic 19 Story 19.1.5: Session guard and queue tracking.
+   *
+   * - Maximum UPLOAD_CONCURRENCY_LIMIT simultaneous uploads
+   * - Remaining files queue and start as slots open
+   * - Each file uses independent AbortController
+   * - Session guard: Bails if upload session already active
+   *
+   * @param conversationId - Target conversation
+   * @param mode - Upload mode
+   *
+   * Reference: behavior-matrix.md Section 5 (Concurrency Limits)
+   */
+  const uploadAll = useCallback(
+    async (conversationId: string, mode: UploadMode) => {
+      if (!token) {
+        onErrorRef.current?.('Not authenticated');
+        return;
+      }
+
+      // Epic 19 Story 19.1.5: GUARD - Bail if session already active
+      // The reschedule useEffect handles new files during active upload.
+      // This prevents re-entrant uploadAll calls from Composer's auto-upload effect.
+      if (isUploadingRef.current) {
+        console.debug('[uploadAll] Session already active, deferring to reschedule effect');
+        return;
+      }
+
+      // Get pending files (snapshot at call time)
+      const pendingFiles = filesRef.current.filter((f) => f.stage === 'pending');
+      if (pendingFiles.length === 0) return;
+
+      // Epic 19 Story 19.1.5: Mark upload session as active
+      // NOTE: Session is cleared by useEffect when all uploads complete
+      isUploadingRef.current = true;
+      uploadParamsRef.current = { conversationId, mode };
+
+      // CRITICAL: Mark all pending files as QUEUED before creating the queue
+      // This prevents the useEffect from double-starting these files
+      pendingFiles.forEach((f) => queuedUploadsRef.current.add(f.localIndex));
+
+      // Create queue from pending files (copy to avoid mutation issues)
+      const uploadQueue = [...pendingFiles];
+
+      /**
+       * Start next upload if slots available
+       * Returns a promise that resolves when this upload chain completes
+       */
+      const processQueue = async (): Promise<void> => {
+        while (uploadQueue.length > 0) {
+          // Check if we have capacity
+          if (activeUploadsRef.current.size >= UPLOAD_CONCURRENCY_LIMIT) {
+            // No capacity - this worker will exit, another will continue
+            return;
+          }
+
+          // Get next file from queue
+          const file = uploadQueue.shift();
+          if (!file) return;
+
+          // CRITICAL: Move from queued → active (atomically)
+          queuedUploadsRef.current.delete(file.localIndex);
+
+          // Check if file still exists and is still pending
+          const currentFile = filesRef.current.find((f) => f.localIndex === file.localIndex);
+          if (!currentFile || currentFile.stage !== 'pending') {
+            // File was removed or stage changed - continue to next
+            continue;
+          }
+
+          // Mark as active
+          activeUploadsRef.current.add(file.localIndex);
+
+          try {
+            // Upload this file
+            await uploadSingleFile(currentFile, conversationId, mode);
+          } catch (error) {
+            // Individual errors handled in uploadSingleFile
+            console.error(`Upload failed for ${file.filename}:`, error);
+          } finally {
+            // Release slot
+            activeUploadsRef.current.delete(file.localIndex);
+          }
+        }
+      };
+
+      // Start up to LIMIT concurrent workers
+      const workerCount = Math.min(UPLOAD_CONCURRENCY_LIMIT, pendingFiles.length);
+      const workers = Array(workerCount)
+        .fill(null)
+        .map(() => processQueue());
+
+      // Wait for all workers to complete
+      await Promise.all(workers);
+
+      // NOTE: Do NOT clear session state here!
+      // The useEffect may have started new workers for newly added files.
+      // Session state is cleared by the cleanup useEffect when all done.
+    },
+    [token, uploadSingleFile]
   );
 
   /**
@@ -535,6 +822,22 @@ export function useMultiFileUpload(
     const unsubProgress = wsAdapter.subscribeUploadProgress((data) => {
       // "Never adopt" - only accept events for known uploadIds
       if (!knownUploadIdsRef.current.has(data.uploadId)) return;
+
+      // Epic 19 Story 19.2.2: Filter late events for canceled uploads
+      if (canceledUploadIdsRef.current.has(data.uploadId)) {
+        console.debug(
+          '[useMultiFileUpload] Ignoring upload_progress for canceled:',
+          data.uploadId
+        );
+        return;
+      }
+
+      // Epic 19 Story 19.2.4: Reset timestamp on progress (upload is alive)
+      // This prevents orphan detection from marking active uploads as timed out
+      const file = filesRef.current.find((f) => f.uploadId === data.uploadId);
+      if (file) {
+        uploadStartTimesRef.current.set(file.localIndex, Date.now());
+      }
 
       setFiles((prev) =>
         prev.map((f) => {
@@ -568,6 +871,21 @@ export function useMultiFileUpload(
     // Intake context ready
     const unsubIntake = wsAdapter.subscribeIntakeContextReady((data) => {
       if (!knownUploadIdsRef.current.has(data.uploadId)) return;
+
+      // Epic 19 Story 19.2.2: Filter late events for canceled uploads
+      if (canceledUploadIdsRef.current.has(data.uploadId)) {
+        console.debug(
+          '[useMultiFileUpload] Ignoring intake_context_ready for canceled:',
+          data.uploadId
+        );
+        return;
+      }
+
+      // Epic 19 Story 19.2.4: Clear timestamp on terminal state
+      const file = filesRef.current.find((f) => f.uploadId === data.uploadId);
+      if (file) {
+        uploadStartTimesRef.current.delete(file.localIndex);
+      }
 
       setFiles((prev) => {
         const updated = prev.map((f) => {
@@ -603,6 +921,21 @@ export function useMultiFileUpload(
     // Scoring parse ready (similar pattern)
     const unsubScoring = wsAdapter.subscribeScoringParseReady((data) => {
       if (!knownUploadIdsRef.current.has(data.uploadId)) return;
+
+      // Epic 19 Story 19.2.2: Filter late events for canceled uploads
+      if (canceledUploadIdsRef.current.has(data.uploadId)) {
+        console.debug(
+          '[useMultiFileUpload] Ignoring scoring_parse_ready for canceled:',
+          data.uploadId
+        );
+        return;
+      }
+
+      // Epic 19 Story 19.2.4: Clear timestamp on terminal state
+      const file = filesRef.current.find((f) => f.uploadId === data.uploadId);
+      if (file) {
+        uploadStartTimesRef.current.delete(file.localIndex);
+      }
 
       setFiles((prev) => {
         const updated = prev.map((f) => {
@@ -653,6 +986,112 @@ export function useMultiFileUpload(
   ]);
 
   /**
+   * Epic 19 Story 19.1.5: Watch for new pending files during upload
+   * When new files are added while upload is active, start workers to process them
+   *
+   * CRITICAL: Checks both activeUploadsRef (processing) and queuedUploadsRef (waiting in queue)
+   * to prevent starting a file that's already queued by uploadAll.
+   */
+  useEffect(() => {
+    // Only act if upload session is active
+    if (!isUploadingRef.current || !uploadParamsRef.current) {
+      return;
+    }
+
+    // Check if we have capacity
+    // Note: queuedUploads don't count against capacity - they're waiting for a worker
+    const availableSlots = UPLOAD_CONCURRENCY_LIMIT - activeUploadsRef.current.size;
+    if (availableSlots <= 0) {
+      return; // No capacity, existing workers will pick up when slots free
+    }
+
+    // Find pending files that aren't already being processed OR queued
+    const pendingFiles = files.filter((f) => {
+      if (f.stage !== 'pending') return false;
+      // CRITICAL: Check BOTH refs to prevent double-upload
+      if (activeUploadsRef.current.has(f.localIndex)) return false;
+      if (queuedUploadsRef.current.has(f.localIndex)) return false;
+      return true;
+    });
+
+    if (pendingFiles.length === 0) {
+      return; // No new pending files
+    }
+
+    // Start new workers for new pending files (up to available slots)
+    const { conversationId, mode } = uploadParamsRef.current;
+    const filesToStart = pendingFiles.slice(0, availableSlots);
+
+    console.debug(
+      '[useMultiFileUpload] Starting workers for new files:',
+      filesToStart.map((f) => f.filename)
+    );
+
+    // Process each new file (async, don't await)
+    filesToStart.forEach(async (file) => {
+      // CRITICAL: Mark as active BEFORE any async work to prevent race
+      // Note: We don't use queuedUploadsRef here because we're starting immediately
+      if (activeUploadsRef.current.has(file.localIndex)) {
+        return; // Another effect iteration got here first
+      }
+      if (activeUploadsRef.current.size >= UPLOAD_CONCURRENCY_LIMIT) {
+        return; // No more capacity
+      }
+
+      activeUploadsRef.current.add(file.localIndex);
+
+      // Double-check file is still pending
+      const currentFile = filesRef.current.find((f) => f.localIndex === file.localIndex);
+      if (!currentFile || currentFile.stage !== 'pending') {
+        activeUploadsRef.current.delete(file.localIndex);
+        return;
+      }
+
+      try {
+        await uploadSingleFile(currentFile, conversationId, mode);
+      } catch (error) {
+        console.error(`Upload failed for ${file.filename}:`, error);
+      } finally {
+        activeUploadsRef.current.delete(file.localIndex);
+      }
+    });
+  }, [files, uploadSingleFile]);
+
+  /**
+   * Epic 19 Story 19.1.5: Clear session state when all uploads complete
+   * Triggers when: activeUploadsRef.size === 0 AND queuedUploadsRef.size === 0
+   *                AND no pending files AND session was active
+   */
+  useEffect(() => {
+    // Only check if we think we're in an upload session
+    if (!isUploadingRef.current) {
+      return;
+    }
+
+    // Check if any uploads still in flight
+    if (activeUploadsRef.current.size > 0) {
+      return; // Still have active uploads
+    }
+
+    // Check if any files still queued (waiting in uploadQueue)
+    if (queuedUploadsRef.current.size > 0) {
+      return; // Still have files in queue
+    }
+
+    // Check if any files still pending
+    const hasPending = files.some((f) => f.stage === 'pending');
+    if (hasPending) {
+      return; // Still have files waiting to upload
+    }
+
+    // All done - clear session state
+    console.debug('[useMultiFileUpload] All uploads complete, clearing session state');
+    isUploadingRef.current = false;
+    uploadParamsRef.current = null;
+    queuedUploadsRef.current.clear(); // Defensive clear
+  }, [files]); // Triggers on files state change
+
+  /**
    * Computed values
    * Story 17.3.5: Computed Values and Tests
    * Epic 18: Only uploading/storing are upload-in-flight stages
@@ -676,22 +1115,50 @@ export function useMultiFileUpload(
 
   const getCompletedFileIds = useCallback(() => {
     return files
-      .filter((f) => f.stage === 'complete' && f.fileId)
+      .filter((f) => {
+        // Must be complete with fileId
+        if (f.stage !== 'complete' || !f.fileId) return false;
+
+        // Epic 19 Story 19.2.3: Exclude canceled files
+        if (f.uploadId && canceledUploadIdsRef.current.has(f.uploadId)) {
+          return false;
+        }
+
+        return true;
+      })
       .map((f) => f.fileId!);
   }, [files]);
 
   /**
    * Helper: Build MessageAttachment[] from current files state
    * Reads from filesRef to get latest state (avoids stale closure)
+   * Epic 19 Story 19.2.3: Excludes files whose uploadId is in canceled set
+   * Epic 19 Story 19.2.3: Carries uploadId in attachment for downstream cancel checking
    */
   const buildAttachmentsFromRef = useCallback((): MessageAttachment[] => {
     return filesRef.current
-      .filter((f) => f.stage === 'complete' && f.fileId)
+      .filter((f) => {
+        // Must be complete with fileId
+        if (f.stage !== 'complete' || !f.fileId) return false;
+
+        // Epic 19 Story 19.2.3: Exclude canceled files
+        // This handles race where file completes after cancel was requested
+        if (f.uploadId && canceledUploadIdsRef.current.has(f.uploadId)) {
+          console.debug(
+            '[useMultiFileUpload] Excluding canceled file from attachments:',
+            f.uploadId
+          );
+          return false;
+        }
+
+        return true;
+      })
       .map((f) => ({
         fileId: f.fileId!,
         filename: f.filename,
         mimeType: f.mimeType,
         size: f.size,
+        uploadId: f.uploadId ?? undefined, // Epic 19: Carry uploadId for downstream cancel checking
       }));
   }, []);
 
@@ -705,11 +1172,25 @@ export function useMultiFileUpload(
   const waitForCompletionResolversRef = useRef<Array<(attachments: MessageAttachment[]) => void>>([]);
 
   // Check and resolve pending waiters when files state changes
-  // Epic 18: Updated to include 'attached' as in-flight
+  // Epic 19 Review Note: waitForCompletion waiter resolution
+  // NOTE: With trigger-on-send (Epic 18), 'attached' = ready to send, so including
+  // 'attached' as in-flight is conservative but harmless since Composer.tsx no longer
+  // uses waitForCompletion (dead code removed in Epic 19 review fix).
+  // Keeping 'attached' in the list for backward compatibility with existing tests.
   useEffect(() => {
-    const hasInFlight = files.some((f) =>
+    // Epic 19 Story 19.2.3: Filter out canceled files when checking in-flight status
+    // This ensures waiters resolve when all non-canceled files are done
+    const inFlightFiles = files.filter((f) =>
       ['uploading', 'storing', 'attached', 'parsing'].includes(f.stage)
-    );
+    ).filter((f) => {
+      // Don't count canceled files as in-flight
+      if (f.uploadId && canceledUploadIdsRef.current.has(f.uploadId)) {
+        return false;
+      }
+      return true;
+    });
+
+    const hasInFlight = inFlightFiles.length > 0;
 
     // Resolve waiters when nothing in-flight (all done or all pending/error/complete)
     if (!hasInFlight && waitForCompletionResolversRef.current.length > 0) {
@@ -730,6 +1211,129 @@ export function useMultiFileUpload(
         resolvers.forEach((resolve) => resolve([]));
       }
     };
+  }, []);
+
+  // Epic 19: Cleanup AbortControllers on unmount
+  useEffect(() => {
+    return () => {
+      abortAllControllers();
+    };
+  }, [abortAllControllers]);
+
+  /**
+   * Epic 19 Story 19.2.4: Handle orphaned uploads on WebSocket reconnect
+   *
+   * When WebSocket reconnects, check for uploads that have been in uploading/storing
+   * stage for too long. These are likely orphaned due to missed WS events.
+   *
+   * Uses aggressive timeout (30s) since we know WS was down.
+   */
+  useEffect(() => {
+    if (!wsAdapter.isConnected) {
+      // Disconnected - nothing to do
+      return;
+    }
+
+    // On reconnect, check for orphaned uploads after delay
+    // (gives legitimate WS events time to arrive)
+    const checkOrphans = () => {
+      const now = Date.now();
+      const orphanedIndices: number[] = [];
+
+      // Find files that have been uploading/storing for too long
+      filesRef.current.forEach((file) => {
+        if (!['uploading', 'storing'].includes(file.stage)) return;
+
+        const startTime = uploadStartTimesRef.current.get(file.localIndex);
+        if (startTime && now - startTime > ORPHAN_TIMEOUT_RECONNECT_MS) {
+          orphanedIndices.push(file.localIndex);
+        }
+      });
+
+      if (orphanedIndices.length > 0) {
+        console.warn(
+          '[useMultiFileUpload] Marking orphaned uploads as error (reconnect):',
+          orphanedIndices
+        );
+
+        setFiles((prev) =>
+          prev.map((f) => {
+            if (orphanedIndices.includes(f.localIndex)) {
+              // Clean up tracking
+              uploadStartTimesRef.current.delete(f.localIndex);
+              abortControllerMapRef.current.delete(f.localIndex);
+
+              return {
+                ...f,
+                stage: 'error' as const,
+                progress: 0,
+                error: 'Upload interrupted - please try again',
+              };
+            }
+            return f;
+          })
+        );
+      }
+    };
+
+    // Run check on reconnect (small delay to let WS events catch up)
+    const timeoutId = setTimeout(checkOrphans, 2000);
+
+    return () => clearTimeout(timeoutId);
+  }, [wsAdapter.isConnected]);
+
+  /**
+   * Epic 19 Story 19.2.4: Periodic orphan check as fallback
+   *
+   * Even without disconnect detection, check for uploads stuck in
+   * uploading/storing for too long. Uses conservative timeout (60s).
+   */
+  useEffect(() => {
+    const checkOrphans = () => {
+      const now = Date.now();
+
+      filesRef.current.forEach((file) => {
+        // Only check uploading/storing stages
+        if (!['uploading', 'storing'].includes(file.stage)) return;
+
+        const startTime = uploadStartTimesRef.current.get(file.localIndex);
+        if (startTime && now - startTime > ORPHAN_TIMEOUT_PERIODIC_MS) {
+          console.warn(
+            '[useMultiFileUpload] Orphan detected (periodic timeout):',
+            file.localIndex,
+            file.filename
+          );
+
+          // Clean up tracking
+          uploadStartTimesRef.current.delete(file.localIndex);
+
+          // Abort if controller exists
+          const controller = abortControllerMapRef.current.get(file.localIndex);
+          if (controller) {
+            controller.abort();
+            abortControllerMapRef.current.delete(file.localIndex);
+          }
+
+          // Transition to error
+          setFiles((prev) =>
+            prev.map((f) =>
+              f.localIndex === file.localIndex
+                ? {
+                    ...f,
+                    stage: 'error' as const,
+                    progress: 0,
+                    error: 'Upload timed out - please try again',
+                  }
+                : f
+            )
+          );
+        }
+      });
+    };
+
+    const intervalId = setInterval(checkOrphans, ORPHAN_CHECK_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   /**
@@ -797,5 +1401,9 @@ export function useMultiFileUpload(
     hasFiles,
     hasPendingFiles,
     hasErrors,
+    isCanceled, // Epic 19 Story 19.2.1: Check if uploadId was canceled
   };
 }
+
+// Export for testing
+export { UPLOAD_CONCURRENCY_LIMIT, MAX_TOTAL_SIZE };

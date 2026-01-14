@@ -48,6 +48,8 @@ export interface MessageAttachment {
   filename: string;
   mimeType: string;
   size: number;
+  /** Epic 19 Story 19.2.3: Carry uploadId for client-side cancel filtering (optional, not sent to backend) */
+  uploadId?: string;
 }
 
 export interface ChatMessage {

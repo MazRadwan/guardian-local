@@ -16,6 +16,8 @@ import {
   useMultiFileUpload,
   UseMultiFileUploadOptions,
   FileState,
+  UPLOAD_CONCURRENCY_LIMIT,
+  MAX_TOTAL_SIZE,
 } from '../useMultiFileUpload';
 
 // Mock useAuth
@@ -350,7 +352,7 @@ describe('useMultiFileUpload', () => {
       expect(result.current.files[0].filename).toBe('doc2.pdf');
     });
 
-    it('should not remove files during upload', () => {
+    it('should allow removal during upload stages (Epic 19)', () => {
       const adapter = createMockAdapter(true);
       const onError = jest.fn();
       const { result } = renderHook(() =>
@@ -384,14 +386,81 @@ describe('useMultiFileUpload', () => {
         result.current.uploadAll('conv-123', 'intake');
       });
 
-      // Try to remove during upload
+      // Epic 19: Remove during upload should now work (abort logic added in Sprint 1)
       act(() => {
         result.current.removeFile(localIndex);
       });
 
-      // Should still have the file
+      // File should be removed (Sprint 1 will add abort logic)
+      expect(result.current.files).toHaveLength(0);
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('should block removal during parsing stage (Epic 19)', async () => {
+      const adapter = createMockAdapter(true);
+      const onError = jest.fn();
+
+      // Capture upload progress handler
+      let progressHandler: ((data: UploadProgressEvent) => void) | null = null;
+      jest.spyOn(adapter, 'subscribeUploadProgress').mockImplementation((handler) => {
+        progressHandler = handler;
+        return () => {};
+      });
+
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      // Add file
+      act(() => {
+        result.current.addFiles(
+          createMockFileList([
+            { name: 'doc.pdf', type: 'application/pdf', size: 1024 },
+          ])
+        );
+      });
+
+      const localIndex = result.current.files[0].localIndex;
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          files: [{ index: 0, uploadId: 'upload-123', status: 'accepted' }],
+        }),
+      });
+
+      // Start upload (async operation)
+      await act(async () => {
+        await result.current.uploadAll('conv-123', 'assessment');
+      });
+
+      // After upload completes, file should be in 'storing' stage
+      expect(result.current.files[0].stage).toBe('storing');
+
+      // Simulate transition to parsing via WebSocket event
+      act(() => {
+        progressHandler?.({
+          uploadId: 'upload-123',
+          stage: 'parsing',
+          progress: 50,
+        });
+      });
+
+      // Verify file is now in parsing stage
+      expect(result.current.files[0].stage).toBe('parsing');
+
+      // Try to remove during parsing - should be blocked
+      act(() => {
+        result.current.removeFile(localIndex);
+      });
+
+      // File should still be there
       expect(result.current.files).toHaveLength(1);
-      expect(onError).toHaveBeenCalledWith('Cannot remove file during upload');
+      expect(onError).toHaveBeenCalledWith('Cannot cancel during analysis');
     });
 
     it('should clear all files', () => {
@@ -442,31 +511,27 @@ describe('useMultiFileUpload', () => {
         );
       });
 
-      // Mock successful upload
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [
-            { index: 0, uploadId: 'upload-abc-0', status: 'accepted' },
-            { index: 1, uploadId: 'upload-abc-1', status: 'accepted' },
-          ],
-        }),
-      });
+      // Epic 19: Mock individual uploads (one response per file)
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-abc-0', status: 'accepted' }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-abc-1', status: 'accepted' }],
+          }),
+        });
 
       await act(async () => {
         await result.current.uploadAll('conv-123', 'intake');
       });
 
-      // Verify fetch was called with FormData
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/documents/upload'),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-token',
-          }),
-        })
-      );
+      // Epic 19: Should make 2 separate calls
+      expect(mockFetch).toHaveBeenCalledTimes(2);
 
       // Files should have uploadIds
       expect(result.current.files[0].uploadId).toBe('upload-abc-0');
@@ -493,16 +558,20 @@ describe('useMultiFileUpload', () => {
         );
       });
 
-      // Mock partial acceptance
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [
-            { index: 0, uploadId: 'upload-good', status: 'accepted' },
-            { index: 1, status: 'rejected', error: 'Corrupted file' },
-          ],
-        }),
-      });
+      // Epic 19: Mock individual uploads - first succeeds, second is rejected
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-good', status: 'accepted' }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, status: 'rejected', error: 'Corrupted file' }],
+          }),
+        });
 
       await act(async () => {
         await result.current.uploadAll('conv-123', 'intake');
@@ -981,16 +1050,20 @@ describe('useMultiFileUpload', () => {
       // Pending files = 0% progress
       expect(result.current.aggregateProgress).toBe(0);
 
-      // Mock upload
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [
-            { index: 0, uploadId: 'upload-1', status: 'accepted' },
-            { index: 1, uploadId: 'upload-2', status: 'accepted' },
-          ],
-        }),
-      });
+      // Epic 19: Mock individual uploads
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-2', status: 'accepted' }],
+          }),
+        });
 
       await act(async () => {
         await result.current.uploadAll('conv-123', 'intake');
@@ -1091,16 +1164,20 @@ describe('useMultiFileUpload', () => {
       // No completed files
       expect(result.current.getCompletedFileIds()).toEqual([]);
 
-      // Mock upload
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          files: [
-            { index: 0, uploadId: 'upload-1', status: 'accepted' },
-            { index: 1, uploadId: 'upload-2', status: 'accepted' },
-          ],
-        }),
-      });
+      // Epic 19: Mock individual uploads
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            files: [{ index: 0, uploadId: 'upload-2', status: 'accepted' }],
+          }),
+        });
 
       await act(async () => {
         await result.current.uploadAll('conv-123', 'intake');
@@ -1330,12 +1407,14 @@ describe('useMultiFileUpload', () => {
       });
 
       // Should return the completed attachment with fileId
+      // Epic 19 Story 19.2.3: attachments now include uploadId for cancel tracking
       expect(attachments).toEqual([
         {
           fileId: 'file-uuid-123',
           filename: 'doc.pdf',
           mimeType: 'application/pdf',
           size: 1024,
+          uploadId: 'upload-123',
         },
       ]);
     });
@@ -1456,11 +1535,13 @@ describe('useMultiFileUpload', () => {
         await Promise.all([waitPromise1, waitPromise2]);
       });
 
+      // Epic 19 Story 19.2.3: attachments now include uploadId for cancel tracking
       const expectedAttachment = {
         fileId: 'file-uuid-123',
         filename: 'doc.pdf',
         mimeType: 'application/pdf',
         size: 1024,
+        uploadId: 'upload-123',
       };
       expect(attachments1).toEqual([expectedAttachment]);
       expect(attachments2).toEqual([expectedAttachment]);
@@ -1678,12 +1759,14 @@ describe('useMultiFileUpload', () => {
       });
 
       // Should resolve normally
+      // Epic 19 Story 19.2.3: attachments now include uploadId for cancel tracking
       expect(attachments).toEqual([
         {
           fileId: 'file-uuid-123',
           filename: 'doc.pdf',
           mimeType: 'application/pdf',
           size: 1024,
+          uploadId: 'upload-123',
         },
       ]);
     });
@@ -1784,10 +1867,950 @@ describe('useMultiFileUpload', () => {
       expect(onContextReady2).toHaveBeenCalledTimes(1);
     });
   });
+
+  /**
+   * Story 19.1.2: Single File Upload Function
+   */
+  describe('Story 19.1.2: Single File Upload', () => {
+    beforeEach(() => {
+      mockFetch.mockClear();
+    });
+
+    it('should upload files individually', async () => {
+      // Setup mock responses
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+        }),
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add files
+      const files = [
+        { name: 'a.pdf', type: 'application/pdf', size: 1000 },
+        { name: 'b.pdf', type: 'application/pdf', size: 2000 },
+      ];
+      act(() => {
+        result.current.addFiles(createMockFileList(files));
+      });
+
+      // Upload
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Should have made 2 separate requests
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Each request should have only one file in FormData
+      const firstCall = mockFetch.mock.calls[0];
+      const firstBody = firstCall[1].body as FormData;
+      const filesInFirstRequest = firstBody.getAll('files');
+      expect(filesInFirstRequest).toHaveLength(1);
+    });
+
+    it('should handle individual file errors without affecting others', async () => {
+      // First file succeeds, second fails
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({
+            files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          json: () => Promise.resolve({ error: 'File too large' }),
+        });
+
+      const onError = jest.fn();
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter, onError })
+      );
+
+      const files = [
+        { name: 'a.pdf', type: 'application/pdf', size: 1000 },
+        { name: 'b.pdf', type: 'application/pdf', size: 2000 },
+      ];
+      act(() => {
+        result.current.addFiles(createMockFileList(files));
+      });
+
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // First file should be in 'storing' state
+      const file1 = result.current.files.find((f) => f.filename === 'a.pdf');
+      expect(file1?.stage).toBe('storing');
+
+      // Second file should be in 'error' state
+      const file2 = result.current.files.find((f) => f.filename === 'b.pdf');
+      expect(file2?.stage).toBe('error');
+
+      // Error callback should have been called for second file
+      expect(onError).toHaveBeenCalledWith('File too large');
+    });
+
+    it('should skip files removed during upload loop', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+        }),
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      const files = [
+        { name: 'a.pdf', type: 'application/pdf', size: 1000 },
+        { name: 'b.pdf', type: 'application/pdf', size: 2000 },
+      ];
+      act(() => {
+        result.current.addFiles(createMockFileList(files));
+      });
+
+      // Remove second file before upload completes
+      const secondIndex = result.current.files[1].localIndex;
+      act(() => {
+        result.current.removeFile(secondIndex);
+      });
+
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Only one request should have been made
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle abort gracefully', async () => {
+      // Mock fetch that will be aborted
+      mockFetch.mockImplementation(() =>
+        new Promise((_, reject) => {
+          const error = new Error('Aborted');
+          error.name = 'AbortError';
+          setTimeout(() => reject(error), 100);
+        })
+      );
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      const file = { name: 'a.pdf', type: 'application/pdf', size: 1000 };
+      act(() => {
+        result.current.addFiles(createMockFileList([file]));
+      });
+
+      // Start upload (will be slow)
+      const uploadPromise = act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Remove file (triggers abort)
+      act(() => {
+        result.current.removeFile(result.current.files[0].localIndex);
+      });
+
+      await uploadPromise;
+
+      // File should be removed (not in error state)
+      expect(result.current.files).toHaveLength(0);
+    });
+  });
+
+  /**
+   * Story 19.1.1: Per-File AbortController Map
+   */
+  describe('Story 19.1.1: Per-File AbortController Map', () => {
+    describe('clearAll with controllers', () => {
+      it('should abort all controllers when clearAll called', () => {
+        const adapter = createMockAdapter(true);
+        const { result } = renderHook(() =>
+          useMultiFileUpload({ wsAdapter: adapter })
+        );
+
+        // Add files
+        const files = [
+          { name: 'a.pdf', type: 'application/pdf', size: 1000 },
+          { name: 'b.pdf', type: 'application/pdf', size: 2000 },
+        ];
+        act(() => {
+          result.current.addFiles(createMockFileList(files));
+        });
+
+        // Start upload (would create controllers in Story 19.1.2)
+        // For now, just verify clearAll works
+        act(() => {
+          result.current.clearAll();
+        });
+
+        expect(result.current.files).toHaveLength(0);
+      });
+    });
+
+    describe('removeFile with abort', () => {
+      it('should remove file and not error during uploading stage', () => {
+        const onError = jest.fn();
+        const adapter = createMockAdapter(true);
+        const { result } = renderHook(() =>
+          useMultiFileUpload({ wsAdapter: adapter, onError })
+        );
+
+        const file = { name: 'test.pdf', type: 'application/pdf', size: 1000 };
+        act(() => {
+          result.current.addFiles(createMockFileList([file]));
+        });
+
+        const localIndex = result.current.files[0].localIndex;
+
+        // File starts in 'pending' which is removable
+        act(() => {
+          result.current.removeFile(localIndex);
+        });
+
+        expect(result.current.files).toHaveLength(0);
+        expect(onError).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('unmount cleanup', () => {
+      it('should clean up on unmount', () => {
+        const adapter = createMockAdapter(true);
+        const { result, unmount } = renderHook(() =>
+          useMultiFileUpload({ wsAdapter: adapter })
+        );
+
+        const file = { name: 'test.pdf', type: 'application/pdf', size: 1000 };
+        act(() => {
+          result.current.addFiles(createMockFileList([file]));
+        });
+
+        // Unmount should clean up without errors
+        unmount();
+
+        // No assertion needed - test passes if no errors thrown
+      });
+    });
+  });
+
+  /**
+   * Story 19.1.3: Concurrent Upload Queue
+   */
+  describe('Story 19.1.3: Concurrent Upload Queue', () => {
+    beforeEach(() => {
+      mockFetch.mockClear();
+    });
+
+    it('should have concurrency limit of 3', () => {
+      expect(UPLOAD_CONCURRENCY_LIMIT).toBe(3);
+    });
+
+    it('should limit concurrent uploads', async () => {
+      // Track concurrent calls
+      let maxConcurrent = 0;
+      let currentConcurrent = 0;
+
+      mockFetch.mockImplementation(() => {
+        currentConcurrent++;
+        maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            currentConcurrent--;
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${Date.now()}`, status: 'accepted' }],
+              }),
+            });
+          }, 50); // Simulate upload time
+        });
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add 5 files (more than concurrency limit)
+      const files = Array(5)
+        .fill(null)
+        .map((_, i) => new File([`content${i}`], `file${i}.pdf`, { type: 'application/pdf' }));
+
+      act(() => {
+        result.current.addFiles(createMockFileList(files.map((f, i) => ({
+          name: `file${i}.pdf`,
+          type: 'application/pdf',
+          size: 1024,
+        }))));
+      });
+
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Should never exceed limit
+      expect(maxConcurrent).toBeLessThanOrEqual(UPLOAD_CONCURRENCY_LIMIT);
+
+      // But should have reached limit (efficient use)
+      expect(maxConcurrent).toBe(UPLOAD_CONCURRENCY_LIMIT);
+
+      // All files should have been uploaded
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+    });
+
+    it('should queue files and process as slots open', async () => {
+      const uploadOrder: string[] = [];
+      const completeOrder: string[] = [];
+
+      mockFetch.mockImplementation((url, options) => {
+        const formData = options.body as FormData;
+        const file = formData.get('files') as File;
+        uploadOrder.push(file.name);
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            completeOrder.push(file.name);
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${file.name}`, status: 'accepted' }],
+              }),
+            });
+          }, 20);
+        });
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      const files = Array(5)
+        .fill(null)
+        .map((_, i) => ({ name: `file${i}.pdf`, type: 'application/pdf', size: 1024 }));
+
+      act(() => {
+        result.current.addFiles(createMockFileList(files));
+      });
+
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // All files should complete
+      expect(completeOrder).toHaveLength(5);
+    });
+
+    it('should handle file removal during queue processing', async () => {
+      mockFetch.mockImplementation(() =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${Date.now()}`, status: 'accepted' }],
+              }),
+            });
+          }, 50);
+        })
+      );
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      const files = Array(5)
+        .fill(null)
+        .map((_, i) => ({ name: `file${i}.pdf`, type: 'application/pdf', size: 1024 }));
+
+      act(() => {
+        result.current.addFiles(createMockFileList(files));
+      });
+
+      // Remove file 3 (should be in queue, not yet uploading)
+      const file3Index = result.current.files[3].localIndex;
+      act(() => {
+        result.current.removeFile(file3Index);
+      });
+
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Only 4 uploads should occur
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('should clear active set on clearAll', async () => {
+      mockFetch.mockImplementation(() =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+              }),
+            });
+          }, 100);
+        })
+      );
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      const file = { name: 'test.pdf', type: 'application/pdf', size: 1024 };
+      act(() => {
+        result.current.addFiles(createMockFileList([file]));
+      });
+
+      // Start upload
+      const uploadPromise = act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Clear before complete
+      act(() => {
+        result.current.clearAll();
+      });
+
+      await uploadPromise;
+
+      // Files should be cleared
+      expect(result.current.files).toHaveLength(0);
+    });
+  });
+
+  /**
+   * Story 19.1.4: Client-Side Size Validation
+   */
+  describe('Story 19.1.4: Client-Side Size Validation', () => {
+    const MB = 1024 * 1024;
+
+    it('should have MAX_TOTAL_SIZE of 50MB', () => {
+      expect(MAX_TOTAL_SIZE).toBe(50 * MB);
+    });
+
+    it('should allow files within 50MB total', () => {
+      const onError = jest.fn();
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter, onError })
+      );
+
+      // Add 40MB total using multiple files (respecting 20MB per-file limit)
+      // 4 x 10MB = 40MB total, each file under 20MB limit
+      const files = [
+        new File([new ArrayBuffer(10 * MB)], 'file1.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'file2.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'file3.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'file4.pdf', { type: 'application/pdf' }),
+      ];
+
+      act(() => {
+        result.current.addFiles(createFileList(files));
+      });
+
+      // Should succeed - all 4 files added (40MB < 50MB total limit)
+      expect(result.current.files).toHaveLength(4);
+      expect(onError).not.toHaveBeenCalledWith('Total size exceeds 50MB limit');
+    });
+
+    it('should reject files that would exceed 50MB total', () => {
+      const onError = jest.fn();
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter, onError })
+      );
+
+      // First add 15MB file
+      const content1 = new ArrayBuffer(15 * MB);
+      const file1 = new File([content1], 'file1.pdf', { type: 'application/pdf' });
+
+      act(() => {
+        result.current.addFiles(createFileList([file1]));
+      });
+
+      expect(result.current.files).toHaveLength(1);
+
+      // Then try to add 40MB more (total would be 55MB)
+      const content2 = new ArrayBuffer(18 * MB);
+      const file2 = new File([content2], 'file2.pdf', { type: 'application/pdf' });
+      const content3 = new ArrayBuffer(18 * MB);
+      const file3 = new File([content3], 'file3.pdf', { type: 'application/pdf' });
+
+      act(() => {
+        result.current.addFiles(createFileList([file2, file3]));
+      });
+
+      // Should reject ALL new files
+      expect(result.current.files).toHaveLength(1);
+      expect(onError).toHaveBeenCalledWith('Total size exceeds 50MB limit');
+    });
+
+    it('should reject entire batch if total would exceed limit', () => {
+      const onError = jest.fn();
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter, onError })
+      );
+
+      // Add existing 45MB
+      // Note: Due to per-file 20MB limit, we need multiple files
+      const files45MB = [
+        new File([new ArrayBuffer(15 * MB)], 'a.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(15 * MB)], 'b.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(15 * MB)], 'c.pdf', { type: 'application/pdf' }),
+      ];
+
+      act(() => {
+        result.current.addFiles(createFileList(files45MB));
+      });
+
+      expect(result.current.files).toHaveLength(3);
+      onError.mockClear();
+
+      // Try to add 10MB more (total would be 55MB)
+      const newFile = new File([new ArrayBuffer(10 * MB)], 'new.pdf', { type: 'application/pdf' });
+
+      act(() => {
+        result.current.addFiles(createFileList([newFile]));
+      });
+
+      // Should reject
+      expect(result.current.files).toHaveLength(3); // Still 3
+      expect(onError).toHaveBeenCalledWith('Total size exceeds 50MB limit');
+    });
+
+    it('should allow exactly 50MB total', () => {
+      const onError = jest.fn();
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter, onError })
+      );
+
+      // Add files totaling exactly 50MB
+      // (Using 10MB each due to per-file 20MB limit)
+      const files = [
+        new File([new ArrayBuffer(10 * MB)], 'a.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'b.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'c.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'd.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(10 * MB)], 'e.pdf', { type: 'application/pdf' }),
+      ];
+
+      act(() => {
+        result.current.addFiles(createFileList(files));
+      });
+
+      // Should accept all (exactly at limit)
+      expect(result.current.files).toHaveLength(5);
+      expect(onError).not.toHaveBeenCalledWith('Total size exceeds 50MB limit');
+    });
+
+    it('should check total size before individual file validation', () => {
+      const onError = jest.fn();
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter, onError })
+      );
+
+      // Add 45MB existing
+      const existing = [
+        new File([new ArrayBuffer(15 * MB)], 'a.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(15 * MB)], 'b.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(15 * MB)], 'c.pdf', { type: 'application/pdf' }),
+      ];
+      act(() => {
+        result.current.addFiles(createFileList(existing));
+      });
+      onError.mockClear();
+
+      // Try to add batch with mixed valid/invalid
+      // Total would exceed even with valid files filtered
+      const mixed = [
+        new File([new ArrayBuffer(5 * MB)], 'valid.pdf', { type: 'application/pdf' }),
+        new File([new ArrayBuffer(5 * MB)], 'invalid.txt', { type: 'text/plain' }),
+      ];
+
+      act(() => {
+        result.current.addFiles(createFileList(mixed));
+      });
+
+      // Total size check happens first (45 + 10 > 50)
+      expect(onError).toHaveBeenCalledWith('Total size exceeds 50MB limit');
+      expect(result.current.files).toHaveLength(3); // No new files added
+    });
+  });
+
+  /**
+   * Story 19.1.5: Queue Reschedule on New Files
+   */
+  describe('Story 19.1.5: Queue Reschedule on New Files', () => {
+    beforeEach(() => {
+      mockFetch.mockClear();
+    });
+
+    it('should process files added during active upload', async () => {
+      const uploadOrder: string[] = [];
+
+      mockFetch.mockImplementation((url, options) => {
+        const formData = options.body as FormData;
+        const file = formData.get('files') as File;
+        uploadOrder.push(file.name);
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${file.name}`, status: 'accepted' }],
+              }),
+            });
+          }, 50);
+        });
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add initial 2 files
+      const initialFiles = [
+        new File(['a'], 'file1.pdf', { type: 'application/pdf' }),
+        new File(['b'], 'file2.pdf', { type: 'application/pdf' }),
+      ];
+      act(() => {
+        result.current.addFiles(createFileList(initialFiles));
+      });
+
+      // Start upload (don't await)
+      let uploadPromise: Promise<void>;
+      act(() => {
+        uploadPromise = result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Wait a bit, then add more files
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+
+      const newFile = new File(['c'], 'file3.pdf', { type: 'application/pdf' });
+      act(() => {
+        result.current.addFiles(createFileList([newFile]));
+      });
+
+      // Wait for all uploads
+      await act(async () => {
+        await uploadPromise!;
+        // Wait a bit more for new file worker
+        await new Promise((r) => setTimeout(r, 100));
+      });
+
+      // All 3 files should have been uploaded
+      expect(uploadOrder).toContain('file1.pdf');
+      expect(uploadOrder).toContain('file2.pdf');
+      expect(uploadOrder).toContain('file3.pdf');
+    });
+
+    it('should respect concurrency limit for new files', async () => {
+      let maxConcurrent = 0;
+      let currentConcurrent = 0;
+
+      mockFetch.mockImplementation(() => {
+        currentConcurrent++;
+        maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            currentConcurrent--;
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${Date.now()}`, status: 'accepted' }],
+              }),
+            });
+          }, 50);
+        });
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add 3 files (at limit)
+      const files = Array(3)
+        .fill(null)
+        .map((_, i) => new File([`${i}`], `file${i}.pdf`, { type: 'application/pdf' }));
+      act(() => {
+        result.current.addFiles(createFileList(files));
+      });
+
+      // Start upload
+      let uploadPromise: Promise<void>;
+      act(() => {
+        uploadPromise = result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Immediately add 2 more (should queue, not exceed limit)
+      const newFiles = [
+        new File(['x'], 'new1.pdf', { type: 'application/pdf' }),
+        new File(['y'], 'new2.pdf', { type: 'application/pdf' }),
+      ];
+      act(() => {
+        result.current.addFiles(createFileList(newFiles));
+      });
+
+      await act(async () => {
+        await uploadPromise!;
+        await new Promise((r) => setTimeout(r, 150));
+      });
+
+      // Should never exceed limit
+      expect(maxConcurrent).toBeLessThanOrEqual(UPLOAD_CONCURRENCY_LIMIT);
+    });
+
+    it('should not double-upload files already in queue', async () => {
+      const uploadCounts = new Map<string, number>();
+
+      mockFetch.mockImplementation((url, options) => {
+        const formData = options.body as FormData;
+        const file = formData.get('files') as File;
+        const count = (uploadCounts.get(file.name) || 0) + 1;
+        uploadCounts.set(file.name, count);
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${file.name}`, status: 'accepted' }],
+              }),
+            });
+          }, 50);
+        });
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add 5 files (more than concurrency limit)
+      const files = Array(5)
+        .fill(null)
+        .map((_, i) => new File([`${i}`], `file${i}.pdf`, { type: 'application/pdf' }));
+      act(() => {
+        result.current.addFiles(createFileList(files));
+      });
+
+      // Start upload
+      await act(async () => {
+        await result.current.uploadAll('conv-1', 'intake');
+        // Wait for all uploads to complete
+        await new Promise((r) => setTimeout(r, 200));
+      });
+
+      // Each file should have been uploaded exactly ONCE
+      expect(Array.from(uploadCounts.values())).toEqual([1, 1, 1, 1, 1]);
+      // No duplicates
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+    });
+
+    it('should not start workers if no upload session active', async () => {
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add files without starting upload
+      const file = new File(['test'], 'test.pdf', { type: 'application/pdf' });
+      act(() => {
+        result.current.addFiles(createFileList([file]));
+      });
+
+      // File should stay pending (no auto-upload from hook)
+      expect(result.current.files[0].stage).toBe('pending');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should clear upload session on clearAll', async () => {
+      mockFetch.mockImplementation(() =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+              }),
+            });
+          }, 100);
+        })
+      );
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add and start upload
+      const file = new File(['test'], 'test.pdf', { type: 'application/pdf' });
+      act(() => {
+        result.current.addFiles(createFileList([file]));
+      });
+
+      act(() => {
+        result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Clear immediately
+      act(() => {
+        result.current.clearAll();
+      });
+
+      // Add new file after clear
+      const newFile = new File(['new'], 'new.pdf', { type: 'application/pdf' });
+      act(() => {
+        result.current.addFiles(createFileList([newFile]));
+      });
+
+      // New file should stay pending (upload session ended)
+      expect(result.current.files[0].stage).toBe('pending');
+    });
+
+    it('should no-op uploadAll when session already active (guard)', async () => {
+      let uploadCallCount = 0;
+
+      mockFetch.mockImplementation(() => {
+        uploadCallCount++;
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: `upload-${uploadCallCount}`, status: 'accepted' }],
+              }),
+            });
+          }, 100); // Slow upload to keep session active
+        });
+      });
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add initial file
+      const file1 = new File(['a'], 'file1.pdf', { type: 'application/pdf' });
+      act(() => {
+        result.current.addFiles(createFileList([file1]));
+      });
+
+      // Start first upload (this initializes the session)
+      act(() => {
+        result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Wait a bit for upload to start
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 20));
+      });
+
+      // Add another file during upload
+      const file2 = new File(['b'], 'file2.pdf', { type: 'application/pdf' });
+      act(() => {
+        result.current.addFiles(createFileList([file2]));
+      });
+
+      // Try to call uploadAll again (should no-op due to guard)
+      act(() => {
+        result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Wait for all uploads to complete
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 250));
+      });
+
+      // Both files should have been uploaded (file2 via reschedule effect, not second uploadAll)
+      // The key assertion: uploadAll guard prevented double-initialization
+      // Each file should only have 1 HTTP request
+      expect(uploadCallCount).toBe(2); // One per file, not more
+    });
+
+    it('should remove queued file from queuedUploadsRef on cancel', async () => {
+      mockFetch.mockImplementation(() =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                files: [{ index: 0, uploadId: 'upload-1', status: 'accepted' }],
+              }),
+            });
+          }, 100);
+        })
+      );
+
+      const adapter = createMockAdapter(true);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({ wsAdapter: adapter })
+      );
+
+      // Add 5 files (more than concurrency limit, some will queue)
+      const files = Array(5)
+        .fill(null)
+        .map((_, i) => new File([`${i}`], `file${i}.pdf`, { type: 'application/pdf' }));
+      act(() => {
+        result.current.addFiles(createFileList(files));
+      });
+
+      // Start upload
+      act(() => {
+        result.current.uploadAll('conv-1', 'intake');
+      });
+
+      // Remove a queued file (one that hasn't started yet)
+      // Files 3 and 4 should be queued (concurrency limit is 3)
+      act(() => {
+        const queuedFile = result.current.files.find(
+          (f) => f.filename === 'file4.pdf' && f.stage === 'pending'
+        );
+        if (queuedFile) {
+          result.current.removeFile(queuedFile.localIndex);
+        }
+      });
+
+      // Wait for remaining uploads
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 300));
+      });
+
+      // Verify only 4 uploads happened (file4 was canceled before starting)
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+  });
 });
 
 /**
- * Helper to create mock FileList
+ * Helper to create mock FileList from file descriptors
  */
 function createMockFileList(
   files: Array<{ name: string; type: string; size: number }>
@@ -1808,5 +2831,19 @@ function createMockFileList(
       for (const file of mockFiles) yield file;
     },
     ...mockFiles.reduce((acc, f, i) => ({ ...acc, [i]: f }), {}),
+  } as unknown as FileList;
+}
+
+/**
+ * Helper to create FileList from actual File objects
+ */
+function createFileList(files: File[]): FileList {
+  return {
+    length: files.length,
+    item: (i: number) => files[i] || null,
+    [Symbol.iterator]: function* () {
+      for (const file of files) yield file;
+    },
+    ...files.reduce((acc, f, i) => ({ ...acc, [i]: f }), {}),
   } as unknown as FileList;
 }

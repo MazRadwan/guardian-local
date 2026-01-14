@@ -454,4 +454,156 @@ describe('FileChip', () => {
       expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
     });
   });
+
+  describe('Story 19.0.3: Document Type (No Warning)', () => {
+    it('should NOT show amber styling regardless of detectedDocType', () => {
+      const { container } = render(
+        <FileChip
+          {...defaultProps}
+          filename="whitepaper.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="document"
+          mode="scoring"
+        />
+      );
+
+      const chip = container.firstChild;
+      // Should have gray styling, NOT amber
+      expect(chip).toHaveClass('bg-gray-100');
+      expect(chip).not.toHaveClass('bg-amber-50');
+      expect(chip).not.toHaveClass('border-amber-300');
+    });
+
+    it('should show checkmark icon for attached stage regardless of docType', () => {
+      const { container } = render(
+        <FileChip
+          {...defaultProps}
+          filename="whitepaper.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="document"
+          mode="scoring"
+        />
+      );
+
+      // Should show green checkmark, not amber warning
+      const checkIcon = container.querySelector('.text-green-600');
+      expect(checkIcon).toBeInTheDocument();
+
+      const warningIcon = container.querySelector('.text-amber-500');
+      expect(warningIcon).not.toBeInTheDocument();
+    });
+
+    it('should NOT show "Not a questionnaire?" text', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          filename="whitepaper.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="document"
+          mode="scoring"
+        />
+      );
+
+      expect(screen.queryByText(/not a questionnaire/i)).not.toBeInTheDocument();
+    });
+
+    it('should have clean aria-label without warning text', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          filename="whitepaper.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="document"
+          mode="scoring"
+        />
+      );
+
+      const chip = screen.getByRole('status');
+      expect(chip.getAttribute('aria-label')).not.toContain('Warning');
+      expect(chip.getAttribute('aria-label')).not.toContain('questionnaire');
+      expect(chip.getAttribute('aria-label')).toBe('File whitepaper.pdf: Attached');
+    });
+
+    it('should show "Attached" text for attached stage in scoring mode with document type', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          filename="whitepaper.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="document"
+          mode="scoring"
+        />
+      );
+
+      expect(screen.getByText('Attached')).toBeInTheDocument();
+    });
+
+    it('should show "Ready" text for complete stage regardless of document type', () => {
+      render(
+        <FileChip
+          {...defaultProps}
+          filename="whitepaper.pdf"
+          stage="complete"
+          progress={100}
+          detectedDocType="document"
+          mode="scoring"
+        />
+      );
+
+      expect(screen.getByText('Ready')).toBeInTheDocument();
+    });
+
+    it('should show normal gray styling for questionnaire in scoring mode', () => {
+      const { container } = render(
+        <FileChip
+          {...defaultProps}
+          filename="questionnaire.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="questionnaire"
+          mode="scoring"
+        />
+      );
+
+      const chip = container.firstChild;
+      expect(chip).toHaveClass('bg-gray-100');
+      expect(chip).not.toHaveClass('bg-amber-50');
+    });
+
+    it('should show normal gray styling when detectedDocType is null', () => {
+      const { container } = render(
+        <FileChip
+          {...defaultProps}
+          filename="unknown.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType={null}
+          mode="scoring"
+        />
+      );
+
+      const chip = container.firstChild;
+      expect(chip).toHaveClass('bg-gray-100');
+    });
+
+    it('should show normal gray styling when mode is not provided', () => {
+      const { container } = render(
+        <FileChip
+          {...defaultProps}
+          filename="document.pdf"
+          stage="attached"
+          progress={100}
+          detectedDocType="document"
+        />
+      );
+
+      const chip = container.firstChild;
+      expect(chip).toHaveClass('bg-gray-100');
+    });
+  });
 });
