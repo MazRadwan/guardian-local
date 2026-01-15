@@ -54,11 +54,20 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
     messages: ClaudeMessage[],
     options: ClaudeRequestOptions = {}
   ): Promise<ClaudeResponse> {
-    const { systemPrompt, usePromptCache, tools, tool_choice, maxTokens } = options;
+    const { systemPrompt, usePromptCache, tools, tool_choice, maxTokens, abortSignal } = options;
     const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
-    const requestOptions = usePromptCache
-      ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
-      : undefined;
+    // Build request options with optional caching header and abort signal
+    // Story 20.3.3: Forward abortSignal to actually cancel the API request
+    const requestOptions: { headers?: Record<string, string>; signal?: AbortSignal } | undefined =
+      (usePromptCache || abortSignal) ? {} : undefined;
+    if (requestOptions) {
+      if (usePromptCache) {
+        requestOptions.headers = { 'anthropic-beta': 'prompt-caching-2024-07-31' };
+      }
+      if (abortSignal) {
+        requestOptions.signal = abortSignal;
+      }
+    }
 
     // Use provided maxTokens or default
     const effectiveMaxTokens = maxTokens ?? this.maxTokens;
@@ -269,12 +278,21 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       },
     ];
 
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: request.maxTokens || 4096,
-      system: request.systemPrompt || 'You are a document analysis assistant.',
-      messages,
-    });
+    // Story 20.3.3: Forward abortSignal to actually cancel the API request
+    const requestOptions: { signal?: AbortSignal } = {};
+    if (request.abortSignal) {
+      requestOptions.signal = request.abortSignal;
+    }
+
+    const response = await this.client.messages.create(
+      {
+        model: this.model,
+        max_tokens: request.maxTokens || 4096,
+        system: request.systemPrompt || 'You are a document analysis assistant.',
+        messages,
+      },
+      Object.keys(requestOptions).length > 0 ? requestOptions : undefined
+    );
 
     // Join all text blocks (consistent with sendMessage behavior)
     const content = response.content
@@ -391,6 +409,8 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       userPrompt,
       tools,
       tool_choice,
+      usePromptCache,
+      maxTokens = 8192,  // Default for backward compatibility
       abortSignal,
       onTextDelta,
       onToolUse,
@@ -408,12 +428,28 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       { role: 'user', content: userPrompt },
     ];
 
+    // Format system prompt for caching if enabled
+    const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
+
+    // Build request options with optional caching header and abort signal
+    // Story 20.3.3: Forward abortSignal to actually cancel the streaming API request
+    const requestOptions: { headers?: Record<string, string>; signal?: AbortSignal } | undefined =
+      (usePromptCache || abortSignal) ? {} : undefined;
+    if (requestOptions) {
+      if (usePromptCache) {
+        requestOptions.headers = { 'anthropic-beta': 'prompt-caching-2024-07-31' };
+      }
+      if (abortSignal) {
+        requestOptions.signal = abortSignal;
+      }
+    }
+
     try {
       const stream = await this.client.messages.stream(
         {
           model: this.model,
-          max_tokens: 8192, // Larger for scoring narrative
-          system: systemPrompt,
+          max_tokens: maxTokens,  // Configurable for different use cases (default: 8192)
+          system,
           messages: messages.map((msg) => ({
             role: msg.role,
             content: msg.content,
@@ -422,8 +458,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
           // tool_choice forces Claude to use the tool - essential for structured output
           ...(tool_choice && { tool_choice }),
         },
-        // No prompt caching for scoring (prompts vary per assessment)
-        undefined
+        requestOptions
       );
 
       // Track tool use blocks during streaming

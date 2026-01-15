@@ -29,6 +29,7 @@ describe('AssessmentService', () => {
     mockAssessmentRepo = {
       create: jest.fn(),
       findById: jest.fn(),
+      findByIdWithVendor: jest.fn(), // Story 20.3.4: Combined lookup
       findByVendorId: jest.fn(),
       findByCreatedBy: jest.fn(),
       update: jest.fn(),

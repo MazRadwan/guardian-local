@@ -8,13 +8,14 @@
 import { db } from '../../../src/infrastructure/database/client.js'
 import { responses } from '../../../src/infrastructure/database/schema/responses.js'
 import { assessments } from '../../../src/infrastructure/database/schema/assessments.js'
+import { assessmentResults } from '../../../src/infrastructure/database/schema/assessmentResults.js'
 import { vendors } from '../../../src/infrastructure/database/schema/vendors.js'
 import { users } from '../../../src/infrastructure/database/schema/users.js'
 import { files } from '../../../src/infrastructure/database/schema/files.js'
 import { conversations } from '../../../src/infrastructure/database/schema/conversations.js'
 import { DrizzleResponseRepository } from '../../../src/infrastructure/database/repositories/DrizzleResponseRepository.js'
 import type { CreateResponseDTO } from '../../../src/domain/scoring/dtos.js'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import crypto from 'crypto'
 
 describe('DrizzleResponseRepository (Integration)', () => {
@@ -347,6 +348,329 @@ describe('DrizzleResponseRepository (Integration)', () => {
 
       // Cleanup vendor
       await db.delete(vendors).where(eq(vendors.id, vendor.id))
+    })
+  })
+
+  // ===========================================================================
+  // Epic 20: Orphan Cleanup Methods
+  // ===========================================================================
+
+  describe('findOrphanedBatches', () => {
+    it('should find batches without matching assessment_results', async () => {
+      const orphanBatchId = crypto.randomUUID()
+
+      // Create responses without assessment result (orphan)
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: orphanBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Orphan Q1',
+          responseText: 'Orphan A1',
+        },
+      ])
+
+      // Make responses appear old by directly updating created_at
+      await db.execute(sql`
+        UPDATE responses
+        SET created_at = NOW() - INTERVAL '48 hours'
+        WHERE batch_id = ${orphanBatchId}
+      `)
+
+      // Find orphaned batches (24h retention)
+      const orphanedBatches = await repository.findOrphanedBatches(24)
+
+      // Should include an entry with matching assessmentId and batchId
+      const found = orphanedBatches.find(
+        (ref) => ref.assessmentId === testAssessmentId && ref.batchId === orphanBatchId
+      )
+      expect(found).toBeDefined()
+    })
+
+    it('should NOT find batches with matching assessment_results', async () => {
+      const linkedBatchId = crypto.randomUUID()
+
+      // Create responses
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: linkedBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Linked Q1',
+          responseText: 'Linked A1',
+        },
+      ])
+
+      // Create matching assessment result
+      await db.insert(assessmentResults).values({
+        assessmentId: testAssessmentId,
+        batchId: linkedBatchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Make responses appear old
+      await db.execute(sql`
+        UPDATE responses
+        SET created_at = NOW() - INTERVAL '48 hours'
+        WHERE batch_id = ${linkedBatchId}
+      `)
+
+      // Find orphaned batches
+      const orphanedBatches = await repository.findOrphanedBatches(24)
+
+      // Should NOT include the linked batch
+      const found = orphanedBatches.find(
+        (ref) => ref.batchId === linkedBatchId
+      )
+      expect(found).toBeUndefined()
+    })
+
+    it('should respect retention window (not delete recent orphans)', async () => {
+      const recentOrphanBatchId = crypto.randomUUID()
+
+      // Create recent responses without assessment result
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: recentOrphanBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Recent Q1',
+          responseText: 'Recent A1',
+        },
+      ])
+
+      // These responses are created NOW, so within 24h retention
+      const orphanedBatches = await repository.findOrphanedBatches(24)
+
+      // Should NOT include the recent orphan (scoring might still be in progress)
+      const found = orphanedBatches.find(
+        (ref) => ref.batchId === recentOrphanBatchId
+      )
+      expect(found).toBeUndefined()
+    })
+
+    it('should handle mixed batches - some old, some new', async () => {
+      const oldOrphanBatchId = crypto.randomUUID()
+      const newOrphanBatchId = crypto.randomUUID()
+
+      // Create old orphan
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: oldOrphanBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Old Q1',
+          responseText: 'Old A1',
+        },
+      ])
+
+      // Make old orphan appear old
+      await db.execute(sql`
+        UPDATE responses
+        SET created_at = NOW() - INTERVAL '48 hours'
+        WHERE batch_id = ${oldOrphanBatchId}
+      `)
+
+      // Create new orphan (recent)
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: newOrphanBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'New Q1',
+          responseText: 'New A1',
+        },
+      ])
+
+      const orphanedBatches = await repository.findOrphanedBatches(24)
+
+      // Should include old orphan, not new orphan
+      const foundOld = orphanedBatches.find(
+        (ref) => ref.batchId === oldOrphanBatchId
+      )
+      const foundNew = orphanedBatches.find(
+        (ref) => ref.batchId === newOrphanBatchId
+      )
+      expect(foundOld).toBeDefined()
+      expect(foundNew).toBeUndefined()
+    })
+
+    it('should return empty array when no orphans exist', async () => {
+      const linkedBatchId = crypto.randomUUID()
+
+      // Create responses with matching assessment result
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: linkedBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Q1',
+          responseText: 'A1',
+        },
+      ])
+
+      await db.insert(assessmentResults).values({
+        assessmentId: testAssessmentId,
+        batchId: linkedBatchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // All responses are either linked or recent
+      // Clear any previously created orphans from this test assessment
+      await db.execute(sql`
+        DELETE FROM responses
+        WHERE assessment_id = ${testAssessmentId}
+        AND batch_id != ${linkedBatchId}
+      `)
+
+      // Find orphaned batches for this specific test
+      const orphanedBatches = await repository.findOrphanedBatches(24)
+
+      // The linked batch should not be in orphans
+      const found = orphanedBatches.find(
+        (ref) => ref.batchId === linkedBatchId
+      )
+      expect(found).toBeUndefined()
+    })
+  })
+
+  describe('deleteByBatchIdIfOrphaned', () => {
+    it('should delete all orphaned responses for a batch and return count', async () => {
+      const orphanBatchId = crypto.randomUUID()
+
+      // Create multiple responses in the batch (no assessment_result = orphaned)
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: orphanBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Q1',
+          responseText: 'A1',
+        },
+        {
+          assessmentId: testAssessmentId,
+          batchId: orphanBatchId,
+          sectionNumber: 1,
+          questionNumber: 2,
+          questionText: 'Q2',
+          responseText: 'A2',
+        },
+        {
+          assessmentId: testAssessmentId,
+          batchId: orphanBatchId,
+          sectionNumber: 2,
+          questionNumber: 1,
+          questionText: 'Q3',
+          responseText: 'A3',
+        },
+      ])
+
+      // Verify responses exist
+      let found = await repository.findByBatchId(testAssessmentId, orphanBatchId)
+      expect(found).toHaveLength(3)
+
+      // Delete (using both assessmentId and batchId)
+      const deletedCount = await repository.deleteByBatchIdIfOrphaned(testAssessmentId, orphanBatchId)
+      expect(deletedCount).toBe(3)
+
+      // Verify deleted
+      found = await repository.findByBatchId(testAssessmentId, orphanBatchId)
+      expect(found).toHaveLength(0)
+    })
+
+    it('should return 0 when batch does not exist', async () => {
+      const nonExistentBatchId = crypto.randomUUID()
+      const deletedCount = await repository.deleteByBatchIdIfOrphaned(testAssessmentId, nonExistentBatchId)
+      expect(deletedCount).toBe(0)
+    })
+
+    it('should NOT delete when batch has matching assessment_result (race-safe)', async () => {
+      const linkedBatchId = crypto.randomUUID()
+
+      // Create responses
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: linkedBatchId,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Linked Q1',
+          responseText: 'Linked A1',
+        },
+      ])
+
+      // Create matching assessment result (batch is not orphaned)
+      await db.insert(assessmentResults).values({
+        assessmentId: testAssessmentId,
+        batchId: linkedBatchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Try to delete - should return 0 (race-safe check)
+      const deletedCount = await repository.deleteByBatchIdIfOrphaned(testAssessmentId, linkedBatchId)
+      expect(deletedCount).toBe(0)
+
+      // Verify responses still exist
+      const found = await repository.findByBatchId(testAssessmentId, linkedBatchId)
+      expect(found).toHaveLength(1)
+    })
+
+    it('should only delete specified batch, leaving others intact', async () => {
+      const batch1Id = crypto.randomUUID()
+      const batch2Id = crypto.randomUUID()
+
+      // Create responses in two batches (both orphaned)
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: batch1Id,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Batch1 Q1',
+          responseText: 'Batch1 A1',
+        },
+      ])
+
+      await repository.createBatch([
+        {
+          assessmentId: testAssessmentId,
+          batchId: batch2Id,
+          sectionNumber: 1,
+          questionNumber: 1,
+          questionText: 'Batch2 Q1',
+          responseText: 'Batch2 A1',
+        },
+      ])
+
+      // Delete batch1
+      const deletedCount = await repository.deleteByBatchIdIfOrphaned(testAssessmentId, batch1Id)
+      expect(deletedCount).toBe(1)
+
+      // Verify batch1 is gone, batch2 remains
+      const batch1Responses = await repository.findByBatchId(testAssessmentId, batch1Id)
+      const batch2Responses = await repository.findByBatchId(testAssessmentId, batch2Id)
+
+      expect(batch1Responses).toHaveLength(0)
+      expect(batch2Responses).toHaveLength(1)
     })
   })
 })

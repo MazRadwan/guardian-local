@@ -12,7 +12,7 @@ import { vendors } from '../../../src/infrastructure/database/schema/vendors.js'
 import { users } from '../../../src/infrastructure/database/schema/users.js'
 import { DrizzleAssessmentResultRepository } from '../../../src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.js'
 import type { CreateAssessmentResultDTO } from '../../../src/domain/scoring/dtos.js'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import crypto from 'crypto'
 
 describe('DrizzleAssessmentResultRepository (Integration)', () => {
@@ -380,6 +380,347 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
 
       // Cleanup vendor
       await db.delete(vendors).where(eq(vendors.id, vendor.id))
+    })
+  })
+
+  // ===========================================================================
+  // Epic 20: Narrative Generation Concurrency Control Tests
+  // ===========================================================================
+
+  describe('updateNarrativeReport', () => {
+    it('should update narrative report for existing result', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      const narrative = '# Assessment Report\n\nThis vendor has medium risk.'
+      await repository.updateNarrativeReport(testAssessmentId, batchId, narrative)
+
+      const result = await repository.findByBatchId(testAssessmentId, batchId)
+      expect(result?.narrativeReport).toBe(narrative)
+    })
+  })
+
+  describe('claimNarrativeGeneration', () => {
+    it('should claim successfully when narrativeStatus is null', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      const claimed = await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      expect(claimed).toBe(true)
+
+      // Verify status was updated
+      const status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status?.status).toBe('generating')
+      expect(status?.error).toBeNull()
+    })
+
+    it('should claim successfully when narrativeStatus is failed', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // First, fail the narrative
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      await repository.failNarrativeGeneration(testAssessmentId, batchId, 'Test error')
+
+      // Now claim should succeed again
+      const claimed = await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      expect(claimed).toBe(true)
+
+      const status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status?.status).toBe('generating')
+      expect(status?.error).toBeNull() // Error should be cleared
+    })
+
+    it('should claim successfully when existing claim is stale (> TTL)', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // First claim
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+
+      // Manually set the claim time to be stale (10 minutes ago)
+      const staleTime = new Date(Date.now() - 10 * 60 * 1000)
+      await db
+        .update(assessmentResults)
+        .set({ narrativeClaimedAt: staleTime })
+        .where(
+          and(
+            eq(assessmentResults.assessmentId, testAssessmentId),
+            eq(assessmentResults.batchId, batchId)
+          )
+        )
+
+      // Now claim should succeed (with 5 min TTL, 10 min old claim is stale)
+      const claimed = await repository.claimNarrativeGeneration(testAssessmentId, batchId, 5 * 60 * 1000)
+      expect(claimed).toBe(true)
+    })
+
+    it('should fail claim when narrativeStatus is generating and not stale', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // First claim succeeds
+      const claimed1 = await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      expect(claimed1).toBe(true)
+
+      // Second claim fails (not stale)
+      const claimed2 = await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      expect(claimed2).toBe(false)
+    })
+
+    it('should fail claim when narrativeStatus is complete', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Claim and finalize
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      await repository.finalizeNarrativeGeneration(testAssessmentId, batchId, '# Report')
+
+      // Attempt to claim again should fail
+      const claimed = await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      expect(claimed).toBe(false)
+    })
+
+    it('should return false when record does not exist', async () => {
+      const claimed = await repository.claimNarrativeGeneration(
+        testAssessmentId,
+        crypto.randomUUID()
+      )
+      expect(claimed).toBe(false)
+    })
+
+    it('should handle concurrent claims - only one succeeds', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Simulate concurrent claims
+      const results = await Promise.all([
+        repository.claimNarrativeGeneration(testAssessmentId, batchId),
+        repository.claimNarrativeGeneration(testAssessmentId, batchId),
+        repository.claimNarrativeGeneration(testAssessmentId, batchId),
+      ])
+
+      // Exactly one should succeed
+      const successCount = results.filter((r) => r === true).length
+      expect(successCount).toBe(1)
+
+      // Status should be 'generating'
+      const status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status?.status).toBe('generating')
+    })
+  })
+
+  describe('finalizeNarrativeGeneration', () => {
+    it('should finalize and set narrative + status', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+
+      const narrative = '# Final Report\n\nDetailed analysis...'
+      await repository.finalizeNarrativeGeneration(testAssessmentId, batchId, narrative)
+
+      const result = await repository.findByBatchId(testAssessmentId, batchId)
+      expect(result?.narrativeReport).toBe(narrative)
+      expect(result?.narrativeStatus).toBe('complete')
+      expect(result?.narrativeCompletedAt).toBeInstanceOf(Date)
+      expect(result?.narrativeError).toBeUndefined()
+    })
+
+    it('should only finalize if status is generating (guard)', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Try to finalize without claiming first
+      await repository.finalizeNarrativeGeneration(testAssessmentId, batchId, '# Report')
+
+      // Should not update because status was null, not 'generating'
+      const result = await repository.findByBatchId(testAssessmentId, batchId)
+      expect(result?.narrativeReport).toBeUndefined()
+      expect(result?.narrativeStatus).toBeUndefined()
+    })
+
+    it('should clear error on finalize', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Claim, fail, then claim again and finalize
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      await repository.failNarrativeGeneration(testAssessmentId, batchId, 'Initial error')
+
+      // Claim again (should succeed because status is 'failed')
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      await repository.finalizeNarrativeGeneration(testAssessmentId, batchId, '# Success!')
+
+      const result = await repository.findByBatchId(testAssessmentId, batchId)
+      expect(result?.narrativeStatus).toBe('complete')
+      expect(result?.narrativeError).toBeUndefined()
+    })
+  })
+
+  describe('failNarrativeGeneration', () => {
+    it('should mark as failed and store error', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      await repository.failNarrativeGeneration(testAssessmentId, batchId, 'LLM timeout error')
+
+      const status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status?.status).toBe('failed')
+      expect(status?.error).toBe('LLM timeout error')
+    })
+
+    it('should allow retry after failure', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // First attempt fails
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      await repository.failNarrativeGeneration(testAssessmentId, batchId, 'First error')
+
+      // Second attempt succeeds
+      const claimed = await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      expect(claimed).toBe(true)
+
+      await repository.finalizeNarrativeGeneration(testAssessmentId, batchId, '# Success on retry')
+
+      const result = await repository.findByBatchId(testAssessmentId, batchId)
+      expect(result?.narrativeStatus).toBe('complete')
+      expect(result?.narrativeReport).toBe('# Success on retry')
+    })
+  })
+
+  describe('getNarrativeStatus', () => {
+    it('should return null for non-existent record', async () => {
+      const status = await repository.getNarrativeStatus(
+        testAssessmentId,
+        crypto.randomUUID()
+      )
+      expect(status).toBeNull()
+    })
+
+    it('should return status and error for existing record', async () => {
+      const batchId = crypto.randomUUID()
+      await repository.create({
+        assessmentId: testAssessmentId,
+        batchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        rubricVersion: 'guardian-v1.0',
+        modelId: 'claude-sonnet-4-5-20250929',
+      })
+
+      // Initially null status
+      let status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status).toEqual({ status: null, error: null })
+
+      // After claim
+      await repository.claimNarrativeGeneration(testAssessmentId, batchId)
+      status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status).toEqual({ status: 'generating', error: null })
+
+      // After fail
+      await repository.failNarrativeGeneration(testAssessmentId, batchId, 'Oops')
+      status = await repository.getNarrativeStatus(testAssessmentId, batchId)
+      expect(status).toEqual({ status: 'failed', error: 'Oops' })
     })
   })
 })

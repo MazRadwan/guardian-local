@@ -31,6 +31,11 @@ export interface StreamWithToolOptions {
   tools: ToolDefinition[];
   /** Force Claude to use a specific tool - essential for structured output */
   tool_choice?: LLMToolChoice;
+  /** Enable Anthropic prompt caching for system prompt (reduces input token costs by 30-50%) */
+  usePromptCache?: boolean;
+  /** Maximum output tokens for the LLM response. Defaults to 8192 for backward compatibility.
+   *  For scoring, 2500 is recommended as tool payload only needs ~1200 tokens. */
+  maxTokens?: number;
   abortSignal?: AbortSignal;
   onTextDelta?: (delta: string) => void;
   onToolUse?: (toolName: string, input: unknown) => void;

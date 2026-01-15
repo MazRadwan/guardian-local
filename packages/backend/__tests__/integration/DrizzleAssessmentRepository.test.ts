@@ -398,6 +398,89 @@ describe('DrizzleAssessmentRepository Integration Tests', () => {
     })
   })
 
+  describe('findByIdWithVendor()', () => {
+    it('should return assessment with vendor info in single query', async () => {
+      // Create and save assessment
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'comprehensive',
+        solutionName: 'Test Solution',
+        solutionType: 'clinical_ai',
+        createdBy: testUserId,
+      })
+      await repository.create(assessment)
+
+      // Use combined lookup
+      const result = await repository.findByIdWithVendor(assessment.id)
+
+      // Verify both assessment and vendor returned
+      expect(result).not.toBeNull()
+      expect(result!.assessment.id).toBe(assessment.id)
+      expect(result!.assessment.vendorId).toBe(testVendorId)
+      expect(result!.assessment.assessmentType).toBe('comprehensive')
+      expect(result!.assessment.solutionName).toBe('Test Solution')
+      expect(result!.assessment.solutionType).toBe('clinical_ai')
+      expect(result!.assessment.createdBy).toBe(testUserId)
+      expect(result!.vendor.id).toBe(testVendorId)
+      expect(result!.vendor.name).toBe('Test Vendor')
+    })
+
+    it('should return null for non-existent assessment ID', async () => {
+      const result = await repository.findByIdWithVendor('00000000-0000-0000-0000-000000000000')
+      expect(result).toBeNull()
+    })
+
+    it('should return correct vendor for assessment with specific vendor', async () => {
+      // Create another vendor
+      const [vendor2] = await testDb
+        .insert(vendors)
+        .values({
+          name: 'Second Vendor',
+          industry: 'Healthcare',
+        })
+        .returning()
+
+      // Create assessment with second vendor
+      const assessment = Assessment.create({
+        vendorId: vendor2.id,
+        assessmentType: 'quick',
+        createdBy: testUserId,
+      })
+      await repository.create(assessment)
+
+      // Verify correct vendor is returned
+      const result = await repository.findByIdWithVendor(assessment.id)
+      expect(result).not.toBeNull()
+      expect(result!.vendor.id).toBe(vendor2.id)
+      expect(result!.vendor.name).toBe('Second Vendor')
+    })
+
+    it('should return assessment with all metadata preserved', async () => {
+      const assessment = Assessment.create({
+        vendorId: testVendorId,
+        assessmentType: 'comprehensive',
+        solutionName: 'Full Metadata Test',
+        solutionType: 'patient_facing',
+        createdBy: testUserId,
+        assessmentMetadata: {
+          assessorName: 'Jane Doe',
+          stakeholders: ['Alice', 'Bob'],
+          notes: 'Integration test assessment',
+        },
+      })
+      await repository.create(assessment)
+
+      const result = await repository.findByIdWithVendor(assessment.id)
+
+      expect(result).not.toBeNull()
+      expect(result!.assessment.assessmentMetadata).toEqual({
+        assessorName: 'Jane Doe',
+        stakeholders: ['Alice', 'Bob'],
+        notes: 'Integration test assessment',
+      })
+    })
+  })
+
   describe('hasExportedAssessments()', () => {
     it('should return true if user has assessment with status "exported"', async () => {
       const assessment = Assessment.create({

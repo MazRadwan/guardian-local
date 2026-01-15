@@ -1,23 +1,86 @@
 {
   "epic": "20",
   "scope": "full",
-  "phase": "complete",
-  "currentBatch": 0,
+  "phase": "implementation",
+  "currentBatch": 4,
   "currentStory": null,
+  "currentSprint": 2,
+  "totalSprints": 4,
   "retryCount": 0,
   "status": "awaiting_gpt_review",
+  "batch1Review": {
+    "status": "approved",
+    "verdict": "patch is correct",
+    "confidence": 0.6,
+    "notes": "Minor layering concern (type import from infra to app) - no correctness issues"
+  },
+  "batch2Review": {
+    "status": "approved",
+    "verdict": "patch is correct",
+    "confidence": 0.6,
+    "notes": "P2 fixes applied for narrative status check and solutionType default"
+  },
+  "batch3Review": {
+    "status": "approved",
+    "verdict": "all tests passing",
+    "confidence": 0.95,
+    "notes": "Manual review - fixed: (1) race-safe orphan deletion with NOT EXISTS check, (2) join on (assessment_id, batch_id), (3) clean architecture violations (NarrativeStatus import, ITransactionRunner port), (4) DrizzleTransaction type order, (5) integration test fixes for Epic 18 check order and component types. All 956 unit + 288 integration tests pass."
+  },
+  "batchReview": {
+    "reReviewRequired": false,
+    "lastReviewConfidence": 0,
+    "findingsCount": 0,
+    "fixesApplied": false
+  },
   "codex": {
     "conversationId": null,
-    "roundCount": 8,
-    "lastResponse": "Code review validates plan - all findings mapped to stories",
+    "roundCount": 0,
+    "lastResponse": "",
     "mode": "mcp"
   },
-  "completedStories": [],
+  "completedStories": [
+    "20.1.1",
+    "20.1.3",
+    "20.1.4",
+    "20.1.2",
+    "20.2.1",
+    "20.2.2",
+    "20.3.1",
+    "20.3.2",
+    "20.3.3",
+    "20.3.4"
+  ],
   "skippedStories": [],
+  "approvedSprints": [
+    "sprint-1"
+  ],
+  "currentSprintBatch": [],
+  "lastCodeReviewBatch": 3,
+  "reviewRounds": {
+    "specPerBatch": {
+      "batch-1": 8
+    },
+    "specFinalPass": 1,
+    "code": 2,
+    "sprintFinal": 0
+  },
+  "sprintReview": {
+    "round": 0,
+    "inlineFixCount": 0,
+    "fixStoriesCreated": [],
+    "maxInlineFixes": 3,
+    "maxFixBatches": 1
+  },
+  "reviewFallback": {
+    "usedOpus": false,
+    "reason": null,
+    "pendingGPTReReview": []
+  },
   "startedAt": "2026-01-15T12:00:00.000Z",
-  "planCompleteAt": 1768493270.561645,
+  "planCompleteAt": 1768508750.512786,
   "reviewCompleteAt": "2026-01-15T13:00:00.000Z",
   "validationCompleteAt": "2026-01-15T14:00:00.000Z",
+  "implementationStartedAt": "2026-01-15T15:00:00.000Z",
   "gptReviewRounds": 8,
   "keyCommitments": [
     "Clean architecture: IExportNarrativeGenerator port",
@@ -27,5 +90,86 @@
     "Evidence selection: Tiered fallback with deterministic ordering",
     "Schema migration: Add narrative_status fields to assessment_results",
     "Solution-type fix: Use assessment.solutionType directly (Story 20.1.4)"
-  ]
+  ],
+  "executionPlan": {
+    "totalBatches": 10,
+    "batches": [
+      {
+        "id": 1,
+        "stories": [
+          "20.1.1",
+          "20.1.3",
+          "20.1.4"
+        ],
+        "parallel": true,
+        "status": "complete"
+      },
+      {
+        "id": 2,
+        "stories": [
+          "20.1.2"
+        ],
+        "parallel": false,
+        "status": "complete"
+      },
+      {
+        "id": 3,
+        "stories": [
+          "20.2.1",
+          "20.2.2"
+        ],
+        "parallel": true,
+        "status": "complete"
+      },
+      {
+        "id": "4a",
+        "stories": [
+          "20.3.1"
+        ],
+        "parallel": false,
+        "status": "complete"
+      },
+      {
+        "id": "4b",
+        "stories": [
+          "20.3.2"
+        ],
+        "parallel": false,
+        "status": "complete"
+      },
+      {
+        "id": "4c",
+        "stories": [
+          "20.3.3"
+        ],
+        "parallel": false,
+        "status": "complete"
+      },
+      {
+        "id": 5,
+        "stories": [
+          "20.3.4"
+        ],
+        "parallel": false,
+        "status": "complete"
+      },
+      {
+        "id": "6a",
+        "stories": [
+          "20.4.1",
+          "20.4.3"
+        ],
+        "parallel": true,
+        "status": "pending"
+      },
+      {
+        "id": "6b",
+        "stories": [
+          "20.4.2"
+        ],
+        "parallel": false,
+        "status": "pending"
+      }
+    ]
+  }
 }

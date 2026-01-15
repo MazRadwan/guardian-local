@@ -60,6 +60,11 @@ export interface CreateDimensionScoreDTO {
 }
 
 /**
+ * Narrative generation status (Epic 20)
+ */
+export type NarrativeStatusDTO = 'generating' | 'complete' | 'failed' | null
+
+/**
  * Domain DTO for assessment result
  */
 export interface AssessmentResultDTO {
@@ -73,6 +78,11 @@ export interface AssessmentResultDTO {
   executiveSummary?: string
   keyFindings?: string[]
   disqualifyingFactors?: string[]
+  // Narrative generation status (Epic 20)
+  narrativeStatus?: NarrativeStatusDTO
+  narrativeClaimedAt?: Date
+  narrativeCompletedAt?: Date
+  narrativeError?: string
   rubricVersion: string
   modelId: string
   rawToolPayload?: unknown

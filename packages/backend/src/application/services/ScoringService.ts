@@ -10,6 +10,7 @@ import { IFileRepository } from '../interfaces/IFileRepository.js';
 import { IFileStorage } from '../interfaces/IFileStorage.js';
 import { ILLMClient } from '../interfaces/ILLMClient.js';
 import { IPromptBuilder } from '../interfaces/IPromptBuilder.js';
+import { ITransactionRunner } from '../interfaces/ITransactionRunner.js';
 import { ScoringPayloadValidator } from '../../domain/scoring/ScoringPayloadValidator.js';
 import { ScoringReportData, ScoringProgressEvent, ScoringCompletePayload } from '../../domain/scoring/types.js';
 import { RUBRIC_VERSION, SolutionType } from '../../domain/scoring/rubric.js';
@@ -40,7 +41,8 @@ export class ScoringService implements IScoringService {
     private documentParser: IScoringDocumentParser,
     private llmClient: ILLMClient,
     private promptBuilder: IPromptBuilder,
-    private validator: ScoringPayloadValidator
+    private validator: ScoringPayloadValidator,
+    private transactionRunner: ITransactionRunner
   ) {}
 
   async score(
@@ -87,15 +89,22 @@ export class ScoringService implements IScoringService {
       };
 
       // Epic 18: Only set expectedAssessmentId if provided in input
+      // Story 20.3.3: Pass abort signal to parser
       const parseOptions: ScoringParseOptions = {
         expectedAssessmentId: inputAssessmentId, // May be undefined - that's OK
         minConfidence: 0.7,
+        abortSignal: abortController.signal,
       };
       const parseResult = await this.documentParser.parseForResponses(
         fileBuffer,
         documentMetadata,
         parseOptions
       );
+
+      // Story 20.3.3: Check if parsing was aborted
+      if (!parseResult.success && parseResult.error === 'Parse aborted') {
+        return { success: false, batchId, error: 'Scoring aborted' };
+      }
 
       // Epic 18: Determine assessmentId - use from document if not provided in input
       const assessmentId = inputAssessmentId || parseResult.assessmentId;
@@ -131,10 +140,12 @@ export class ScoringService implements IScoringService {
 
       // 5. AUTHORIZATION: Verify assessment exists and user owns it
       // Epic 18: Moved after parsing since assessmentId may come from document
-      const assessment = await this.assessmentRepo.findById(assessmentId);
-      if (!assessment) {
+      // Story 20.3.4: Combined lookup fetches assessment + vendor in single query
+      const assessmentWithVendor = await this.assessmentRepo.findByIdWithVendor(assessmentId);
+      if (!assessmentWithVendor) {
         throw new ScoringError('ASSESSMENT_NOT_FOUND', `Assessment not found: ${assessmentId}`);
       }
+      const { assessment, vendor } = assessmentWithVendor;
       // Assessment entity uses 'createdBy' for the owner
       if (assessment.createdBy !== userId) {
         throw new ScoringError('UNAUTHORIZED_ASSESSMENT', `User ${userId} does not own assessment ${assessmentId}`);
@@ -175,10 +186,8 @@ export class ScoringService implements IScoringService {
       onProgress({ status: 'parsing', message: 'Storing extracted responses...' });
       await this.storeResponses(parseResult, assessmentId, batchId, fileId);
 
-      // 6. Get vendor info for prompt
-      const vendor = await this.assessmentRepo.getVendor(assessmentId);
-
-      // 7. Determine solution type for correct weighting
+      // 6. Determine solution type for correct weighting
+      // Note: vendor already fetched via findByIdWithVendor (Story 20.3.4)
       const solutionType = this.determineSolutionType(assessment);
 
       // 8. Score with Claude
@@ -294,23 +303,29 @@ export class ScoringService implements IScoringService {
   }
 
   /**
-   * Determine solution type from assessment
-   * Used for selecting correct dimension weights
+   * Determine solution type from assessment for correct dimension weighting
+   * Uses assessment.solutionType which maps directly to rubric SolutionType
    */
-  private determineSolutionType(assessment: { assessmentType?: string }): SolutionType {
-    // Map assessment type to solution type
-    // Default to clinical_ai for healthcare assessments
-    const typeMap: Record<string, SolutionType> = {
-      'clinical': 'clinical_ai',
-      'clinical_ai': 'clinical_ai',
-      'administrative': 'administrative_ai',
-      'admin': 'administrative_ai',
-      'patient': 'patient_facing',
-      'patient_facing': 'patient_facing',
-    };
+  private determineSolutionType(assessment: { solutionType?: string | null }): SolutionType {
+    // Valid rubric solution types
+    const validTypes: SolutionType[] = ['clinical_ai', 'administrative_ai', 'patient_facing'];
 
-    const assessmentType = assessment.assessmentType?.toLowerCase() || 'clinical';
-    return typeMap[assessmentType] || 'clinical_ai';
+    const solutionType = assessment.solutionType?.toLowerCase();
+
+    if (!solutionType) {
+      // Default to clinical_ai for healthcare assessments
+      return 'clinical_ai';
+    }
+
+    if (validTypes.includes(solutionType as SolutionType)) {
+      return solutionType as SolutionType;
+    }
+
+    // Log warning for invalid values
+    console.warn(
+      `[ScoringService] Invalid solutionType "${assessment.solutionType}", defaulting to clinical_ai`
+    );
+    return 'clinical_ai';
   }
 
   /**
@@ -351,6 +366,12 @@ export class ScoringService implements IScoringService {
       // CRITICAL: Force Claude to use the scoring_complete tool
       // Without this, Claude may write narrative but skip calling the tool
       tool_choice: { type: 'any' },
+      // Enable prompt caching for the large scoring rubric system prompt
+      // Reduces input token costs by 30-50% for repeated scoring requests
+      usePromptCache: true,
+      // Scoring tool payload needs ~1200 tokens. 2500 provides ~2x safety margin.
+      // Reduced from default 8192 to optimize response time and costs.
+      maxTokens: 2500,
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;
@@ -366,7 +387,12 @@ export class ScoringService implements IScoringService {
       },
     });
 
+    // P2 Fix: Check if abort caused the missing tool payload
+    // When user aborts mid-stream, streamWithTool exits early before tool fires
     if (!toolPayload) {
+      if (abortSignal.aborted) {
+        throw new Error('Scoring aborted');
+      }
       throw new Error('Claude did not call scoring_complete tool');
     }
 
@@ -374,7 +400,9 @@ export class ScoringService implements IScoringService {
   }
 
   /**
-   * Store dimension scores and assessment result
+   * Store dimension scores and assessment result atomically.
+   * Uses a database transaction to ensure both inserts succeed or both fail.
+   * This prevents partial writes (e.g., dimension scores without assessment result).
    */
   private async storeScores(
     assessmentId: string,
@@ -383,8 +411,8 @@ export class ScoringService implements IScoringService {
     narrativeReport: string,
     durationMs: number
   ): Promise<void> {
-    // Store dimension scores
-    const dimensionScores = payload.dimensionScores.map(ds => ({
+    // Prepare dimension scores data
+    const dimensionScoresData = payload.dimensionScores.map(ds => ({
       assessmentId,
       batchId,
       dimension: ds.dimension,
@@ -393,10 +421,8 @@ export class ScoringService implements IScoringService {
       findings: ds.findings,
     }));
 
-    await this.dimensionScoreRepo.createBatch(dimensionScores);
-
-    // Store assessment result
-    await this.assessmentResultRepo.create({
+    // Prepare assessment result data
+    const assessmentResultData = {
       assessmentId,
       batchId,
       compositeScore: payload.compositeScore,
@@ -410,6 +436,22 @@ export class ScoringService implements IScoringService {
       modelId: this.llmClient.getModelId(),
       rawToolPayload: payload,
       scoringDurationMs: durationMs,
-    });
+    };
+
+    // Wrap both inserts in a transaction for atomicity
+    // If either fails, both are rolled back
+    try {
+      await this.transactionRunner.run(async (tx) => {
+        await this.dimensionScoreRepo.createBatch(dimensionScoresData, tx);
+        await this.assessmentResultRepo.create(assessmentResultData, tx);
+      });
+    } catch (error) {
+      // Re-throw with clear transaction context
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      throw new ScoringError(
+        'STORAGE_FAILED',
+        `Transaction failed while storing scores: ${errorMessage}`
+      );
+    }
   }
 }

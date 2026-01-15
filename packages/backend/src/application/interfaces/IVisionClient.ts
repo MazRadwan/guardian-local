@@ -25,6 +25,9 @@ export interface VisionRequest {
 
   /** Max tokens for response */
   maxTokens?: number;
+
+  /** Abort signal to cancel the request (Story 20.3.3) */
+  abortSignal?: AbortSignal;
 }
 
 export interface VisionResponse {

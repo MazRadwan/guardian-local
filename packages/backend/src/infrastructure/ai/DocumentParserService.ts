@@ -279,12 +279,22 @@ export class DocumentParserService
     const startTime = Date.now();
 
     try {
+      // Story 20.3.3: Check abort before extraction
+      if (options?.abortSignal?.aborted) {
+        return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
+      }
+
       // 1. Extract content from document (text or vision-based)
       const { text: rawDocumentText, visionContent } = await this.extractContent(
         file,
         metadata.documentType,
         metadata.mimeType
       );
+
+      // Story 20.3.3: Check abort after extraction, before LLM call
+      if (options?.abortSignal?.aborted) {
+        return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
+      }
 
       // 2. Apply text length limits to prevent context overflow
       const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
@@ -301,15 +311,18 @@ export class DocumentParserService
 
       if (visionContent && visionContent.length > 0) {
         // Use Vision API for image-based documents (scanned questionnaires)
+        // Story 20.3.3: Pass abort signal to Vision client
         const visionResponse = await this.visionClient.analyzeImages({
           images: visionContent,
           prompt: `${prompt}\n\nAnalyze the questionnaire shown in the image(s).`,
           systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT,
           maxTokens: 16384, // Extended output for large questionnaires (100+ questions)
+          abortSignal: options?.abortSignal,
         });
         responseContent = visionResponse.content;
       } else {
         // Use text-based API for PDF/DOCX
+        // Story 20.3.3: Pass abort signal to Claude client
         const response = await this.claudeClient.sendMessage(
           [
             {
@@ -317,7 +330,7 @@ export class DocumentParserService
               content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}`,
             },
           ],
-          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384 }
+          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384, abortSignal: options?.abortSignal }
         );
         responseContent = response.content;
       }
@@ -374,6 +387,11 @@ export class DocumentParserService
         isComplete: extracted.isComplete,
       };
     } catch (error) {
+      // Story 20.3.3: Handle abort during LLM call
+      if (options?.abortSignal?.aborted) {
+        return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
+      }
+
       console.error('[DocumentParserService] Scoring parsing error:', error);
 
       // Re-throw specific errors for upstream handling

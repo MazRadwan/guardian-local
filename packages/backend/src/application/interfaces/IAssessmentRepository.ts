@@ -53,6 +53,18 @@ export interface IAssessmentRepository {
   getVendor(assessmentId: string): Promise<{ id: string; name: string }>
 
   /**
+   * Find assessment by ID with vendor info in single query.
+   * More efficient than calling findById + getVendor separately.
+   * Story 20.3.4: Combined lookup to reduce database round trips.
+   *
+   * @returns Assessment and vendor if found, null if assessment doesn't exist
+   */
+  findByIdWithVendor(id: string): Promise<{
+    assessment: Assessment
+    vendor: { id: string; name: string }
+  } | null>
+
+  /**
    * Deletes an assessment by ID
    */
   delete(id: string): Promise<void>

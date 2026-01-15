@@ -172,6 +172,63 @@ export class DrizzleAssessmentRepository implements IAssessmentRepository {
     return result
   }
 
+  /**
+   * Find assessment by ID with vendor info in single query.
+   * Story 20.3.4: Combined lookup to reduce database round trips from 2 to 1.
+   *
+   * Uses INNER JOIN to fetch assessment and vendor in a single database call,
+   * eliminating the need for separate findById() + getVendor() calls.
+   */
+  async findByIdWithVendor(id: string): Promise<{
+    assessment: Assessment
+    vendor: { id: string; name: string }
+  } | null> {
+    const [result] = await db
+      .select({
+        // Assessment fields
+        id: assessments.id,
+        vendorId: assessments.vendorId,
+        assessmentType: assessments.assessmentType,
+        solutionName: assessments.solutionName,
+        solutionType: assessments.solutionType,
+        status: assessments.status,
+        assessmentMetadata: assessments.assessmentMetadata,
+        createdAt: assessments.createdAt,
+        updatedAt: assessments.updatedAt,
+        createdBy: assessments.createdBy,
+        // Vendor fields (aliased to avoid conflicts)
+        vendorIdField: vendors.id,
+        vendorName: vendors.name,
+      })
+      .from(assessments)
+      .innerJoin(vendors, eq(assessments.vendorId, vendors.id))
+      .where(eq(assessments.id, id))
+      .limit(1)
+
+    if (!result) {
+      return null
+    }
+
+    return {
+      assessment: Assessment.fromPersistence({
+        id: result.id,
+        vendorId: result.vendorId,
+        assessmentType: result.assessmentType,
+        solutionName: result.solutionName,
+        solutionType: result.solutionType,
+        status: result.status,
+        assessmentMetadata: result.assessmentMetadata,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
+        createdBy: result.createdBy,
+      }),
+      vendor: {
+        id: result.vendorIdField,
+        name: result.vendorName,
+      },
+    }
+  }
+
   async delete(id: string): Promise<void> {
     try {
       await db.delete(assessments).where(eq(assessments.id, id))

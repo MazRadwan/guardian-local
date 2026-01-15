@@ -479,10 +479,10 @@ describe('DrizzleMessageRepository Integration Tests', () => {
             },
           },
           {
-            type: 'code' as const,
+            type: 'form' as const,
             data: {
-              language: 'javascript',
-              code: 'console.log("Hello World");',
+              formId: 'sample-form',
+              fields: [{ name: 'input', value: 'test' }],
             },
           },
         ],

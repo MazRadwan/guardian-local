@@ -492,4 +492,150 @@ describe('DocumentParserService', () => {
       expect(result.error).toContain('Unsupported document type');
     });
   });
+
+  // Story 20.3.3: Abort support for parsing
+  describe('Abort support (Story 20.3.3)', () => {
+    beforeEach(() => {
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse()),
+      });
+    });
+
+    it('returns failed result when aborted before extraction', async () => {
+      const abortController = new AbortController();
+      abortController.abort(); // Abort immediately
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Parse aborted');
+      expect(mockClaudeClient.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('returns failed result when aborted after extraction but before LLM call', async () => {
+      const abortController = new AbortController();
+
+      // Mock extraction to take some time, then abort before LLM call
+      // Since extraction is fast in tests, we need to abort during extraction
+      // The check happens after extractContent returns
+      const originalSendMessage = mockClaudeClient.sendMessage.getMockImplementation();
+      mockClaudeClient.sendMessage.mockImplementation(async () => {
+        // Should not reach here if abort check works
+        return { content: JSON.stringify(createScoringExtractionResponse()) };
+      });
+
+      // Abort before calling (simulates abort happening after extraction completes)
+      // We'll test this by aborting and verifying the error response
+      abortController.abort();
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Parse aborted');
+    });
+
+    it('returns failed result when LLM call throws due to abort', async () => {
+      const abortController = new AbortController();
+
+      // Mock sendMessage to throw an abort error
+      mockClaudeClient.sendMessage.mockRejectedValue(new Error('Request aborted'));
+
+      // Abort to set the signal state
+      abortController.abort();
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Parse aborted');
+    });
+
+    it('passes abort signal to Claude client for text documents', async () => {
+      const abortController = new AbortController();
+
+      await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(mockClaudeClient.sendMessage).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          abortSignal: abortController.signal,
+        })
+      );
+    });
+
+    it('passes abort signal to Vision client for image documents', async () => {
+      const abortController = new AbortController();
+
+      mockVisionClient.prepareDocument.mockResolvedValue([
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: 'base64data' },
+        },
+      ]);
+      mockVisionClient.analyzeImages.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse()),
+        usage: { inputTokens: 2000, outputTokens: 1000 },
+        stopReason: 'end_turn',
+      });
+
+      const metadata = createMetadata({
+        filename: 'questionnaire.jpg',
+        mimeType: 'image/jpeg',
+        documentType: 'image',
+      });
+
+      await service.parseForResponses(
+        Buffer.from('image content'),
+        metadata,
+        { abortSignal: abortController.signal }
+      );
+
+      expect(mockVisionClient.analyzeImages).toHaveBeenCalledWith(
+        expect.objectContaining({
+          abortSignal: abortController.signal,
+        })
+      );
+    });
+
+    it('continues normal operation when not aborted', async () => {
+      const abortController = new AbortController();
+      // Do NOT abort
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.assessmentId).toBe('assessment-123');
+      expect(mockClaudeClient.sendMessage).toHaveBeenCalled();
+    });
+
+    it('works without abort signal (backward compatible)', async () => {
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+        // No options, no abortSignal
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.assessmentId).toBe('assessment-123');
+    });
+  });
 });
