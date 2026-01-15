@@ -50,6 +50,48 @@ const DEFAULT_MAX_EXTRACTED_TEXT_CHARS = 100000;
 const TRUNCATION_NOTICE = '\n\n[NOTE: Document text was truncated due to length. Full document contains additional content.]';
 
 // =============================================================================
+// Story 20.4.1: Guardian Document Signature Pre-Check
+// =============================================================================
+
+/**
+ * Regex patterns to identify Guardian questionnaire documents.
+ * Best-effort detection to avoid expensive LLM calls on non-Guardian documents.
+ */
+const GUARDIAN_MARKERS = [
+  /Assessment\s+ID:\s*[a-f0-9-]{36}/i,     // UUID format assessment ID
+  /GUARDIAN.*Assessment/i,                  // Header text
+  /Section\s+\d+:/i,                        // Section headers (e.g., "Section 1:")
+  /Question\s+\d+\.\d+/i,                   // Question numbering format (e.g., "Question 1.1")
+  /\d+\.\d+\s+[-–—]\s+/i,                   // Alternative question format "1.1 - "
+];
+
+/**
+ * Minimum markers required to pass pre-check.
+ * Set to 2 to be lenient and avoid false negatives.
+ */
+const MIN_MARKERS_REQUIRED = 2;
+
+/**
+ * Environment variable to disable pre-check (for testing or edge cases).
+ */
+const ENABLE_GUARDIAN_PRECHECK = process.env.GUARDIAN_PRECHECK !== 'false';
+
+// =============================================================================
+// Story 20.4.2: Per-Response Truncation
+// =============================================================================
+
+/**
+ * Maximum characters per individual response.
+ * Ensures predictable token budget while preserving evidence across all responses.
+ */
+const DEFAULT_MAX_RESPONSE_CHARS = 2000;
+
+/**
+ * Notice appended when individual response is truncated.
+ */
+const RESPONSE_TRUNCATION_NOTICE = ' [truncated]';
+
+// =============================================================================
 // Types and Validation Helpers for AI JSON
 // =============================================================================
 
@@ -296,6 +338,33 @@ export class DocumentParserService
         return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
       }
 
+      // Story 20.4.1: Pre-check for Guardian document signature (text-based only)
+      // Images require Vision to read anything, so skip pre-check
+      if (ENABLE_GUARDIAN_PRECHECK && metadata.documentType !== 'image') {
+        const preCheck = this.isLikelyGuardianDocument(rawDocumentText);
+
+        if (!preCheck.likely) {
+          console.log(
+            '[DocumentParserService] Pre-check failed, markers found:',
+            preCheck.foundMarkers.length,
+            '(need at least',
+            MIN_MARKERS_REQUIRED,
+            ')'
+          );
+
+          return this.createFailedScoringResult(
+            metadata,
+            startTime,
+            'Document does not appear to be a Guardian questionnaire. Please upload an exported questionnaire PDF or Word document.'
+          );
+        }
+
+        console.log(
+          '[DocumentParserService] Pre-check passed, markers found:',
+          preCheck.foundMarkers.length
+        );
+      }
+
       // 2. Apply text length limits to prevent context overflow
       const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
       const documentText = this.truncateText(rawDocumentText, maxChars);
@@ -362,6 +431,10 @@ export class DocumentParserService
           extracted.assessmentId
         );
       }
+
+      // Story 20.4.2: Truncate individual responses to prevent token explosion
+      const maxResponseChars = options?.maxResponseChars ?? DEFAULT_MAX_RESPONSE_CHARS;
+      extracted.responses = this.truncateResponses(extracted.responses, maxResponseChars);
 
       // 8. Filter by confidence if threshold set
       let responses = extracted.responses;
@@ -582,6 +655,92 @@ export class DocumentParserService
     const truncatedText = text.slice(0, maxChars - TRUNCATION_NOTICE.length);
     return truncatedText + TRUNCATION_NOTICE;
   }
+
+  // =========================================================================
+  // Story 20.4.1: Guardian Pre-Check
+  // =========================================================================
+
+  /**
+   * Quick pre-check to detect if document is likely a Guardian questionnaire.
+   * Searches for Guardian markers in extracted text.
+   *
+   * @param text - Extracted document text
+   * @returns Object with `likely` boolean and `foundMarkers` array
+   */
+  private isLikelyGuardianDocument(text: string): { likely: boolean; foundMarkers: string[] } {
+    // Short documents unlikely to be full questionnaires
+    if (!text || text.length < 100) {
+      return { likely: false, foundMarkers: [] };
+    }
+
+    const foundMarkers: string[] = [];
+
+    for (const marker of GUARDIAN_MARKERS) {
+      if (marker.test(text)) {
+        foundMarkers.push(marker.source);
+      }
+    }
+
+    return {
+      likely: foundMarkers.length >= MIN_MARKERS_REQUIRED,
+      foundMarkers,
+    };
+  }
+
+  // =========================================================================
+  // Story 20.4.2: Per-Response Truncation
+  // =========================================================================
+
+  /**
+   * Truncate individual responses to prevent token explosion.
+   * Each response is limited to DEFAULT_MAX_RESPONSE_CHARS.
+   *
+   * @param responses - Array of extracted responses
+   * @param maxChars - Maximum characters per response (default: 2000)
+   * @returns Responses with truncated text where needed
+   */
+  private truncateResponses(
+    responses: ScoringExtractionResponse['responses'],
+    maxChars: number = DEFAULT_MAX_RESPONSE_CHARS
+  ): ScoringExtractionResponse['responses'] {
+    let truncatedCount = 0;
+
+    const result = responses.map((response) => {
+      if (response.responseText.length <= maxChars) {
+        return response;
+      }
+
+      truncatedCount++;
+
+      // Guard: If maxChars is too small to fit notice + meaningful content,
+      // just truncate without notice to avoid exceeding maxChars
+      const minMeaningfulContent = 10;
+      if (maxChars < RESPONSE_TRUNCATION_NOTICE.length + minMeaningfulContent) {
+        return {
+          ...response,
+          responseText: response.responseText.slice(0, maxChars),
+        };
+      }
+
+      const truncateAt = maxChars - RESPONSE_TRUNCATION_NOTICE.length;
+      return {
+        ...response,
+        responseText: response.responseText.slice(0, truncateAt) + RESPONSE_TRUNCATION_NOTICE,
+      };
+    });
+
+    if (truncatedCount > 0) {
+      console.log(
+        `[DocumentParserService] Truncated ${truncatedCount} responses to ${maxChars} chars`
+      );
+    }
+
+    return result;
+  }
+
+  // =========================================================================
+  // Result Builders
+  // =========================================================================
 
   private createFailedIntakeResult(
     metadata: DocumentMetadata,

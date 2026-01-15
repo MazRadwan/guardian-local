@@ -303,8 +303,14 @@ export class ScoringService implements IScoringService {
   }
 
   /**
-   * Determine solution type from assessment for correct dimension weighting
-   * Uses assessment.solutionType which maps directly to rubric SolutionType
+   * Determine solution type from assessment for correct dimension weighting.
+   *
+   * Maps assessment.solutionType to rubric SolutionType for weight selection.
+   * Only accepts exact rubric values - no keyword heuristics to prevent
+   * mismatches between scoring weights and export narrative emphasis.
+   *
+   * @see docs/design/architecture/scoring-solution-type.md for field semantics
+   * @see rubric.ts DIMENSION_WEIGHTS for weight definitions
    */
   private determineSolutionType(assessment: { solutionType?: string | null }): SolutionType {
     // Valid rubric solution types

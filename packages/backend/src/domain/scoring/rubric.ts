@@ -15,7 +15,15 @@ import { RiskRating } from './types'
 export const RUBRIC_VERSION = 'guardian-v1.0'
 
 /**
- * Solution types that determine dimension weighting
+ * Solution types that determine dimension weighting in composite score calculation.
+ *
+ * These are the authoritative values for scoring weight selection:
+ * - `clinical_ai`: Clinical decision support systems - weights clinical_risk highest (40%)
+ * - `administrative_ai`: Administrative/workflow tools - weights privacy_risk highest (30%)
+ * - `patient_facing`: Patient engagement platforms - weights privacy_risk highest (35%)
+ *
+ * @see DIMENSION_WEIGHTS for full weight mappings
+ * @see docs/design/architecture/scoring-solution-type.md for field semantics
  */
 export type SolutionType = 'clinical_ai' | 'administrative_ai' | 'patient_facing'
 
