@@ -1,0 +1,31 @@
+{
+  "epic": "20",
+  "scope": "full",
+  "phase": "complete",
+  "currentBatch": 0,
+  "currentStory": null,
+  "retryCount": 0,
+  "status": "awaiting_gpt_review",
+  "codex": {
+    "conversationId": null,
+    "roundCount": 8,
+    "lastResponse": "Code review validates plan - all findings mapped to stories",
+    "mode": "mcp"
+  },
+  "completedStories": [],
+  "skippedStories": [],
+  "startedAt": "2026-01-15T12:00:00.000Z",
+  "planCompleteAt": 1768493270.561645,
+  "reviewCompleteAt": "2026-01-15T13:00:00.000Z",
+  "validationCompleteAt": "2026-01-15T14:00:00.000Z",
+  "gptReviewRounds": 8,
+  "keyCommitments": [
+    "Clean architecture: IExportNarrativeGenerator port",
+    "Concurrency: narrative_status column with claim-before-LLM pattern",
+    "Security: Audit logs with counts/IDs only",
+    "Parallelization: Phase A (interfaces) then Phase B (implementations)",
+    "Evidence selection: Tiered fallback with deterministic ordering",
+    "Schema migration: Add narrative_status fields to assessment_results",
+    "Solution-type fix: Use assessment.solutionType directly (Story 20.1.4)"
+  ]
+}
