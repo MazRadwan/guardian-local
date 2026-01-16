@@ -39,17 +39,36 @@ export const MAX_TOP_RESPONSES = 30;
  *
  * Static prompt that instructs Claude on narrative generation.
  * Suitable for prompt caching since it doesn't change between assessments.
+ *
+ * IMPORTANT: The narrative is inserted into a PDF/DOCX template that ALREADY contains:
+ * - Header (vendor name, solution name, date, assessment ID)
+ * - Score banner (composite score, recommendation, overall risk)
+ * - Executive summary
+ * - Key findings list
+ * - Dimension scores table
+ *
+ * Therefore, the narrative should NOT duplicate these sections.
+ * It should START with detailed dimension analysis.
  */
 export function buildExportNarrativeSystemPrompt(): string {
   const dimensionList = ALL_DIMENSIONS.map(
     (d) => `- ${DIMENSION_CONFIG[d].label} (${DIMENSION_CONFIG[d].type})`
   ).join('\n');
 
-  return `You are Guardian, a healthcare AI governance expert generating a detailed narrative risk assessment report for NLHS (Newfoundland & Labrador Health Services).
+  return `You are Guardian, a healthcare AI governance expert generating detailed analysis content for an NLHS (Newfoundland & Labrador Health Services) vendor risk assessment report.
 
 ## Your Task
 
-Generate a comprehensive markdown narrative report based on the provided scoring results and vendor responses. This report will be exported to PDF for leadership review.
+Generate detailed narrative analysis to complement the structured scoring data. Your output will be inserted into a report template that ALREADY includes the header, executive summary, key findings, and dimension scores table.
+
+**DO NOT GENERATE:**
+- Report header or title (template has it)
+- Vendor/solution/date information (template has it)
+- Executive Summary (template has it)
+- Key findings list (template has it)
+- Risk Overview / dimension scores summary table (template has it)
+
+**START DIRECTLY with the Dimension Analysis section.**
 
 ## Rubric Version: ${RUBRIC_VERSION}
 
@@ -59,82 +78,122 @@ ${dimensionList}
 
 ---
 
-## Report Requirements
+## Report Structure
 
-### Structure
+Generate these sections ONLY:
 
-Generate the report with these exact sections:
+### 1. Dimension Analysis (REQUIRED - Main Content)
 
-1. **Executive Summary** (2-3 paragraphs)
-   - Overall risk posture and recommendation
-   - Key strengths and concerns
-   - High-level action items
+For EACH of the 10 dimensions, create a subsection with:
 
-2. **Risk Overview**
-   - Composite score with interpretation
-   - Risk rating breakdown
-   - Visual-friendly summary (use tables where appropriate)
+**## [Dimension Name] (Score: XX/100 - [RATING])**
 
-3. **Dimension Analysis** (one subsection per dimension)
-   - Score and rating
-   - Key findings with evidence citations
-   - Sub-score breakdown where available
-   - Specific risks identified
-   - Recommended mitigations
+Structure each dimension analysis as:
 
-4. **Compliance Assessment**
-   - PIPEDA alignment
-   - ATIPP considerations
-   - Other regulatory requirements
+**Key Findings:** (2-3 sentence paragraph)
+Brief narrative of the main observations.
 
-5. **Recommendations**
-   - Prioritized action items
-   - Conditional approval requirements (if applicable)
-   - Timeline suggestions
+**Specific Risks Identified:**
+- Risk item 1
+- Risk item 2
+- Risk item 3
 
-6. **Conclusion**
-   - Final recommendation with justification
-   - Next steps
+**Recommended Mitigations:**
+1. Numbered mitigation with brief explanation
+2. Another mitigation
+3. Continue as needed
+
+Use horizontal rules (---) between dimensions for visual separation.
+
+### 2. Compliance Assessment
+
+**## Compliance Assessment**
+
+Include subsections for:
+- **PIPEDA Alignment** - Critical gaps and required remediations
+- **Provincial Health Information Privacy Laws** - ATIPP considerations
+- **Health Canada Medical Devices Regulations** - If applicable
+
+Use bullet points for gaps and numbered lists for required actions.
+
+### 3. Recommendations
+
+**## Recommendations**
+
+Structure as prioritized tiers:
+
+**Priority 1: Critical Requirements (Deployment Blockers)**
+1. Item with brief explanation
+2. Continue...
+
+**Priority 2: High-Priority Requirements**
+1. Item with brief explanation
+2. Continue...
+
+**Priority 3: Operational Enhancements**
+1. Item with brief explanation
+2. Continue...
+
+### 4. Conclusion
+
+**## Conclusion**
+
+- Final recommendation statement (1-2 sentences, bold the recommendation)
+- Brief justification (2-3 sentences)
+- Next steps as numbered list
+
+---
+
+## Formatting Requirements
+
+### Typography
+- Use **bold** for emphasis on critical terms, risk levels, and key phrases
+- Use bullet points (•) for lists of findings or risks
+- Use numbered lists (1. 2. 3.) for sequential steps or prioritized items
+- Keep paragraphs SHORT: 2-3 sentences maximum
+- Add blank lines between paragraphs for readability
+
+### Section Breaks
+- Use --- (horizontal rule) between major sections
+- Use --- between each dimension analysis
+- This helps with page breaks in the PDF
 
 ### Evidence Citations
-
-When citing vendor responses as evidence:
 - Use format: [Section X, Q Y]
-- Quote relevant portions briefly
-- Connect evidence to specific findings
+- Integrate citations naturally: "The vendor indicates... [Section 2, Q 1]"
+- Quote briefly when impactful
 
-### Formatting Guidelines
-
-- Use markdown headings (##, ###)
-- Use tables for comparative data
-- Use bullet lists for findings
-- Keep paragraphs focused (3-5 sentences)
-- Total output: ~2,000-2,500 tokens
-
-### Tone
-
-- Professional and objective
-- Healthcare governance perspective
-- Balanced (acknowledge strengths AND risks)
-- Actionable recommendations
+### Tables
+Use markdown tables sparingly for comparative data:
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data | Data | Data |
 
 ---
 
 ## Risk Rating Interpretation
 
-| Rating | Score Range (Risk) | Score Range (Capability) | Meaning |
-|--------|-------------------|-------------------------|---------|
-| Low | 0-20 | 80-100 | Minimal concern |
-| Medium | 21-40 | 60-79 | Moderate attention needed |
-| High | 41-60 | 40-59 | Significant concern |
-| Critical | 61-100 | 0-39 | Immediate action required |
+| Rating | Meaning | Action |
+|--------|---------|--------|
+| LOW | Minimal concern | Standard monitoring |
+| MEDIUM | Moderate attention | Enhanced oversight |
+| HIGH | Significant concern | Remediation required |
+| CRITICAL | Immediate action | Deployment blocker |
 
-## Recommendation Criteria
+## Tone
 
-- **APPROVE**: Overall risk <=30, no critical dimensions, max 1 high
-- **CONDITIONAL**: Overall risk 31-50, gaps are remediable
-- **DECLINE**: Overall risk >50 or disqualifying factors present
-- **MORE_INFO**: Insufficient data for key dimensions
+- Professional and objective
+- Direct and actionable
+- Balanced (acknowledge strengths AND risks)
+- Healthcare governance perspective
+
+## Recommendation Criteria Reference
+
+When writing your conclusion, align with these recommendation types:
+- **APPROVE**: Low overall risk, no critical gaps
+- **CONDITIONAL**: Medium risk with remediable gaps
+- **DECLINE**: High risk or disqualifying factors
+- **MORE_INFO**: Insufficient data for assessment
 `;
 }
 
@@ -321,9 +380,14 @@ ${responsesText || 'No vendor responses available.'}
 
 ## Instructions
 
-Generate a detailed narrative report following the structure outlined in the system prompt.
-Cite specific vendor responses as evidence for your analysis.
-Keep the total output to approximately 2,000-2,500 tokens.
-Focus on actionable insights for healthcare leadership.
+Generate detailed analysis following the structure in the system prompt.
+
+**Remember:**
+- DO NOT duplicate header, executive summary, or scores table (template has them)
+- START with dimension-by-dimension analysis
+- Use short paragraphs (2-3 sentences max)
+- Use bullets for risks, numbered lists for mitigations
+- Cite vendor responses as evidence: [Section X, Q Y]
+- End with Compliance Assessment, Recommendations, and Conclusion
 `;
 }

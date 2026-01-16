@@ -375,9 +375,9 @@ export class ScoringService implements IScoringService {
       // Enable prompt caching for the large scoring rubric system prompt
       // Reduces input token costs by 30-50% for repeated scoring requests
       usePromptCache: true,
-      // Scoring tool payload needs ~1200 tokens. 2500 provides ~2x safety margin.
-      // Reduced from default 8192 to optimize response time and costs.
-      maxTokens: 2500,
+      // Scoring output includes 10 dimensions with findings, executive summary,
+      // and key findings. 8K tokens provides headroom for comprehensive analysis.
+      maxTokens: 8000,
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;

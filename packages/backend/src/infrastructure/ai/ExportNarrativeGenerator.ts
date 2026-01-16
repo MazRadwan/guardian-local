@@ -73,8 +73,9 @@ export class ExportNarrativeGenerator implements IExportNarrativeGenerator {
       [{ role: 'user', content: userPrompt }],
       {
         systemPrompt,
-        // Use a higher max token limit for narrative generation
-        maxTokens: 4096,
+        // Narrative includes detailed analysis for all 10 dimensions with evidence,
+        // strengths/weaknesses, and recommendations. 16K tokens for comprehensive reports.
+        maxTokens: 16000,
       }
     );
 

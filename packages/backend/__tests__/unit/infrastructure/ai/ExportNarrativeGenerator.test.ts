@@ -124,7 +124,7 @@ describe('ExportNarrativeGenerator', () => {
         [{ role: 'user', content: 'User prompt' }],
         {
           systemPrompt: 'System prompt',
-          maxTokens: 4096,
+          maxTokens: 16000,
         }
       )
     })

@@ -5,13 +5,25 @@
   <title>Guardian Risk Assessment Report</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       font-family: 'Segoe UI', Tahoma, sans-serif;
       color: #1f2937;
       line-height: 1.6;
       padding: 40px;
+      font-size: 14px;
     }
 
+    /* ===== PAGE BREAK CONTROLS ===== */
+    .page-break { page-break-before: always; }
+    .avoid-break { page-break-inside: avoid; }
+    h1, h2, h3, h4 { page-break-after: avoid; }
+    .section { page-break-inside: avoid; }
+
+    /* Keep headers with their content */
+    h2 + *, h3 + * { page-break-before: avoid; }
+
+    /* ===== HEADER ===== */
     .header {
       border-bottom: 3px solid #7c3aed;
       padding-bottom: 20px;
@@ -37,6 +49,7 @@
       font-size: 12px;
     }
 
+    /* ===== SCORE BANNER ===== */
     .score-banner {
       display: flex;
       justify-content: space-between;
@@ -45,6 +58,7 @@
       padding: 24px;
       border-radius: 12px;
       margin-bottom: 30px;
+      page-break-inside: avoid;
     }
 
     .composite-score {
@@ -54,7 +68,7 @@
     .composite-score .value {
       font-size: 48px;
       font-weight: bold;
-      color: #1f2937;
+      color: #7c3aed;
     }
 
     .composite-score .label {
@@ -74,54 +88,89 @@
     .recommendation.decline { background: #fee2e2; color: #991b1b; }
     .recommendation.more_info { background: #dbeafe; color: #1e40af; }
 
+    .overall-risk {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .overall-risk strong {
+      text-transform: uppercase;
+    }
+
+    /* ===== SECTIONS ===== */
     .section {
       margin-bottom: 30px;
     }
 
     .section h2 {
       font-size: 18px;
-      color: #374151;
+      color: #7c3aed;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 2px solid #e5e7eb;
+      page-break-after: avoid;
     }
 
+    /* ===== EXECUTIVE SUMMARY ===== */
     .executive-summary {
       background: #f9fafb;
       padding: 16px;
       border-radius: 8px;
       font-size: 14px;
+      border-left: 4px solid #7c3aed;
     }
 
+    /* ===== KEY FINDINGS ===== */
     .findings-list {
       list-style: none;
     }
 
     .findings-list li {
-      padding: 8px 0;
-      padding-left: 20px;
+      padding: 10px 0;
+      padding-left: 24px;
       position: relative;
       font-size: 14px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
+    .findings-list li:last-child {
+      border-bottom: none;
     }
 
     .findings-list li::before {
-      content: "•";
-      color: #7c3aed;
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: #f59e0b;
+      border-radius: 50%;
       position: absolute;
       left: 0;
+      top: 14px;
     }
 
+    /* ===== DIMENSION TABLE ===== */
     .dimension-table {
       width: 100%;
       border-collapse: collapse;
       font-size: 14px;
+      page-break-inside: avoid;
     }
 
     .dimension-table th {
       text-align: left;
       padding: 12px;
-      background: #f3f4f6;
-      border-bottom: 1px solid #e5e7eb;
+      background: #7c3aed;
+      color: white;
+      font-weight: 600;
+    }
+
+    .dimension-table th:first-child {
+      border-radius: 8px 0 0 0;
+    }
+
+    .dimension-table th:last-child {
+      border-radius: 0 8px 0 0;
     }
 
     .dimension-table td {
@@ -129,6 +178,19 @@
       border-bottom: 1px solid #e5e7eb;
     }
 
+    .dimension-table tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    .dimension-table tr:last-child td:first-child {
+      border-radius: 0 0 0 8px;
+    }
+
+    .dimension-table tr:last-child td:last-child {
+      border-radius: 0 0 8px 0;
+    }
+
+    /* ===== SCORE BARS ===== */
     .score-bar {
       width: 100px;
       height: 8px;
@@ -147,11 +209,14 @@
     .risk-high { background: #f97316; }
     .risk-critical { background: #ef4444; }
 
+    /* ===== RISK BADGES ===== */
     .risk-badge {
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      display: inline-block;
     }
 
     .risk-badge.low { background: #dcfce7; color: #166534; }
@@ -159,6 +224,173 @@
     .risk-badge.high { background: #ffedd5; color: #c2410c; }
     .risk-badge.critical { background: #fee2e2; color: #991b1b; }
 
+    /* ===== NARRATIVE CONTENT STYLING ===== */
+    .narrative {
+      line-height: 1.7;
+    }
+
+    .narrative h1 {
+      font-size: 22px;
+      color: #7c3aed;
+      margin-top: 30px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #7c3aed;
+      page-break-after: avoid;
+    }
+
+    .narrative h2 {
+      font-size: 18px;
+      color: #374151;
+      margin-top: 28px;
+      margin-bottom: 14px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #e5e7eb;
+      page-break-after: avoid;
+    }
+
+    .narrative h3 {
+      font-size: 15px;
+      color: #4b5563;
+      margin-top: 20px;
+      margin-bottom: 10px;
+      page-break-after: avoid;
+    }
+
+    .narrative h4 {
+      font-size: 14px;
+      color: #6b7280;
+      margin-top: 16px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .narrative p {
+      margin-bottom: 12px;
+      text-align: justify;
+    }
+
+    .narrative strong {
+      color: #1f2937;
+      font-weight: 600;
+    }
+
+    .narrative em {
+      font-style: italic;
+      color: #4b5563;
+    }
+
+    /* Narrative lists */
+    .narrative ul, .narrative ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+
+    .narrative ul {
+      list-style: none;
+    }
+
+    .narrative ul li {
+      position: relative;
+      padding-left: 16px;
+      margin-bottom: 8px;
+    }
+
+    .narrative ul li::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: #7c3aed;
+      border-radius: 50%;
+      position: absolute;
+      left: 0;
+      top: 8px;
+    }
+
+    .narrative ol li {
+      margin-bottom: 8px;
+    }
+
+    /* Narrative tables */
+    .narrative table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13px;
+      page-break-inside: avoid;
+    }
+
+    .narrative table th {
+      background: #f3f4f6;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .narrative table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .narrative table tr:nth-child(even) {
+      background: #f9fafb;
+    }
+
+    /* Horizontal rules in narrative */
+    .narrative hr {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 24px 0;
+    }
+
+    /* Blockquotes for emphasis */
+    .narrative blockquote {
+      border-left: 4px solid #7c3aed;
+      background: #f5f3ff;
+      padding: 12px 16px;
+      margin: 16px 0;
+      font-style: italic;
+    }
+
+    /* Code/monospace for IDs, references */
+    .narrative code {
+      font-family: monospace;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    /* Risk level highlighting in text */
+    .narrative .risk-high-text,
+    .narrative strong:contains('HIGH'),
+    .narrative strong:contains('CRITICAL') {
+      color: #dc2626;
+    }
+
+    .narrative .risk-medium-text {
+      color: #d97706;
+    }
+
+    .narrative .risk-low-text {
+      color: #16a34a;
+    }
+
+    /* Dimension sections - keep together */
+    .narrative h2 + p,
+    .narrative h2 + ul,
+    .narrative h2 + ol,
+    .narrative h2 + table {
+      page-break-before: avoid;
+    }
+
+    /* Priority callouts */
+    .narrative strong:first-child {
+      display: inline-block;
+    }
+
+    /* ===== FOOTER ===== */
     .footer {
       margin-top: 40px;
       padding-top: 20px;
@@ -168,7 +400,40 @@
       text-align: center;
     }
 
-    .page-break { page-break-before: always; }
+    /* ===== PRINT OPTIMIZATIONS ===== */
+    @media print {
+      body {
+        padding: 20px;
+      }
+
+      .page-break {
+        page-break-before: always;
+      }
+
+      .section {
+        page-break-inside: avoid;
+      }
+
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+
+      .dimension-table,
+      .narrative table {
+        page-break-inside: avoid;
+      }
+
+      .score-banner {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .risk-badge,
+      .recommendation {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
   </style>
 </head>
 <body>
@@ -193,7 +458,7 @@
     </div>
     <div>
       <span class="recommendation {{recommendation}}">{{recommendationLabel}}</span>
-      <p style="margin-top: 8px; font-size: 14px; color: #6b7280;">
+      <p class="overall-risk">
         Overall Risk: <strong>{{overallRiskRating}}</strong>
       </p>
     </div>
@@ -247,7 +512,7 @@
   <!-- Narrative Report -->
   <div class="section page-break">
     <h2>Detailed Analysis</h2>
-    <div class="narrative">{{narrativeReport}}</div>
+    <div class="narrative">{{{narrativeReport}}}</div>
   </div>
 
   <!-- Footer -->

@@ -339,14 +339,14 @@ describe('ScoringService', () => {
         expect(result.report?.scoringDurationMs).toBeGreaterThanOrEqual(0)
       })
 
-      it('should pass maxTokens: 2500 to LLM client for scoring (Story 20.3.2)', async () => {
+      it('should pass maxTokens: 8000 to LLM client for scoring (Story 20.3.2)', async () => {
         await service.score(defaultInput, jest.fn())
 
-        // Verify maxTokens is set to 2500 for scoring
-        // This optimizes output tokens as scoring tool payload only needs ~1200 tokens
+        // Verify maxTokens is set to 8000 for scoring
+        // 10 dimensions with findings + executive summary needs ~6-7K tokens
         expect(mockLLMClient.streamWithTool).toHaveBeenCalledWith(
           expect.objectContaining({
-            maxTokens: 2500,
+            maxTokens: 8000,
           })
         )
       })
