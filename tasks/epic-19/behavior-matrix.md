@@ -15,10 +15,11 @@
 6. [Mode-Specific Behaviors](#mode-specific-behaviors)
 7. [Send Button Rules](#send-button-rules)
 8. [UI Affordances](#ui-affordances)
-9. [Cross-Session Persistence](#cross-session-persistence)
-10. [Error Handling](#error-handling)
-11. [Central Helper Functions](#central-helper-functions)
-12. [Test Mapping](#test-mapping)
+9. [Drag & Drop Upload](#drag--drop-upload)
+10. [Cross-Session Persistence](#cross-session-persistence)
+11. [Error Handling](#error-handling)
+12. [Central Helper Functions](#central-helper-functions)
+13. [Test Mapping](#test-mapping)
 
 ---
 
@@ -424,6 +425,89 @@ When files are in mixed stages, the aria-label follows this priority:
 
 ---
 
+## Drag & Drop Upload
+
+> **Epic 19.5:** Drag-and-drop file upload complements the existing paperclip click-to-upload.
+
+### Overview
+
+Users can add files to the composer via two methods:
+1. **Paperclip button** - Click to open file picker (existing)
+2. **Drag & drop** - Drag files onto composer area (Epic 19.5)
+
+Both methods call the same `addFiles()` hook and follow identical validation rules.
+
+### Implementation Details
+
+| Aspect | Implementation |
+|--------|----------------|
+| Library | `react-dropzone` v14.3.8 |
+| Hook signature | `addFiles(files: FileList \| File[])` |
+| Dropzone config | `noClick: true`, `noKeyboard: true` |
+| File inputs | Dual: dropzone input + paperclip input (coexist) |
+
+### Visual Feedback
+
+| Drag State | Border | Background | Overlay Text |
+|------------|--------|------------|--------------|
+| Not dragging | `border-gray-200` | `bg-white` | None |
+| Dragging valid files | `border-blue-400 border-2` | `bg-blue-50/30` | "Drop files here" (blue) |
+| Dragging invalid files | `border-red-500 border-2` | `bg-red-50/30` | "Invalid file type" (red) |
+
+### Disabled States
+
+Dropzone is disabled (no visual feedback, drops ignored) when:
+
+| Condition | Disabled? | Rationale |
+|-----------|-----------|-----------|
+| `disabled` prop is true | Yes | Component-level disable |
+| `uploadEnabled` is false | Yes | No wsAdapter or conversationId |
+| `files.length >= 10` | Yes | At max file limit |
+| `isStreaming` is true | Yes | Mirrors paperclip behavior |
+| `isLoading` is true | Yes | Mirrors paperclip behavior |
+
+```typescript
+const dropzoneDisabled = disabled || !uploadEnabled || files.length >= 10 || isBusy;
+```
+
+### Accepted File Types
+
+| MIME Type | Extensions |
+|-----------|------------|
+| `application/pdf` | `.pdf` |
+| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | `.docx` |
+| `image/png` | `.png` |
+| `image/jpeg` | `.jpg`, `.jpeg` |
+
+**Max file size:** 20MB per file (matches server validation)
+**Max files:** `Math.max(0, 10 - files.length)` (dynamic based on current count)
+
+### Rejection Handling
+
+| Rejection Reason | User Feedback |
+|------------------|---------------|
+| Invalid file type | Toast error: "File type must be..." |
+| File too large | Toast error: "File is larger than 20MB" |
+| Too many files | Toast error: "Too many files" |
+
+### Accessibility
+
+| Feature | Implementation |
+|---------|----------------|
+| Drag overlay | `role="status"` `aria-live="polite"` |
+| Rejection feedback | Sonner toast (built-in aria-live) |
+| Non-color cues | Text overlay ("Drop files here" / "Invalid file type") |
+| Keyboard nav | `noKeyboard: true` - doesn't interfere with textarea |
+
+### Coexistence with Paperclip
+
+- Dropzone and paperclip operate independently
+- Both call the same `addFiles()` hook
+- Both respect the same validation rules (type, size, count, total size)
+- Files from either source are indistinguishable in the queue
+
+---
+
 ## Cross-Session Persistence
 
 Files persist across browser sessions **only after they are sent** and appear in the chat stream. Composer attachments (`pending` → `attached`) are session-scoped and do not persist across reloads.
@@ -774,6 +858,29 @@ export function wouldExceedTotalSize(
 | `Composer` | Aria-label shows "Uploading..." when any blocking |
 | `ModeSelector` | No warning triangle (hasIncompleteFiles prop removed) |
 
+### Drag & Drop Tests Required (Epic 19.5)
+
+| Test Category | Test Cases |
+|---------------|------------|
+| Visual Feedback | Drag feedback (blue border) on dragEnter |
+| Visual Feedback | Red border for invalid files (isDragReject) |
+| Visual Feedback | Clear feedback when drag ends |
+| File Drop | addFiles called on valid file drop |
+| File Drop | Toast error on invalid file type |
+| File Drop | Reject files when at max count |
+| Disabled States | Disabled when uploadEnabled=false |
+| Disabled States | Disabled when isStreaming=true |
+| Disabled States | Disabled when isLoading=true |
+| Disabled States | Disabled when disabled=true |
+| Coexistence | Paperclip upload still works |
+| Coexistence | Both drop and paperclip can add files |
+| File Types | Accept PDF files |
+| File Types | Accept DOCX files |
+| File Types | Accept PNG files |
+| File Types | Accept JPEG files |
+
+**Test file:** `apps/web/src/components/chat/__tests__/Composer.dragdrop.test.tsx`
+
 ### Integration Tests Required
 
 | Flow | Test Cases |
@@ -811,11 +918,15 @@ export function wouldExceedTotalSize(
 | 2024-01-13 | 1.2 | Removed ModeSelector warning triangle (hasIncompleteFiles), removed FileChip amber warning for detectedDocType, document type issues now handled via chat messages only |
 | 2024-01-13 | 1.3 | Added Cross-Session Persistence section documenting history loading, download availability, and orphaned file cleanup gap |
 | 2024-01-13 | 1.4 | Added Storage Lifecycle/Retention section with verified DB findings: upload failure leak, FK cascade conflict bug, missing infrastructure inventory |
+| 2026-01-14 | 1.5 | **Epic 19.5:** Added Drag & Drop Upload section - react-dropzone integration, visual feedback (blue/red borders), disabled states, accessibility, test mapping |
 
 ---
 
 ## References
 
 - Epic 19 Goals: `tasks/epic-19/epic-19-goals.md`
+- Epic 19.5 Goals: `tasks/epic-19.5/epic-19.5-goals.md`
 - Current Implementation: `apps/web/src/hooks/useMultiFileUpload.ts`
+- Composer (with dropzone): `apps/web/src/components/chat/Composer.tsx`
 - Stage Types: `apps/web/src/lib/websocket.ts` (`FileUploadStage`)
+- Drag-Drop Tests: `apps/web/src/components/chat/__tests__/Composer.dragdrop.test.tsx`
