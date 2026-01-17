@@ -1,0 +1,165 @@
+ ---
+  Scenario 1: Wrong Document Type in Scoring Mode
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  USER MISTAKE: Uploads vendor-whitepaper.pdf in Scoring mode                 │
+  │  (Thinking they were in Consult/Assessment mode)                             │
+  └─────────────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  STEP 1: Document Type Detection (BEFORE scoring triggers)                   │
+  │  ┌──────────────────────────────────────────────────────────────────────┐   │
+  │  │ Analyze file structure:                                               │   │
+  │  │                                                                       │   │
+  │  │ ✅ Scoring Document Indicators:          ❌ Non-Scoring Indicators:   │   │
+  │  │ - Question + Response columns            - Narrative text only        │   │
+  │  │ - Excel with answer fields filled        - No Q&A structure           │   │
+  │  │ - References assessment ID               - Marketing/policy content   │   │
+  │  │ - "Vendor Response" headers              - No response fields         │   │
+  │  └──────────────────────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────────┘
+                                │
+                ┌───────────────┴───────────────┐
+                ▼                               ▼
+  ┌─────────────────────────┐     ┌─────────────────────────────────────────────┐
+  │ VALID QUESTIONNAIRE     │     │ NOT A QUESTIONNAIRE                          │
+  │ → Proceed with scoring  │     │ → Guardian asks clarification:               │
+  │                         │     │                                              │
+  │                         │     │ "This looks like a vendor whitepaper, not    │
+  │                         │     │  a completed questionnaire. Would you like   │
+  │                         │     │  to:                                         │
+  │                         │     │                                              │
+  │                         │     │  [Switch to Consult] - Ask questions about   │
+  │                         │     │                        this document         │
+  │                         │     │  [Switch to Assessment] - Use this for       │
+  │                         │     │                          vendor intake       │
+  │                         │     │  [Score Anyway] - I know what I'm doing"     │
+  └─────────────────────────┘     └─────────────────────────────────────────────┘
+
+  ---
+  Scenario 2: Two Valid Scoring Documents (Different Assessments)
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  USER UPLOADS: vendorA-responses.xlsx + vendorB-responses.xlsx               │
+  │  Both are valid completed questionnaires for DIFFERENT vendors               │
+  └─────────────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  STEP 1: Detect Multiple Assessments                                         │
+  │  ┌──────────────────────────────────────────────────────────────────────┐   │
+  │  │ Parse each file:                                                      │   │
+  │  │                                                                       │   │
+  │  │ vendorA-responses.xlsx          vendorB-responses.xlsx                │   │
+  │  │ ├─ Vendor: "CloudSec Inc"       ├─ Vendor: "DataGuard LLC"            │   │
+  │  │ ├─ Assessment: ASM-001          ├─ Assessment: ASM-002                │   │
+  │  │ └─ Valid questionnaire ✓        └─ Valid questionnaire ✓              │   │
+  │  │                                                                       │   │
+  │  │ Detection: TWO different assessments found                            │   │
+  │  └──────────────────────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  STEP 2: Parallel Scoring (Both Assessments)                                 │
+  │  ┌──────────────────────────────────────────────────────────────────────┐   │
+  │  │ Progress in chat:                                                     │   │
+  │  │                                                                       │   │
+  │  │ ⏳ Scoring CloudSec Inc... [███████░░░] 70%                           │   │
+  │  │ ⏳ Scoring DataGuard LLC... [████░░░░░░] 40%                          │   │
+  │  │                                                                       │   │
+  │  │ (Can run in parallel or sequential - parallel preferred)              │   │
+  │  └──────────────────────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  STEP 3: Two Scoring Results in Chat                                         │
+  │  ┌──────────────────────────────────────────────────────────────────────┐   │
+  │  │ ┌─────────────────────────────────────────────────────────────────┐  │   │
+  │  │ │ 🏆 CloudSec Inc - Overall: 7.8/10                               │  │   │
+  │  │ │ ├─ Data Privacy: 8/10                                           │  │   │
+  │  │ │ ├─ Security Architecture: 8/10                                  │  │   │
+  │  │ │ └─ AI Ethics: 6/10                                              │  │   │
+  │  │ └─────────────────────────────────────────────────────────────────┘  │   │
+  │  │                                                                       │   │
+  │  │ ┌─────────────────────────────────────────────────────────────────┐  │   │
+  │  │ │ 🏆 DataGuard LLC - Overall: 6.5/10                              │  │   │
+  │  │ │ ├─ Data Privacy: 7/10                                           │  │   │
+  │  │ │ ├─ Security Architecture: 6/10                                  │  │   │
+  │  │ │ └─ AI Ethics: 5/10                                              │  │   │
+  │  │ └─────────────────────────────────────────────────────────────────┘  │   │
+  │  └──────────────────────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │  STEP 4: Address User Query with BOTH Scores as Context                      │
+  │  ┌──────────────────────────────────────────────────────────────────────┐   │
+  │  │ User asked: "Which vendor is better for our healthcare use case?"     │   │
+  │  │                                                                       │   │
+  │  │ Guardian responds:                                                    │   │
+  │  │ "Based on the scoring results, CloudSec Inc (7.8/10) outperforms     │   │
+  │  │  DataGuard LLC (6.5/10) overall. For healthcare specifically:         │   │
+  │  │                                                                       │   │
+  │  │  CloudSec strengths:                                                  │   │
+  │  │  - HIPAA compliance documented (Data Privacy: 8/10)                   │   │
+  │  │  - Strong encryption at rest and in transit                           │   │
+  │  │                                                                       │   │
+  │  │  DataGuard concerns:                                                  │   │
+  │  │  - AI Ethics gaps (5/10) - limited bias documentation                 │   │
+  │  │  - No healthcare-specific certifications mentioned                    │   │
+  │  │                                                                       │   │
+  │  │  Recommendation: CloudSec Inc for healthcare deployments."            │   │
+  │  └──────────────────────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+  ---
+  Summary: Smart Detection Logic
+
+  ┌─────────────────────────────────────────────────────────────────────────────┐
+  │                    SCORING MODE FILE VALIDATION                              │
+  └─────────────────────────────────────────────────────────────────────────────┘
+
+                      User uploads file(s) in Scoring mode
+                                      │
+                                      ▼
+                      ┌───────────────────────────────┐
+                      │ For each file: Is it a valid  │
+                      │ completed questionnaire?      │
+                      └───────────────────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              ▼                       ▼                       ▼
+      ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+      │ ALL valid     │       │ SOME valid    │       │ NONE valid    │
+      │ questionnaires│       │ (mixed)       │       │               │
+      └───────────────┘       └───────────────┘       └───────────────┘
+              │                       │                       │
+              ▼                       ▼                       ▼
+      ┌───────────────┐       ┌───────────────┐       ┌───────────────┐
+      │ Check vendor/ │       │ "File X looks │       │ "These don't  │
+      │ assessment IDs│       │ like a policy │       │ look like     │
+      │               │       │ doc. Score    │       │ questionnaires│
+      │ Same? → Merge │       │ the others?"  │       │ Switch mode?" │
+      │ Diff? → Both  │       │ [Yes] [No]    │       │               │
+      └───────────────┘       └───────────────┘       └───────────────┘
+
+  ---
+  Decisions Confirmed
+  ┌───────────────────────────────────┬─────────────────────────────────────────────────────────┐
+  │             Scenario              │                        Behavior                         │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Single valid questionnaire        │ Auto-score, address user query after                    │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Single non-questionnaire          │ Ask clarification, offer mode switch                    │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Multiple files, same vendor       │ Merge into single score                                 │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Multiple files, different vendors │ Score BOTH, return two results                          │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ Mixed valid + invalid             │ Ask about invalid, score valid ones                     │
+  ├───────────────────────────────────┼─────────────────────────────────────────────────────────┤
+  │ User query present                │ Queue it, address after scoring with results as context │
+  └───────────────────────────────────┴─────────────────────────────────────────────────────────
