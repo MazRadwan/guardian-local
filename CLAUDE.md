@@ -178,8 +178,34 @@ pnpm --filter @guardian/backend db:migrate:test   # test database
 **Configured MCP Servers** (`.mcp.json`):
 - `next-devtools` - Next.js runtime diagnostics, docs, migrations
 - `shadcn` - Shadcn/ui component installation and usage
+- `chrome-devtools` - Browser QA, screenshots, console/network inspection
 
 **Use MCPs first** when working with Next.js or Shadcn - they have current docs, you don't.
+
+### Browser Automation MCP (STALE TRAINING DATA WARNING)
+
+**CRITICAL:** Your training data about browser automation MCPs is STALE.
+
+**Use Chrome DevTools MCP (Official Google):**
+```bash
+claude mcp add chrome-devtools npx chrome-devtools-mcp@latest
+```
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| **chrome-devtools-mcp** | ✅ USE THIS | Official Google, actively maintained |
+| ~~@modelcontextprotocol/server-puppeteer~~ | ❌ DEPRECATED | No longer supported |
+| ~~playwright-mcp~~ | ⚠️ AVOID | Less capable than Chrome DevTools MCP |
+
+**Chrome DevTools MCP tools:**
+- `navigate_page`, `new_page`, `wait_for` - Navigation
+- `click`, `fill`, `drag`, `hover` - User input
+- `list_console_messages` - Console errors/warnings
+- `list_network_requests`, `get_network_request` - Network inspection
+- `evaluate_script` - Run JS in browser
+- `emulate_cpu`, `emulate_network` - Performance testing
+
+**Do NOT suggest** Puppeteer MCP or basic Playwright - they are outdated/deprecated.
 
 ---
 
@@ -379,4 +405,4 @@ Main Agent identifies: "Need to complete Epic 9 Stories 9.1-9.3"
 - [ ] Update implementation log with fix details (recommended)
 - [ ] Clear commit message with "fix:" prefix
 
-**Last Updated:** 2026-01-05 v5.1 (added test database setup requirements)
+**Last Updated:** 2026-01-16 v5.2 (added Chrome DevTools MCP, deprecated Puppeteer/Playwright MCPs)

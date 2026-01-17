@@ -5,10 +5,56 @@
         "hooks": [
           {
             "type": "command",
+            "command": ".claude/hooks/stop.sh"
+          },
+          {
+            "type": "command",
             "command": "osascript -e 'display notification \"Task Complete\" with title \"Claude Code\" sound name \"Glass\"'"
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "plan-agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-plan.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "frontend-agent|backend-agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-implementation.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/post-tool-format.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(pnpm test:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm build:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)"
     ]
   }
 }
