@@ -80,37 +80,45 @@ export function Sidebar({
         aria-label="Sidebar navigation"
       >
         {/* Section 1: Header & Toggle */}
-        <div className={`flex items-center h-14 ${isMinimized ? 'justify-center p-2' : 'justify-between p-3'}`}>
-          {!isMinimized && (
+        {isMinimized ? (
+          <div className="p-2">
+            <button
+              onClick={onToggle}
+              className="flex h-10 w-10 mx-auto items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+              aria-expanded={false}
+            >
+              <PanelLeft className="h-5 w-5 text-gray-700" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center h-14 justify-between p-3">
             <span className="font-semibold text-lg text-gray-900 pl-2">Guardian</span>
-          )}
-          {/* Desktop: minimize/expand button, Mobile: close drawer button */}
-          <button
-            onClick={() => {
-              // Mobile: close drawer, Desktop: toggle minimize
-              if (window.innerWidth < 768) {
-                onCloseMobile?.();
-              } else {
-                onToggle();
-              }
-            }}
-            className={`flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors ${
-              isMinimized ? 'h-10 w-10 mx-auto' : 'h-8 w-8'
-            }`}
-            title={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
-            aria-label={isMinimized ? 'Expand sidebar' : 'Minimize sidebar'}
-            aria-expanded={!isMinimized}
-          >
-            <PanelLeft className={`h-5 w-5 text-gray-700 ${isMinimized ? '' : 'rotate-180'}`} />
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                if (window.innerWidth < 768) {
+                  onCloseMobile?.();
+                } else {
+                  onToggle();
+                }
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              title="Minimize sidebar"
+              aria-label="Minimize sidebar"
+              aria-expanded={true}
+            >
+              <PanelLeft className="h-5 w-5 text-gray-700 rotate-180" />
+            </button>
+          </div>
+        )}
 
         {/* Section 2: New Chat Button */}
         <div className="p-2">
           {isMinimized ? (
             <button
               onClick={onNewChat}
-              className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              className="flex h-10 w-10 mx-auto items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
               title="New Chat"
               aria-label="New Chat"
             >
@@ -134,7 +142,7 @@ export function Sidebar({
           <div className="p-2">
             <button
               onClick={() => setIsSearchOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+              className="flex h-10 w-10 mx-auto items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
               title="Search conversations"
               aria-label="Search conversations"
             >
