@@ -1,8 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @layer base {
   body {
     @apply bg-white text-gray-900;
+    font-family: 'Atkinson Hyperlegible', sans-serif;
   }
 }
 
@@ -44,5 +46,31 @@
 
   .animate-pulse-subtle {
     animation: pulse-subtle 2s ease-in-out infinite;
+  }
+
+  /* Epic 21 Story 21.1: Pulsing shield avatar animation */
+  @keyframes pulse-shield {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.5);
+    }
+    50% {
+      transform: scale(1.18);
+      box-shadow: 0 0 0 14px rgba(14, 165, 233, 0);
+    }
+  }
+
+  .animate-pulse-shield {
+    animation: pulse-shield 1.5s ease-in-out infinite;
+  }
+
+  /* Epic 21 Story 21.1: Shimmer text animation */
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
   }
 }

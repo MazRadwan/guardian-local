@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { SquarePen, LogOut, Search, PanelLeft } from 'lucide-react';
+import { SquarePen, LogOut, Search, PanelLeft, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
 import { ConversationSearchModal } from './ConversationSearchModal';
@@ -94,7 +94,10 @@ export function Sidebar({
           </div>
         ) : (
           <div className="flex items-center h-14 justify-between p-3">
-            <span className="font-semibold text-lg text-gray-900 pl-2">Guardian</span>
+            <div className="flex items-center gap-2 pl-2">
+              <Shield className="h-5 w-5 text-gray-900" />
+              <span className="font-semibold text-lg text-gray-900">Guardian</span>
+            </div>
             <button
               onClick={() => {
                 if (window.innerWidth < 768) {

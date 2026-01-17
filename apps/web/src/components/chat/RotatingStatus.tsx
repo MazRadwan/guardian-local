@@ -61,9 +61,9 @@ export function RotatingStatus({ status, currentMessage }: RotatingStatusProps) 
   const isLoading = status !== 'complete' && status !== 'error';
 
   return (
-    <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
+    <div className="flex items-center gap-3 p-4 bg-sky-50 rounded-xl">
       {isLoading && (
-        <Loader2 className="h-5 w-5 text-purple-600 animate-spin flex-shrink-0" />
+        <Loader2 className="h-5 w-5 text-sky-600 animate-spin flex-shrink-0" />
       )}
       <span className="text-gray-700">{displayMessage}</span>
     </div>

@@ -39,14 +39,14 @@ export function FileChipInChat({ filename, mimeType, onClick }: FileChipInChatPr
       onClick={onClick}
       className={cn(
         'inline-flex items-center gap-2 px-3 py-2 rounded-lg max-w-xs',
-        'bg-gray-100 border border-gray-200',
-        'hover:bg-gray-200 transition-colors cursor-pointer',
+        'bg-white border border-slate-200',
+        'hover:bg-slate-50 transition-colors cursor-pointer',
         'text-left'
       )}
       aria-label={`Download ${filename}`}
     >
       {/* Document icon */}
-      <div className="flex-shrink-0 w-8 h-8 bg-blue-500 rounded flex items-center justify-center">
+      <div className="flex-shrink-0 w-8 h-8 bg-sky-500 rounded flex items-center justify-center">
         <FileText className="h-4 w-4 text-white" aria-hidden="true" />
       </div>
 
@@ -55,7 +55,7 @@ export function FileChipInChat({ filename, mimeType, onClick }: FileChipInChatPr
         <span className="text-sm text-gray-900 truncate max-w-[180px]" title={filename}>
           {filename}
         </span>
-        <span className="text-xs text-gray-500">{getTypeLabel()}</span>
+        <span className="text-xs text-sky-600">{getTypeLabel()}</span>
       </div>
     </button>
   );

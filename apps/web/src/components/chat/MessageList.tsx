@@ -8,7 +8,7 @@ import { ScoringResultCard } from './ScoringResultCard';
 import { ProgressMessage } from './ProgressMessage';
 import { VendorClarificationCard } from './VendorClarificationCard';
 import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ShieldCheck } from 'lucide-react';
 import type { Step } from '@/types/stepper';
 import type { QuestionnaireUIState } from './QuestionnairePromptCard';
 import type { ScoringResultData, ScoringStatus } from '@/types/scoring';
@@ -247,26 +247,19 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
             )}
 
             {isLoading && (
-              <div data-testid="typing-indicator" className="flex gap-3 py-6">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-                  </svg>
+              <div data-testid="typing-indicator" className="flex items-center gap-3 py-6">
+                {/* Pulsing Avatar */}
+                <div className="w-10 h-10 rounded-full bg-sky-500 flex items-center justify-center animate-pulse-shield">
+                  <ShieldCheck className="h-5 w-5 text-white" />
                 </div>
-                <div className="flex items-center gap-1 py-2">
-                  <span
-                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: '0ms', animationDuration: '1s' }}
-                  ></span>
-                  <span
-                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: '150ms', animationDuration: '1s' }}
-                  ></span>
-                  <span
-                    className="h-2 w-2 rounded-full bg-gray-400 animate-bounce"
-                    style={{ animationDelay: '300ms', animationDuration: '1s' }}
-                  ></span>
-                </div>
+
+                {/* Shimmer Text */}
+                <span
+                  className="text-sm font-medium bg-gradient-to-r from-slate-500 via-sky-400 to-slate-500 bg-clip-text text-transparent animate-shimmer"
+                  style={{ backgroundSize: '200% 100%' }}
+                >
+                  Guardian is thinking...
+                </span>
               </div>
             )}
 
@@ -274,10 +267,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
             {vendorClarification && (
               <div className="py-4" data-testid="vendor-clarification-container">
                 <div className="flex gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600 text-white">
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-                    </svg>
+                  <div className="flex w-10 h-10 shrink-0 items-center justify-center rounded-full bg-sky-500">
+                    <ShieldCheck className="h-5 w-5 text-white" />
                   </div>
                   <VendorClarificationCard
                     payload={vendorClarification.payload}
