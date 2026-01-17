@@ -25,5 +25,10 @@ const queryClient = postgres(DATABASE_URL, {
 // Create Drizzle instance with schema
 export const db = drizzle(queryClient, { schema })
 
+// Export transaction type derived from Drizzle's transaction API
+// This is the type passed to the callback in db.transaction(async (tx) => ...)
+// IMPORTANT: Must be declared after `db` to avoid TS errors
+export type DrizzleTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
 // Export query client for raw SQL queries if needed
 export { queryClient }

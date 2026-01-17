@@ -407,7 +407,9 @@ describe('Attachment Flow Integration Tests', () => {
       const userMessage = messages.find((m) => m.role === 'user');
 
       expect(userMessage).toBeDefined();
-      expect(userMessage!.content.text).toBe('');
+      // When user sends file-only message (no text), system adds placeholder
+      // to provide context to Claude about what files are attached
+      expect(userMessage!.content.text).toBe('[Uploaded file for analysis: file-only.pdf]');
       expect(userMessage!.attachments).toHaveLength(1);
       expect(userMessage!.attachments![0].fileId).toBe(fileRecord.id);
     });

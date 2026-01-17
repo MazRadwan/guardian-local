@@ -64,6 +64,9 @@ import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidato
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 import { TextExtractionService } from './infrastructure/extraction/TextExtractionService.js';
 import { VendorValidationService } from './application/services/VendorValidationService.js';
+import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativePromptBuilder.js';
+import { ExportNarrativeGenerator } from './infrastructure/ai/ExportNarrativeGenerator.js';
+import { DrizzleTransactionRunner } from './infrastructure/database/DrizzleTransactionRunner.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -150,13 +153,20 @@ const exportService = new ExportService(
   excelExporter
 );
 
-// Initialize scoring export service (Epic 15)
+// Initialize scoring export service (Epic 15, extended in Epic 20)
+const exportNarrativePromptBuilder = new ExportNarrativePromptBuilder();
+const exportNarrativeGenerator = new ExportNarrativeGenerator(
+  exportNarrativePromptBuilder,
+  claudeClient
+);
 const scoringExportService = new ScoringExportService(
   assessmentRepo,
   assessmentResultRepo,
   dimensionScoreRepo,
+  responseRepo,
   scoringPDFExporter,
-  scoringWordExporter
+  scoringWordExporter,
+  exportNarrativeGenerator
 );
 
 // Initialize file storage and validation (Epic 16)
@@ -173,9 +183,10 @@ const textExtractionService = new TextExtractionService();
 // Epic 18.4: Initialize vendor validation service
 const vendorValidationService = new VendorValidationService(fileRepo);
 
-// Initialize scoring components (Epic 15)
+// Initialize scoring components (Epic 15, Epic 20: added transactionRunner)
 const scoringPromptBuilder = new ScoringPromptBuilder();
 const scoringPayloadValidator = new ScoringPayloadValidator();
+const transactionRunner = new DrizzleTransactionRunner();
 const scoringService = new ScoringService(
   responseRepo,
   dimensionScoreRepo,
@@ -186,7 +197,8 @@ const scoringService = new ScoringService(
   documentParserService, // IScoringDocumentParser
   claudeClient,          // ILLMClient - ClaudeClient implements this
   scoringPromptBuilder,
-  scoringPayloadValidator
+  scoringPayloadValidator,
+  transactionRunner      // ITransactionRunner for atomic score storage
 );
 
 // Initialize controllers

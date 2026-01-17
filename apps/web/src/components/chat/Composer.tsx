@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent, forwardRef, useImperativeHandle } from 'react';
 import { toast } from 'sonner';
+import { useDropzone } from 'react-dropzone';
 import { Button } from '@/components/ui/button';
 import { Send, Paperclip, Square, Loader2 } from 'lucide-react';
 import { ModeSelector, ConversationMode } from './ModeSelector';
@@ -10,6 +11,7 @@ import { useMultiFileUpload, UploadMode } from '@/hooks/useMultiFileUpload';
 import type { WebSocketAdapterInterface } from '@/hooks/useWebSocketAdapter';
 import type { MessageAttachment } from '@/lib/websocket';
 import { isXButtonVisible, isBlocking, isSendable, isUploadingAriaLabel } from '@/lib/uploadStageHelpers';
+import { cn } from '@/lib/utils';
 
 // Stable fallback adapter for when wsAdapter is not provided
 // Module-level constant prevents new object identity on each render
@@ -108,6 +110,33 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
             : 'Document processed successfully',
           { duration: 3000 }
         );
+      },
+    });
+
+    // Epic 19 Story 19.5.2: Drag-and-drop file upload via react-dropzone
+    // Compute disabled state (mirrors paperclip behavior)
+    const isBusy = isStreaming || isLoading;
+    const dropzoneDisabled = disabled || !uploadEnabled || files.length >= 10 || isBusy;
+
+    const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({
+      accept: {
+        'application/pdf': ['.pdf'],
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+        'image/png': ['.png'],
+        'image/jpeg': ['.jpg', '.jpeg'],
+      },
+      maxSize: 20 * 1024 * 1024, // 20MB per file (matches server)
+      maxFiles: Math.max(0, 10 - files.length),
+      disabled: dropzoneDisabled,
+      noClick: true, // Paperclip handles click
+      noKeyboard: true, // Don't hijack textarea shortcuts
+      onDrop: (acceptedFiles) => {
+        addFiles(acceptedFiles);
+      },
+      onDropRejected: (fileRejections) => {
+        fileRejections.forEach(({ errors }) => {
+          errors.forEach((e) => toast.error(e.message));
+        });
       },
     });
 
@@ -277,7 +306,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
     // Enable send if we have text OR files that are ready for sending
     // Epic 18: Changed from hasFiles to canSendWithAttachments
     const isSendEnabled = (message.trim().length > 0 || (hasFiles && canSendWithAttachments)) && !disabled;
-    const isBusy = isStreaming || isLoading;
+    // Note: isBusy is defined earlier for dropzone disabled state
 
     return (
       <div className="bg-white p-2">
@@ -296,8 +325,36 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
 
         {/* Centered composer container */}
         <div className="max-w-3xl mx-auto">
-          {/* Elevated composer box */}
-          <div className="border border-gray-200 rounded-2xl shadow-lg bg-white overflow-hidden">
+          {/* Elevated composer box - Epic 19 Story 19.5.2: Wrapped with dropzone */}
+          <div
+            {...getRootProps()}
+            className={cn(
+              'border border-gray-200 rounded-2xl shadow-lg bg-white overflow-hidden transition-all duration-200 relative',
+              isDragActive && !isDragReject && 'border-blue-400 border-2 bg-blue-50/30',
+              isDragReject && 'border-red-500 border-2 bg-red-50/30'
+            )}
+          >
+            {/* Epic 19 Story 19.5.2: Drag overlay */}
+            {isDragActive && (
+              <div
+                className="absolute inset-0 flex items-center justify-center bg-blue-500/10 rounded-2xl pointer-events-none z-10"
+                role="status"
+                aria-live="polite"
+              >
+                <span
+                  className={cn(
+                    'font-medium',
+                    isDragReject ? 'text-red-600' : 'text-blue-600'
+                  )}
+                >
+                  {isDragReject ? 'Invalid file type' : 'Drop files here'}
+                </span>
+              </div>
+            )}
+
+            {/* Hidden dropzone input - separate from paperclip input */}
+            <input {...getInputProps()} className="hidden" />
+
             {/* Epic 17: File chips - INSIDE composer, above textarea */}
             {hasFiles && (
               <div className="px-4 pt-3">

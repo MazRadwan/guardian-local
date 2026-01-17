@@ -16,7 +16,8 @@ export type ScoringErrorCode =
   | 'PARSE_CONFIDENCE_TOO_LOW'
   | 'RATE_LIMITED'
   | 'DUPLICATE_FILE'
-  | 'SCORING_FAILED';
+  | 'SCORING_FAILED'
+  | 'STORAGE_FAILED'; // Epic 20.2.1: Transaction failure during score storage
 
 /**
  * Error thrown during scoring workflow with structured code

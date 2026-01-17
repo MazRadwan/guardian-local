@@ -28,6 +28,7 @@ describe('ExportService', () => {
     // Create mock repositories
     mockAssessmentRepo = {
       findById: jest.fn(),
+      findByIdWithVendor: jest.fn(), // Story 20.3.4: Combined lookup
       create: jest.fn(),
       update: jest.fn(),
       updateStatus: jest.fn(),

@@ -23,6 +23,7 @@ import type { IFileStorage } from '../../../../src/application/interfaces/IFileS
 import type { IScoringDocumentParser } from '../../../../src/application/interfaces/IScoringDocumentParser.js'
 import type { ILLMClient } from '../../../../src/application/interfaces/ILLMClient.js'
 import type { IPromptBuilder } from '../../../../src/application/interfaces/IPromptBuilder.js'
+import type { ITransactionRunner } from '../../../../src/application/interfaces/ITransactionRunner.js'
 import type { ScoringProgressEvent } from '../../../../src/domain/scoring/types.js'
 
 describe('ScoringService', () => {
@@ -30,12 +31,13 @@ describe('ScoringService', () => {
   let mockResponseRepo: jest.Mocked<IResponseRepository>
   let mockDimensionScoreRepo: jest.Mocked<IDimensionScoreRepository>
   let mockAssessmentResultRepo: jest.Mocked<IAssessmentResultRepository>
-  let mockAssessmentRepo: jest.Mocked<IAssessmentRepository & { getVendor: (id: string) => Promise<{ name: string }> }>
+  let mockAssessmentRepo: jest.Mocked<IAssessmentRepository>
   let mockFileRepo: jest.Mocked<IFileRepository>
   let mockFileStorage: jest.Mocked<IFileStorage>
   let mockDocumentParser: jest.Mocked<IScoringDocumentParser>
   let mockLLMClient: jest.Mocked<ILLMClient>
   let mockPromptBuilder: jest.Mocked<IPromptBuilder>
+  let mockTransactionRunner: jest.Mocked<ITransactionRunner>
   let validator: ScoringPayloadValidator
 
   const testUserId = 'user-1'
@@ -65,6 +67,9 @@ describe('ScoringService', () => {
       findByAssessmentId: jest.fn().mockResolvedValue([]),
       findByBatchId: jest.fn().mockResolvedValue([]),
       deleteByBatchId: jest.fn().mockResolvedValue(undefined),
+      // Epic 20: Orphan cleanup methods
+      findOrphanedBatches: jest.fn().mockResolvedValue([]),
+      deleteByBatchIdIfOrphaned: jest.fn().mockResolvedValue(0),
     } as jest.Mocked<IResponseRepository>
 
     mockDimensionScoreRepo = {
@@ -79,21 +84,35 @@ describe('ScoringService', () => {
       findByAssessmentId: jest.fn().mockResolvedValue(null),
       findByBatchId: jest.fn().mockResolvedValue(null),
       findLatestByAssessmentId: jest.fn().mockResolvedValue(null),
+      updateNarrativeReport: jest.fn().mockResolvedValue(undefined),
       countTodayForAssessment: jest.fn().mockResolvedValue(0),
       findRecentByFileHash: jest.fn().mockResolvedValue(null),
+      // Epic 20: Narrative generation concurrency control
+      claimNarrativeGeneration: jest.fn().mockResolvedValue(true),
+      finalizeNarrativeGeneration: jest.fn().mockResolvedValue(undefined),
+      failNarrativeGeneration: jest.fn().mockResolvedValue(undefined),
+      getNarrativeStatus: jest.fn().mockResolvedValue(null),
     } as jest.Mocked<IAssessmentResultRepository>
 
-    // Mock assessment repo with getVendor method
+    // Mock assessment repo with findByIdWithVendor method (Story 20.3.4)
+    const mockAssessmentEntity = {
+      id: testAssessmentId,
+      createdBy: testUserId,
+      solutionName: 'Test Solution',
+      solutionType: 'clinical_ai', // Used for rubric weight selection
+      assessmentType: 'comprehensive', // Used for question count (not weights)
+      vendorId: 'vendor-1',
+      status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
+    }
     mockAssessmentRepo = {
-      findById: jest.fn().mockResolvedValue({
-        id: testAssessmentId,
-        createdBy: testUserId,
-        solutionName: 'Test Solution',
-        assessmentType: 'clinical',
-        vendorId: 'vendor-1',
-        status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
+      // Story 20.3.4: Combined lookup used by ScoringService
+      findByIdWithVendor: jest.fn().mockResolvedValue({
+        assessment: mockAssessmentEntity,
+        vendor: { id: 'vendor-1', name: 'Test Vendor' },
       }),
-      getVendor: jest.fn().mockResolvedValue({ name: 'Test Vendor' }),
+      // Legacy methods kept for backward compatibility
+      findById: jest.fn().mockResolvedValue(mockAssessmentEntity),
+      getVendor: jest.fn().mockResolvedValue({ id: 'vendor-1', name: 'Test Vendor' }),
       updateStatus: jest.fn().mockResolvedValue(undefined),
       create: jest.fn(),
       findByVendorId: jest.fn(),
@@ -188,6 +207,14 @@ describe('ScoringService', () => {
       buildScoringUserPrompt: jest.fn().mockReturnValue('user prompt with responses'),
     } as jest.Mocked<IPromptBuilder>
 
+    // Mock transaction runner (Epic 20: clean architecture compliance)
+    mockTransactionRunner = {
+      run: jest.fn().mockImplementation(async (callback) => {
+        // Execute callback with a mock transaction context
+        return callback({})
+      }),
+    } as jest.Mocked<ITransactionRunner>
+
     validator = new ScoringPayloadValidator()
 
     service = new ScoringService(
@@ -200,7 +227,8 @@ describe('ScoringService', () => {
       mockDocumentParser,
       mockLLMClient,
       mockPromptBuilder,
-      validator
+      validator,
+      mockTransactionRunner
     )
   })
 
@@ -259,9 +287,10 @@ describe('ScoringService', () => {
         )
       })
 
-      it('should store dimension scores', async () => {
+      it('should store dimension scores with transaction context', async () => {
         await service.score(defaultInput, jest.fn())
 
+        // Epic 20.2.1: Verify transaction parameter is passed
         expect(mockDimensionScoreRepo.createBatch).toHaveBeenCalledWith(
           expect.arrayContaining([
             expect.objectContaining({
@@ -270,13 +299,15 @@ describe('ScoringService', () => {
               score: 75,
               riskRating: 'medium',
             }),
-          ])
+          ]),
+          expect.anything() // Transaction context
         )
       })
 
-      it('should store assessment result with provenance', async () => {
+      it('should store assessment result with provenance and transaction context', async () => {
         await service.score(defaultInput, jest.fn())
 
+        // Epic 20.2.1: Verify transaction parameter is passed
         expect(mockAssessmentResultRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
             assessmentId: testAssessmentId,
@@ -287,7 +318,8 @@ describe('ScoringService', () => {
             rubricVersion: expect.any(String),
             modelId: 'claude-3-5-sonnet-20241022',
             scoringDurationMs: expect.any(Number),
-          })
+          }),
+          expect.anything() // Transaction context
         )
       })
 
@@ -306,11 +338,35 @@ describe('ScoringService', () => {
         expect(typeof result.report?.scoringDurationMs).toBe('number')
         expect(result.report?.scoringDurationMs).toBeGreaterThanOrEqual(0)
       })
+
+      it('should pass maxTokens: 8000 to LLM client for scoring (Story 20.3.2)', async () => {
+        await service.score(defaultInput, jest.fn())
+
+        // Verify maxTokens is set to 8000 for scoring
+        // 10 dimensions with findings + executive summary needs ~6-7K tokens
+        expect(mockLLMClient.streamWithTool).toHaveBeenCalledWith(
+          expect.objectContaining({
+            maxTokens: 8000,
+          })
+        )
+      })
+
+      it('should enable usePromptCache for scoring (Story 20.3.1)', async () => {
+        await service.score(defaultInput, jest.fn())
+
+        // Verify prompt caching is enabled for scoring rubric
+        expect(mockLLMClient.streamWithTool).toHaveBeenCalledWith(
+          expect.objectContaining({
+            usePromptCache: true,
+          })
+        )
+      })
     })
 
     describe('authorization checks', () => {
       it('should fail if assessment not found', async () => {
-        mockAssessmentRepo.findById.mockResolvedValue(null)
+        // Story 20.3.4: Now using findByIdWithVendor
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue(null)
 
         const result = await service.score(defaultInput, jest.fn())
 
@@ -319,12 +375,16 @@ describe('ScoringService', () => {
       })
 
       it('should fail if user does not own the assessment', async () => {
-        mockAssessmentRepo.findById.mockResolvedValue({
-          id: testAssessmentId,
-          createdBy: 'other-user', // Different user owns this assessment
-          solutionName: 'Test',
-          assessmentType: 'clinical',
-        } as any)
+        // Story 20.3.4: Now using findByIdWithVendor
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: 'other-user', // Different user owns this assessment
+            solutionName: 'Test',
+            assessmentType: 'clinical',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
 
         const result = await service.score(defaultInput, jest.fn())
 
@@ -508,14 +568,18 @@ describe('ScoringService', () => {
     })
 
     describe('solution type determination', () => {
-      it('should use clinical_ai weights for clinical assessment', async () => {
-        mockAssessmentRepo.findById.mockResolvedValue({
-          id: testAssessmentId,
-          createdBy: testUserId,
-          solutionName: 'Clinical AI Tool',
-          assessmentType: 'clinical',
-          status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
-        } as any)
+      it('should use clinical_ai weights when solutionType is clinical_ai', async () => {
+        // Story 20.3.4: Now using findByIdWithVendor
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Clinical AI Tool',
+            solutionType: 'clinical_ai',
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
 
         mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
           opts.onTextDelta?.('Report')
@@ -531,14 +595,17 @@ describe('ScoringService', () => {
         )
       })
 
-      it('should use administrative_ai weights for administrative assessment', async () => {
-        mockAssessmentRepo.findById.mockResolvedValue({
-          id: testAssessmentId,
-          createdBy: testUserId,
-          solutionName: 'Admin AI Tool',
-          assessmentType: 'administrative',
-          status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
-        } as any)
+      it('should use administrative_ai weights when solutionType is administrative_ai', async () => {
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Admin AI Tool',
+            solutionType: 'administrative_ai',
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
 
         mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
           opts.onTextDelta?.('Report')
@@ -554,14 +621,17 @@ describe('ScoringService', () => {
         )
       })
 
-      it('should use patient_facing weights for patient assessment', async () => {
-        mockAssessmentRepo.findById.mockResolvedValue({
-          id: testAssessmentId,
-          createdBy: testUserId,
-          solutionName: 'Patient Portal',
-          assessmentType: 'patient',
-          status: 'exported', // Epic 15 Story 5a.4: Required for validation gate
-        } as any)
+      it('should use patient_facing weights when solutionType is patient_facing', async () => {
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Patient Portal',
+            solutionType: 'patient_facing',
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
 
         mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
           opts.onTextDelta?.('Report')
@@ -576,10 +646,219 @@ describe('ScoringService', () => {
           })
         )
       })
+
+      it('should default to clinical_ai when solutionType is null', async () => {
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Unknown Tool',
+            solutionType: null,
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
+
+        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+          opts.onTextDelta?.('Report')
+          opts.onToolUse?.('scoring_complete', validPayload)
+        })
+
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            solutionType: 'clinical_ai',
+          })
+        )
+      })
+
+      it('should default to clinical_ai when solutionType is undefined', async () => {
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Unknown Tool',
+            // solutionType not set (undefined)
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
+
+        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+          opts.onTextDelta?.('Report')
+          opts.onToolUse?.('scoring_complete', validPayload)
+        })
+
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            solutionType: 'clinical_ai',
+          })
+        )
+      })
+
+      it('should handle case-insensitive solutionType (e.g., Clinical_AI)', async () => {
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Clinical Tool',
+            solutionType: 'Clinical_AI', // Mixed case
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
+
+        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+          opts.onTextDelta?.('Report')
+          opts.onToolUse?.('scoring_complete', validPayload)
+        })
+
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            solutionType: 'clinical_ai',
+          })
+        )
+      })
+
+      it('should log warning and default to clinical_ai for invalid solutionType', async () => {
+        const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Unknown Tool',
+            solutionType: 'invalid_type', // Invalid value
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
+
+        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+          opts.onTextDelta?.('Report')
+          opts.onToolUse?.('scoring_complete', validPayload)
+        })
+
+        await service.score(defaultInput, jest.fn())
+
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Invalid solutionType "invalid_type"')
+        )
+        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            solutionType: 'clinical_ai',
+          })
+        )
+
+        consoleSpy.mockRestore()
+      })
+
+      it('should ignore assessmentType and use solutionType for weighting', async () => {
+        // This test verifies that the old assessmentType field does NOT affect weighting
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: {
+            id: testAssessmentId,
+            createdBy: testUserId,
+            solutionName: 'Admin Tool',
+            assessmentType: 'quick', // Old field - should be ignored
+            solutionType: 'administrative_ai', // New field - should be used
+            status: 'exported',
+          } as any,
+          vendor: { id: 'vendor-1', name: 'Test Vendor' },
+        })
+
+        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+          opts.onTextDelta?.('Report')
+          opts.onToolUse?.('scoring_complete', validPayload)
+        })
+
+        await service.score(defaultInput, jest.fn())
+
+        // Should use solutionType, not assessmentType
+        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+          expect.objectContaining({
+            solutionType: 'administrative_ai',
+          })
+        )
+      })
     })
   })
 
   describe('abort', () => {
+    it('should pass abort signal to document parser (Story 20.3.3)', async () => {
+      // Setup successful LLM call
+      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+        opts.onTextDelta?.('Report')
+        opts.onToolUse?.('scoring_complete', validPayload)
+      })
+
+      await service.score(
+        {
+          assessmentId: testAssessmentId,
+          conversationId: testConversationId,
+          fileId: testFileId,
+          userId: testUserId,
+        },
+        jest.fn()
+      )
+
+      // Verify parseForResponses was called with abortSignal
+      expect(mockDocumentParser.parseForResponses).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.any(Object),
+        expect.objectContaining({
+          abortSignal: expect.any(AbortSignal),
+        })
+      )
+    })
+
+    it('should return aborted result when parser returns parse aborted error (Story 20.3.3)', async () => {
+      // Mock parser returning aborted result
+      mockDocumentParser.parseForResponses.mockResolvedValue({
+        success: false,
+        error: 'Parse aborted',
+        assessmentId: null,
+        vendorName: null,
+        solutionName: null,
+        responses: [],
+        parsedQuestionCount: 0,
+        expectedQuestionCount: null,
+        isComplete: false,
+        unparsedQuestions: [],
+        confidence: 0,
+        metadata: {
+          filename: 'questionnaire.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 1024,
+          documentType: 'pdf' as const,
+          storagePath: '/storage/path',
+          uploadedAt: new Date(),
+          uploadedBy: testUserId,
+        },
+        parseTimeMs: 50,
+      })
+
+      const result = await service.score(
+        {
+          assessmentId: testAssessmentId,
+          conversationId: testConversationId,
+          fileId: testFileId,
+          userId: testUserId,
+        },
+        jest.fn()
+      )
+
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('Scoring aborted')
+      // LLM client should not be called since parsing was aborted
+      expect(mockLLMClient.streamWithTool).not.toHaveBeenCalled()
+    })
+
     it('should abort in-progress scoring', async () => {
       // Setup LLM call that checks abort signal and waits
       mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
@@ -641,8 +920,35 @@ describe('ScoringService', () => {
   })
 
   describe('error handling', () => {
+    it('should return STORAGE_FAILED error when transaction fails (Epic 20.2.1)', async () => {
+      // Setup successful LLM call
+      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
+        opts.onTextDelta?.('Report')
+        opts.onToolUse?.('scoring_complete', validPayload)
+      })
+
+      // Make dimension score insert fail
+      mockDimensionScoreRepo.createBatch.mockRejectedValue(new Error('Unique constraint violation'))
+
+      const result = await service.score(
+        {
+          assessmentId: testAssessmentId,
+          conversationId: testConversationId,
+          fileId: testFileId,
+          userId: testUserId,
+        },
+        jest.fn()
+      )
+
+      expect(result.success).toBe(false)
+      expect(result.code).toBe('STORAGE_FAILED')
+      expect(result.error).toContain('Transaction failed')
+      expect(result.error).toContain('Unique constraint violation')
+    })
+
     it('should emit error progress event on failure', async () => {
-      mockAssessmentRepo.findById.mockRejectedValue(new Error('Database connection failed'))
+      // Story 20.3.4: Now using findByIdWithVendor
+      mockAssessmentRepo.findByIdWithVendor.mockRejectedValue(new Error('Database connection failed'))
 
       const progressEvents: ScoringProgressEvent[] = []
       const result = await service.score(
@@ -661,7 +967,8 @@ describe('ScoringService', () => {
     })
 
     it('should clean up abort controller on error', async () => {
-      mockAssessmentRepo.findById.mockRejectedValue(new Error('Test error'))
+      // Story 20.3.4: Now using findByIdWithVendor
+      mockAssessmentRepo.findByIdWithVendor.mockRejectedValue(new Error('Test error'))
 
       await service.score(
         {

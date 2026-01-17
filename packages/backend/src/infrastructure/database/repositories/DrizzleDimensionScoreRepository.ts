@@ -5,7 +5,7 @@
  */
 
 import { eq, and, desc } from 'drizzle-orm'
-import { db } from '../client.js'
+import { db, type DrizzleTransaction } from '../client.js'
 import { dimensionScores, type DimensionScore, type NewDimensionScore } from '../schema/dimensionScores.js'
 import type { IDimensionScoreRepository } from '../../../application/interfaces/IDimensionScoreRepository.js'
 import type { DimensionScoreDTO, CreateDimensionScoreDTO } from '../../../domain/scoring/dtos.js'
@@ -14,8 +14,10 @@ import type { RiskRating } from '../../../domain/scoring/types.js'
 export class DrizzleDimensionScoreRepository implements IDimensionScoreRepository {
   /**
    * Create batch of dimension scores
+   * @param newScores - The dimension scores to create
+   * @param tx - Optional transaction context for atomic operations
    */
-  async createBatch(newScores: CreateDimensionScoreDTO[]): Promise<DimensionScoreDTO[]> {
+  async createBatch(newScores: CreateDimensionScoreDTO[], tx?: DrizzleTransaction): Promise<DimensionScoreDTO[]> {
     if (newScores.length === 0) {
       return []
     }
@@ -29,7 +31,9 @@ export class DrizzleDimensionScoreRepository implements IDimensionScoreRepositor
       findings: dto.findings,
     }))
 
-    const created = await db.insert(dimensionScores).values(values).returning()
+    // Use transaction if provided, otherwise use default db
+    const executor = tx ?? db
+    const created = await executor.insert(dimensionScores).values(values).returning()
 
     return created.map(this.toDTO)
   }

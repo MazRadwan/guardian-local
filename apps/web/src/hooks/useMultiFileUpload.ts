@@ -179,7 +179,7 @@ export interface UseMultiFileUploadReturn {
   /** Aggregate progress (0-100) across all files */
   aggregateProgress: number;
   /** Add files to queue (validates, doesn't upload yet) */
-  addFiles: (fileList: FileList) => void;
+  addFiles: (files: FileList | File[]) => void;
   /** Remove file by localIndex */
   removeFile: (localIndex: number) => void;
   /** Clear all files */
@@ -337,11 +337,12 @@ export function useMultiFileUpload(
    * Add files to queue (validates but doesn't upload)
    * Story 17.3.2: Core Operations
    * Epic 19 Story 19.1.4: Client-side total size validation
+   * Epic 19 Story 19.5.2: Accept FileList or File[] (for react-dropzone)
    */
   const addFiles = useCallback(
-    (fileList: FileList) => {
-      // Convert FileList to array for easier handling
-      const filesToAdd = Array.from(fileList);
+    (newFileInput: FileList | File[]) => {
+      // Convert to array (works for both FileList and File[])
+      const filesToAdd = Array.from(newFileInput);
 
       // Epic 19 Story 19.1.4: Check total size limit FIRST (before any individual validation)
       // This prevents partially adding files when total would exceed limit
@@ -352,7 +353,8 @@ export function useMultiFileUpload(
       }
 
       const newFiles: FileState[] = [];
-      const currentCount = files.length;
+      // Use current state length, not parameter length (was shadowing bug)
+      const currentCount = filesRef.current.length;
 
       for (let i = 0; i < filesToAdd.length; i++) {
         // Check max files limit

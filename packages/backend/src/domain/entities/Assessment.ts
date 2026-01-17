@@ -18,6 +18,18 @@ export interface CreateAssessmentData {
   vendorId: string
   assessmentType: AssessmentTypeValue
   solutionName?: string
+  /**
+   * Solution type for scoring weight selection.
+   *
+   * Should be one of the rubric SolutionType values:
+   * - 'clinical_ai' - Clinical decision support (weights clinical_risk highest)
+   * - 'administrative_ai' - Administrative/workflow tools (weights privacy_risk highest)
+   * - 'patient_facing' - Patient engagement platforms (weights privacy_risk highest)
+   *
+   * If not set or invalid, ScoringService defaults to 'clinical_ai'.
+   *
+   * @see docs/design/architecture/scoring-solution-type.md
+   */
   solutionType?: string
   assessmentMetadata?: AssessmentMetadata
   createdBy: string

@@ -28,6 +28,11 @@ export const responses = pgTable(
   (table) => ({
     assessmentBatchIdx: index('responses_assessment_batch_idx').on(table.assessmentId, table.batchId),
     positionIdx: index('responses_position_idx').on(table.assessmentId, table.sectionNumber, table.questionNumber),
+    // Epic 20: Indexes for orphan cleanup job (Story 20.2.2)
+    // batch_id index for efficient LEFT JOIN with assessment_results
+    batchIdIdx: index('responses_batch_id_idx').on(table.batchId),
+    // created_at index for retention window filtering
+    createdAtIdx: index('responses_created_at_idx').on(table.createdAt),
   })
 )
 

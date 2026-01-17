@@ -11,7 +11,7 @@
     "lint": "eslint src --ext .ts",
     "test": "jest --testPathIgnorePatterns=e2e-external",
     "test:unit": "jest --testPathPattern=unit",
-    "test:integration": "jest --testPathPattern=integration",
+    "test:integration": "jest --testPathPattern=integration --runInBand",
     "test:e2e": "jest --testPathPattern=e2e --testPathIgnorePatterns=e2e-external",
     "test:e2e:external": "jest --testPathPattern=e2e-external",
     "test:all": "jest",
@@ -21,7 +21,8 @@
     "db:generate": "cd ../.. && drizzle-kit generate",
     "db:migrate": "tsx src/infrastructure/database/migrate.ts",
     "db:migrate:test": "DATABASE_URL=$TEST_DATABASE_URL tsx src/infrastructure/database/migrate.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "cleanup:orphans": "tsx src/scripts/cleanupOrphans.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.35.0",

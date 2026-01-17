@@ -6,16 +6,29 @@ import {
 } from '../../src/application/interfaces/IScoringDocumentParser.js';
 
 // Mock pdf-parse module (v2 class-based API)
+// Default content includes Guardian markers to pass pre-check (Story 20.4.1)
 jest.mock('pdf-parse', () => ({
   PDFParse: jest.fn().mockImplementation(() => ({
-    getText: jest.fn().mockResolvedValue({ text: 'Extracted PDF text', total: 2, pages: [] }),
+    getText: jest.fn().mockResolvedValue({
+      text: `Assessment ID: 12345678-1234-1234-1234-123456789012
+GUARDIAN Security Assessment
+Section 1: Clinical Risk
+Question 1.1 - How do you validate AI outputs?`,
+      total: 2,
+      pages: [],
+    }),
     destroy: jest.fn().mockResolvedValue(undefined),
   })),
 }));
 
-// Mock mammoth module
+// Mock mammoth module - includes Guardian markers for pre-check
 jest.mock('mammoth', () => ({
-  extractRawText: jest.fn().mockResolvedValue({ value: 'Extracted DOCX text' }),
+  extractRawText: jest.fn().mockResolvedValue({
+    value: `Assessment ID: 12345678-1234-1234-1234-123456789012
+GUARDIAN Security Assessment
+Section 1: Clinical Risk
+Question 1.1 - How do you validate AI outputs?`,
+  }),
 }));
 
 // Mock dependencies
@@ -490,6 +503,487 @@ describe('DocumentParserService', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Unsupported document type');
+    });
+  });
+
+  // Story 20.3.3: Abort support for parsing
+  describe('Abort support (Story 20.3.3)', () => {
+    beforeEach(() => {
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse()),
+      });
+    });
+
+    it('returns failed result when aborted before extraction', async () => {
+      const abortController = new AbortController();
+      abortController.abort(); // Abort immediately
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Parse aborted');
+      expect(mockClaudeClient.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('returns failed result when aborted after extraction but before LLM call', async () => {
+      const abortController = new AbortController();
+
+      // Mock extraction to take some time, then abort before LLM call
+      // Since extraction is fast in tests, we need to abort during extraction
+      // The check happens after extractContent returns
+      const originalSendMessage = mockClaudeClient.sendMessage.getMockImplementation();
+      mockClaudeClient.sendMessage.mockImplementation(async () => {
+        // Should not reach here if abort check works
+        return { content: JSON.stringify(createScoringExtractionResponse()) };
+      });
+
+      // Abort before calling (simulates abort happening after extraction completes)
+      // We'll test this by aborting and verifying the error response
+      abortController.abort();
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Parse aborted');
+    });
+
+    it('returns failed result when LLM call throws due to abort', async () => {
+      const abortController = new AbortController();
+
+      // Mock sendMessage to throw an abort error
+      mockClaudeClient.sendMessage.mockRejectedValue(new Error('Request aborted'));
+
+      // Abort to set the signal state
+      abortController.abort();
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Parse aborted');
+    });
+
+    it('passes abort signal to Claude client for text documents', async () => {
+      const abortController = new AbortController();
+
+      await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(mockClaudeClient.sendMessage).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          abortSignal: abortController.signal,
+        })
+      );
+    });
+
+    it('passes abort signal to Vision client for image documents', async () => {
+      const abortController = new AbortController();
+
+      mockVisionClient.prepareDocument.mockResolvedValue([
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: 'base64data' },
+        },
+      ]);
+      mockVisionClient.analyzeImages.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse()),
+        usage: { inputTokens: 2000, outputTokens: 1000 },
+        stopReason: 'end_turn',
+      });
+
+      const metadata = createMetadata({
+        filename: 'questionnaire.jpg',
+        mimeType: 'image/jpeg',
+        documentType: 'image',
+      });
+
+      await service.parseForResponses(
+        Buffer.from('image content'),
+        metadata,
+        { abortSignal: abortController.signal }
+      );
+
+      expect(mockVisionClient.analyzeImages).toHaveBeenCalledWith(
+        expect.objectContaining({
+          abortSignal: abortController.signal,
+        })
+      );
+    });
+
+    it('continues normal operation when not aborted', async () => {
+      const abortController = new AbortController();
+      // Do NOT abort
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { abortSignal: abortController.signal }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.assessmentId).toBe('assessment-123');
+      expect(mockClaudeClient.sendMessage).toHaveBeenCalled();
+    });
+
+    it('works without abort signal (backward compatible)', async () => {
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+        // No options, no abortSignal
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.assessmentId).toBe('assessment-123');
+    });
+  });
+
+  // Story 20.4.1: Guardian Document Pre-Check
+  describe('Guardian Document Pre-Check (Story 20.4.1)', () => {
+    beforeEach(() => {
+      // Mock pdf-parse to return custom text
+      const { PDFParse } = require('pdf-parse');
+      PDFParse.mockImplementation((opts: { data: Buffer }) => ({
+        getText: jest.fn().mockResolvedValue({
+          text: opts.data.toString(),
+          total: 1,
+          pages: [],
+        }),
+        destroy: jest.fn().mockResolvedValue(undefined),
+      }));
+
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse()),
+      });
+    });
+
+    it('passes pre-check when valid Guardian document with markers', async () => {
+      const guardianText = `
+        Assessment ID: 12345678-1234-1234-1234-123456789012
+        GUARDIAN Security Assessment
+        Section 1: Clinical Risk
+        Question 1.1 - How do you validate outputs?
+      `;
+
+      const result = await service.parseForResponses(
+        Buffer.from(guardianText),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockClaudeClient.sendMessage).toHaveBeenCalled();
+    });
+
+    it('fails pre-check when document has no Guardian markers', async () => {
+      const nonGuardianText = `
+        This is just a random PDF document about something else entirely.
+        No assessment ID here, no sections, no questions.
+        Just regular content.
+      `;
+
+      const result = await service.parseForResponses(
+        Buffer.from(nonGuardianText),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('does not appear to be a Guardian questionnaire');
+      expect(mockClaudeClient.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('requires at least 2 markers to pass', async () => {
+      // Only one marker (Assessment ID)
+      const oneMarkerText = `
+        Assessment ID: 12345678-1234-1234-1234-123456789012
+        This document has an ID but nothing else recognizable.
+      `;
+
+      const result = await service.parseForResponses(
+        Buffer.from(oneMarkerText),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('does not appear to be a Guardian questionnaire');
+    });
+
+    it('passes with alternative question format (1.1 - )', async () => {
+      const altFormatText = `
+        Assessment ID: 12345678-1234-1234-1234-123456789012
+        1.1 - First question
+        1.2 - Second question
+      `;
+
+      const result = await service.parseForResponses(
+        Buffer.from(altFormatText),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('bypasses pre-check for image documents', async () => {
+      // Images require Vision API to read, so pre-check is skipped
+      mockVisionClient.prepareDocument.mockResolvedValue([
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: 'base64data' },
+        },
+      ]);
+      mockVisionClient.analyzeImages.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse()),
+        usage: { inputTokens: 2000, outputTokens: 1000 },
+        stopReason: 'end_turn',
+      });
+
+      const metadata = createMetadata({
+        filename: 'questionnaire.jpg',
+        mimeType: 'image/jpeg',
+        documentType: 'image',
+      });
+
+      const result = await service.parseForResponses(
+        Buffer.from('image content'),
+        metadata
+      );
+
+      // Should succeed because pre-check is bypassed for images
+      expect(result.success).toBe(true);
+      expect(mockVisionClient.analyzeImages).toHaveBeenCalled();
+    });
+
+    it('fails pre-check for empty/short documents', async () => {
+      const shortText = 'Too short';
+
+      const result = await service.parseForResponses(
+        Buffer.from(shortText),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('does not appear to be a Guardian questionnaire');
+    });
+
+    it('provides descriptive error message on pre-check failure', async () => {
+      const nonGuardianText = 'Random document content without any markers';
+
+      const result = await service.parseForResponses(
+        Buffer.from(nonGuardianText),
+        createMetadata()
+      );
+
+      expect(result.error).toBe(
+        'Document does not appear to be a Guardian questionnaire. Please upload an exported questionnaire PDF or Word document.'
+      );
+    });
+  });
+
+  // Story 20.4.2: Per-Response Truncation
+  describe('Per-Response Truncation (Story 20.4.2)', () => {
+    beforeEach(() => {
+      // Mock pdf-parse to return Guardian-like content
+      const { PDFParse } = require('pdf-parse');
+      PDFParse.mockImplementation(() => ({
+        getText: jest.fn().mockResolvedValue({
+          text: `Assessment ID: 12345678-1234-1234-1234-123456789012
+                 Section 1: Test
+                 Question 1.1 - Test question`,
+          total: 1,
+          pages: [],
+        }),
+        destroy: jest.fn().mockResolvedValue(undefined),
+      }));
+    });
+
+    it('does not truncate short responses', async () => {
+      const shortResponse = 'Short response text';
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({
+          responses: [{
+            sectionNumber: 1,
+            sectionTitle: 'Test',
+            questionNumber: 1,
+            questionText: 'Test question',
+            responseText: shortResponse,
+            confidence: 0.9,
+            hasVisualContent: false,
+            visualContentDescription: null,
+          }],
+        })),
+      });
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.responses[0].responseText).toBe(shortResponse);
+      expect(result.responses[0].responseText).not.toContain('[truncated]');
+    });
+
+    it('truncates long responses to limit', async () => {
+      const longResponse = 'A'.repeat(3000); // 3000 chars, over 2000 limit
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({
+          responses: [{
+            sectionNumber: 1,
+            sectionTitle: 'Test',
+            questionNumber: 1,
+            questionText: 'Test question',
+            responseText: longResponse,
+            confidence: 0.9,
+            hasVisualContent: false,
+            visualContentDescription: null,
+          }],
+        })),
+      });
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(true);
+      // 2000 - ' [truncated]'.length = 1988
+      expect(result.responses[0].responseText.length).toBeLessThanOrEqual(2000);
+      expect(result.responses[0].responseText).toContain('[truncated]');
+    });
+
+    it('appends [truncated] notice to truncated responses', async () => {
+      const longResponse = 'B'.repeat(2500);
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({
+          responses: [{
+            sectionNumber: 1,
+            sectionTitle: 'Test',
+            questionNumber: 1,
+            questionText: 'Test question',
+            responseText: longResponse,
+            confidence: 0.9,
+            hasVisualContent: false,
+            visualContentDescription: null,
+          }],
+        })),
+      });
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+      );
+
+      expect(result.responses[0].responseText.endsWith(' [truncated]')).toBe(true);
+    });
+
+    it('processes all responses (none dropped)', async () => {
+      const responses = Array.from({ length: 5 }, (_, i) => ({
+        sectionNumber: i + 1,
+        sectionTitle: `Section ${i + 1}`,
+        questionNumber: 1,
+        questionText: `Question ${i + 1}`,
+        responseText: i % 2 === 0 ? 'Short' : 'C'.repeat(3000), // Mix of short and long
+        confidence: 0.9,
+        hasVisualContent: false,
+        visualContentDescription: null,
+      }));
+
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({ responses })),
+      });
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.responses).toHaveLength(5); // All responses preserved
+    });
+
+    it('respects custom maxResponseChars option', async () => {
+      const longResponse = 'D'.repeat(1500); // 1500 chars
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({
+          responses: [{
+            sectionNumber: 1,
+            sectionTitle: 'Test',
+            questionNumber: 1,
+            questionText: 'Test question',
+            responseText: longResponse,
+            confidence: 0.9,
+            hasVisualContent: false,
+            visualContentDescription: null,
+          }],
+        })),
+      });
+
+      // Use custom limit of 1000 chars
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata(),
+        { maxResponseChars: 1000 }
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.responses[0].responseText.length).toBeLessThanOrEqual(1000);
+      expect(result.responses[0].responseText).toContain('[truncated]');
+    });
+
+    it('uses default 2000 char limit when maxResponseChars not specified', async () => {
+      const exactlyAtLimit = 'E'.repeat(2000); // Exactly 2000
+      const justOverLimit = 'F'.repeat(2001); // Just over
+
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: JSON.stringify(createScoringExtractionResponse({
+          responses: [
+            {
+              sectionNumber: 1,
+              sectionTitle: 'Test',
+              questionNumber: 1,
+              questionText: 'Q1',
+              responseText: exactlyAtLimit,
+              confidence: 0.9,
+              hasVisualContent: false,
+              visualContentDescription: null,
+            },
+            {
+              sectionNumber: 1,
+              sectionTitle: 'Test',
+              questionNumber: 2,
+              questionText: 'Q2',
+              responseText: justOverLimit,
+              confidence: 0.9,
+              hasVisualContent: false,
+              visualContentDescription: null,
+            },
+          ],
+        })),
+      });
+
+      const result = await service.parseForResponses(
+        Buffer.from('content'),
+        createMetadata()
+      );
+
+      expect(result.success).toBe(true);
+      // First response at exactly 2000 should NOT be truncated
+      expect(result.responses[0].responseText).toBe(exactlyAtLimit);
+      // Second response at 2001 should be truncated
+      expect(result.responses[1].responseText).toContain('[truncated]');
     });
   });
 });

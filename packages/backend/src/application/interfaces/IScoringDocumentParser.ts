@@ -94,6 +94,12 @@ export interface ScoringParseOptions extends ParseOptions {
 
   /** Whether to include low-confidence extractions (default: false) */
   includeLowConfidence?: boolean;
+
+  /** Abort signal to cancel parsing (Story 20.3.3) */
+  abortSignal?: AbortSignal;
+
+  /** Maximum characters per response before truncation (default: 2000, Story 20.4.2) */
+  maxResponseChars?: number;
 }
 
 /**

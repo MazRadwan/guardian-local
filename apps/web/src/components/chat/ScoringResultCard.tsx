@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { RecommendationBadge } from './RecommendationBadge';
 import { ScoreDashboard } from './ScoreDashboard';
@@ -17,6 +17,127 @@ const RISK_RATING_COLORS: Record<RiskRating, string> = {
   high: 'text-orange-600',
   critical: 'text-red-600',
 };
+
+// Keywords to highlight with their corresponding styles
+const HIGHLIGHT_PATTERNS: Array<{ pattern: RegExp; className: string }> = [
+  { pattern: /\b(CRITICAL|critical)\b/g, className: 'font-semibold text-red-600' },
+  { pattern: /\b(HIGH|high)\s*(RISK|risk)?\b/g, className: 'font-semibold text-orange-600' },
+  { pattern: /\b(MEDIUM|medium)\s*(RISK|risk)?\b/g, className: 'font-semibold text-amber-600' },
+  { pattern: /\b(LOW|low)\s*(RISK|risk)?\b/g, className: 'font-semibold text-green-600' },
+  { pattern: /\b(APPROVE[D]?|CONDITIONAL\s*APPROVAL?|DECLINE[D]?)\b/gi, className: 'font-semibold text-purple-600' },
+];
+
+/**
+ * Split text into paragraphs for better readability
+ * Splits on double newlines, or groups sentences if no explicit breaks
+ */
+function splitIntoParagraphs(text: string): string[] {
+  // First try splitting by double newlines
+  const byNewlines = text.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  if (byNewlines.length > 1) {
+    return byNewlines;
+  }
+
+  // If no explicit paragraphs, split by sentences and group every 2-3
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  if (sentences.length <= 3) {
+    return [text];
+  }
+
+  const paragraphs: string[] = [];
+  for (let i = 0; i < sentences.length; i += 2) {
+    const chunk = sentences.slice(i, i + 2).join(' ').trim();
+    if (chunk) paragraphs.push(chunk);
+  }
+  return paragraphs;
+}
+
+/**
+ * Highlight risk-related keywords in text
+ */
+function highlightKeywords(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let keyIndex = 0;
+
+  // Find all matches across all patterns
+  const allMatches: Array<{ start: number; end: number; text: string; className: string }> = [];
+
+  for (const { pattern, className } of HIGHLIGHT_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      allMatches.push({
+        start: match.index,
+        end: match.index + match[0].length,
+        text: match[0],
+        className,
+      });
+    }
+  }
+
+  // Sort by position and remove overlaps
+  allMatches.sort((a, b) => a.start - b.start);
+  const filteredMatches = allMatches.filter((match, i) => {
+    if (i === 0) return true;
+    return match.start >= allMatches[i - 1].end;
+  });
+
+  // Build the result
+  let lastEnd = 0;
+  for (const match of filteredMatches) {
+    if (match.start > lastEnd) {
+      parts.push(<span key={keyIndex++}>{text.slice(lastEnd, match.start)}</span>);
+    }
+    parts.push(
+      <span key={keyIndex++} className={match.className}>
+        {match.text}
+      </span>
+    );
+    lastEnd = match.end;
+  }
+
+  if (lastEnd < text.length) {
+    parts.push(<span key={keyIndex++}>{text.slice(lastEnd)}</span>);
+  }
+
+  return parts.length > 0 ? parts : [<span key={0}>{text}</span>];
+}
+
+/**
+ * Executive Summary component with formatted paragraphs and highlighted keywords
+ */
+function FormattedExecutiveSummary({ text }: { text: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const paragraphs = useMemo(() => splitIntoParagraphs(text), [text]);
+  const isLong = text.length > 400;
+
+  // Show first paragraph only if collapsed and text is long
+  const visibleParagraphs = isLong && !isExpanded ? paragraphs.slice(0, 1) : paragraphs;
+  const hasMore = isLong && paragraphs.length > 1;
+
+  return (
+    <div className="space-y-3">
+      {visibleParagraphs.map((paragraph, i) => (
+        <p key={i} className="text-gray-700 text-sm leading-relaxed">
+          {highlightKeywords(paragraph)}
+        </p>
+      ))}
+      {hasMore && (
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-sm text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+        >
+          {isExpanded ? (
+            <>Show less <ChevronUp className="h-3 w-3" /></>
+          ) : (
+            <>Show more <ChevronDown className="h-3 w-3" /></>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export function ScoringResultCard({
   result,
@@ -63,7 +184,7 @@ export function ScoringResultCard({
       {/* Executive Summary */}
       <div className="px-6 py-4 border-b border-gray-100">
         <h4 className="text-sm font-semibold text-gray-900 mb-2">Executive Summary</h4>
-        <p className="text-gray-700 text-sm leading-relaxed">{result.executiveSummary}</p>
+        <FormattedExecutiveSummary text={result.executiveSummary} />
       </div>
 
       {/* Key Findings */}

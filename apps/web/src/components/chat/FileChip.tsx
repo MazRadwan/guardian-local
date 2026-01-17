@@ -30,11 +30,11 @@
 
 import { Loader2, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { DetectedDocType } from '@/lib/websocket';
+import type { DetectedDocType, FileUploadStage } from '@/lib/websocket';
 
 export interface FileChipProps {
   filename: string;
-  stage: 'pending' | 'uploading' | 'storing' | 'attached' | 'parsing' | 'complete' | 'error'; // Epic 18: Added 'attached'
+  stage: FileUploadStage; // Epic 19.5: Use shared type for consistency
   progress: number; // 0-100
   error?: string;
   onRemove: () => void;

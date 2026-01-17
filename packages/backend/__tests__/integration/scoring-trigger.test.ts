@@ -23,6 +23,8 @@ import type { IFileRepository } from '../../src/application/interfaces/IFileRepo
 import type { IFileStorage } from '../../src/application/interfaces/IFileStorage.js'
 import type { ILLMClient } from '../../src/application/interfaces/ILLMClient.js'
 import type { IPromptBuilder } from '../../src/application/interfaces/IPromptBuilder.js'
+import type { ITransactionRunner } from '../../src/application/interfaces/ITransactionRunner.js'
+import type { OrphanedBatchRef } from '../../src/application/interfaces/IResponseRepository.js'
 import { ScoringPayloadValidator } from '../../src/domain/scoring/ScoringPayloadValidator.js'
 import { Assessment } from '../../src/domain/entities/Assessment.js'
 import type { ScoringParseResult } from '../../src/application/interfaces/IScoringDocumentParser.js'
@@ -35,10 +37,19 @@ class MockResponseRepository implements IResponseRepository {
   async findByAssessmentId(_assessmentId: string): Promise<any[]> { return [] }
   async findByBatchId(_assessmentId: string, _batchId: string): Promise<any[]> { return [] }
   async deleteByBatchId(_assessmentId: string, _batchId: string): Promise<void> {}
+  // Epic 20: Orphan cleanup methods (updated interface)
+  async findOrphanedBatches(_olderThanHours: number): Promise<OrphanedBatchRef[]> { return [] }
+  async deleteByBatchIdIfOrphaned(_assessmentId: string, _batchId: string): Promise<number> { return 0 }
+}
+
+class MockTransactionRunner implements ITransactionRunner {
+  async run<T>(callback: (tx: unknown) => Promise<T>): Promise<T> {
+    return callback({})
+  }
 }
 
 class MockDimensionScoreRepository implements IDimensionScoreRepository {
-  async createBatch(_scores: any[]): Promise<any[]> { return [] }
+  async createBatch(_scores: any[], _tx?: unknown): Promise<any[]> { return [] }
   async findByAssessmentId(_assessmentId: string): Promise<any[]> { return [] }
   async findByBatchId(_assessmentId: string, _batchId: string): Promise<any[]> { return [] }
   async findLatestByAssessmentId(_assessmentId: string): Promise<any[]> { return [] }
@@ -48,13 +59,14 @@ class MockAssessmentResultRepository implements IAssessmentResultRepository {
   private results: CreateAssessmentResultDTO[] = []
   private rateLimitCount = 0
 
-  async create(result: CreateAssessmentResultDTO): Promise<any> {
+  async create(result: CreateAssessmentResultDTO, _tx?: unknown): Promise<any> {
     this.results.push(result)
     return { ...result, id: randomUUID(), scoredAt: new Date() }
   }
   async findByAssessmentId(_assessmentId: string): Promise<any[]> { return [] }
   async findByBatchId(_assessmentId: string, _batchId: string): Promise<any | null> { return null }
   async findLatestByAssessmentId(_assessmentId: string): Promise<any | null> { return null }
+  async updateNarrativeReport(_assessmentId: string, _batchId: string, _narrativeReport: string): Promise<void> {}
 
   // Story 5a.4 methods
   async countTodayForAssessment(_assessmentId: string): Promise<number> {
@@ -63,6 +75,16 @@ class MockAssessmentResultRepository implements IAssessmentResultRepository {
 
   async findRecentByFileHash(_fileHash: string, _hoursWindow: number): Promise<any | null> {
     // Not implemented for MVP
+    return null
+  }
+
+  // Epic 20: Narrative generation concurrency control
+  async claimNarrativeGeneration(_assessmentId: string, _batchId: string, _ttlMs?: number): Promise<boolean> {
+    return true
+  }
+  async finalizeNarrativeGeneration(_assessmentId: string, _batchId: string, _narrativeReport: string): Promise<void> {}
+  async failNarrativeGeneration(_assessmentId: string, _batchId: string, _error: string): Promise<void> {}
+  async getNarrativeStatus(_assessmentId: string, _batchId: string): Promise<{ status: any; error: string | null } | null> {
     return null
   }
 
@@ -94,6 +116,15 @@ class MockAssessmentRepository implements IAssessmentRepository {
   async getVendor(_assessmentId: string): Promise<{ id: string; name: string }> {
     return { id: randomUUID(), name: 'Test Vendor' }
   }
+  // Story 20.3.4: Combined assessment+vendor lookup
+  async findByIdWithVendor(id: string): Promise<{ assessment: Assessment; vendor: { id: string; name: string } } | null> {
+    const assessment = this.assessments.get(id)
+    if (!assessment) return null
+    return {
+      assessment,
+      vendor: { id: assessment.vendorId, name: 'Test Vendor' },
+    }
+  }
   async delete(_id: string): Promise<void> {}
   async list(_limit?: number, _offset?: number): Promise<Assessment[]> { return [] }
   async hasExportedAssessments(_userId: string): Promise<boolean> { return false }
@@ -116,6 +147,9 @@ class MockFileRepository implements IFileRepository {
 
   async create(_file: any): Promise<any> { return { id: randomUUID(), textExcerpt: null, parseStatus: 'pending' } }
   async findById(_id: string): Promise<any | null> { return null }
+  async findByIds(fileIds: string[]): Promise<any[]> {
+    return fileIds.map(id => this.files.get(id)).filter(Boolean)
+  }
   async findByConversation(_conversationId: string): Promise<any[]> { return [] }
   async findByIdAndConversation(_fileId: string, _conversationId: string): Promise<any | null> { return null }
   async findByConversationWithContext(_conversationId: string): Promise<any[]> { return [] }
@@ -248,7 +282,8 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
       mockDocumentParser,
       new MockLLMClient(),
       new MockPromptBuilder(),
-      new ScoringPayloadValidator()
+      new ScoringPayloadValidator(),
+      new MockTransactionRunner()
     )
   })
 
@@ -263,10 +298,40 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
 
   describe('Error Code: ASSESSMENT_NOT_FOUND', () => {
     it('should throw ASSESSMENT_NOT_FOUND when assessment does not exist', async () => {
+      // Epic 18: File ownership is checked BEFORE assessment existence
+      // Must set up an owned file first to reach the assessment check
+      const fileId = randomUUID()
+      mockFileRepo.addFile({
+        id: fileId,
+        userId: testUserId,
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        storagePath: '/test/path',
+        createdAt: new Date(),
+      })
+
+      // Configure parser to return a valid result with the non-existent assessment ID
+      const nonExistentAssessmentId = randomUUID()
+      mockDocumentParser.setParseResult({
+        success: true,
+        confidence: 0.9,
+        metadata: { filename: 'test.pdf', mimeType: 'application/pdf', sizeBytes: 1024, documentType: 'pdf', storagePath: '/test/path', uploadedAt: new Date(), uploadedBy: testUserId },
+        parseTimeMs: 100,
+        assessmentId: nonExistentAssessmentId,
+        vendorName: 'Test Vendor',
+        solutionName: 'Test Solution',
+        responses: [{ sectionNumber: 1, sectionTitle: 'Test', questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.9, hasVisualContent: false, visualContentDescription: null }],
+        expectedQuestionCount: 1,
+        parsedQuestionCount: 1,
+        unparsedQuestions: [],
+        isComplete: true,
+      })
+
       const input: ScoringInput = {
-        assessmentId: randomUUID(),
+        assessmentId: nonExistentAssessmentId,
         conversationId: testConversationId,
-        fileId: randomUUID(),
+        fileId,
         userId: testUserId,
       }
 
@@ -280,6 +345,19 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
 
   describe('Error Code: UNAUTHORIZED_ASSESSMENT', () => {
     it('should throw UNAUTHORIZED_ASSESSMENT when user does not own assessment', async () => {
+      // Epic 18: File ownership is checked BEFORE assessment ownership
+      // Must set up an owned file first to reach the assessment owner check
+      const fileId = randomUUID()
+      mockFileRepo.addFile({
+        id: fileId,
+        userId: testUserId,
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 1024,
+        storagePath: '/test/path',
+        createdAt: new Date(),
+      })
+
       const assessment = Assessment.fromPersistence({
         id: randomUUID(),
         vendorId: randomUUID(),
@@ -290,14 +368,30 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
         assessmentMetadata: null,
         createdAt: new Date(),
         updatedAt: new Date(),
-        createdBy: randomUUID(), // Different user
+        createdBy: randomUUID(), // Different user owns the assessment
       })
       mockAssessmentRepo.addAssessment(assessment)
+
+      // Configure parser to return the assessment ID
+      mockDocumentParser.setParseResult({
+        success: true,
+        confidence: 0.9,
+        metadata: { filename: 'test.pdf', mimeType: 'application/pdf', sizeBytes: 1024, documentType: 'pdf', storagePath: '/test/path', uploadedAt: new Date(), uploadedBy: testUserId },
+        parseTimeMs: 100,
+        assessmentId: assessment.id,
+        vendorName: 'Test Vendor',
+        solutionName: 'Test Solution',
+        responses: [{ sectionNumber: 1, sectionTitle: 'Test', questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.9, hasVisualContent: false, visualContentDescription: null }],
+        expectedQuestionCount: 1,
+        parsedQuestionCount: 1,
+        unparsedQuestions: [],
+        isComplete: true,
+      })
 
       const input: ScoringInput = {
         assessmentId: assessment.id,
         conversationId: testConversationId,
-        fileId: randomUUID(),
+        fileId,
         userId: testUserId, // Different from assessment owner
       }
 
@@ -334,6 +428,22 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
         sizeBytes: 1024,
         storagePath: '/test/path',
         createdAt: new Date(),
+      })
+
+      // Epic 18: Parser is called before assessment status check, must configure it
+      mockDocumentParser.setParseResult({
+        success: true,
+        confidence: 0.9,
+        metadata: { filename: 'test.pdf', mimeType: 'application/pdf', sizeBytes: 1024, documentType: 'pdf', storagePath: '/test/path', uploadedAt: new Date(), uploadedBy: testUserId },
+        parseTimeMs: 100,
+        assessmentId: assessment.id,
+        vendorName: 'Test Vendor',
+        solutionName: 'Test Solution',
+        responses: [{ sectionNumber: 1, sectionTitle: 'Test', questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.9, hasVisualContent: false, visualContentDescription: null }],
+        expectedQuestionCount: 1,
+        parsedQuestionCount: 1,
+        unparsedQuestions: [],
+        isComplete: true,
       })
 
       const input: ScoringInput = {
