@@ -17,12 +17,14 @@
 | Code Path | File | Persists `scoring_result`? | Links Assessment? |
 |-----------|------|---------------------------|-------------------|
 | HTTP upload → scoring | `DocumentUploadController.ts:706-726` | **YES** | **NO** (must fix) |
-| WebSocket scoring | `ChatServer.ts:807-823` | **NO** | YES |
+| WebSocket scoring | `ChatServer.ts:807-823` | **NO** | **NO** (must fix) |
+| Questionnaire generation | `QuestionnaireGenerationService.ts:372` | N/A | YES (only path that links) |
 
 This means:
 1. Historical messages MAY contain `scoring_result` components
-2. **CRITICAL:** `DocumentUploadController` must call `linkAssessment` after scoring for rehydration to work
-3. Story 22.1.3 uses fallback strategy (store primary, message fallback) to handle legacy data
+2. **CRITICAL:** BOTH `DocumentUploadController` AND `ChatServer` must call `linkAssessment` after scoring for rehydration to work
+3. Only conversations that went through questionnaire generation currently have `assessmentId` linked
+4. Story 22.1.3 uses fallback strategy (store primary, message fallback) to handle legacy data
 
 ### Response Type (MUST match existing)
 
@@ -69,14 +71,15 @@ E2E test fixtures must use PDF or DOCX format.
     |         | ScoringRehydrationController.ts (NEW)            |                   |
     |         | ScoringService.ts                                |                   |
     |         | DocumentUploadController.ts (add linkAssessment) |                   |
+    |         | ChatServer.ts (add linkAssessment)               |                   |
     |         | index.ts (route registration)                    |                   |
     +---------+--------------------------------------------------+-------------------+
     | 22.1.2  | chatStore.ts                                     | None              |
     |         | ChatInterface.tsx                                |                   |
     |         | lib/api/scoring.ts (NEW)                         |                   |
     +---------+--------------------------------------------------+-------------------+
-    | 22.1.3  | ChatMessage.tsx (add filter)                     | None (22.1.2 is  |
-    |         | MessageList.tsx (verify)                         | different file)  |
+    | 22.1.3  | ChatMessage.tsx (add isLastScoringMessage prop)  | None (22.1.2 is  |
+    |         | MessageList.tsx (latest-only logic)              | different file)  |
     |         | ChatInterface.tsx (add comment)                  |                   |
     +---------+--------------------------------------------------+-------------------+
     | 22.1.4  | e2e/scoring-persistence.spec.ts (NEW)            | None              |
@@ -104,6 +107,7 @@ E2E test fixtures must use PDF or DOCX format.
 |   - ScoringRehydrationController  |   - MessageList.tsx (verify)           |
 |   - ScoringService.ts             |   - ChatInterface.tsx (add comment)    |
 |   - DocumentUploadController.ts   |                                        |
+|   - ChatServer.ts                 |                                        |
 |   - index.ts                      |                                        |
 |                                   |                                        |
 |   backend-agent                   |   frontend-agent                       |
@@ -186,6 +190,7 @@ E2E test fixtures must use PDF or DOCX format.
 
 Sprint 1 is complete when:
 - [ ] `DocumentUploadController.runScoring()` calls `linkAssessment` after scoring success
+- [ ] `ChatServer.ts` WebSocket scoring calls `linkAssessment` after scoring success
 - [ ] GET /api/scoring/conversation/:conversationId endpoint returns scoring data
 - [ ] Frontend fetches and populates store on conversation load (with in-flight guard)
 - [ ] No duplicate scoring cards rendered (fallback strategy working)

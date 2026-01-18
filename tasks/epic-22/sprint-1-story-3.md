@@ -15,12 +15,14 @@ Ensure that only ONE scoring card renders per conversation, using a **fallback s
 1. If store has result for this conversation → render from store, skip message component
 2. If store is empty → render from message component (fallback for legacy/failed rehydration)
 3. Never render BOTH
+4. **Latest-only rule:** If multiple `scoring_result` components exist in messages (repeated scoring), only the LAST one renders
 
 ## Acceptance Criteria
 
 - [ ] Scoring card renders from store state when available (primary source)
 - [ ] If store is empty AND message has `scoring_result` component → render from message (fallback)
 - [ ] Never render duplicate cards (store AND message)
+- [ ] If multiple `scoring_result` components exist in history, only render the LAST one (latest-only rule)
 - [ ] Card position is consistent (after narrative message)
 - [ ] Historical messages with `scoring_result` components continue to work if rehydration fails
 - [ ] Document the fallback rendering pattern
@@ -31,11 +33,19 @@ Ensure that only ONE scoring card renders per conversation, using a **fallback s
 
 In `apps/web/src/components/chat/ChatMessage.tsx`, conditionally render `scoring_result`:
 
+**Note:** ChatMessage does NOT have a `conversationId` prop (see `ChatMessageProps` interface).
+Use `activeConversationId` from the store since messages are always rendered in the context of the active conversation.
+
 ```typescript
 // Epic 22: Conditional scoring_result rendering
 // Only render from message if store doesn't have result (fallback for failed rehydration)
+
+// Get activeConversationId from store (ChatMessage doesn't have conversationId prop)
+const activeConversationId = useChatStore((state) => state.activeConversationId);
 const scoringResultInStore = useChatStore(
-  (state) => state.scoringResultByConversation[conversationId]
+  (state) => activeConversationId
+    ? state.scoringResultByConversation[activeConversationId]
+    : null
 );
 
 const filteredComponents = components?.filter((c) => {
@@ -53,11 +63,45 @@ if (scoringResultComponent && !scoringResultInStore) {
 }
 ```
 
-### 2. Update MessageList Rendering
+### 2. Update MessageList Rendering (Latest-Only Rule)
 
 In `apps/web/src/components/chat/MessageList.tsx`:
 - Continue rendering `ScoringResultCard` from store when available
 - The card from store takes precedence; ChatMessage handles fallback
+- **Latest-only implementation:**
+
+```typescript
+// Find the LAST message index that has a scoring_result component
+const lastScoringMessageIndex = messages.reduceRight(
+  (found, msg, idx) => {
+    if (found !== -1) return found;
+    const hasScoringResult = msg.content?.components?.some(
+      (c) => c.type === 'scoring_result'
+    );
+    return hasScoringResult ? idx : -1;
+  },
+  -1
+);
+
+// Pass isLastScoringMessage prop to ChatMessage
+{messages.map((msg, idx) => (
+  <ChatMessage
+    key={msg.id}
+    {...msg}
+    isLastScoringMessage={idx === lastScoringMessageIndex}
+  />
+))}
+```
+
+Then in ChatMessage, only render fallback if `isLastScoringMessage` is true:
+```typescript
+// Only render scoring_result from message if:
+// 1. Store is empty (fallback needed)
+// 2. This message has the LAST scoring_result (latest-only rule)
+if (scoringResultComponent && !scoringResultInStore && isLastScoringMessage) {
+  // Render ScoringResultCard from message data as fallback
+}
+```
 
 ### 3. Rendering Priority
 
@@ -108,8 +152,8 @@ Document the pattern in `ChatInterface.tsx`:
 
 ## Files Touched
 
-- `apps/web/src/components/chat/ChatMessage.tsx` - Conditional render based on store state
-- `apps/web/src/components/chat/MessageList.tsx` - Verify store-based rendering unchanged
+- `apps/web/src/components/chat/ChatMessage.tsx` - Add `isLastScoringMessage` prop, conditional render based on store state
+- `apps/web/src/components/chat/MessageList.tsx` - Calculate lastScoringMessageIndex, pass `isLastScoringMessage` prop
 - `apps/web/src/components/chat/ChatInterface.tsx` - Add documentation comment
 
 ## Tests Affected

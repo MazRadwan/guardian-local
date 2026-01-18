@@ -2,7 +2,7 @@
 
 ## Overview
 
-Fix the scoring result card disappearing after session reload. Currently, the scoring card only renders from in-memory state populated by WebSocket events and is lost when the user logs out or refreshes the browser.
+Fix the scoring result card disappearing after session reload. The scoring card can render from TWO sources (store state AND message components), but neither is reliable across all flows, leading to inconsistent persistence.
 
 ## Problem Statement
 
@@ -16,10 +16,10 @@ There are **TWO code paths** for scoring completion with **inconsistent persiste
 | WebSocket scoring | `ChatServer.ts:807-823` | **NO** |
 
 1. The `scoring_complete` WebSocket event populates `scoringResultByConversation` in the Zustand store
-2. The scoring card renders from this in-memory store state
+2. The scoring card renders from BOTH store state AND message components (`ChatMessage.tsx:214-228` has `EmbeddedScoringResult`)
 3. **Inconsistency:** `DocumentUploadController.ts` DOES persist `scoring_result` component, but `ChatServer.ts` does NOT
 4. The store's `partialize` function only persists `sidebarMinimized` and `activeConversationId` to localStorage
-5. Frontend does not currently render `scoring_result` from message history (renders from store only)
+5. **Dual rendering risk:** Both store-based and message-based cards can render simultaneously (duplicates)
 
 **Current Behavior:**
 - Same session: Card displays correctly (WebSocket event → store → UI)

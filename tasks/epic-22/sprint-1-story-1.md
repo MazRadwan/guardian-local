@@ -8,27 +8,30 @@ The endpoint joins data from `assessmentResults`, `dimensionScores`, and `conver
 
 ## Critical Pre-Requisite: Fix Conversation-Assessment Linkage
 
-**PROBLEM:** The rehydration endpoint depends on `conversation.assessmentId` being set. However, in the **scoring-from-upload flow** (`DocumentUploadController.ts`), this linkage is **NEVER created**:
+**PROBLEM:** The rehydration endpoint depends on `conversation.assessmentId` being set. However, **TWO scoring paths** never create this linkage:
 
 ```typescript
-// QuestionnaireGenerationService.ts:372 - DOES link assessment
+// QuestionnaireGenerationService.ts:372 - DOES link assessment (ONLY path that works)
 await this.conversationService.linkAssessment(context.conversationId, assessmentResult.assessmentId);
 
 // DocumentUploadController.ts - Does NOT link assessment after scoring!
-// The assessment is created from uploaded document, but conversation.assessmentId is never set
+// ChatServer.ts - Does NOT link assessment after WebSocket scoring!
 ```
 
-**FIX REQUIRED:** Add `linkAssessment` call to `DocumentUploadController.runScoring()` after successful scoring:
+**FIX REQUIRED:** Add `linkAssessment` call to BOTH scoring paths:
 
 ```typescript
 // DocumentUploadController.ts - After scoring success (around line 726)
-// Link assessment to conversation for rehydration support
+await this.conversationService.linkAssessment(conversationId, assessmentId);
+
+// ChatServer.ts - After scoring success (around line 823)
 await this.conversationService.linkAssessment(conversationId, assessmentId);
 ```
 
 ## Acceptance Criteria
 
 - [ ] **CRITICAL:** `DocumentUploadController.runScoring()` links assessment to conversation after scoring
+- [ ] **CRITICAL:** `ChatServer.ts` WebSocket scoring links assessment to conversation after scoring
 - [ ] `GET /api/scoring/conversation/:conversationId` endpoint exists
 - [ ] Returns 404 if no scoring results exist for conversation (no assessmentId linked)
 - [ ] Returns 403 if authenticated user doesn't own the conversation
@@ -112,6 +115,7 @@ interface ScoringRehydrationResponse {
 ## Files Touched
 
 - `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts` - **MODIFY** Add `linkAssessment` call after scoring success
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts` - **MODIFY** Add `linkAssessment` call after WebSocket scoring success
 - `packages/backend/src/infrastructure/http/routes/scoring.routes.ts` - **NEW** route file
 - `packages/backend/src/infrastructure/http/controllers/ScoringRehydrationController.ts` - **NEW** controller
 - `packages/backend/src/application/services/ScoringService.ts` - Add `getResultForConversation` read-model query

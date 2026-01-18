@@ -84,7 +84,12 @@ test.describe('Scoring Card Persistence', () => {
     expect(recommendationAfter).toBe(recommendation);
 
     // 9. Verify against database via API (source of truth)
-    const conversationId = page.url().split('/').pop();
+    // Parse conversationId from URL query param (e.g., /chat?conversation=abc123)
+    const url = new URL(page.url());
+    const conversationId = url.searchParams.get('conversation');
+    expect(conversationId).toBeTruthy();
+
+    // API call needs auth - Playwright request context inherits cookies from page
     const apiResponse = await page.request.get(`/api/scoring/conversation/${conversationId}`);
     expect(apiResponse.status()).toBe(200);
 
