@@ -20,6 +20,7 @@ The test will:
 - [ ] Test verifies data consistency (scores match before/after reload)
 - [ ] Test uses proper test fixtures and cleanup
 - [ ] Test is stable (no flaky failures)
+- [ ] Chrome DevTools MCP QA validation passes (see QA section below)
 
 ## Technical Approach
 
@@ -115,6 +116,39 @@ Ensure components have required `data-testid` attributes:
 - Use test isolation (each test gets fresh conversation)
 - Clean up test data in afterEach
 
+### 6. Chrome DevTools MCP QA Validation
+
+**Required QA steps using Chrome DevTools MCP after implementation:**
+
+```
+1. Visual verification:
+   - take_screenshot: Capture scoring card after scoring completes
+   - take_screenshot: Capture scoring card after page reload
+   - Compare screenshots for visual consistency
+
+2. Console check:
+   - list_console_messages: Verify no errors/warnings related to scoring
+   - Confirm rehydration logs appear: "[ChatInterface] Rehydrated scoring result from backend"
+
+3. Network verification:
+   - list_network_requests: Verify GET /api/scoring/conversation/:id is called on reload
+   - get_network_request: Confirm response matches expected shape (200 OK)
+   - Verify no duplicate rehydration requests (in-flight guard working)
+
+4. Persistence flow:
+   - navigate_page: Load conversation with scoring
+   - take_snapshot: Capture DOM state
+   - navigate_page: Reload page
+   - take_snapshot: Capture DOM state after reload
+   - Verify scoring card present in both snapshots
+```
+
+**QA Pass Criteria:**
+- [ ] No console errors related to scoring/rehydration
+- [ ] Rehydration API called exactly once on reload
+- [ ] Scoring card visually identical before/after reload
+- [ ] Response time < 500ms for rehydration endpoint
+
 ## Files Touched
 
 - `apps/web/e2e/scoring-persistence.spec.ts` - **NEW** E2E test file
@@ -147,4 +181,5 @@ No existing tests should be affected. This is a new E2E test file.
 - [ ] Data-testid attributes added to components
 - [ ] No TypeScript errors
 - [ ] No lint errors
+- [ ] Chrome DevTools MCP QA validation completed (all criteria pass)
 - [ ] Test documented in PR description

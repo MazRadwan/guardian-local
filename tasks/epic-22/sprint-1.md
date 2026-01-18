@@ -185,4 +185,5 @@ Sprint 1 is complete when:
 - [ ] No duplicate scoring cards rendered
 - [ ] E2E test verifies card persists across page reload
 - [ ] All unit and integration tests passing
+- [ ] Chrome DevTools MCP QA validation passes (no console errors, correct network calls, visual consistency)
 - [ ] Code reviewed and approved
