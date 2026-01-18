@@ -8,14 +8,50 @@
 
 ---
 
+## Key Context (Updated after external review)
+
+### Dual Backend Persistence Paths
+
+**Important:** The backend has TWO code paths with INCONSISTENT persistence:
+
+| Code Path | File | Persists `scoring_result`? |
+|-----------|------|---------------------------|
+| HTTP upload → scoring | `DocumentUploadController.ts:706-726` | **YES** |
+| WebSocket scoring | `ChatServer.ts:807-823` | **NO** |
+
+This means historical messages MAY contain `scoring_result` components. Story 22.1.3 must handle this.
+
+### Response Type (MUST match existing)
+
+All API responses must match `ScoringCompletePayload['result']` from `apps/web/src/lib/websocket.ts:227-240`:
+```typescript
+{
+  compositeScore: number;
+  recommendation: 'approve' | 'conditional' | 'decline' | 'more_info';
+  overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
+  executiveSummary: string;
+  keyFindings: string[];
+  dimensionScores: Array<{ dimension: string; score: number; riskRating: string; }>;
+  batchId: string;
+  assessmentId: string;
+}
+```
+
+### E2E Fixture Format
+
+The upload API accepts: **PDF, DOCX, PNG, JPEG** (NOT YAML).
+E2E test fixtures must use PDF or DOCX format.
+
+---
+
 ## Stories
 
 | Story | Name | Focus | Dependencies | Agent |
 |-------|------|-------|--------------|-------|
 | **22.1.1** | Backend Scoring Rehydration Endpoint | New API to fetch scoring results by conversationId | None | backend-agent |
-| **22.1.2** | Frontend Scoring Rehydration | Fetch and populate scoring results on conversation load | 22.1.1 | frontend-agent |
-| **22.1.3** | Prevent Duplicate Card Rendering | Verify single card render from store state | None | frontend-agent |
-| **22.1.4** | E2E Test - Scoring Persistence | End-to-end verification of persistence flow | 22.1.1, 22.1.2 | frontend-agent |
+| **22.1.2** | Frontend Scoring Rehydration | Fetch and populate scoring results on conversation load (with in-flight guard) | 22.1.1 | frontend-agent |
+| **22.1.3** | Prevent Duplicate Card Rendering | Filter `scoring_result` from messages, render from store only | None | frontend-agent |
+| **22.1.4** | E2E Test - Scoring Persistence | End-to-end verification with PDF fixture | 22.1.1, 22.1.2 | frontend-agent |
 
 ---
 
@@ -35,11 +71,13 @@
     |         | ChatInterface.tsx                                |                   |
     |         | lib/api/scoring.ts (NEW)                         |                   |
     +---------+--------------------------------------------------+-------------------+
-    | 22.1.3  | ChatInterface.tsx                                | 22.1.2 (same file)|
-    |         | MessageList.tsx (verify)                         |                   |
-    |         | ChatMessage.tsx (verify)                         |                   |
+    | 22.1.3  | ChatMessage.tsx (add filter)                     | None (22.1.2 is  |
+    |         | MessageList.tsx (verify)                         | different file)  |
+    |         | ChatInterface.tsx (add comment)                  |                   |
     +---------+--------------------------------------------------+-------------------+
     | 22.1.4  | e2e/scoring-persistence.spec.ts (NEW)            | None              |
+    |         | e2e/fixtures/completed-questionnaire.pdf (NEW)   |                   |
+    |         | ScoringResultCard.tsx (add data-testid)          |                   |
     +---------+--------------------------------------------------+-------------------+
 ```
 
@@ -58,9 +96,9 @@
 |   Backend Rehydration Endpoint    |   Prevent Duplicate Rendering          |
 |                                   |                                        |
 |   FILES:                          |   FILES:                               |
-|   - scoring.routes.ts (NEW)       |   - ChatInterface.tsx (verify only)    |
-|   - ScoringRehydrationController  |   - MessageList.tsx (verify only)      |
-|   - ScoringService.ts             |   - ChatMessage.tsx (verify only)      |
+|   - scoring.routes.ts (NEW)       |   - ChatMessage.tsx (add filter)       |
+|   - ScoringRehydrationController  |   - MessageList.tsx (verify)           |
+|   - ScoringService.ts             |   - ChatInterface.tsx (add comment)    |
 |   - index.ts                      |                                        |
 |                                   |                                        |
 |   backend-agent                   |   frontend-agent                       |

@@ -28,8 +28,11 @@ The test will:
 - Use existing E2E infrastructure (Playwright)
 - Create test fixtures for:
   - Test user authentication
-  - Sample questionnaire file (YAML format)
+  - Sample questionnaire file (**PDF or DOCX format** - YAML not accepted by upload)
   - Expected scoring ranges (for validation)
+
+**Important:** The upload API accepts: PDF, DOCX, PNG, JPEG (see `Composer.tsx:122-127`).
+YAML files are NOT directly uploadable. Use a PDF export of a completed questionnaire.
 
 ### 2. Test Flow
 
@@ -43,9 +46,9 @@ test.describe('Scoring Card Persistence', () => {
     await page.click('[data-testid="new-chat"]');
     await page.selectOption('[data-testid="mode-selector"]', 'scoring');
 
-    // 3. Upload completed questionnaire
+    // 3. Upload completed questionnaire (PDF format)
     const fileInput = page.locator('input[type="file"]');
-    await fileInput.setInputFiles('./fixtures/completed-questionnaire.yaml');
+    await fileInput.setInputFiles('./fixtures/completed-questionnaire.pdf');
 
     // 4. Wait for scoring to complete
     await page.waitForSelector('[data-testid="scoring-result-card"]', {
@@ -88,10 +91,13 @@ test.describe('Scoring Card Persistence', () => {
 
 ### 3. Test Fixtures
 
-Create `apps/web/e2e/fixtures/completed-questionnaire.yaml`:
-- Use a minimal but valid questionnaire
+Create `apps/web/e2e/fixtures/completed-questionnaire.pdf`:
+- Use a PDF export of a completed Guardian questionnaire
 - Pre-filled responses that will score consistently
 - Include all 10 dimensions with sample responses
+- Must contain a valid Guardian Assessment ID (for scoring to work)
+
+**Alternative:** Use a DOCX file if PDF generation is complex. Either format is accepted.
 
 ### 4. Test Data Attributes
 
@@ -112,7 +118,7 @@ Ensure components have required `data-testid` attributes:
 ## Files Touched
 
 - `apps/web/e2e/scoring-persistence.spec.ts` - **NEW** E2E test file
-- `apps/web/e2e/fixtures/completed-questionnaire.yaml` - **NEW** test fixture
+- `apps/web/e2e/fixtures/completed-questionnaire.pdf` - **NEW** test fixture (PDF format, not YAML)
 - `apps/web/src/components/chat/ScoringResultCard.tsx` - **MODIFY** Add required data-testid attributes: `scoring-result-card`, `composite-score`, `overall-risk`, `recommendation`, `dimension-score-{dimension}`
 
 ## Tests Affected
@@ -130,7 +136,7 @@ No existing tests should be affected. This is a new E2E test file.
   - Test: scoring card persists after page reload
   - Test: scoring card data matches before/after reload
   - Test: scoring card persists after logout/login (optional, can be added later)
-- [ ] `apps/web/e2e/fixtures/completed-questionnaire.yaml` - Test fixture with pre-filled responses
+- [ ] `apps/web/e2e/fixtures/completed-questionnaire.pdf` - Test fixture (PDF format with pre-filled responses)
 - [ ] Verify existing E2E tests still pass (no regressions)
 
 ## Definition of Done

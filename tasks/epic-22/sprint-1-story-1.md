@@ -48,10 +48,9 @@ Logic:
 1. Look up conversation by ID
 2. Verify user owns conversation (403 if not)
 3. Get assessmentId from conversation
-4. Fetch latest assessmentResult for that assessment
+4. Fetch latest assessmentResult for that assessment (most recent `scoredAt`)
 5. Fetch dimensionScores for that batch
-6. Fetch assessment + vendor for names
-7. Map to frontend payload shape
+6. Map to `ScoringCompletePayload['result']` shape (no vendor lookup needed)
 
 ### 4. Register Route
 
@@ -65,24 +64,27 @@ server.registerRoutes('/api/scoring', createScoringRoutes(scoringRehydrationCont
 
 ### Response Shape
 
+**MUST match `ScoringCompletePayload['result']` from `apps/web/src/lib/websocket.ts:227-240`:**
+
 ```typescript
+// Exact type from apps/web/src/lib/websocket.ts
 interface ScoringRehydrationResponse {
-  assessmentId: string;
   compositeScore: number;
-  overallRiskRating: 'Low' | 'Moderate' | 'High' | 'Critical';
-  recommendation: 'Approved' | 'Conditional' | 'Not Recommended';
+  recommendation: 'approve' | 'conditional' | 'decline' | 'more_info';
+  overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
   executiveSummary: string;
   keyFindings: string[];
   dimensionScores: Array<{
     dimension: string;
     score: number;
-    riskRating: string;
-    findings: string[];
+    riskRating: 'low' | 'medium' | 'high' | 'critical';
   }>;
-  vendorName: string;
-  solutionName: string;
+  batchId: string;
+  assessmentId: string;
 }
 ```
+
+**Note:** Do NOT add `vendorName`/`solutionName` - they are not in the existing type. The frontend already gets vendor info from elsewhere.
 
 ## Files Touched
 

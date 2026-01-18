@@ -14,6 +14,7 @@ The current flow populates `scoringResultByConversation` only via WebSocket even
 - [ ] Handle 404 gracefully (no scoring for this conversation - no error shown)
 - [ ] Avoid duplicate fetches (check in-memory store first)
 - [ ] Avoid fetching while scoring is in progress (check `scoringProgress.status`)
+- [ ] Prevent concurrent fetches under React strict mode (per-conversation in-flight flag)
 - [ ] Unit tests for new API function
 - [ ] Unit tests for rehydration logic
 
@@ -78,6 +79,12 @@ rehydrateScoringResult: (conversationId, result) => {
 
 Modify `apps/web/src/components/chat/ChatInterface.tsx`:
 
+**Add in-flight tracking ref** (prevents duplicate fetches under React strict mode):
+```typescript
+// Epic 22: Track in-flight rehydration requests per conversation
+const rehydratingRef = useRef<Set<string>>(new Set());
+```
+
 Add new effect after the existing conversation switch effect:
 ```typescript
 // Epic 22: Rehydrate scoring result from backend if not in cache
@@ -97,6 +104,15 @@ useEffect(() => {
     return;
   }
 
+  // Guard 3: Already fetching (prevents duplicate under strict mode)
+  if (rehydratingRef.current.has(activeConversationId)) {
+    console.log('[ChatInterface] Rehydration already in progress');
+    return;
+  }
+
+  // Mark as in-flight
+  rehydratingRef.current.add(activeConversationId);
+
   // Fetch from backend
   const rehydrate = async () => {
     try {
@@ -108,6 +124,9 @@ useEffect(() => {
     } catch (error) {
       // Silently fail - scoring card just won't show
       console.warn('[ChatInterface] Failed to rehydrate scoring result:', error);
+    } finally {
+      // Clear in-flight flag
+      rehydratingRef.current.delete(activeConversationId);
     }
   };
 
@@ -156,6 +175,7 @@ Existing tests that may need updates:
   - Test rehydration called when cache miss
   - Test rehydration NOT called when already in cache
   - Test rehydration NOT called when scoring in progress
+  - Test rehydration NOT called twice under React strict mode (in-flight guard)
 
 ## Definition of Done
 

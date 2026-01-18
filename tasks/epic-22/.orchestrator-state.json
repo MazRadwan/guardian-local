@@ -3,30 +3,41 @@
   "workflowVersion": "1.9.0",
   "epic": "22",
   "phase": "planning",
-  "status": "plan_approved",
+  "status": "awaiting_gpt_review",
   "currentSprint": 1,
   "totalSprints": 1,
   "completedStories": [],
   "stuckStories": [],
-  "approvedSprints": ["sprint-1"],
+  "approvedSprints": [
+    "sprint-1"
+  ],
   "startedAt": "2026-01-17T21:00:00.000Z",
   "architectAttempts": 1,
   "specReviewAttempts": 2,
   "architectApprovedWithWarnings": false,
   "planAgentComplete": true,
-  "planCompleteAt": 1768696395.160048,
+  "planCompleteAt": 1768696946.028037,
   "architectReview": {
     "status": "approved",
     "attempt": 1,
     "notes": "Architecture sound. No decomposition needed. chatStore.ts at 559 lines - monitor growth."
   },
   "specReview": {
-    "status": "approved",
-    "attempts": 2,
+    "status": "approved_after_external_review",
+    "attempts": 3,
     "fixesApplied": [
       "Story 22.1.1: Fixed test paths to match actual directory structure",
       "Story 22.1.4: Made ScoringResultCard.tsx explicit in Files Touched with data-testid requirements",
       "Story 22.1.4: Added fixture file to Tests Required"
+    ],
+    "externalReviewFixes": [
+      "Fixed response shape to match ScoringCompletePayload['result'] (lowercase enums, no vendorName/solutionName)",
+      "Standardized controller naming to ScoringRehydrationController",
+      "Acknowledged dual backend persistence paths (DocumentUploadController vs ChatServer)",
+      "Added in-flight guard (rehydratingRef) to Story 22.1.2 for React strict mode",
+      "Fixed API client location to lib/api/scoring.ts",
+      "Changed E2E fixture format from YAML to PDF (upload API constraint)",
+      "Story 22.1.3 updated: now adds filter, not just verification"
     ]
   },
   "executionPlan": {
@@ -34,19 +45,26 @@
     "phases": [
       {
         "id": 1,
-        "stories": ["22.1.1", "22.1.3"],
+        "stories": [
+          "22.1.1",
+          "22.1.3"
+        ],
         "parallel": true,
         "status": "pending"
       },
       {
         "id": 2,
-        "stories": ["22.1.2"],
+        "stories": [
+          "22.1.2"
+        ],
         "parallel": false,
         "status": "pending"
       },
       {
         "id": 3,
-        "stories": ["22.1.4"],
+        "stories": [
+          "22.1.4"
+        ],
         "parallel": false,
         "status": "pending"
       }

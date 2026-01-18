@@ -2,48 +2,52 @@
 
 ## Description
 
-Verify and ensure that only ONE scoring card renders per conversation. The card should render from Zustand store state only, not from message components. This is defensive work to prevent edge cases where both paths could render a card.
+Ensure that only ONE scoring card renders per conversation, even though `scoring_result` components MAY exist in message history.
 
-Current behavior (verified):
-- `ChatServer.ts` does NOT include `scoring_result` component in saved messages
-- `ScoringResultCard` renders based on store state via `scoringResultByConversation`
-- Message content has narrative text only
+**Background (corrected after external review):**
+- `DocumentUploadController.ts:706-726` DOES persist `scoring_result` component in messages
+- `ChatServer.ts:807-823` does NOT persist `scoring_result` component
+- Frontend currently renders card from store state via `scoringResultByConversation`
+- **Risk:** If frontend also renders `scoring_result` from message components, duplicate cards appear
 
-This story verifies this behavior is correct and adds safeguards if needed.
+**Strategy:** Filter out `scoring_result` components from message rendering. The card should ONLY render from store state (populated by WebSocket event or backend rehydration).
 
 ## Acceptance Criteria
 
 - [ ] Scoring card renders from store state only (`scoringResultByConversation`)
-- [ ] Verify no `scoring_result` component exists in message content
-- [ ] If both exist (edge case), store takes precedence - no duplicate render
-- [ ] Card position is consistent (after the narrative message)
-- [ ] Add defensive check in ChatMessage.tsx to skip `scoring_result` component type
+- [ ] `scoring_result` component type is filtered out in ChatMessage rendering
+- [ ] No duplicate cards even if message contains `scoring_result` component AND store has result
+- [ ] Card position is consistent (rendered by MessageList after narrative message)
+- [ ] Historical messages with `scoring_result` components don't break (filtered gracefully)
 - [ ] Document the single-source rendering pattern
 
 ## Technical Approach
 
-### 1. Verify Message Content Structure
+### 1. Acknowledge Dual Backend Behavior
 
-Confirm in `ChatServer.ts` that scoring messages don't include `scoring_result` component.
-
-Current code at `ChatServer.ts:807-823` (from goals doc):
+**Important context for implementation:**
 ```typescript
+// DocumentUploadController.ts:714-724 - DOES persist scoring_result
+const scoringComponent = { type: 'scoring_result', data: resultData };
 const reportMessage = await this.conversationService.sendMessage({
-  conversationId,
-  role: 'assistant',
-  content: {
-    text: narrativeText,
-    // No components - scoring card rendered from store state
-  },
+  content: { text: narrativeText, components: [scoringComponent] },
+});
+
+// ChatServer.ts:807-823 - Does NOT persist scoring_result
+const reportMessage = await this.conversationService.sendMessage({
+  content: { text: narrativeText },  // No components
 });
 ```
 
+This means historical messages MAY contain `scoring_result` components. The frontend must handle both cases.
+
 ### 2. Add Defensive Filter in ChatMessage
 
-In `apps/web/src/components/chat/ChatMessage.tsx`, ensure we never render a `scoring_result` component even if one appears in message data:
+In `apps/web/src/components/chat/ChatMessage.tsx`, filter out `scoring_result` components:
 
 ```typescript
-// Filter out scoring_result components - rendered from store, not message
+// Epic 22: Filter out scoring_result - rendered from store by MessageList, not from message
+// This prevents duplicate cards when messages contain persisted scoring_result components
 const filteredComponents = components?.filter(
   (c) => c.type !== 'scoring_result'
 ) ?? [];
@@ -53,31 +57,32 @@ const filteredComponents = components?.filter(
 
 In `apps/web/src/components/chat/MessageList.tsx`, confirm:
 - `ScoringResultCard` is rendered from `scoringResult` prop (from store)
-- Position is after the last message or at a specific anchor point
-- No duplicate render from both message and prop
+- Position is after the last assistant message
+- No duplicate render path exists
 
 ### 4. Add Code Comment
 
 Document the pattern in `ChatInterface.tsx`:
 ```typescript
 // Epic 22: Scoring card renders from store state only, not from message components
-// This ensures:
-// 1. Card persists across reloads (via backend rehydration)
-// 2. No duplicate cards (single source of truth)
-// 3. Consistent positioning (always after narrative message)
+// Backend paths inconsistently persist scoring_result:
+// - DocumentUploadController.ts: DOES persist component
+// - ChatServer.ts: Does NOT persist component
+// To prevent duplicates, ChatMessage filters out scoring_result components
+// and the card is rendered solely by MessageList from store state.
 ```
 
 ## Files Touched
 
-- `apps/web/src/components/chat/ChatInterface.tsx` - Verify render logic, add documentation
+- `apps/web/src/components/chat/ChatMessage.tsx` - Add filter for `scoring_result` component type
 - `apps/web/src/components/chat/MessageList.tsx` - Verify no duplicate render path
-- `apps/web/src/components/chat/ChatMessage.tsx` - Add defensive filter for `scoring_result` component type
+- `apps/web/src/components/chat/ChatInterface.tsx` - Add documentation comment
 
 ## Tests Affected
 
 Existing tests that may need updates:
-- `apps/web/src/components/chat/__tests__/ChatInterface.scoring.test.tsx` - Tests should still pass, verify card render from store
-- `apps/web/src/components/chat/__tests__/ChatMessage.test.tsx` - May need test for filtering scoring_result components
+- `apps/web/src/components/chat/__tests__/ChatMessage.test.tsx` - Need test for filtering scoring_result
+- `apps/web/src/components/chat/__tests__/ChatInterface.scoring.test.tsx` - Verify card still renders from store
 
 ## Agent Assignment
 
@@ -87,18 +92,19 @@ Existing tests that may need updates:
 
 - [ ] Update `apps/web/src/components/chat/__tests__/ChatMessage.test.tsx`
   - Test that `scoring_result` component type is filtered out
-  - Test that other component types still render
+  - Test that other component types (download, error, etc.) still render normally
+  - Test with message containing `scoring_result` component - should not render card
 - [ ] Verify existing `ChatInterface.scoring.test.tsx` tests pass
   - Card renders from store state
   - Card doesn't render when store is empty
-- [ ] Add test case for duplicate prevention
-  - If message contains `scoring_result` component AND store has result, only ONE card renders
+- [ ] Add duplicate prevention test
+  - Message contains `scoring_result` component AND store has result → only ONE card renders
 
 ## Definition of Done
 
 - [ ] All acceptance criteria met
-- [ ] Defensive filter added to ChatMessage
-- [ ] Tests verify single card render
+- [ ] Defensive filter added to ChatMessage.tsx
+- [ ] Tests verify single card render even with legacy persisted components
 - [ ] No TypeScript errors
 - [ ] No lint errors
 - [ ] Pattern documented in code comments

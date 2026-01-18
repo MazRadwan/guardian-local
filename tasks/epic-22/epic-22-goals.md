@@ -6,23 +6,45 @@ Fix the scoring result card disappearing after session reload. Currently, the sc
 
 ## Problem Statement
 
-**Root Cause (Verified):**
+**Root Cause (Corrected after external review):**
+
+There are **TWO code paths** for scoring completion with **inconsistent persistence behavior**:
+
+| Code Path | File | Persists `scoring_result`? |
+|-----------|------|---------------------------|
+| HTTP upload → scoring | `DocumentUploadController.ts:706-726` | **YES** |
+| WebSocket scoring | `ChatServer.ts:807-823` | **NO** |
+
 1. The `scoring_complete` WebSocket event populates `scoringResultByConversation` in the Zustand store
 2. The scoring card renders from this in-memory store state
-3. The message saved to the database explicitly excludes the `scoring_result` component (see `ChatServer.ts:807-823`)
+3. **Inconsistency:** `DocumentUploadController.ts` DOES persist `scoring_result` component, but `ChatServer.ts` does NOT
 4. The store's `partialize` function only persists `sidebarMinimized` and `activeConversationId` to localStorage
-5. After relogin: empty store + no `scoring_result` in message history = no card
+5. Frontend does not currently render `scoring_result` from message history (renders from store only)
 
 **Current Behavior:**
 - Same session: Card displays correctly (WebSocket event → store → UI)
-- After reload/relogin: Card disappears (store reset, message has no component)
+- After reload/relogin: Card may or may not appear depending on code path used
 
-**Evidence:**
+**Evidence - Two Different Implementations:**
 ```typescript
-// ChatServer.ts:807-823 - Explicitly excludes scoring_result
+// DocumentUploadController.ts:714-724 - DOES persist scoring_result
+const scoringComponent = {
+  type: 'scoring_result' as const,
+  data: resultData,
+};
 const reportMessage = await this.conversationService.sendMessage({
   conversationId,
-  role: 'assistant',
+  content: {
+    text: narrativeText,
+    components: [scoringComponent],  // <-- PERSISTED!
+  },
+});
+```
+
+```typescript
+// ChatServer.ts:807-823 - Does NOT persist scoring_result
+const reportMessage = await this.conversationService.sendMessage({
+  conversationId,
   content: {
     text: narrativeText,
     // No components - scoring card rendered from store state via scoring_complete event
@@ -91,33 +113,31 @@ partialize: (state) => ({
 
 **New API endpoint:**
 - `packages/backend/src/infrastructure/http/routes/scoring.routes.ts` - New route file
-- `packages/backend/src/infrastructure/http/controllers/ScoringController.ts` - New controller
+- `packages/backend/src/infrastructure/http/controllers/ScoringRehydrationController.ts` - New controller
 
 **Endpoint:** `GET /api/scoring/conversation/:conversationId`
 
-**Response shape (matches `ScoringCompletePayload['result']`):**
+**Response shape (MUST match `ScoringCompletePayload['result']` from `apps/web/src/lib/websocket.ts:227-240`):**
 ```typescript
 {
-  assessmentId: string;
   compositeScore: number;
-  overallRiskRating: 'Low' | 'Moderate' | 'High' | 'Critical';
-  recommendation: 'Approved' | 'Conditional' | 'Not Recommended';
+  recommendation: 'approve' | 'conditional' | 'decline' | 'more_info';
+  overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
+  executiveSummary: string;
+  keyFindings: string[];
   dimensionScores: Array<{
     dimension: string;
     score: number;
-    rating: string;
-    confidence: string;
-    keyFindings: string[];
+    riskRating: 'low' | 'medium' | 'high' | 'critical';
   }>;
-  vendorName: string;
-  solutionName: string;
+  batchId: string;
+  assessmentId: string;
 }
 ```
 
 **Data sources:**
-- `assessmentResults` table - compositeScore, overallRiskRating, recommendation
-- `dimensionScores` table - per-dimension scores and findings
-- `assessments` table - vendorName, solutionName (via join)
+- `assessmentResults` table - compositeScore, overallRiskRating, recommendation, executiveSummary, keyFindings
+- `dimensionScores` table - per-dimension scores
 - `conversations` table - link conversation to assessment
 
 ### Frontend Changes
@@ -125,7 +145,7 @@ partialize: (state) => ({
 **Files to modify:**
 - `apps/web/src/stores/chatStore.ts` - Add rehydration action
 - `apps/web/src/components/chat/ChatInterface.tsx` - Trigger rehydration on conversation load
-- `apps/web/src/lib/api.ts` - Add scoring fetch function
+- `apps/web/src/lib/api/scoring.ts` - **NEW** scoring API client (follows existing `lib/api/auth.ts` pattern)
 
 **Rehydration logic:**
 ```typescript
@@ -139,7 +159,7 @@ partialize: (state) => ({
 ### Test Files
 
 **Backend tests:**
-- `packages/backend/__tests__/unit/controllers/ScoringController.test.ts` - New
+- `packages/backend/__tests__/unit/infrastructure/http/ScoringRehydrationController.test.ts` - New
 - `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - New
 
 **Frontend tests:**
