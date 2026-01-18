@@ -735,6 +735,14 @@ export class DocumentUploadController {
           createdAt: reportMessage.createdAt,
         });
 
+        // Epic 22.1.1: Link assessment to conversation for rehydration
+        // Non-fatal - scoring already succeeded, don't emit scoring_error if this fails
+        try {
+          await this.conversationService.linkAssessment(conversationId, assessmentId);
+        } catch (linkError) {
+          console.warn(`[DocumentUpload] Failed to link assessment (non-fatal):`, linkError);
+        }
+
         console.log(`[DocumentUpload] Scoring complete: assessmentId=${assessmentId}, score=${scoringResult.report.payload.compositeScore}`);
       } else {
         // Scoring failed - emit structured error

@@ -3,6 +3,7 @@
 # Used by diagram-updater-agent
 #
 # VALIDATED: 2026-01-17 - Paths verified against actual codebase
+# UPDATED: 2026-01-17 - Added 9 new components to not_in_diagram tracking
 
 diagram: architecture-latest.mmd
 last_verified: "2026-01-17"
@@ -95,6 +96,24 @@ nodes:
     status: EXISTS
     note: "Diagram says 'DownloadBubble', code says 'DownloadButton'"
 
+  ScoreDashboard:
+    paths: ["apps/web/src/components/chat/ScoreDashboard.tsx"]
+    exports: ["ScoreDashboard"]
+    validation_strategy: export
+    status: EXISTS
+
+  ScoringResultCard:
+    paths: ["apps/web/src/components/chat/ScoringResultCard.tsx", "apps/web/src/components/chat/DimensionScoreBar.tsx"]
+    exports: ["ScoringResultCard", "DimensionScoreBar"]
+    validation_strategy: export
+    status: EXISTS
+
+  ProgressMessage:
+    paths: ["apps/web/src/components/chat/ProgressMessage.tsx"]
+    exports: ["ProgressMessage"]
+    validation_strategy: export
+    status: EXISTS
+
   # === Hooks & State Layer ===
   useChatController:
     paths: ["apps/web/src/hooks/useChatController.ts"]
@@ -141,6 +160,12 @@ nodes:
   useAuth:
     paths: ["apps/web/src/hooks/useAuth.ts"]
     exports: ["useAuth"]
+    validation_strategy: export
+    status: EXISTS
+
+  useScoringProgress:
+    paths: ["apps/web/src/hooks/useScoringProgress.ts"]
+    exports: ["useScoringProgress"]
     validation_strategy: export
     status: EXISTS
 
@@ -253,6 +278,18 @@ nodes:
   ExportService:
     paths: ["packages/backend/src/application/services/ExportService.ts"]
     exports: ["ExportService"]
+    validation_strategy: export
+    status: EXISTS
+
+  ScoringService:
+    paths: ["packages/backend/src/application/services/ScoringService.ts"]
+    exports: ["ScoringService"]
+    validation_strategy: export
+    status: EXISTS
+
+  ScoringExportService:
+    paths: ["packages/backend/src/application/services/ScoringExportService.ts"]
+    exports: ["ScoringExportService"]
     validation_strategy: export
     status: EXISTS
 
@@ -408,9 +445,8 @@ nodes:
 
 # === Items in code but NOT in diagram (potential additions) ===
 not_in_diagram:
+  # Items tracked but intentionally NOT in diagram (supporting/minor components)
   services:
-    - ScoringService: "packages/backend/src/application/services/ScoringService.ts"
-    - ScoringExportService: "packages/backend/src/application/services/ScoringExportService.ts"
     - VendorValidationService: "packages/backend/src/application/services/VendorValidationService.ts"
     - FileValidationService: "packages/backend/src/application/services/FileValidationService.ts"
     - OrphanCleanupService: "packages/backend/src/application/services/OrphanCleanupService.ts"
@@ -419,18 +455,23 @@ not_in_diagram:
     - useWebSocket: "apps/web/src/hooks/useWebSocket.ts"
     - useFileUpload: "apps/web/src/hooks/useFileUpload.ts"
     - useMultiFileUpload: "apps/web/src/hooks/useMultiFileUpload.ts"
-    - useScoringProgress: "apps/web/src/hooks/useScoringProgress.ts"
     - useUserAssessments: "apps/web/src/hooks/useUserAssessments.ts"
     - useDelayedLoading: "apps/web/src/hooks/useDelayedLoading.ts"
 
   components:
-    - ScoreDashboard: "apps/web/src/components/chat/ScoreDashboard.tsx"
-    - ScoringResultCard: "apps/web/src/components/chat/ScoringResultCard.tsx"
+    # UI helpers and minor components (not architecturally significant)
     - ScoringWarnings: "apps/web/src/components/chat/ScoringWarnings.tsx"
     - ScoringWelcome: "apps/web/src/components/chat/ScoringWelcome.tsx"
     - VendorClarificationCard: "apps/web/src/components/chat/VendorClarificationCard.tsx"
     - FileChip: "apps/web/src/components/chat/FileChip.tsx"
     - GenerateQuestionnaireButton: "apps/web/src/components/chat/GenerateQuestionnaireButton.tsx"
+    - ChatMessage: "apps/web/src/components/chat/ChatMessage.tsx"
+    - ConversationListItem: "apps/web/src/components/chat/ConversationListItem.tsx"
+    - ConversationSearchModal: "apps/web/src/components/chat/ConversationSearchModal.tsx"
+    - FileChipInChat: "apps/web/src/components/chat/FileChipInChat.tsx"
+    - RecommendationBadge: "apps/web/src/components/chat/RecommendationBadge.tsx"
+    - RotatingStatus: "apps/web/src/components/chat/RotatingStatus.tsx"
+    - SkeletonMessage: "apps/web/src/components/chat/SkeletonMessage.tsx"
 
   repositories:
     - DrizzleResponseRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts"

@@ -54,7 +54,9 @@ import { createAssessmentRoutes } from './infrastructure/http/routes/assessment.
 import { createQuestionRoutes } from './infrastructure/http/routes/question.routes.js';
 import { createExportRoutes } from './infrastructure/http/routes/export.routes.js';
 import { createScoringExportRoutes } from './infrastructure/http/routes/scoring.export.routes.js';
+import { createScoringRoutes } from './infrastructure/http/routes/scoring.routes.js';
 import { createDocumentRoutes } from './infrastructure/http/routes/document.routes.js';
+import { ScoringRehydrationController } from './infrastructure/http/controllers/ScoringRehydrationController.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
 import { createFileStorage } from './infrastructure/storage/index.js';
@@ -183,7 +185,7 @@ const textExtractionService = new TextExtractionService();
 // Epic 18.4: Initialize vendor validation service
 const vendorValidationService = new VendorValidationService(fileRepo);
 
-// Initialize scoring components (Epic 15, Epic 20: added transactionRunner)
+// Initialize scoring components (Epic 15, Epic 20: added transactionRunner, Epic 22: added conversationRepo)
 const scoringPromptBuilder = new ScoringPromptBuilder();
 const scoringPayloadValidator = new ScoringPayloadValidator();
 const transactionRunner = new DrizzleTransactionRunner();
@@ -198,7 +200,8 @@ const scoringService = new ScoringService(
   claudeClient,          // ILLMClient - ClaudeClient implements this
   scoringPromptBuilder,
   scoringPayloadValidator,
-  transactionRunner      // ITransactionRunner for atomic score storage
+  transactionRunner,     // ITransactionRunner for atomic score storage
+  conversationRepo       // Epic 22: IConversationRepository for scoring rehydration
 );
 
 // Initialize controllers
@@ -212,6 +215,9 @@ const scoringExportController = new ScoringExportController(
   assessmentRepo
 );
 
+// Epic 22.1.1: Initialize scoring rehydration controller
+const scoringRehydrationController = new ScoringRehydrationController(scoringService);
+
 // Initialize server
 const server = new Server({
   port: PORT,
@@ -224,6 +230,7 @@ server.registerRoutes('/api/vendors', createVendorRoutes(vendorController, authS
 server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentController, authService));
 server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
 server.registerRoutes('/api/export/scoring', createScoringExportRoutes(scoringExportController, authService));
+server.registerRoutes('/api/scoring', createScoringRoutes(scoringRehydrationController, authService));
 server.registerRoutes('/api', createQuestionRoutes(questionController, authService));
 
 // Initialize rate limiter (10 messages per user per minute)

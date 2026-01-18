@@ -2,7 +2,7 @@
 name: question-gen-agent
 description: Build question generation system (Epic 6 - Claude integration, core feature)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Question Generation Agent - Epic 6

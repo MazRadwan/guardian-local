@@ -2,7 +2,7 @@
 name: chat-architecture-agent
 description: Execute the Chat Interface modularization sidequest (controller/services refactor with zero regressions)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Chat Architecture Agent

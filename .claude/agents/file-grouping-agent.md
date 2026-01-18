@@ -2,7 +2,7 @@
 name: file-grouping-agent
 description: Validates and passes through phase structure from sprint overviews. Safety checks for file conflicts.
 tools: Read, Grep, Glob
-model: sonnet
+model: opus
 ---
 
 # File Grouping Agent

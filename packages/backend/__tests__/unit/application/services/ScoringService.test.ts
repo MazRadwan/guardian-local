@@ -25,6 +25,8 @@ import type { ILLMClient } from '../../../../src/application/interfaces/ILLMClie
 import type { IPromptBuilder } from '../../../../src/application/interfaces/IPromptBuilder.js'
 import type { ITransactionRunner } from '../../../../src/application/interfaces/ITransactionRunner.js'
 import type { ScoringProgressEvent } from '../../../../src/domain/scoring/types.js'
+import type { IConversationRepository } from '../../../../src/application/interfaces/IConversationRepository.js'
+import { Conversation } from '../../../../src/domain/entities/Conversation.js'
 
 describe('ScoringService', () => {
   let service: ScoringService
@@ -38,6 +40,7 @@ describe('ScoringService', () => {
   let mockLLMClient: jest.Mocked<ILLMClient>
   let mockPromptBuilder: jest.Mocked<IPromptBuilder>
   let mockTransactionRunner: jest.Mocked<ITransactionRunner>
+  let mockConversationRepo: jest.Mocked<IConversationRepository>
   let validator: ScoringPayloadValidator
 
   const testUserId = 'user-1'
@@ -215,6 +218,31 @@ describe('ScoringService', () => {
       }),
     } as jest.Mocked<ITransactionRunner>
 
+    // Mock conversation repository (Epic 22: scoring rehydration)
+    mockConversationRepo = {
+      findById: jest.fn().mockResolvedValue(
+        Conversation.fromPersistence({
+          id: testConversationId,
+          userId: testUserId,
+          mode: 'scoring',
+          assessmentId: testAssessmentId,
+          status: 'active',
+          context: {},
+          startedAt: new Date(),
+          lastActivityAt: new Date(),
+          completedAt: null,
+        })
+      ),
+      findByUserId: jest.fn(),
+      create: jest.fn(),
+      updateMode: jest.fn(),
+      updateStatus: jest.fn(),
+      linkAssessment: jest.fn(),
+      updateContext: jest.fn(),
+      updateActivity: jest.fn(),
+      delete: jest.fn(),
+    } as jest.Mocked<IConversationRepository>
+
     validator = new ScoringPayloadValidator()
 
     service = new ScoringService(
@@ -228,7 +256,8 @@ describe('ScoringService', () => {
       mockLLMClient,
       mockPromptBuilder,
       validator,
-      mockTransactionRunner
+      mockTransactionRunner,
+      mockConversationRepo
     )
   })
 
@@ -1002,6 +1031,156 @@ describe('ScoringService', () => {
 
       // Aborting after success should not throw
       expect(() => service.abort(testConversationId)).not.toThrow()
+    })
+  })
+
+  describe('getResultForConversation (Epic 22.1.1)', () => {
+    const testBatchId = 'batch-1'
+
+    beforeEach(() => {
+      // Setup default assessment result
+      mockAssessmentResultRepo.findLatestByAssessmentId.mockResolvedValue({
+        id: 'result-1',
+        assessmentId: testAssessmentId,
+        batchId: testBatchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        executiveSummary: 'Test executive summary',
+        keyFindings: ['Finding 1', 'Finding 2'],
+        rubricVersion: '1.0',
+        modelId: 'claude-3-5-sonnet-20241022',
+        scoredAt: new Date(),
+      })
+
+      // Setup default dimension scores
+      mockDimensionScoreRepo.findByBatchId.mockResolvedValue([
+        {
+          id: 'dim-1',
+          assessmentId: testAssessmentId,
+          batchId: testBatchId,
+          dimension: 'clinical_risk',
+          score: 80,
+          riskRating: 'low',
+          createdAt: new Date(),
+        },
+        {
+          id: 'dim-2',
+          assessmentId: testAssessmentId,
+          batchId: testBatchId,
+          dimension: 'data_governance',
+          score: 70,
+          riskRating: 'medium',
+          createdAt: new Date(),
+        },
+      ])
+    })
+
+    it('should return scoring result for valid conversation', async () => {
+      const result = await service.getResultForConversation(testConversationId, testUserId)
+
+      expect(result).not.toBeNull()
+      expect(result?.compositeScore).toBe(75)
+      expect(result?.recommendation).toBe('conditional')
+      expect(result?.overallRiskRating).toBe('medium')
+      expect(result?.executiveSummary).toBe('Test executive summary')
+      expect(result?.keyFindings).toEqual(['Finding 1', 'Finding 2'])
+      expect(result?.batchId).toBe(testBatchId)
+      expect(result?.assessmentId).toBe(testAssessmentId)
+      expect(result?.dimensionScores).toHaveLength(2)
+      expect(result?.dimensionScores[0]).toEqual({
+        dimension: 'clinical_risk',
+        score: 80,
+        riskRating: 'low',
+      })
+    })
+
+    it('should return null if conversation not found', async () => {
+      mockConversationRepo.findById.mockResolvedValue(null)
+
+      const result = await service.getResultForConversation('nonexistent', testUserId)
+
+      expect(result).toBeNull()
+    })
+
+    it('should throw UnauthorizedError if user does not own conversation', async () => {
+      const otherUserId = 'other-user'
+
+      await expect(
+        service.getResultForConversation(testConversationId, otherUserId)
+      ).rejects.toThrow(UnauthorizedError)
+    })
+
+    it('should return null if conversation has no assessmentId linked', async () => {
+      mockConversationRepo.findById.mockResolvedValue(
+        Conversation.fromPersistence({
+          id: testConversationId,
+          userId: testUserId,
+          mode: 'scoring',
+          assessmentId: null, // No assessment linked
+          status: 'active',
+          context: {},
+          startedAt: new Date(),
+          lastActivityAt: new Date(),
+          completedAt: null,
+        })
+      )
+
+      const result = await service.getResultForConversation(testConversationId, testUserId)
+
+      expect(result).toBeNull()
+    })
+
+    it('should return null if no assessment result exists', async () => {
+      mockAssessmentResultRepo.findLatestByAssessmentId.mockResolvedValue(null)
+
+      const result = await service.getResultForConversation(testConversationId, testUserId)
+
+      expect(result).toBeNull()
+    })
+
+    it('should handle missing optional fields gracefully', async () => {
+      mockAssessmentResultRepo.findLatestByAssessmentId.mockResolvedValue({
+        id: 'result-1',
+        assessmentId: testAssessmentId,
+        batchId: testBatchId,
+        compositeScore: 75,
+        recommendation: 'conditional',
+        overallRiskRating: 'medium',
+        executiveSummary: undefined, // Optional field missing
+        keyFindings: undefined, // Optional field missing
+        rubricVersion: '1.0',
+        modelId: 'claude-3-5-sonnet-20241022',
+        scoredAt: new Date(),
+      })
+
+      const result = await service.getResultForConversation(testConversationId, testUserId)
+
+      expect(result).not.toBeNull()
+      expect(result?.executiveSummary).toBe('')
+      expect(result?.keyFindings).toEqual([])
+    })
+
+    it('should throw error if conversationRepo is not configured', async () => {
+      // Create service without conversationRepo
+      const serviceWithoutConvRepo = new ScoringService(
+        mockResponseRepo,
+        mockDimensionScoreRepo,
+        mockAssessmentResultRepo,
+        mockAssessmentRepo,
+        mockFileRepo,
+        mockFileStorage,
+        mockDocumentParser,
+        mockLLMClient,
+        mockPromptBuilder,
+        validator,
+        mockTransactionRunner
+        // No conversationRepo passed
+      )
+
+      await expect(
+        serviceWithoutConvRepo.getResultForConversation(testConversationId, testUserId)
+      ).rejects.toThrow('ConversationRepository not configured for rehydration')
     })
   })
 })

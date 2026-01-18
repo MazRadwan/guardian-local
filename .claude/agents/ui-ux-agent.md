@@ -2,7 +2,7 @@
 name: ui-ux-agent
 description: Build ChatGPT-style UI upgrade with sidebar, centered layout, and enhanced composer (Epic 9)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # UI/UX Agent - Epic 9

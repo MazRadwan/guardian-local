@@ -28,11 +28,16 @@ Guardian development uses **specialized sub-agents** with **automated code revie
 | `export-agent` | PDF, Word, Excel export | Export functionality | Sonnet |
 | `ui-ux-agent` | UI/UX polish, layouts, styling | UI improvements | Sonnet |
 
-### Review Agent (Opus)
+### Review Agents (Opus)
 
-| Agent | Scope | Model |
-|-------|-------|-------|
-| `code-reviewer` | Review all code for quality, architecture, security, tests | Opus 4.1 |
+| Agent | Scope | When Invoked | Model |
+|-------|-------|--------------|-------|
+| `code-reviewer` | Story-level review: architecture, security, tests, quality | After EACH story | Opus |
+| `final-reviewer` | Epic-level deep audit: codebase-wide quality, completeness, security, regressions | After ALL stories complete | Opus |
+
+**Key Difference:**
+- `code-reviewer`: Quick review of story changes (~5-10 min). Approves or requests fixes.
+- `final-reviewer`: Thorough, skeptical deep dive (~45-60 min). NOT a rubber stamp. Must find improvement opportunities.
 
 ### Bug-Fix Agent (Sonnet)
 
@@ -240,8 +245,209 @@ Stories 9.4-9.6
 Stories 9.7-9.9
   → Same process
 
-... until all 25 stories complete
+... until all stories complete
 ```
+
+---
+
+### Step 8: Final Deep Review (Epic Completion)
+
+**When ALL stories in an epic are complete**, invoke the **final-reviewer agent** for a comprehensive codebase audit.
+
+**THIS IS NOT A RUBBER STAMP.** The final review is a thorough, skeptical deep dive.
+
+**Invocation:**
+```
+Task(subagent_type: "final-reviewer",
+     model: "opus",
+     prompt: "Perform final deep review for Epic 9 (UI/UX Upgrade).
+              All 25 stories are complete.
+              This is NOT a rubber stamp - be thorough and skeptical.
+              Return specific recommendations if issues found.")
+```
+
+**What Final Reviewer Does:**
+
+1. **Codebase Audit (not just changed files)**
+   - Reviews ALL files touched by the epic
+   - Checks for patterns that emerge across files
+   - Looks for inconsistencies between components
+   - Verifies the implementation matches the original epic goals
+
+2. **Code Quality Deep Dive**
+   - TypeScript strictness (any types, missing types)
+   - Error handling patterns (consistent across codebase?)
+   - Code duplication (copy-paste patterns?)
+   - Naming consistency (same concept named differently?)
+   - Dead code (unused exports, unreachable branches)
+
+3. **Completeness Check**
+   - All acceptance criteria met (per story)?
+   - All edge cases handled?
+   - All error states have UI feedback?
+   - Loading states implemented?
+   - Empty states handled?
+
+4. **Security Audit**
+   - Authentication checks on all protected routes
+   - Authorization (user can only access their data)
+   - Input validation (XSS, injection)
+   - Secrets handling (no hardcoded keys)
+   - CORS configuration
+   - Rate limiting in place
+
+5. **Regression Analysis**
+   - Run FULL test suite (unit + integration + e2e)
+   - Compare coverage before/after epic
+   - Check for tests that were disabled or skipped
+   - Verify existing functionality still works
+   - Check for breaking changes to APIs
+
+6. **Architecture Coherence**
+   - Layer boundaries respected?
+   - Dependency direction correct?
+   - No circular dependencies introduced?
+   - Consistent patterns across similar components?
+
+**Extended Thinking Required:**
+
+The final reviewer MUST use extended thinking to reason through:
+- "What could go wrong with this implementation?"
+- "What edge cases might be missed?"
+- "Are there security implications I haven't considered?"
+- "Does this implementation align with the system design?"
+- "What would a malicious user try to do?"
+
+**Output: Detailed Recommendations**
+
+The final reviewer creates: `.claude/final-review-epic-{N}.md`
+
+```markdown
+# Final Deep Review: Epic 9 (UI/UX Upgrade)
+
+**Reviewer:** final-reviewer (Opus)
+**Date:** 2025-01-17
+**Status:** RECOMMENDATIONS PENDING | APPROVED
+
+---
+
+## Executive Summary
+
+[2-3 paragraph assessment of the epic implementation]
+
+---
+
+## Code Quality Assessment
+
+### Strengths
+- [What was done well]
+
+### Issues Found
+
+#### Critical (Must Fix Before Merge)
+| Issue | Location | Description | Recommendation |
+|-------|----------|-------------|----------------|
+| Missing auth check | Sidebar.tsx:45 | User data fetched without auth verification | Add useAuth() check before fetch |
+
+#### Important (Should Fix)
+| Issue | Location | Description | Recommendation |
+|-------|----------|-------------|----------------|
+
+#### Minor (Consider Fixing)
+| Issue | Location | Description | Recommendation |
+|-------|----------|-------------|----------------|
+
+---
+
+## Completeness Assessment
+
+| Story | Acceptance Criteria | Met? | Notes |
+|-------|---------------------|------|-------|
+| 9.1 | Sidebar renders | ✅ | |
+| 9.1 | Collapse state persists | ⚠️ | Works but localStorage key could conflict |
+
+---
+
+## Security Assessment
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Auth on protected routes | ✅ | All routes check useAuth |
+| XSS prevention | ✅ | React escaping used |
+| CSRF protection | ⚠️ | Not applicable (JWT auth) |
+| Rate limiting | ❌ | Missing on new endpoints |
+
+---
+
+## Regression Analysis
+
+| Metric | Before Epic | After Epic | Status |
+|--------|-------------|------------|--------|
+| Unit tests | 120 | 145 | ✅ +25 |
+| Integration tests | 30 | 35 | ✅ +5 |
+| E2E tests | 12 | 15 | ✅ +3 |
+| Coverage | 78% | 76% | ⚠️ -2% |
+| Skipped tests | 0 | 2 | ⚠️ NEW |
+
+**Skipped Tests Analysis:**
+- `Sidebar.test.tsx:45` - Skipped "resize handler" - WHY?
+- `chatStore.test.ts:120` - Skipped "persistence edge case" - WHY?
+
+---
+
+## Architecture Coherence
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Layer boundaries | ✅ | Domain has no infra imports |
+| Dependency direction | ✅ | Correct flow |
+| Circular deps | ✅ | None detected |
+| Pattern consistency | ⚠️ | Two different state patterns used |
+
+---
+
+## Recommendations
+
+### Must Address (Blocking)
+1. **Add rate limiting to /api/sidebar/preferences** - Currently unlimited, could be abused
+2. **Fix auth check in ConversationList.tsx:78** - Fetches conversations without auth guard
+
+### Should Address (Non-Blocking)
+3. **Unify state management pattern** - Sidebar uses local state, MessageList uses Zustand
+4. **Increase test coverage** - Coverage dropped 2%, add tests for new hooks
+5. **Enable skipped tests or document why** - 2 tests skipped without explanation
+
+### Consider (Future Improvement)
+6. **Extract common patterns** - Three components have similar loading/error handling
+7. **Add storybook stories** - Would help with visual regression testing
+
+---
+
+## Verdict
+
+**Status:** RECOMMENDATIONS PENDING
+
+**Blocking Issues:** 2
+**Non-Blocking Issues:** 3
+**Suggestions:** 2
+
+**Next Steps:**
+1. Specialist fixes blocking issues (1, 2)
+2. Re-invoke final-reviewer for re-review
+3. Non-blocking issues can be addressed in follow-up PR
+
+---
+
+**This review is NOT a rubber stamp.** Issues must be addressed or explicitly acknowledged by user before proceeding.
+```
+
+**After Final Review:**
+
+- If **RECOMMENDATIONS PENDING**: Specialist fixes blocking issues, then re-invoke final-reviewer
+- If **APPROVED**: User may mark epic as complete in task-overview.md
+- Non-blocking issues become tech debt items (add to backlog)
+
+**Critical:** The final reviewer hands back specific, actionable recommendations. It does NOT just say "looks good" - it finds things to improve.
 
 ---
 
@@ -553,12 +759,14 @@ If you override a code review warning, document why in commit message or review 
 - `.claude/agents/question-gen-agent.md` - Question generation
 - `.claude/agents/export-agent.md` - Export functionality
 - `.claude/agents/ui-ux-agent.md` - UI/UX improvements
-- `.claude/agents/code-reviewer.md` - Code review (Opus)
+- `.claude/agents/code-reviewer.md` - Story-level code review (Opus)
+- `.claude/agents/final-reviewer.md` - Epic-level deep review (Opus) - NOT a rubber stamp
 - `.claude/agents/bug-fix-agent.md` - Bug fixes
 
 **Review outputs:**
 - `.claude/review-approved.md` (ephemeral, created per story review)
 - `.claude/review-feedback.md` (ephemeral, created per story review)
+- `.claude/final-review-epic-{N}.md` (persistent, created after final deep review)
 
 **Task tracking:**
 - `tasks/task-overview.md` - High-level epic status
@@ -579,6 +787,7 @@ If you override a code review warning, document why in commit message or review 
 | 1.0 | 2025-01-04 | Initial agent workflow documentation - 7 specialist agents (Sonnet) + 1 code reviewer (Opus). Manual approval checkpoints between stories. |
 | 2.0 | 2025-01-12 | Added bug-fix agent workflow. Added implementation logs (optional context preservation). Updated source of truth hierarchy. |
 | 3.0 | 2025-01-13 | **MAJOR UPDATE:** Added ui-ux-agent (Epic 9). Clarified story-level code review pattern (review after EACH story, not batched). Added 3-story user manual review checkpoints. Updated example workflow to show correct delegation: Main Agent → Specialist → Code Review (per story) → User Review (every 3 stories). |
+| 4.0 | 2026-01-17 | **MAJOR UPDATE:** Added final-reviewer agent for epic-level deep review. This is NOT a rubber stamp - thorough codebase audit checking quality, completeness, security, regressions. Added Step 8 (Final Deep Review) to workflow. Final reviewer must document thinking process and provide actionable recommendations. |
 
 ---
 

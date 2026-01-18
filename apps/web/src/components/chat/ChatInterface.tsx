@@ -9,8 +9,25 @@ import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
+import { fetchScoringResult } from '@/lib/api/scoring';
 import type { QuestionnaireReadyPayload, MessageAttachment } from '@/lib/websocket';
 
+/**
+ * Epic 22: Scoring card rendering with fallback strategy
+ *
+ * Primary: Render from store (populated by WebSocket or rehydration)
+ * Fallback: Render from message component (if store empty and message has it)
+ *
+ * This ensures:
+ * 1. Rehydration success → render from store
+ * 2. Rehydration failure → render from message (legacy support)
+ * 3. Never duplicate (store takes precedence)
+ *
+ * Implementation:
+ * - MessageList passes scoringResult from store to render card
+ * - ChatMessage filters out scoring_result from components when store has result
+ * - ChatMessage only renders scoring_result fallback for the LAST message with that component
+ */
 export function ChatInterface() {
   const {
     messages,
@@ -190,6 +207,56 @@ export function ChatInterface() {
       resetScoring();
     }
   }, [activeConversationId, resetScoring, scoringResultByConversation, setScoringResult]);
+
+  // Epic 22.1.2: Track in-flight rehydration requests per conversation
+  // Prevents duplicate fetches under React strict mode
+  const rehydratingRef = useRef<Set<string>>(new Set());
+
+  // Epic 22.1.2: Rehydrate scoring result from backend if not in cache
+  useEffect(() => {
+    if (!activeConversationId || !token) return;
+
+    // Guard 1: Already in cache (WebSocket event or previous rehydration)
+    const cachedResult = scoringResultByConversation[activeConversationId];
+    if (cachedResult) {
+      console.log('[ChatInterface] Scoring result already in cache');
+      return;
+    }
+
+    // Guard 2: Scoring in progress (will get result via WebSocket)
+    if (scoringProgress.status !== 'idle' && scoringProgress.status !== 'complete') {
+      console.log('[ChatInterface] Scoring in progress, skipping rehydration');
+      return;
+    }
+
+    // Guard 3: Already fetching (prevents duplicate under strict mode)
+    if (rehydratingRef.current.has(activeConversationId)) {
+      console.log('[ChatInterface] Rehydration already in progress');
+      return;
+    }
+
+    // Mark as in-flight
+    rehydratingRef.current.add(activeConversationId);
+
+    // Fetch from backend
+    const rehydrate = async () => {
+      try {
+        const result = await fetchScoringResult(activeConversationId, token);
+        if (result) {
+          useChatStore.getState().rehydrateScoringResult(activeConversationId, result);
+          console.log('[ChatInterface] Rehydrated scoring result from backend');
+        }
+      } catch (error) {
+        // Silently fail - scoring card just won't show
+        console.warn('[ChatInterface] Failed to rehydrate scoring result:', error);
+      } finally {
+        // Clear in-flight flag
+        rehydratingRef.current.delete(activeConversationId);
+      }
+    };
+
+    rehydrate();
+  }, [activeConversationId, token, scoringResultByConversation, scoringProgress.status]);
 
   // Story 5b: Clear Composer files when scoring completes
   const prevScoringStatusRef = useRef<string>('idle');

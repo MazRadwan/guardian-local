@@ -1,10 +1,6 @@
 ---
-description: Claude-only implementation with parallel agents and browser QA
-context: fork
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task, MCPSearch
-hooks:
-  Stop:
-    - path: .claude/hooks/stop.sh
+name: claude-implement
+description: Claude-only implementation with parallel agents and browser QA. Use after /claude-plan to execute specs with frontend-agent, backend-agent, and code-review-agent.
 ---
 
 # Claude Implement
