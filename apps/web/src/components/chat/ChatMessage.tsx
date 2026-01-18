@@ -67,7 +67,7 @@ export function ChatMessage({
   // Story 24.5: Use simulated streaming for mode switch guidance messages
   const { displayedText, isStreaming: isSimulatedStreaming, isComplete } = useStreamingText({
     text: content,
-    speed: 40, // 40 chars/sec matches regular Claude streaming
+    speed: 80, // 80 chars/sec - faster than Claude but still visible streaming effect
     enabled: simulateStreaming,
   });
 
