@@ -2,7 +2,7 @@
 name: questionnaire-extraction-agent
 description: Build questionnaire extraction and export wiring (Epic 11 - detection, parsing, WebSocket events, download UI)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Questionnaire Extraction Agent - Epic 11

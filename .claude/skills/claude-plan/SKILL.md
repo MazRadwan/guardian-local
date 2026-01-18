@@ -1,7 +1,6 @@
 ---
-description: Claude-only planning phase with two-stage spec review
-context: fork
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task
+name: claude-plan
+description: Claude-only planning phase with two-stage spec review (architect + feasibility). Use for autonomous epic planning with plan-agent, architect-agent, and spec-review-agent.
 ---
 
 # Claude Plan

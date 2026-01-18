@@ -2,7 +2,7 @@
 name: export-agent
 description: Build questionnaire export system (Epic 7 - PDF, Word, Excel generation)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Export Agent - Epic 7

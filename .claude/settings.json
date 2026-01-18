@@ -1,4 +1,7 @@
 {
+  "env": {
+    "USE_BUILTIN_RIPGREP": "0"
+  },
   "hooks": {
     "Stop": [
       {

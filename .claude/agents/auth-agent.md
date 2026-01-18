@@ -2,7 +2,7 @@
 name: auth-agent
 description: Build authentication and authorization system for Guardian (Epic 2)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Auth Agent - Epic 2

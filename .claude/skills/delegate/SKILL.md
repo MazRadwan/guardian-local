@@ -1,6 +1,6 @@
 ---
-description: Full automation - runs spec-design then implement end-to-end
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task
+name: delegate
+description: Full automation - runs spec-design then implement end-to-end with GPT deep review. Use for complete autonomous epic execution with minimal intervention.
 ---
 
 # Delegate - Full Automation
@@ -92,94 +92,9 @@ For each sprint (1 to N):
     └── 4. Move to next sprint
 ```
 
-### Sprint Spec Review Prompt (Deep Analysis)
-
-```
-You are assuming the role of a 10x senior dev. Review this SPRINT SPECIFICATION with deep analysis.
-
-Sprint: {sprint_id}
-Stories: {story_count}
-
-## Your Task
-
-Before approving, YOU MUST perform deep analysis:
-
-1. **Search the codebase** for each file in 'Files Touched' sections
-2. **Verify** the proposed changes don't conflict with existing code
-3. **Check** for missing dependencies or breaking changes
-4. **Look for** similar implementations and ensure consistency
-5. **Validate** the technical approach against existing patterns
-6. **Identify** potential race conditions, security issues, or architectural violations
-
-Take your time. Think deeply. Search continuously.
-
-## Response Format
-
-**If issues found**, respond with:
-
-STATUS: NEEDS_REVISION
-
-CRITICAL (blocks implementation):
-1. [Issue] — Why: [rationale] — File: [path if applicable]
-
-HIGH (significant risk if not addressed):
-1. [Issue] — Why: [rationale] — File: [path if applicable]
-
-MEDIUM (should address, creates tech debt):
-1. [Issue] — Why: [rationale]
-
-LOW (nice to have):
-- [Issue] — Why: [benefit if addressed]
-
-**If no issues**, respond with:
-
-STATUS: APPROVED
-
-No blocking issues found. Sprint specification is ready for implementation.
-
-## Important
-- CRITICAL/HIGH items block approval
-- MEDIUM items should be fixed but can be overridden after discussion
-- LOW items are logged for awareness
-- **Search the codebase** - don't just read the spec in isolation
-```
-
 ## Step 4: Spec Final Pass
 
 **After all sprints individually approved**, do a holistic review.
-
-```
-You are assuming the role of a 10x senior dev. Review ALL SPRINT SPECS together holistically.
-
-Epic: {epic_id}
-Total Sprints: {sprint_count}
-Total Stories: {story_count}
-
-## Your Task
-
-Review all sprints TOGETHER to catch:
-1. **Cross-sprint dependencies:** Are they correctly ordered?
-2. **File conflicts across sprints:** Do later sprints assume earlier changes?
-3. **Architectural consistency:** Does the sum align with clean architecture?
-4. **Scope creep:** Does the total scope match the original goals?
-5. **Integration risks:** Will these pieces work together?
-6. **Missing gaps:** Anything implied by goals but not covered?
-
-## Response Format
-
-**If issues found**, respond with:
-
-STATUS: NEEDS_REVISION
-
-CROSS-SPRINT ISSUES:
-1. [Issue] — Sprints affected: [list] — Why: [rationale]
-
-**If no issues**, respond with:
-
-STATUS: APPROVED
-
-No cross-sprint issues found. Epic specification is ready for implementation.
-```
 
 Log: `<promise>PLAN_APPROVED</promise>`
 
@@ -219,49 +134,7 @@ Log: `<promise>SPRINT_REVIEWED</promise>`
 
 1. Generate completion summary
 2. Write to `/tasks/epic-{N}/completion.md`
-3. Final output:
-
-```
-## Workflow Complete
-
-**Epic:** {N}
-**Scope:** {scope}
-
-### Planning
-- Sprints created: {count}
-- Stories created: {count}
-
-#### Per-Sprint Spec Review Rounds
-- Sprint 1: {N} rounds
-- Sprint 2: {N} rounds
-- ...
-
-#### Spec Final Pass
-- Rounds: {N}
-
-### Implementation
-- Stories completed: {count}
-- Stories skipped: {count}
-- Batches: {count}
-- Code review rounds: {total}
-
-### Sprint Final Pass
-- Rounds: {N}
-- CRITICAL fixes: {count}
-- MAJOR fixes: {count}
-- MINOR deferred: {count}
-
-### CLAUDE.md Updates
-- Rules added: {count}
-
-### Files
-- Completion summary: /tasks/epic-{N}/completion.md
-- Review log: /tasks/epic-{N}/.review-log.md
-- Stuck log: /tasks/epic-{N}/.stuck-log.md (if any)
-- Sprint review notes: /tasks/epic-{N}/.sprint-review-notes.md
-
-<promise>SCOPE_COMPLETE</promise>
-```
+3. Final output: `<promise>SCOPE_COMPLETE</promise>`
 
 ## Error Recovery
 
@@ -278,14 +151,6 @@ If same error 3x:
 1. Log to `.stuck-log.md`
 2. Skip story, continue with next
 3. Include in final report
-
-### Critical Failure
-
-If unrecoverable:
-1. Save state
-2. Output `<promise>ERROR</promise>`
-3. Provide resume instructions:
-   "To resume, run `/delegate` again - state will be loaded from checkpoint."
 
 ## Flow Diagram
 
