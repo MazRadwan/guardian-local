@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { cn } from '@/lib/utils';
-import { User, Bot, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
+import { User, ShieldCheck, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
 import { DownloadButton } from './DownloadButton';
 import { FileChipInChat } from './FileChipInChat';
 import { ScoringResultCard } from './ScoringResultCard';
@@ -80,7 +80,7 @@ export function ChatMessage({
     <div
       className={cn(
         'flex w-full gap-4 px-4 py-6 md:px-8 md:py-8',
-        isUser ? 'bg-white' : 'bg-gray-50',
+        isUser && 'flex-row-reverse',
         className
       )}
       role="article"
@@ -89,127 +89,123 @@ export function ChatMessage({
       {/* Avatar */}
       <div
         className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-blue-600' : 'bg-purple-600'
+          'flex w-10 h-10 shrink-0 items-center justify-center rounded-full',
+          isUser ? 'bg-sky-100' : 'bg-sky-500'
         )}
       >
         {isUser ? (
-          <User className="h-5 w-5 text-white" aria-hidden="true" />
+          <User className="h-5 w-5 text-sky-600" aria-hidden="true" />
         ) : (
-          <Bot className="h-5 w-5 text-white" aria-hidden="true" />
+          <ShieldCheck className="h-5 w-5 text-white" aria-hidden="true" />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 space-y-3 overflow-hidden">
+      <div className={cn('flex-1 min-w-0 overflow-hidden', isUser && 'flex flex-col items-end')}>
         {/* Role label */}
-        <div className="text-sm font-semibold text-gray-900">
+        <div className={cn(
+          'text-sm font-semibold',
+          isUser ? 'text-gray-900' : 'text-sky-600'
+        )}>
           {isUser ? 'You' : isSystem ? 'System' : 'Guardian'}
         </div>
 
-        {/* Message content */}
-        <div className="prose prose-slate prose-base max-w-none break-words
-          prose-p:leading-7 prose-li:leading-7
-          prose-pre:p-0 prose-pre:bg-transparent
-          [&>table]:my-4
-          [&>th]:bg-gray-100 [&>th]:p-2 [&>th]:text-left [&>th]:border [&>th]:border-gray-300
-          [&>td]:p-2 [&>td]:border [&>td]:border-gray-300
-        ">
-          <ReactMarkdown 
-            remarkPlugins={[remarkGfm]}
-            components={{
-              table: ({node, ...props}) => (
-                <div className="overflow-x-auto w-full my-4 border rounded-lg">
-                  <table className="min-w-full border-collapse text-sm" {...props} />
-                </div>
-              ),
-              thead: ({node, ...props}) => (
-                <thead className="bg-gray-50" {...props} />
-              ),
-              th: ({node, ...props}) => (
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b" {...props} />
-              ),
-              td: ({node, ...props}) => (
-                <td className="px-4 py-3 text-sm text-gray-900 border-b last:border-0" {...props} />
-              )
-            }}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
-
-        {/* Epic 16.6.8: File attachments */}
-        {attachments.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2" data-testid="message-attachments">
-            {attachments.map((attachment) => (
-              <FileChipInChat
-                key={attachment.fileId}
-                filename={attachment.filename}
-                fileId={attachment.fileId}
-                mimeType={attachment.mimeType}
-                onClick={() => onDownloadAttachment?.(attachment)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Embedded components */}
-        {components.length > 0 && (
-          <div className="mt-4 space-y-2">
-            {components.map((component, index) => (
-              <EmbeddedComponent key={index} component={component} />
-            ))}
-          </div>
-        )}
-
-        {/* Timestamp */}
-        {timestamp && (
-          <div className="text-xs text-gray-500" aria-label="Message timestamp">
-            {new Date(timestamp).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </div>
-        )}
-
-        {/* Message Actions - Assistant Messages Only */}
-        {!isUser && !isSystem && (
-          <div className="mt-2 flex items-center gap-2">
-            {/* Copy Button */}
-            <button
-              onClick={handleCopy}
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors"
-              aria-label={isCopied ? 'Copied to clipboard' : 'Copy message'}
-              title={isCopied ? 'Copied!' : 'Copy to clipboard'}
+        {/* Content container - sky-50 for Guardian, plain for user */}
+        <div className={cn(!isUser && !isSystem && 'bg-sky-50 rounded-xl p-5 mt-2', (isUser || isSystem) && 'mt-2')}>
+          {/* Message content */}
+          <div className="prose prose-slate prose-base max-w-none break-words
+            prose-p:leading-7 prose-li:leading-7
+            prose-pre:p-0 prose-pre:bg-transparent
+            [&>table]:my-4
+            [&>th]:bg-gray-100 [&>th]:p-2 [&>th]:text-left [&>th]:border [&>th]:border-gray-300
+            [&>td]:p-2 [&>td]:border [&>td]:border-gray-300
+          ">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                table: ({node, ...props}) => (
+                  <div className="overflow-x-auto w-full my-4 border rounded-lg">
+                    <table className="min-w-full border-collapse text-sm" {...props} />
+                  </div>
+                ),
+                thead: ({node, ...props}) => (
+                  <thead className="bg-gray-50" {...props} />
+                ),
+                th: ({node, ...props}) => (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b" {...props} />
+                ),
+                td: ({node, ...props}) => (
+                  <td className="px-4 py-3 text-sm text-gray-900 border-b last:border-0" {...props} />
+                )
+              }}
             >
-              {isCopied ? (
-                <>
-                  <Check className="h-4 w-4 text-green-600" />
-                  <span className="text-green-600 font-medium">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="h-4 w-4" />
-                  <span>Copy</span>
-                </>
-              )}
-            </button>
-
-            {/* Regenerate Button */}
-            {onRegenerate && messageIndex !== undefined && (
-              <button
-                onClick={handleRegenerateClick}
-                disabled={isRegenerating}
-                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 active:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Regenerate response"
-                title="Regenerate response"
-              >
-                <RefreshCw className={`h-4 w-4 ${isRegenerating ? 'animate-spin' : ''}`} />
-                <span>Regenerate</span>
-              </button>
-            )}
+              {content}
+            </ReactMarkdown>
           </div>
-        )}
+
+          {/* Epic 16.6.8: File attachments */}
+          {attachments.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2" data-testid="message-attachments">
+              {attachments.map((attachment) => (
+                <FileChipInChat
+                  key={attachment.fileId}
+                  filename={attachment.filename}
+                  fileId={attachment.fileId}
+                  mimeType={attachment.mimeType}
+                  onClick={() => onDownloadAttachment?.(attachment)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Embedded components */}
+          {components.length > 0 && (
+            <div className="mt-4 space-y-2">
+              {components.map((component, index) => (
+                <EmbeddedComponent key={index} component={component} />
+              ))}
+            </div>
+          )}
+
+          {/* Message Actions - Assistant Messages Only (inside sky-50 container) */}
+          {!isUser && !isSystem && (
+            <div className="mt-4 flex items-center gap-2">
+              {/* Copy Button */}
+              <button
+                onClick={handleCopy}
+                className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-sky-100 active:bg-sky-200 transition-colors"
+                aria-label={isCopied ? 'Copied to clipboard' : 'Copy message'}
+                title={isCopied ? 'Copied!' : 'Copy to clipboard'}
+              >
+                {isCopied ? (
+                  <>
+                    <Check className="h-4 w-4 text-green-600" />
+                    <span className="text-green-600 font-medium">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </button>
+
+              {/* Regenerate Button */}
+              {onRegenerate && messageIndex !== undefined && (
+                <button
+                  onClick={handleRegenerateClick}
+                  disabled={isRegenerating}
+                  className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-sky-100 active:bg-sky-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Regenerate response"
+                  title="Regenerate response"
+                >
+                  <RefreshCw className={`h-4 w-4 ${isRegenerating ? 'animate-spin' : ''}`} />
+                  <span>Regenerate</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

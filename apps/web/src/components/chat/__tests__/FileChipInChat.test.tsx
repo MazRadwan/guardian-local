@@ -25,10 +25,10 @@ describe('FileChipInChat', () => {
       expect(screen.getByText('test-document.pdf')).toBeInTheDocument();
     });
 
-    it('renders with light background', () => {
+    it('renders with white background', () => {
       const { container } = render(<FileChipInChat {...defaultProps} />);
       const button = container.querySelector('button');
-      expect(button).toHaveClass('bg-gray-100');
+      expect(button).toHaveClass('bg-white');
     });
 
     it('has proper accessibility label', () => {
@@ -97,9 +97,9 @@ describe('FileChipInChat', () => {
   });
 
   describe('Visual elements', () => {
-    it('renders document icon with blue background', () => {
+    it('renders document icon with sky background', () => {
       const { container } = render(<FileChipInChat {...defaultProps} />);
-      const iconContainer = container.querySelector('.bg-blue-500');
+      const iconContainer = container.querySelector('.bg-sky-500');
       expect(iconContainer).toBeInTheDocument();
     });
 

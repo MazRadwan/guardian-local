@@ -1,0 +1,87 @@
+{
+  "workflow": "claude-autonomous",
+  "workflowVersion": "1.9.0",
+  "epic": 21,
+  "phase": "implementation",
+  "status": "awaiting_gpt_review",
+  "currentSprint": 1,
+  "currentBatch": 4,
+  "totalBatches": 4,
+  "batches": [
+    {
+      "id": 0,
+      "stories": [
+        "21.1"
+      ],
+      "description": "Foundational: globals.css font and animations",
+      "status": "complete"
+    },
+    {
+      "id": 1,
+      "stories": [
+        "21.2",
+        "21.5",
+        "21.6",
+        "21.7"
+      ],
+      "description": "Independent components: Sidebar, FileChipInChat, RotatingStatus, ChatInterface",
+      "status": "complete"
+    },
+    {
+      "id": 2,
+      "stories": [
+        "21.3"
+      ],
+      "description": "Major restructure: ChatMessage",
+      "status": "complete"
+    },
+    {
+      "id": 3,
+      "stories": [
+        "21.4",
+        "21.8"
+      ],
+      "description": "MessageList changes: typing indicator and vendor clarification",
+      "status": "complete"
+    }
+  ],
+  "completedStories": [
+    "21.1",
+    "21.2",
+    "21.3",
+    "21.4",
+    "21.5",
+    "21.6",
+    "21.7",
+    "21.8"
+  ],
+  "stuckStories": [],
+  "approvedSprints": [
+    "sprint-1"
+  ],
+  "startedAt": "2026-01-17T19:15:00Z",
+  "architectAttempts": 1,
+  "architectApproved": true,
+  "specReviewAttempts": 1,
+  "specReviewApproved": true,
+  "finalPassApproved": true,
+  "planningCompletedAt": "2026-01-17T19:35:00Z",
+  "specsCreated": [
+    "sprint-1.md",
+    "sprint-1-story-1.md",
+    "sprint-1-story-2.md",
+    "sprint-1-story-3.md",
+    "sprint-1-story-4.md",
+    "sprint-1-story-5.md",
+    "sprint-1-story-6.md",
+    "sprint-1-story-7.md",
+    "sprint-1-story-8.md"
+  ],
+  "planCompleteAt": 1768694113.877303,
+  "implementationStartedAt": "2026-01-17T20:00:00Z",
+  "implementationCompletedAt": "2026-01-17T20:30:00Z",
+  "testResults": {
+    "unitTests": "1155 passed",
+    "buildStatus": "pre-existing error in useWebSocketEvents.ts (unrelated to Epic 21)"
+  }
+}

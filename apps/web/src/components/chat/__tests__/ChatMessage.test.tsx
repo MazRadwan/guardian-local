@@ -36,12 +36,12 @@ describe('ChatMessage', () => {
     expect(article).toBeInTheDocument();
   });
 
-  it('displays timestamp when provided', () => {
-    const timestamp = new Date('2024-01-01T12:00:00');
-    render(<ChatMessage role="user" content="Test" timestamp={timestamp} />);
-
-    expect(screen.getByLabelText('Message timestamp')).toBeInTheDocument();
-  });
+  // Epic 21 Story 21.3: Timestamps removed from UI
+  // it('displays timestamp when provided', () => {
+  //   const timestamp = new Date('2024-01-01T12:00:00');
+  //   render(<ChatMessage role="user" content="Test" timestamp={timestamp} />);
+  //   expect(screen.getByLabelText('Message timestamp')).toBeInTheDocument();
+  // });
 
   it('renders embedded button component', () => {
     const components = [

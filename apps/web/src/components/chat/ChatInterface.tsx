@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { ScoringResultCard } from './ScoringResultCard';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, Shield } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
 import { useAuth } from '@/hooks/useAuth';
@@ -71,6 +71,9 @@ export function ChatInterface() {
   // Epic 18.4.2b: Vendor clarification state
   const vendorClarification = useChatStore((state) => state.vendorClarification);
   const clearVendorClarification = useChatStore((state) => state.clearVendorClarification);
+
+  // Epic 21 Story 21.7: Sidebar minimized state for canvas logo
+  const sidebarMinimized = useChatStore((state) => state.sidebarMinimized);
 
   // Get export data for active conversation
   const exportData = activeConversationId
@@ -345,6 +348,14 @@ export function ChatInterface() {
 
   return (
     <div className="flex h-full flex-col relative">
+      {/* Epic 21 Story 21.7: Guardian logo - visible when sidebar minimized */}
+      {sidebarMinimized && (
+        <div className="absolute top-4 left-4 z-10 flex items-center gap-2">
+          <Shield className="h-6 w-6 text-sky-500" />
+          <span className="text-lg font-semibold text-gray-900">Guardian</span>
+        </div>
+      )}
+
       {/* Error banner */}
       {error && (
         <div className="flex items-center gap-2 bg-red-50 px-6 py-3 text-sm text-red-800 shrink-0">

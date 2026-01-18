@@ -458,7 +458,7 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
                   type="button"
                   onClick={handleSend}
                   disabled={!isSendEnabled}
-                  className="h-8 w-8 rounded-full p-0 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed bg-purple-600 hover:bg-purple-700 text-white"
+                  className="h-8 w-8 rounded-full p-0 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed bg-sky-500 hover:bg-sky-600 text-white"
                   aria-label={isUploadingAriaLabel(files) ? 'Uploading files...' : 'Send message'}
                 >
                   {/* Sprint 2 Fix: Show loader during upload (includes pending stage per behavior-matrix) */}

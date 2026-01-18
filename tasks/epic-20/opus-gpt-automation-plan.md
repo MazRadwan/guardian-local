@@ -453,27 +453,28 @@ Automate the planning and implementation review cycle between Opus (Claude Code)
 - `/spec-design` → Review plan → `/implement` → Checkpoint workflow
 - `/implement` → Specs already exist, skip to implementation
 
-### MCP Integration
+### GPT Integration (Updated 2026-01-15)
 
-| Server | Purpose | Fallback |
-|--------|---------|----------|
-| `codex` | Stateful GPT-5.2 conversation for pushback loop | Bash: `codex --prompt` |
+| Method | Purpose | Status |
+|--------|---------|--------|
+| `codex review -` | Bash with heredoc prompt | ✅ **PRIMARY** |
+| MCP `mcp__codex__codex` | Stateful conversation | ⚠️ DEPRECATED (crash loop) |
 
-**MCP Config:**
-```json
-// .mcp.json
-{
-  "mcpServers": {
-    "codex": {
-      "type": "stdio",
-      "command": "codex",
-      "args": ["-m", "gpt-5.2-codex", "mcp-server"]
-    }
-  }
-}
+**Primary Method - Bash with heredoc:**
+```bash
+pkill -f "codex.*mcp-server" 2>/dev/null || true
+gtimeout 300 codex review - <<'EOF'
+## TASK
+...structured 7-section prompt...
+EOF
 ```
 
-**Note:** Requires global codex install (`npm install -g codex`).
+**Why Bash over MCP:**
+- MCP has `needs_follow_up: true` loop that causes Cursor crashes after ~5 min
+- Bash with heredoc is stable and reliable
+- Structured prompts tell GPT exactly what to review
+
+**Note:** Requires global codex install (`npm install -g @openai/codex`).
 
 ### State Files
 
@@ -516,6 +517,8 @@ ELSE                              → append to /CLAUDE.md
 
 ```json
 {
+  "workflow": "opus-gpt",           // REQUIRED: Identifies which workflow created this state
+  "workflowVersion": "1.0.0",       // Version for compatibility checking
   "epic": "19",
   "scope": "sprint-0",
   "phase": "planning|spec_final_pass|parallelization|implementation|sprint_review|complete",
@@ -861,6 +864,72 @@ No blocking issues found. Sprint implementation meets quality standards.
 
 ---
 
+## Epic 20 Workflow Improvements (2026-01-15)
+
+During Epic 20 implementation, several issues were discovered and resolved. See `post-epic-fixes.md` for full details.
+
+### Key Changes
+
+| Change | Before | After |
+|--------|--------|-------|
+| GPT Integration | MCP primary | Bash primary (`codex review -`) |
+| Prompt Format | Unstructured | 7-section format (TASK, EXPECTED OUTCOME, CONTEXT, CONSTRAINTS, MUST DO, MUST NOT DO, OUTPUT FORMAT) |
+| STATUS Requirement | Implicit | Explicit + emphatic ("MUST start with STATUS:") |
+| Timeout | `timeout` | `gtimeout` (macOS compatible) |
+| After Approval | No commit | Commit approved batch |
+| Process Cleanup | Manual | `pkill` before each review |
+
+### Structured 7-Section Prompt Format
+
+Based on [claude-delegator](https://github.com/jarrodwatts/claude-delegator) patterns:
+
+```
+## TASK
+Single, specific goal
+
+## EXPECTED OUTCOME
+Definition of success
+
+## CONTEXT
+Stories, files changed, test results
+
+## CONSTRAINTS
+Architecture rules, patterns
+
+## MUST DO
+Required actions
+
+## MUST NOT DO
+Forbidden actions
+
+## RE-REVIEW & PUSHBACK
+Re-review cycle, 7 round limit
+
+## OUTPUT FORMAT
+STATUS: APPROVED or STATUS: NEEDS_REVISION
+CONFIDENCE: [0.0-1.0]
+```
+
+### Commit After Approval
+
+After GPT approves a batch:
+```bash
+git add {files}
+git commit -m "feat(epic-N): batch X - stories Y, Z"
+```
+
+**Why:** Prevents re-reviewing already-approved code on subsequent reviews.
+
+### Issues Resolved
+
+| # | Issue | Status |
+|---|-------|--------|
+| 1-14 | Various workflow issues | ✅ ALL RESOLVED |
+
+See `post-epic-fixes.md` for complete issue log.
+
+---
+
 ## References
 
 - [Ralph Wiggum Plugin](https://github.com/anthropics/claude-code/tree/main/plugins/ralph-wiggum)
@@ -869,3 +938,22 @@ No blocking issues found. Sprint implementation meets quality standards.
 - [Claude Code Hooks](https://code.claude.com/docs/en/hooks)
 - [Boris Cherny's Claude Code Workflow](https://karozieminski.substack.com/p/boris-cherny-claude-code-workflow) - Parallel fleet, CLAUDE.md institutional memory, verification loops
 - [Using CLAUDE.MD Files (Anthropic)](https://claude.com/blog/using-claude-md-files) - Hierarchical/scoped CLAUDE.md documentation
+- [claude-delegator](https://github.com/jarrodwatts/claude-delegator) - 7-section prompt format pattern
+
+---
+
+## Changelog
+
+### v1.0.1 (2026-01-17)
+- **Workflow Identifier:** Added `workflow: "opus-gpt"` and `workflowVersion` fields to state file
+- **Compatibility Check:** Detects and warns if epic was started with different workflow (claude-autonomous vs opus-gpt)
+- Updated `/spec-design` command with workflow compatibility check before state initialization
+
+### v1.0.0 (2026-01-16)
+- Initial release
+- Plan phase with batched GPT deep review (every 2 sprints)
+- Implementation phase with parallel agents and file grouping
+- Sprint final pass for post-implementation QA
+- Scoped CLAUDE.md routing for institutional memory
+- Ralph Wiggum hooks for persistent loops
+- GPT-5.2 as external reviewer with 7-round pushback limit
