@@ -147,6 +147,14 @@ export function useWebSocketEvents({
   // Handler 1: Process complete assistant messages
   const handleMessage = useCallback(
     (message: ChatMessage) => {
+      // Story 24.5: Check if simulated streaming is requested for this message
+      const shouldSimulateStreaming = useChatStore.getState().simulateStreamingForNext;
+      if (shouldSimulateStreaming) {
+        // Clear the flag and mark message for simulated streaming
+        useChatStore.getState().setSimulateStreamingForNext(false);
+        message = { ...message, simulateStreaming: true };
+      }
+
       // Add message to store (critical - this was missing!)
       addMessage(message);
       finishStreaming();
@@ -404,6 +412,12 @@ export function useWebSocketEvents({
       // If this is the active conversation, hydrate local mode
       if (activeConversationId === data.conversationId) {
         setModeFromConversation(data.mode);
+
+        // Story 24.5: Set flag to simulate streaming for the next assistant message
+        // when switching to assessment or scoring mode (guidance message)
+        if (data.mode === 'assessment' || data.mode === 'scoring') {
+          useChatStore.getState().setSimulateStreamingForNext(true);
+        }
       }
     },
     [conversations, setConversations, activeConversationId, setModeFromConversation]

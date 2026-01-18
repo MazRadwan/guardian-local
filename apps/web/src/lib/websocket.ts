@@ -60,6 +60,8 @@ export interface ChatMessage {
   timestamp?: Date;
   /** Epic 16.6.8: File attachments sent with this message */
   attachments?: MessageAttachment[];
+  /** Story 24.5: Flag indicating this message should be simulated-streamed (mode switch guidance) */
+  simulateStreaming?: boolean;
 }
 
 export interface StreamEvent {
