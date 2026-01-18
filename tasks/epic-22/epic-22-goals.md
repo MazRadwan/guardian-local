@@ -179,15 +179,15 @@ partialize: (state) => ({
 - [ ] Returns 404 if no scoring results exist for conversation
 - [ ] Returns 403 if user doesn't own the conversation
 - [ ] Response shape matches `ScoringCompletePayload['result']`
-- [ ] Joins assessmentResults + dimensionScores + assessments tables
+- [ ] Joins assessmentResults + dimensionScores tables (NO assessment table join needed)
 - [ ] Unit tests for controller
 - [ ] Integration test for full flow
 
 **Files Touched:**
 - `packages/backend/src/infrastructure/http/routes/scoring.routes.ts` (new)
-- `packages/backend/src/infrastructure/http/controllers/ScoringController.ts` (new)
-- `packages/backend/src/infrastructure/http/routes/index.ts` (register route)
-- `packages/backend/src/application/services/ScoringService.ts` (add method)
+- `packages/backend/src/infrastructure/http/controllers/ScoringRehydrationController.ts` (new)
+- `packages/backend/src/index.ts` (register route)
+- `packages/backend/src/application/services/ScoringService.ts` (add read-model query method)
 
 **Agent:** backend-agent
 
@@ -202,13 +202,13 @@ partialize: (state) => ({
 - [ ] Fetch from `/api/scoring/conversation/:id` if not in store
 - [ ] Populate `scoringResultByConversation` on success
 - [ ] Handle 404 gracefully (no scoring for this conversation)
-- [ ] Avoid duplicate fetches (check store first)
-- [ ] Loading state while fetching (optional, can be silent)
+- [ ] Avoid duplicate fetches (check store first, use in-flight guard)
+- [ ] Prevent concurrent fetches under React strict mode
 
 **Files Touched:**
 - `apps/web/src/stores/chatStore.ts` - Add `rehydrateScoringResult` action
-- `apps/web/src/components/chat/ChatInterface.tsx` - Trigger rehydration
-- `apps/web/src/lib/api.ts` - Add `fetchScoringResult` function
+- `apps/web/src/components/chat/ChatInterface.tsx` - Trigger rehydration with in-flight guard
+- `apps/web/src/lib/api/scoring.ts` - **NEW** Add `fetchScoringResult` function
 
 **Agent:** frontend-agent
 
@@ -216,17 +216,17 @@ partialize: (state) => ({
 
 ### Story 22.3: Prevent Duplicate Card Rendering
 
-**Description:** Ensure only one scoring card renders (from store, not message components).
+**Description:** Ensure only one scoring card renders, with fallback to message components if store is empty.
 
 **Acceptance Criteria:**
-- [ ] Scoring card renders from store state only
-- [ ] No `scoring_result` component in message content (current behavior, verify)
-- [ ] If both exist (edge case), store takes precedence
+- [ ] Scoring card renders from store state when available (primary source)
+- [ ] If store is empty, render from `scoring_result` message component (fallback)
+- [ ] Never render BOTH (deduplicate)
 - [ ] Card position is consistent (after narrative message)
 
 **Files Touched:**
-- `apps/web/src/components/chat/ChatInterface.tsx` - Verify render logic
-- `apps/web/src/components/chat/ChatMessage.tsx` - Verify no duplicate render
+- `apps/web/src/components/chat/ChatInterface.tsx` - Implement fallback logic
+- `apps/web/src/components/chat/ChatMessage.tsx` - Conditional render based on store state
 
 **Agent:** frontend-agent
 

@@ -14,12 +14,15 @@
 
 **Important:** The backend has TWO code paths with INCONSISTENT persistence:
 
-| Code Path | File | Persists `scoring_result`? |
-|-----------|------|---------------------------|
-| HTTP upload → scoring | `DocumentUploadController.ts:706-726` | **YES** |
-| WebSocket scoring | `ChatServer.ts:807-823` | **NO** |
+| Code Path | File | Persists `scoring_result`? | Links Assessment? |
+|-----------|------|---------------------------|-------------------|
+| HTTP upload → scoring | `DocumentUploadController.ts:706-726` | **YES** | **NO** (must fix) |
+| WebSocket scoring | `ChatServer.ts:807-823` | **NO** | YES |
 
-This means historical messages MAY contain `scoring_result` components. Story 22.1.3 must handle this.
+This means:
+1. Historical messages MAY contain `scoring_result` components
+2. **CRITICAL:** `DocumentUploadController` must call `linkAssessment` after scoring for rehydration to work
+3. Story 22.1.3 uses fallback strategy (store primary, message fallback) to handle legacy data
 
 ### Response Type (MUST match existing)
 
@@ -48,10 +51,10 @@ E2E test fixtures must use PDF or DOCX format.
 
 | Story | Name | Focus | Dependencies | Agent |
 |-------|------|-------|--------------|-------|
-| **22.1.1** | Backend Scoring Rehydration Endpoint | New API to fetch scoring results by conversationId | None | backend-agent |
+| **22.1.1** | Backend Scoring Rehydration Endpoint | New API + fix `linkAssessment` gap in upload flow | None | backend-agent |
 | **22.1.2** | Frontend Scoring Rehydration | Fetch and populate scoring results on conversation load (with in-flight guard) | 22.1.1 | frontend-agent |
-| **22.1.3** | Prevent Duplicate Card Rendering | Filter `scoring_result` from messages, render from store only | None | frontend-agent |
-| **22.1.4** | E2E Test - Scoring Persistence | End-to-end verification with PDF fixture | 22.1.1, 22.1.2 | frontend-agent |
+| **22.1.3** | Prevent Duplicate Card Rendering | Fallback strategy: store primary, message fallback (no regression) | None | frontend-agent |
+| **22.1.4** | E2E Test - Scoring Persistence | End-to-end + DB verification with PDF fixture | 22.1.1, 22.1.2 | frontend-agent |
 
 ---
 
@@ -65,6 +68,7 @@ E2E test fixtures must use PDF or DOCX format.
     | 22.1.1  | scoring.routes.ts (NEW)                          | None              |
     |         | ScoringRehydrationController.ts (NEW)            |                   |
     |         | ScoringService.ts                                |                   |
+    |         | DocumentUploadController.ts (add linkAssessment) |                   |
     |         | index.ts (route registration)                    |                   |
     +---------+--------------------------------------------------+-------------------+
     | 22.1.2  | chatStore.ts                                     | None              |
@@ -99,6 +103,7 @@ E2E test fixtures must use PDF or DOCX format.
 |   - scoring.routes.ts (NEW)       |   - ChatMessage.tsx (add filter)       |
 |   - ScoringRehydrationController  |   - MessageList.tsx (verify)           |
 |   - ScoringService.ts             |   - ChatInterface.tsx (add comment)    |
+|   - DocumentUploadController.ts   |                                        |
 |   - index.ts                      |                                        |
 |                                   |                                        |
 |   backend-agent                   |   frontend-agent                       |
@@ -180,10 +185,12 @@ E2E test fixtures must use PDF or DOCX format.
 ## Exit Criteria
 
 Sprint 1 is complete when:
+- [ ] `DocumentUploadController.runScoring()` calls `linkAssessment` after scoring success
 - [ ] GET /api/scoring/conversation/:conversationId endpoint returns scoring data
-- [ ] Frontend fetches and populates store on conversation load
-- [ ] No duplicate scoring cards rendered
+- [ ] Frontend fetches and populates store on conversation load (with in-flight guard)
+- [ ] No duplicate scoring cards rendered (fallback strategy working)
 - [ ] E2E test verifies card persists across page reload
+- [ ] E2E test verifies UI matches database values (source of truth)
 - [ ] All unit and integration tests passing
 - [ ] Chrome DevTools MCP QA validation passes (no console errors, correct network calls, visual consistency)
 - [ ] Code reviewed and approved

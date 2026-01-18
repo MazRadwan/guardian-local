@@ -18,6 +18,7 @@ The test will:
 - [ ] Test verifies scoring card displays after scoring completes
 - [ ] Test reloads page and verifies card still displays
 - [ ] Test verifies data consistency (scores match before/after reload)
+- [ ] Test verifies UI data matches database values via API call (source of truth)
 - [ ] Test uses proper test fixtures and cleanup
 - [ ] Test is stable (no flaky failures)
 - [ ] Chrome DevTools MCP QA validation passes (see QA section below)
@@ -73,7 +74,7 @@ test.describe('Scoring Card Persistence', () => {
       timeout: 10000, // Rehydration should be fast
     });
 
-    // 8. Verify data matches
+    // 8. Verify data matches after reload
     const compositeScoreAfter = await page.textContent('[data-testid="composite-score"]');
     const overallRiskAfter = await page.textContent('[data-testid="overall-risk"]');
     const recommendationAfter = await page.textContent('[data-testid="recommendation"]');
@@ -81,6 +82,16 @@ test.describe('Scoring Card Persistence', () => {
     expect(compositeScoreAfter).toBe(compositeScore);
     expect(overallRiskAfter).toBe(overallRisk);
     expect(recommendationAfter).toBe(recommendation);
+
+    // 9. Verify against database via API (source of truth)
+    const conversationId = page.url().split('/').pop();
+    const apiResponse = await page.request.get(`/api/scoring/conversation/${conversationId}`);
+    expect(apiResponse.status()).toBe(200);
+
+    const dbData = await apiResponse.json();
+    expect(String(dbData.compositeScore)).toBe(compositeScore);
+    expect(dbData.overallRiskRating).toBe(overallRisk?.toLowerCase());
+    expect(dbData.recommendation).toBe(recommendation?.toLowerCase());
   });
 
   test('scoring card persists after logout and login', async ({ page }) => {

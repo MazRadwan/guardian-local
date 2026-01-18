@@ -4,15 +4,36 @@
 
 Create a new REST API endpoint to fetch scoring results for a conversation. This enables the frontend to rehydrate the scoring card after page reload by fetching persisted data from the database instead of relying on in-memory state populated by WebSocket events.
 
-The endpoint joins data from `assessmentResults`, `dimensionScores`, `assessments`, and `conversations` tables to return the complete scoring payload.
+The endpoint joins data from `assessmentResults`, `dimensionScores`, and `conversations` tables to return the complete scoring payload.
+
+## Critical Pre-Requisite: Fix Conversation-Assessment Linkage
+
+**PROBLEM:** The rehydration endpoint depends on `conversation.assessmentId` being set. However, in the **scoring-from-upload flow** (`DocumentUploadController.ts`), this linkage is **NEVER created**:
+
+```typescript
+// QuestionnaireGenerationService.ts:372 - DOES link assessment
+await this.conversationService.linkAssessment(context.conversationId, assessmentResult.assessmentId);
+
+// DocumentUploadController.ts - Does NOT link assessment after scoring!
+// The assessment is created from uploaded document, but conversation.assessmentId is never set
+```
+
+**FIX REQUIRED:** Add `linkAssessment` call to `DocumentUploadController.runScoring()` after successful scoring:
+
+```typescript
+// DocumentUploadController.ts - After scoring success (around line 726)
+// Link assessment to conversation for rehydration support
+await this.conversationService.linkAssessment(conversationId, assessmentId);
+```
 
 ## Acceptance Criteria
 
+- [ ] **CRITICAL:** `DocumentUploadController.runScoring()` links assessment to conversation after scoring
 - [ ] `GET /api/scoring/conversation/:conversationId` endpoint exists
-- [ ] Returns 404 if no scoring results exist for conversation
+- [ ] Returns 404 if no scoring results exist for conversation (no assessmentId linked)
 - [ ] Returns 403 if authenticated user doesn't own the conversation
 - [ ] Response shape matches `ScoringCompletePayload['result']` from frontend types
-- [ ] Correctly joins assessmentResults + dimensionScores + assessments tables
+- [ ] Correctly joins assessmentResults + dimensionScores tables (NO assessment table join)
 - [ ] Only returns the LATEST scoring batch (most recent `scoredAt`)
 - [ ] Unit tests for controller with mocked service
 - [ ] Integration test for full database flow
@@ -47,10 +68,12 @@ async getResultForConversation(
 Logic:
 1. Look up conversation by ID
 2. Verify user owns conversation (403 if not)
-3. Get assessmentId from conversation
+3. Get assessmentId from conversation (return 404 if not linked)
 4. Fetch latest assessmentResult for that assessment (most recent `scoredAt`)
 5. Fetch dimensionScores for that batch
-6. Map to `ScoringCompletePayload['result']` shape (no vendor lookup needed)
+6. Map to `ScoringCompletePayload['result']` shape
+
+**Note:** This is a read-model query (retrieval, not orchestration). Consider extracting to a dedicated read service in future if `ScoringService` grows.
 
 ### 4. Register Route
 
@@ -88,17 +111,19 @@ interface ScoringRehydrationResponse {
 
 ## Files Touched
 
+- `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts` - **MODIFY** Add `linkAssessment` call after scoring success
 - `packages/backend/src/infrastructure/http/routes/scoring.routes.ts` - **NEW** route file
 - `packages/backend/src/infrastructure/http/controllers/ScoringRehydrationController.ts` - **NEW** controller
-- `packages/backend/src/application/services/ScoringService.ts` - Add `getResultForConversation` method
+- `packages/backend/src/application/services/ScoringService.ts` - Add `getResultForConversation` read-model query
 - `packages/backend/src/application/interfaces/IScoringService.ts` - Add interface method
 - `packages/backend/src/index.ts` - Register new route
 
 ## Tests Affected
 
 Existing tests that may need updates:
-- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - May need to add tests for new method, existing tests should still pass
-- No existing tests directly touch the new files (all new code)
+- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - Add tests for new method
+- `packages/backend/__tests__/integration/auto-trigger-scoring.test.ts` - May need update to verify linkAssessment is called
+- `packages/backend/__tests__/unit/infrastructure/http/DocumentUploadController.test.ts` - If exists, add test for linkAssessment call
 
 ## Agent Assignment
 
