@@ -38,6 +38,7 @@ summaries/
 # Claude local state
 .claude/settings.local.json
 .claude/review-*.md
+.claude/commands/
 
 # Planning artifacts (local only)
 chats/
