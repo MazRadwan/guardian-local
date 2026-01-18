@@ -193,7 +193,7 @@ export class ScoringService implements IScoringService {
       const solutionType = this.determineSolutionType(assessment);
 
       // 8. Score with Claude
-      onProgress({ status: 'scoring', message: 'Analyzing responses against rubric...' });
+      onProgress({ status: 'scoring', message: 'Analyzing scoring...' });
       const { narrativeReport, payload } = await this.scoreWithClaude(
         parseResult,
         vendor.name,

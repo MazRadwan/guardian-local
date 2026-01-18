@@ -300,6 +300,20 @@ describe('ScoringService', () => {
         expect(progressEvents.some((e) => e.status === 'complete')).toBe(true)
       })
 
+      it('should emit "Analyzing scoring..." message (Story 24.4)', async () => {
+        const progressEvents: ScoringProgressEvent[] = []
+        await service.score(defaultInput, (e) => progressEvents.push(e))
+
+        // Find the scoring status progress call (initial scoring message, not streaming updates)
+        const scoringCall = progressEvents.find(
+          (e) => e.status === 'scoring' && e.message === 'Analyzing scoring...'
+        )
+
+        expect(scoringCall).toBeDefined()
+        expect(scoringCall!.message).toBe('Analyzing scoring...')
+        expect(scoringCall!.message).not.toContain('rubric')
+      })
+
       it('should store responses from parsed document', async () => {
         await service.score(defaultInput, jest.fn())
 
