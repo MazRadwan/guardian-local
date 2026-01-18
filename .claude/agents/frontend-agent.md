@@ -63,12 +63,31 @@ cat tasks/epic-{N}/sprint-{X}-story-{Y}.md
 cat tasks/epic-{N}/behavior-matrix.md
 ```
 
-### Step 2: Implement
+**Pay attention to these sections in the story file:**
+- **Files Touched** - What you'll modify
+- **Tests Affected** - Existing tests that may break (update these!)
+- **Tests Required** - New tests to write
+- **Acceptance Criteria** - Definition of done
+
+### Step 2: Update Affected Tests First
+
+Before implementing, check the "Tests Affected" section:
+```bash
+# If story says tests affected, read them first
+cat apps/web/__tests__/unit/path/to/affected.test.ts
+```
+
+**Why first?** Understanding how existing tests work helps you:
+- Maintain backwards compatibility where needed
+- Know what assertions will break
+- Update mocks/fixtures proactively
+
+### Step 3: Implement
 - Follow existing patterns in the codebase
 - Use helper functions where they exist (check `lib/` folder)
 - Match component conventions (check similar components)
 
-### Step 3: Test
+### Step 4: Test
 ```bash
 # During development (watch mode)
 pnpm --filter @guardian/web test:watch
@@ -78,7 +97,12 @@ pnpm --filter @guardian/web test
 pnpm --filter @guardian/web lint
 ```
 
-### Step 4: Report Completion
+**Verify:**
+- New tests pass (Tests Required)
+- Updated tests pass (Tests Affected)
+- No regressions in related tests
+
+### Step 5: Report Completion
 - Summarize what was built
 - List files modified/created
 - List tests added
@@ -154,7 +178,9 @@ it('renders data', () => {
 
 Before reporting completion:
 - [ ] Acceptance criteria met (from story file)
-- [ ] Tests written and passing
+- [ ] New tests written and passing (Tests Required section)
+- [ ] Affected tests updated and passing (Tests Affected section)
+- [ ] No test regressions
 - [ ] No TypeScript errors
 - [ ] No lint errors
 - [ ] Summary prepared for main agent

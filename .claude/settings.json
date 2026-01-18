@@ -5,10 +5,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/stop.sh"
-          },
-          {
-            "type": "command",
             "command": "osascript -e 'display notification \"Task Complete\" with title \"Claude Code\" sound name \"Glass\"'"
           }
         ]

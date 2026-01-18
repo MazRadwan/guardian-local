@@ -366,7 +366,7 @@ const isSendEnabled = (
 |-------|------------|------------|
 | Disabled (no content) | Gray, not clickable | "Send message" |
 | Disabled (uploading) | Gray, not clickable | "Uploading files..." |
-| Enabled | Purple, clickable | "Send message" |
+| Enabled | Sky-blue (`bg-sky-500`), clickable | "Send message" |
 | Sending | Spinner | "Sending..." |
 
 ### Aria Label in Mixed States
@@ -388,13 +388,15 @@ When files are in mixed stages, the aria-label follows this priority:
 
 | Stage | Icon | Background | Border | Status Text |
 |-------|------|------------|--------|-------------|
-| `pending` | Clock (gray) | Gray-100 | Gray-200 | "Queued" |
-| `uploading` | Spinner (blue) | Gray-100 | Gray-200 | "XX%" |
-| `storing` | Spinner (blue) | Gray-100 | Gray-200 | "Storing..." |
-| `attached` | Checkmark (green) | Gray-100 | Gray-200 | "Attached" |
-| `parsing` | Spinner (blue) | Gray-100 | Gray-200 | "Analyzing..." |
-| `complete` | Checkmark (green) | Gray-100 | Gray-200 | "Ready" |
+| `pending` | Clock (gray) | White | Slate-200 | "Queued" |
+| `uploading` | Spinner (sky-500) | White | Slate-200 | "XX%" |
+| `storing` | Spinner (sky-500) | White | Slate-200 | "Storing..." |
+| `attached` | Checkmark (green) | White | Slate-200 | "Attached" |
+| `parsing` | Spinner (sky-500) | White | Slate-200 | "Analyzing..." |
+| `complete` | Checkmark (green) | White | Slate-200 | "Ready" |
 | `error` | Alert (red) | Red-50 | Red-200 | "Error" |
+
+> **Epic 21 Update:** File chips now use `bg-white border-slate-200` with `bg-sky-500` icon background (was `bg-gray-100 border-gray-200` with `bg-blue-500`).
 
 ### Progress Bar
 
@@ -811,6 +813,7 @@ export function wouldExceedTotalSize(
 | 2024-01-13 | 1.2 | Removed ModeSelector warning triangle (hasIncompleteFiles), removed FileChip amber warning for detectedDocType, document type issues now handled via chat messages only |
 | 2024-01-13 | 1.3 | Added Cross-Session Persistence section documenting history loading, download availability, and orphaned file cleanup gap |
 | 2024-01-13 | 1.4 | Added Storage Lifecycle/Retention section with verified DB findings: upload failure leak, FK cascade conflict bug, missing infrastructure inventory |
+| 2026-01-17 | 1.5 | Epic 21 UI updates: Send button purple→sky-blue, File chip gray→white/slate/sky color scheme |
 
 ---
 

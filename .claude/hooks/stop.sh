@@ -4,12 +4,18 @@
 # This hook intercepts exit attempts and checks for completion promises in output.
 # If no promise found, it blocks exit and re-injects the prompt.
 #
+# Exit Methods:
+#   1. Output an exit promise (EPIC_COMPLETE, PLAN_APPROVED, etc.)
+#   2. Press ESC when Claude output is short/empty (detected as user interrupt)
+#   3. Run: touch /tmp/claude-force-exit (then press ESC)
+#   4. Press ESC 5 times (max iterations safety net)
+#
 # Exit Promises (any of these allow exit):
 #   EPIC_COMPLETE, PLAN_APPROVED, PLAN_APPROVED_WITH_WARNINGS,
 #   PAUSE_REQUESTED, EXIT_MODE, PLAN_STUCK_FEASIBILITY, PLAN_STUCK_INTEGRATION
 #
 # Usage: Automatically called by Claude Code on Stop event
-# Config: .claude/settings.json -> hooks.Stop
+# Config: Command frontmatter hooks (not global settings.json)
 
 set -e
 
@@ -17,11 +23,32 @@ set -e
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MAX_ITERATIONS="${MAX_ITERATIONS:-50}"
+MAX_ITERATIONS="${MAX_ITERATIONS:-5}"
 ITERATION_FILE="/tmp/claude-workflow-iterations"
+FORCE_EXIT_FILE="/tmp/claude-force-exit"
 
 # Exit promises that allow clean exit
 EXIT_PROMISES="EPIC_COMPLETE|PLAN_APPROVED|PLAN_APPROVED_WITH_WARNINGS|PAUSE_REQUESTED|EXIT_MODE|PLAN_STUCK_FEASIBILITY|PLAN_STUCK_INTEGRATION"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FORCE EXIT CHECK (User can touch /tmp/claude-force-exit to break loop)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if [ -f "$FORCE_EXIT_FILE" ]; then
+    echo "✓ Force exit signal found. Exiting."
+    rm -f "$FORCE_EXIT_FILE" "$ITERATION_FILE"
+    exit 0
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EMPTY OUTPUT CHECK (User likely pressed ESC to interrupt)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if [ -z "$CLAUDE_OUTPUT" ] || [ ${#CLAUDE_OUTPUT} -lt 50 ]; then
+    echo "✓ Detected user interrupt (empty/short output). Exiting."
+    rm -f "$ITERATION_FILE"
+    exit 0
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ITERATION TRACKING (Safety net for runaway loops)

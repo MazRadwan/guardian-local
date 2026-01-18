@@ -1,0 +1,450 @@
+# Architecture Diagram Mapping
+# Maps diagram nodes to actual code paths for validation
+# Used by diagram-updater-agent
+#
+# VALIDATED: 2026-01-17 - Paths verified against actual codebase
+
+diagram: architecture-latest.mmd
+last_verified: "2026-01-17"
+
+# Subgraph to directory mappings
+subgraphs:
+  Presentation:
+    paths:
+      - "apps/web/src/components/**"
+      - "apps/web/src/app/**"
+
+  HooksState:
+    paths:
+      - "apps/web/src/hooks/**"
+      - "apps/web/src/stores/**"
+      - "apps/web/src/services/**"
+
+  WebSocket:
+    paths:
+      - "apps/web/src/lib/websocket.ts"
+      - "packages/backend/src/infrastructure/websocket/**"
+
+  Backend:
+    paths:
+      - "packages/backend/src/infrastructure/http/**"
+      - "packages/backend/src/infrastructure/websocket/**"
+
+  Services:
+    paths:
+      - "packages/backend/src/application/services/**"
+
+  Domain:
+    paths:
+      - "packages/backend/src/domain/**"
+
+  AI:
+    paths:
+      - "packages/backend/src/infrastructure/ai/**"
+
+  Data:
+    paths:
+      - "packages/backend/src/infrastructure/database/**"
+      - "packages/backend/src/infrastructure/auth/**"
+      - "packages/backend/src/infrastructure/export/**"
+
+# Node to file/export mappings
+# validation_strategy: file | export | directory | pattern | skip
+nodes:
+  # === Presentation Layer ===
+  ChatInterface:
+    paths: ["apps/web/src/components/chat/ChatInterface.tsx"]
+    exports: ["ChatInterface"]
+    validation_strategy: export
+    status: EXISTS
+
+  Composer:
+    paths: ["apps/web/src/components/chat/Composer.tsx", "apps/web/src/components/chat/ModeSelector.tsx"]
+    exports: ["Composer", "ModeSelector"]
+    validation_strategy: export
+    status: EXISTS
+
+  MessageList:
+    paths: ["apps/web/src/components/chat/MessageList.tsx", "apps/web/src/components/chat/QuestionnaireMessage.tsx"]
+    exports: ["MessageList", "QuestionnaireMessage"]
+    validation_strategy: export
+    status: EXISTS
+
+  VerticalStepper:
+    paths: ["apps/web/src/components/chat/VerticalStepper.tsx"]
+    exports: ["VerticalStepper"]
+    validation_strategy: export
+    status: EXISTS
+
+  Sidebar:
+    paths: ["apps/web/src/components/chat/Sidebar.tsx", "apps/web/src/components/chat/ConversationList.tsx"]
+    exports: ["Sidebar", "ConversationList"]
+    validation_strategy: export
+    status: EXISTS
+
+  QuestionnairePrompt:
+    paths: ["apps/web/src/components/chat/QuestionnairePromptCard.tsx"]
+    exports: ["QuestionnairePromptCard"]
+    validation_strategy: export
+    status: EXISTS
+
+  DownloadBubble:
+    paths: ["apps/web/src/components/chat/DownloadButton.tsx"]
+    exports: ["DownloadButton"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Diagram says 'DownloadBubble', code says 'DownloadButton'"
+
+  # === Hooks & State Layer ===
+  useChatController:
+    paths: ["apps/web/src/hooks/useChatController.ts"]
+    exports: ["useChatController"]
+    validation_strategy: export
+    status: EXISTS
+
+  useWebSocketAdapter:
+    paths: ["apps/web/src/hooks/useWebSocketAdapter.ts"]
+    exports: ["useWebSocketAdapter"]
+    validation_strategy: export
+    status: EXISTS
+
+  useWebSocketEvents:
+    paths: ["apps/web/src/hooks/useWebSocketEvents.ts"]
+    exports: ["useWebSocketEvents"]
+    validation_strategy: export
+    status: EXISTS
+
+  useHistoryManager:
+    paths: ["apps/web/src/hooks/useHistoryManager.ts"]
+    exports: ["useHistoryManager"]
+    validation_strategy: export
+    status: EXISTS
+
+  useConversationSync:
+    paths: ["apps/web/src/hooks/useConversationSync.ts"]
+    exports: ["useConversationSync"]
+    validation_strategy: export
+    status: EXISTS
+
+  useConversationMode:
+    paths: ["apps/web/src/hooks/useConversationMode.ts"]
+    exports: ["useConversationMode"]
+    validation_strategy: export
+    status: EXISTS
+
+  useQuestionnairePersistence:
+    paths: ["apps/web/src/hooks/useQuestionnairePersistence.ts"]
+    exports: ["useQuestionnairePersistence"]
+    validation_strategy: export
+    status: EXISTS
+
+  useAuth:
+    paths: ["apps/web/src/hooks/useAuth.ts"]
+    exports: ["useAuth"]
+    validation_strategy: export
+    status: EXISTS
+
+  chatStore:
+    paths: ["apps/web/src/stores/chatStore.ts"]
+    exports: ["useChatStore"]
+    validation_strategy: export
+    status: EXISTS
+
+  ChatServiceFE:
+    paths: ["apps/web/src/services/ChatService.ts"]
+    exports: ["ChatService"]
+    validation_strategy: export
+    status: EXISTS
+
+  ConversationServiceFE:
+    paths: ["apps/web/src/services/ConversationService.ts"]
+    exports: ["ConversationService"]
+    validation_strategy: export
+    status: EXISTS
+
+  # === WebSocket Layer ===
+  WSClient:
+    paths: ["apps/web/src/lib/websocket.ts"]
+    exports: ["socket", "connectSocket"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Not a class, exports socket instance and connect function"
+
+  ClientEvents:
+    paths: ["apps/web/src/lib/websocket.ts"]
+    validation_strategy: pattern
+    status: EXISTS
+    note: "Event names defined inline, not separate type"
+
+  ServerEvents:
+    paths: ["packages/backend/src/infrastructure/websocket/ChatServer.ts"]
+    validation_strategy: pattern
+    status: EXISTS
+    note: "Event emissions defined in ChatServer"
+
+  # === Backend Layer ===
+  ChatServer:
+    paths: ["packages/backend/src/infrastructure/websocket/ChatServer.ts"]
+    exports: ["ChatServer"]
+    validation_strategy: export
+    status: EXISTS
+
+  RateLimiter:
+    paths: ["packages/backend/src/infrastructure/websocket/RateLimiter.ts"]
+    exports: ["RateLimiter"]
+    validation_strategy: export
+    status: EXISTS
+
+  HttpRoutes:
+    paths: ["packages/backend/src/infrastructure/http/routes/"]
+    validation_strategy: directory
+    status: EXISTS
+    note: "Multiple route files: auth, assessment, vendor, export, etc."
+
+  Controllers:
+    paths: ["packages/backend/src/infrastructure/http/controllers/"]
+    validation_strategy: directory
+    status: EXISTS
+    note: "AuthController, AssessmentController, VendorController, ExportController, etc."
+
+  # === Services Layer ===
+  AuthService:
+    paths: ["packages/backend/src/application/services/AuthService.ts"]
+    exports: ["AuthService"]
+    validation_strategy: export
+    status: EXISTS
+
+  ConversationService:
+    paths: ["packages/backend/src/application/services/ConversationService.ts"]
+    exports: ["ConversationService"]
+    validation_strategy: export
+    status: EXISTS
+
+  AssessmentService:
+    paths: ["packages/backend/src/application/services/AssessmentService.ts"]
+    exports: ["AssessmentService"]
+    validation_strategy: export
+    status: EXISTS
+
+  VendorService:
+    paths: ["packages/backend/src/application/services/VendorService.ts"]
+    exports: ["VendorService"]
+    validation_strategy: export
+    status: EXISTS
+
+  QuestionService:
+    paths: ["packages/backend/src/application/services/QuestionService.ts"]
+    exports: ["QuestionService"]
+    validation_strategy: export
+    status: EXISTS
+
+  QuestionnaireReadyService:
+    paths: ["packages/backend/src/application/services/QuestionnaireReadyService.ts"]
+    exports: ["QuestionnaireReadyService"]
+    validation_strategy: export
+    status: EXISTS
+
+  QuestionnaireGenerationService:
+    paths: ["packages/backend/src/application/services/QuestionnaireGenerationService.ts"]
+    exports: ["QuestionnaireGenerationService"]
+    validation_strategy: export
+    status: EXISTS
+
+  ExportService:
+    paths: ["packages/backend/src/application/services/ExportService.ts"]
+    exports: ["ExportService"]
+    validation_strategy: export
+    status: EXISTS
+
+  # === Domain Layer ===
+  User:
+    paths: ["packages/backend/src/domain/entities/User.ts"]
+    exports: ["User"]
+    validation_strategy: export
+    status: EXISTS
+
+  Conversation:
+    paths: ["packages/backend/src/domain/entities/Conversation.ts"]
+    exports: ["Conversation"]
+    validation_strategy: export
+    status: EXISTS
+
+  Assessment:
+    paths: ["packages/backend/src/domain/entities/Assessment.ts"]
+    exports: ["Assessment"]
+    validation_strategy: export
+    status: EXISTS
+
+  Vendor:
+    paths: ["packages/backend/src/domain/entities/Vendor.ts"]
+    exports: ["Vendor"]
+    validation_strategy: export
+    status: EXISTS
+
+  Question:
+    paths: ["packages/backend/src/domain/entities/Question.ts"]
+    exports: ["Question"]
+    validation_strategy: export
+    status: EXISTS
+
+  Message:
+    paths: ["packages/backend/src/domain/entities/Message.ts"]
+    exports: ["Message"]
+    validation_strategy: export
+    status: EXISTS
+
+  # === AI Layer ===
+  ClaudeClient:
+    paths: ["packages/backend/src/infrastructure/ai/ClaudeClient.ts"]
+    exports: ["ClaudeClient"]
+    validation_strategy: export
+    status: EXISTS
+
+  PromptCacheManager:
+    paths: ["packages/backend/src/infrastructure/ai/PromptCacheManager.ts"]
+    exports: ["PromptCacheManager"]
+    validation_strategy: export
+    status: EXISTS
+
+  assessmentModeTools:
+    paths: ["packages/backend/src/infrastructure/ai/tools/questionnaireReadyTool.ts"]
+    exports: ["questionnaireReadyTool"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Diagram says 'assessmentModeTools', actual file is 'questionnaireReadyTool'"
+
+  questionnaireOutputTool:
+    paths: ["packages/backend/src/infrastructure/ai/tools/questionnaireOutputTool.ts"]
+    exports: ["questionnaireOutputTool"]
+    validation_strategy: export
+    status: EXISTS
+
+  questionGenPrompt:
+    paths: ["packages/backend/src/infrastructure/ai/prompts/questionGeneration.ts"]
+    exports: ["questionGenerationPrompt", "buildQuestionGenerationPrompt"]
+    validation_strategy: export
+    status: EXISTS
+
+  QuestionnaireSchemaAdapter:
+    paths: ["packages/backend/src/application/adapters/QuestionnaireSchemaAdapter.ts"]
+    exports: ["QuestionnaireSchemaAdapter"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Located in application/adapters, not infrastructure/ai"
+
+  questionnaireToMarkdown:
+    paths: ["packages/backend/src/infrastructure/rendering/questionnaireToMarkdown.ts"]
+    exports: ["questionnaireToMarkdown"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Located in infrastructure/rendering, not infrastructure/ai"
+
+  # === Data Layer ===
+  UserRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleUserRepository.ts"]
+    exports: ["DrizzleUserRepository"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Class name is DrizzleUserRepository"
+
+  ConversationRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleConversationRepository.ts"]
+    exports: ["DrizzleConversationRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  MessageRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleMessageRepository.ts"]
+    exports: ["DrizzleMessageRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  VendorRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleVendorRepository.ts"]
+    exports: ["DrizzleVendorRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  AssessmentRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentRepository.ts"]
+    exports: ["DrizzleAssessmentRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  QuestionRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleQuestionRepository.ts"]
+    exports: ["DrizzleQuestionRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  Tables:
+    paths: ["packages/backend/src/infrastructure/database/schema/index.ts"]
+    exports: ["users", "conversations", "messages", "vendors", "assessments", "questions"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Schema spread across multiple files, re-exported from index"
+
+  Exporters:
+    paths:
+      - "packages/backend/src/infrastructure/export/PDFExporter.ts"
+      - "packages/backend/src/infrastructure/export/WordExporter.ts"
+      - "packages/backend/src/infrastructure/export/ExcelExporter.ts"
+    exports: ["PDFExporter", "WordExporter", "ExcelExporter"]
+    validation_strategy: export
+    status: EXISTS
+
+  JWTProvider:
+    paths: ["packages/backend/src/infrastructure/auth/JWTProvider.ts"]
+    exports: ["JWTProvider"]
+    validation_strategy: export
+    status: EXISTS
+
+  # === External (Not validated - external APIs) ===
+  ClaudeAPI:
+    paths: []
+    validation_strategy: skip
+    status: EXTERNAL
+    note: "External Anthropic API - not in codebase"
+
+# === Items in code but NOT in diagram (potential additions) ===
+not_in_diagram:
+  services:
+    - ScoringService: "packages/backend/src/application/services/ScoringService.ts"
+    - ScoringExportService: "packages/backend/src/application/services/ScoringExportService.ts"
+    - VendorValidationService: "packages/backend/src/application/services/VendorValidationService.ts"
+    - FileValidationService: "packages/backend/src/application/services/FileValidationService.ts"
+    - OrphanCleanupService: "packages/backend/src/application/services/OrphanCleanupService.ts"
+
+  hooks:
+    - useWebSocket: "apps/web/src/hooks/useWebSocket.ts"
+    - useFileUpload: "apps/web/src/hooks/useFileUpload.ts"
+    - useMultiFileUpload: "apps/web/src/hooks/useMultiFileUpload.ts"
+    - useScoringProgress: "apps/web/src/hooks/useScoringProgress.ts"
+    - useUserAssessments: "apps/web/src/hooks/useUserAssessments.ts"
+    - useDelayedLoading: "apps/web/src/hooks/useDelayedLoading.ts"
+
+  components:
+    - ScoreDashboard: "apps/web/src/components/chat/ScoreDashboard.tsx"
+    - ScoringResultCard: "apps/web/src/components/chat/ScoringResultCard.tsx"
+    - ScoringWarnings: "apps/web/src/components/chat/ScoringWarnings.tsx"
+    - ScoringWelcome: "apps/web/src/components/chat/ScoringWelcome.tsx"
+    - VendorClarificationCard: "apps/web/src/components/chat/VendorClarificationCard.tsx"
+    - FileChip: "apps/web/src/components/chat/FileChip.tsx"
+    - GenerateQuestionnaireButton: "apps/web/src/components/chat/GenerateQuestionnaireButton.tsx"
+
+  repositories:
+    - DrizzleResponseRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts"
+    - DrizzleFileRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleFileRepository.ts"
+    - DrizzleDimensionScoreRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleDimensionScoreRepository.ts"
+    - DrizzleAssessmentResultRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.ts"
+
+  ai:
+    - ScoringPromptBuilder: "packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts"
+    - ExportNarrativeGenerator: "packages/backend/src/infrastructure/ai/ExportNarrativeGenerator.ts"
+    - DocumentParserService: "packages/backend/src/infrastructure/ai/DocumentParserService.ts"
+
+# Edge rules for relational validation
+edge_rules:
+  implicit_within_subgraph: true
+  explicit_cross_layer: true
+  significance_threshold: 3

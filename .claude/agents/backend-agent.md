@@ -107,8 +107,8 @@ export class DrizzleConversationRepository implements IConversationRepository {
 
 ### Step 1: Understand the Task
 ```bash
-# Read the sprint file for context
-cat tasks/epic-{N}/sprint-{X}.md
+# Read the story file for context
+cat tasks/epic-{N}/sprint-{X}-story-{Y}.md
 
 # Check existing related code
 ls packages/backend/src/domain/
@@ -116,14 +116,33 @@ ls packages/backend/src/application/services/
 ls packages/backend/src/infrastructure/
 ```
 
-### Step 2: Implement in Order
+**Pay attention to these sections in the story file:**
+- **Files Touched** - What you'll modify
+- **Tests Affected** - Existing tests that may break (update these!)
+- **Tests Required** - New tests to write
+- **Acceptance Criteria** - Definition of done
+
+### Step 2: Review Affected Tests
+
+Before implementing, check the "Tests Affected" section:
+```bash
+# If story says tests affected, read them first
+cat packages/backend/__tests__/unit/path/to/affected.test.ts
+```
+
+**Why first?** Understanding how existing tests work helps you:
+- Maintain backwards compatibility where needed
+- Know what assertions will break
+- Update mocks/fixtures proactively
+
+### Step 3: Implement in Order
 
 1. **Domain entities first** (if new business concepts)
 2. **Interfaces second** (define contracts)
 3. **Services third** (orchestration logic)
 4. **Infrastructure last** (repositories, controllers, WebSocket handlers)
 
-### Step 3: Write Tests Alongside
+### Step 4: Write Tests Alongside
 
 ```bash
 # Start watch mode during development
@@ -134,7 +153,12 @@ pnpm test:unit
 pnpm test:integration  # If DB changes involved
 ```
 
-### Step 4: Verify Layer Compliance
+**Verify:**
+- New tests pass (Tests Required)
+- Updated tests pass (Tests Affected)
+- No regressions in related tests
+
+### Step 5: Verify Layer Compliance
 
 ```bash
 # Domain should have NO external imports
@@ -288,8 +312,10 @@ catch (error) {
 
 Before marking a story complete:
 
-- [ ] All acceptance criteria met (from sprint file)
-- [ ] Unit tests written and passing
+- [ ] All acceptance criteria met (from story file)
+- [ ] New tests written and passing (Tests Required section)
+- [ ] Affected tests updated and passing (Tests Affected section)
+- [ ] No test regressions
 - [ ] Integration tests if DB changes
 - [ ] No TypeScript errors (`tsc --noEmit`)
 - [ ] Layer rules followed (domain has no external imports)

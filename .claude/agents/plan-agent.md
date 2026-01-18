@@ -157,6 +157,12 @@ Sprint {X} is complete when:
 - `path/to/file1.ts` - [what changes]
 - `path/to/file2.ts` - [what changes]
 
+## Tests Affected
+Existing tests that may need updates or could break:
+- `__tests__/unit/path/to/file1.test.ts` - [why affected: function signature change, new dependency, etc.]
+- `__tests__/integration/path/to/feature.test.ts` - [why affected]
+- None expected (if no existing tests touch these files)
+
 ## Agent Assignment
 - [ ] frontend-agent OR backend-agent
 
@@ -181,8 +187,13 @@ Sprint {X} is complete when:
    - Clear on files touched (for parallelization)
 4. **Assign agents** - frontend-agent or backend-agent based on scope
 5. **Analyze file conflicts** - Build the File Overlap Analysis table
-6. **Create phases** - Group stories into parallel execution phases
-7. **Write files** - Create sprint overview and story files
+6. **Identify tests affected** - For each file touched, search for existing tests:
+   - Search `__tests__/` for imports of the file
+   - Check if function signatures or exports will change
+   - Note tests that mock the file's dependencies
+   - Flag potential regressions
+7. **Create phases** - Group stories into parallel execution phases
+8. **Write files** - Create sprint overview and story files
 
 ## Phase Analysis (MANDATORY)
 
@@ -276,6 +287,7 @@ Stories with overlapping files CANNOT run in parallel. The more precise you are,
 Before completing:
 - [ ] Every story has clear acceptance criteria
 - [ ] Every story has Files Touched section
+- [ ] Every story has Tests Affected section (existing tests that may break)
 - [ ] Every story has agent assignment
 - [ ] Every story has required tests listed
 - [ ] No story is too large (5+ unrelated files)
@@ -307,3 +319,4 @@ When done, provide summary:
 3. **Testable criteria** - Every acceptance criterion must be verifiable
 4. **Right-size stories** - Too big = hard to review, too small = overhead
 5. **Document dependencies** - Cross-story deps affect execution order
+6. **Identify test impacts** - Search for existing tests that import/mock files being changed. Prevents surprise regressions during implementation.

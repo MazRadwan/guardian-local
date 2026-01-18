@@ -1,0 +1,25 @@
+# Diagram Index - Auto-maintained by diagram-updater-agent
+# This file tracks all architecture diagrams and their validation status
+
+last_processed_commit: "b54de6a9c0c9ca0570381ebfb58a8c88ce1281a6"
+last_updated: "2026-01-17"
+
+diagrams:
+  - id: architecture-latest
+    file: architecture-latest.mmd
+    level: L1
+    scope: "Full system architecture - all layers and connections"
+    tags:
+      - presentation
+      - hooks
+      - websocket
+      - backend
+      - services
+      - domain
+      - ai
+      - data
+      - overview
+    description: |
+      Comprehensive flowchart showing Guardian's layered architecture:
+      Presentation (Next.js/React) → Hooks/State → WebSocket → Backend → Services → Domain → Data
+      Includes AI pipeline with Claude integration.
