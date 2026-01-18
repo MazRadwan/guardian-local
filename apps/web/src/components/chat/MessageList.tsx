@@ -168,8 +168,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       return (
         <div className="flex h-full items-center justify-center">
           <div className="text-center">
-            <h2 className="text-xl font-semibold text-gray-900">Welcome to Guardian</h2>
-            <p className="mt-2 text-gray-600">
+            <h2 className="text-xl font-semibold bg-gradient-to-r from-sky-700 via-sky-500 to-sky-700 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer">Welcome to Guardian</h2>
+            <p className="mt-2 bg-gradient-to-r from-sky-600 via-sky-400 to-sky-600 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer">
               Start a conversation to assess AI vendors or get guidance.
             </p>
           </div>

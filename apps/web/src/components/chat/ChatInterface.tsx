@@ -381,8 +381,10 @@ export function ChatInterface() {
           {/* Welcome message - hidden when scoring result is present */}
           {!(scoringResult && scoringResult.assessmentId) && (
             <div className="text-center mb-8">
-              <h1 className="text-2xl font-semibold text-gray-900 mb-2">Welcome to Guardian</h1>
-              <p className="text-gray-600">Start a conversation to assess AI vendors or get guidance.</p>
+              <h1 className="text-2xl font-semibold bg-gradient-to-r from-sky-700 via-sky-500 to-sky-700 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer mb-2">Welcome to Guardian</h1>
+              <p className="bg-gradient-to-r from-sky-600 via-sky-400 to-sky-600 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer">
+                Start a conversation to assess AI vendors or get guidance.
+              </p>
             </div>
           )}
 

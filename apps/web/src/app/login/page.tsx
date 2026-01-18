@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { login as apiLogin, AuthAPIError } from '@/lib/api/auth';
 import { DevModeButton } from '@/components/auth/DevModeButton';
+import { DNAHelixBackground } from '@/components/auth/DNAHelixBackground';
 import {
   ShieldCheck,
   Mail,
@@ -52,8 +53,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/30 to-slate-50 flex items-center justify-center px-4 py-12 font-['Atkinson_Hyperlegible']">
-      <div className="w-full max-w-md space-y-8">
+    <div className="relative min-h-screen overflow-hidden font-['Atkinson_Hyperlegible']">
+      {/* Base gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-sky-50/30 to-slate-50" />
+
+      {/* DNA Helix canvas animation */}
+      <DNAHelixBackground />
+
+      {/* Content - sits above canvas */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md space-y-8">
         {/* Logo Section */}
         <div className="flex flex-col items-center">
           <div className="relative">
@@ -69,8 +78,8 @@ export default function LoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 p-8">
-          <h2 className="text-xl font-semibold text-slate-800 text-center mb-6">
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl shadow-slate-200/50 p-8">
+          <h2 className="text-xl font-semibold text-slate-500 text-center mb-6">
             Sign in to your account
           </h2>
 
@@ -189,6 +198,7 @@ export default function LoginPage() {
           <Link href="#" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
           <span>·</span>
           <Link href="#" className="hover:text-slate-600 transition-colors">Support</Link>
+        </div>
         </div>
       </div>
     </div>
