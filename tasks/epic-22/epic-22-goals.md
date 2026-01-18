@@ -271,6 +271,18 @@ partialize: (state) => ({
 
 ---
 
+## Sprint Specification
+
+**Sprint file:** `tasks/epic-22/sprint-1.md`
+
+**Story files:**
+- `sprint-1-story-1.md` - Backend Scoring Rehydration Endpoint (backend-agent)
+- `sprint-1-story-2.md` - Frontend Scoring Rehydration (frontend-agent)
+- `sprint-1-story-3.md` - Prevent Duplicate Card Rendering (frontend-agent)
+- `sprint-1-story-4.md` - E2E Test - Scoring Persistence (frontend-agent)
+
+---
+
 ## References
 
 - Root cause analysis: External reviewer debug session (2026-01-17)

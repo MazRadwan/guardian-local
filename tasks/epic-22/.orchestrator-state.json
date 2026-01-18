@@ -1,0 +1,55 @@
+{
+  "workflow": "claude-autonomous",
+  "workflowVersion": "1.9.0",
+  "epic": "22",
+  "phase": "planning",
+  "status": "plan_approved",
+  "currentSprint": 1,
+  "totalSprints": 1,
+  "completedStories": [],
+  "stuckStories": [],
+  "approvedSprints": ["sprint-1"],
+  "startedAt": "2026-01-17T21:00:00.000Z",
+  "architectAttempts": 1,
+  "specReviewAttempts": 2,
+  "architectApprovedWithWarnings": false,
+  "planAgentComplete": true,
+  "planCompleteAt": 1768696395.160048,
+  "architectReview": {
+    "status": "approved",
+    "attempt": 1,
+    "notes": "Architecture sound. No decomposition needed. chatStore.ts at 559 lines - monitor growth."
+  },
+  "specReview": {
+    "status": "approved",
+    "attempts": 2,
+    "fixesApplied": [
+      "Story 22.1.1: Fixed test paths to match actual directory structure",
+      "Story 22.1.4: Made ScoringResultCard.tsx explicit in Files Touched with data-testid requirements",
+      "Story 22.1.4: Added fixture file to Tests Required"
+    ]
+  },
+  "executionPlan": {
+    "totalPhases": 3,
+    "phases": [
+      {
+        "id": 1,
+        "stories": ["22.1.1", "22.1.3"],
+        "parallel": true,
+        "status": "pending"
+      },
+      {
+        "id": 2,
+        "stories": ["22.1.2"],
+        "parallel": false,
+        "status": "pending"
+      },
+      {
+        "id": 3,
+        "stories": ["22.1.4"],
+        "parallel": false,
+        "status": "pending"
+      }
+    ]
+  }
+}
