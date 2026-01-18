@@ -105,4 +105,31 @@ describe('ProgressMessage', () => {
     const progressBar = screen.getByRole('progressbar');
     expect(progressBar).toHaveAttribute('aria-label', 'Progress: 60%');
   });
+
+  // Story 24.2: Smooth transition tests
+  it('should render with smooth transitions for message changes', () => {
+    const { rerender } = render(
+      <ProgressMessage status="parsing" message="First message" />
+    );
+
+    expect(screen.getByText('First message')).toHaveClass('transition-opacity');
+    expect(screen.getByText('First message')).toHaveClass('duration-300');
+
+    rerender(<ProgressMessage status="scoring" message="Second message" />);
+    expect(screen.getByText('Second message')).toBeInTheDocument();
+    expect(screen.getByText('Second message')).toHaveClass('transition-opacity');
+  });
+
+  it('should have transition classes for smooth updates', () => {
+    render(
+      <ProgressMessage
+        status="parsing"
+        progress={25}
+        message="Extracting responses..."
+      />
+    );
+
+    const messageElement = screen.getByText('Extracting responses...');
+    expect(messageElement).toHaveClass('transition-opacity', 'duration-300');
+  });
 });

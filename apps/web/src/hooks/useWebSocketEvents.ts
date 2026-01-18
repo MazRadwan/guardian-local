@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
@@ -558,6 +558,12 @@ export function useWebSocketEvents({
     [activeConversationId]
   );
 
+  // Story 24.2: Track last update time to enforce minimum display duration
+  const lastProgressUpdate = useRef<number>(0);
+  const pendingProgress = useRef<ScoringProgressPayload | null>(null);
+  const progressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const MIN_DISPLAY_MS = 500;
+
   const handleScoringProgress = useCallback(
     (data: ScoringProgressPayload) => {
       // Only process for active conversation
@@ -566,14 +572,43 @@ export function useWebSocketEvents({
         return;
       }
 
-      console.log('[useWebSocketEvents] Scoring progress:', data.status, data.message);
-      // Update scoring progress state
-      useChatStore.getState().updateScoringProgress({
-        status: data.status,
-        message: data.message,
-        progress: data.progress,
-        error: data.error,
-      });
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastProgressUpdate.current;
+
+      console.log('[useWebSocketEvents] Scoring progress:', data.status, data.message,
+        `(${timeSinceLastUpdate}ms since last)`);
+
+      if (timeSinceLastUpdate < MIN_DISPLAY_MS) {
+        // Queue this update to display after minimum duration
+        pendingProgress.current = data;
+
+        // Clear any existing timeout to avoid duplicate updates
+        if (progressTimeoutRef.current) {
+          clearTimeout(progressTimeoutRef.current);
+        }
+
+        progressTimeoutRef.current = setTimeout(() => {
+          if (pendingProgress.current === data) {
+            useChatStore.getState().updateScoringProgress({
+              status: data.status,
+              message: data.message,
+              progress: data.progress,
+              error: data.error,
+            });
+            lastProgressUpdate.current = Date.now();
+            pendingProgress.current = null;
+          }
+        }, MIN_DISPLAY_MS - timeSinceLastUpdate);
+      } else {
+        // Update immediately
+        useChatStore.getState().updateScoringProgress({
+          status: data.status,
+          message: data.message,
+          progress: data.progress,
+          error: data.error,
+        });
+        lastProgressUpdate.current = now;
+      }
     },
     [activeConversationId]
   );

@@ -50,8 +50,8 @@ export function ProgressMessage({ status, progress, message }: ProgressMessagePr
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {/* Status message */}
-        <p className="text-sm font-medium text-gray-900">{message}</p>
+        {/* Status message - Story 24.2: Add transition for smooth message changes */}
+        <p className="text-sm font-medium text-gray-900 transition-opacity duration-300">{message}</p>
 
         {/* Progress bar - only show when not complete and progress is defined */}
         {!isComplete && progress !== undefined && (
