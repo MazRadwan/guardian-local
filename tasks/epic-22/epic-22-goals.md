@@ -250,7 +250,7 @@ partialize: (state) => ({
 - [ ] Verify data matches database values
 
 **Files Touched:**
-- `apps/web/__tests__/e2e/scoring-persistence.spec.ts` (new)
+- `apps/web/e2e/scoring-persistence.spec.ts` (new)
 
 **Agent:** frontend-agent
 
