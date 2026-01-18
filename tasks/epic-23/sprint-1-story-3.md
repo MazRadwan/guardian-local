@@ -1,3 +1,42 @@
+# Story 23.3: Update Dev Mode Section Styling
+
+**Sprint:** 1
+**Epic:** 23 - Login Page Redesign
+**Agent:** frontend-agent
+**Dependencies:** Story 23.2 (Login page layout)
+
+---
+
+## Description
+
+### What
+Update the DevModeButton component styling to match the new "Accessible Care" design system.
+
+### Why
+The dev mode section should be visually consistent with the redesigned login page while remaining clearly distinguishable as a development-only feature.
+
+---
+
+## Acceptance Criteria
+
+- [ ] Dev mode section has `bg-slate-50` background
+- [ ] Dashed border style: `border-dashed border-slate-300`
+- [ ] Rounded corners: `rounded-xl`
+- [ ] Hover state: `hover:border-sky-400 hover:bg-sky-50`
+- [ ] Zap icon with "Development Mode" label
+- [ ] Button styled to match new design
+- [ ] Error text uses `text-red-500`
+- [ ] Consistent spacing with card
+
+---
+
+## Technical Approach
+
+### Step 1: Update DevModeButton Component
+
+**File:** `apps/web/src/components/auth/DevModeButton.tsx`
+
+```tsx
 'use client';
 
 import { useState } from 'react';
@@ -57,3 +96,49 @@ export function DevModeButton({ onLogin }: DevModeButtonProps) {
     </div>
   );
 }
+```
+
+### Step 2: Add Loader2 Import
+
+Add `Loader2` to lucide-react imports for loading spinner.
+
+---
+
+## Files Touched
+
+- `apps/web/src/components/auth/DevModeButton.tsx` - Complete restyling
+
+---
+
+## Tests Required
+
+Tests covered in Story 23.6. Verification:
+
+1. **Build check:** Component compiles without errors
+2. **Visual check:** Dev mode section matches design system
+3. **Functionality:** Quick login still works
+
+---
+
+## Verification Commands
+
+```bash
+# Build check
+pnpm --filter @guardian/web build
+
+# Dev server with dev mode enabled
+NEXT_PUBLIC_ENABLE_DEV_MODE=true pnpm --filter @guardian/web dev
+
+# Navigate to http://localhost:3000/login
+# Verify: Dev mode section visible, styled correctly
+```
+
+---
+
+## Notes for Agent
+
+1. **Remove Button import** - Use native button with Tailwind
+2. **Add Loader2 import** - For loading spinner consistency
+3. **Keep existing logic** - handleDevLogin, state management unchanged
+4. **Error styling** - Use text-red-500 to match design system
+5. **Spacing** - mt-6 pt-6 creates visual separation from form
