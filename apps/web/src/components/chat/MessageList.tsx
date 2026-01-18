@@ -239,6 +239,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                   attachments={message.attachments as MessageAttachment[] | undefined}
                   onDownloadAttachment={onDownloadAttachment}
                   isLastScoringMessage={index === lastScoringMessageIndex}
+                  simulateStreaming={message.simulateStreaming}
                 />
               </React.Fragment>
             ))}

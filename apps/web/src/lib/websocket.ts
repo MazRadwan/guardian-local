@@ -60,6 +60,8 @@ export interface ChatMessage {
   timestamp?: Date;
   /** Epic 16.6.8: File attachments sent with this message */
   attachments?: MessageAttachment[];
+  /** Story 24.5: Flag indicating this message should be simulated-streamed (mode switch guidance) */
+  simulateStreaming?: boolean;
 }
 
 export interface StreamEvent {
@@ -454,11 +456,13 @@ export class WebSocketClient {
 
   /**
    * Epic 16.6.8: Send message with optional attachments
+   * Story 24.1: Add isRegenerate flag for retry context
    * @param content - Message text content (can be empty if attachments present)
    * @param conversationId - Target conversation ID
    * @param attachments - Optional file attachments (from document upload)
+   * @param isRegenerate - Optional flag to indicate this is a regenerate request
    */
-  sendMessage(content: string, conversationId: string, attachments?: MessageAttachment[]): void {
+  sendMessage(content: string, conversationId: string, attachments?: MessageAttachment[], isRegenerate?: boolean): void {
     if (!this.socket || !this.socket.connected) {
       throw new Error('WebSocket not connected');
     }
@@ -470,6 +474,8 @@ export class WebSocketClient {
       content,
       // Epic 16.6.8: Include attachments if provided
       ...(attachments && attachments.length > 0 && { attachments }),
+      // Story 24.1: Include isRegenerate flag when regenerating
+      ...(isRegenerate && { isRegenerate: true }),
     });
   }
 

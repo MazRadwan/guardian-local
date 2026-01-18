@@ -249,7 +249,8 @@ describe('useWebSocketAdapter', () => {
 
       result.current.sendMessage('Hello!', 'conv-123');
 
-      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello!', 'conv-123', undefined);
+      // Story 24.1: sendMessage now takes optional isRegenerate parameter
+      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello!', 'conv-123', undefined, undefined);
     });
 
     it('should request history with conversation ID', () => {
@@ -449,8 +450,9 @@ describe('useWebSocketAdapter', () => {
       expect(result.current.isConnected).toBe(true);
 
       // Should be able to send message
+      // Story 24.1: sendMessage now takes optional isRegenerate parameter
       result.current.sendMessage('Test', 'conv-123');
-      expect(mockWs.sendMessage).toHaveBeenCalledWith('Test', 'conv-123', undefined);
+      expect(mockWs.sendMessage).toHaveBeenCalledWith('Test', 'conv-123', undefined, undefined);
 
       // Should be able to request history
       result.current.requestHistory('conv-123');
@@ -498,7 +500,8 @@ describe('useWebSocketAdapter', () => {
 
       // Verify all operations called
       expect(mockWs.fetchConversations).toHaveBeenCalledTimes(1);
-      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello', 'conv-1', undefined);
+      // Story 24.1: sendMessage now takes optional isRegenerate parameter
+      expect(mockWs.sendMessage).toHaveBeenCalledWith('Hello', 'conv-1', undefined, undefined);
       expect(mockWs.startNewConversation).toHaveBeenCalledWith('assessment');
       expect(mockWs.abortStream).toHaveBeenCalledTimes(1);
       expect(mockWs.deleteConversation).toHaveBeenCalledWith('conv-2');

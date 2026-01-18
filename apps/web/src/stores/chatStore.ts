@@ -124,6 +124,13 @@ export interface ChatState {
    */
   vendorClarification: VendorClarificationNeededPayload | null;
 
+  /**
+   * Story 24.5: Flag to simulate streaming for the next assistant message
+   * Set when switching to assessment/scoring mode (guidance message)
+   * Cleared after the message is rendered with streaming
+   */
+  simulateStreamingForNext: boolean;
+
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
@@ -256,6 +263,12 @@ export interface ChatState {
    * Epic 18.4.2b: Clear vendor clarification (after selection or cancel)
    */
   clearVendorClarification: () => void;
+
+  /**
+   * Story 24.5: Set flag to simulate streaming for the next assistant message
+   * Called when switching to assessment/scoring mode
+   */
+  setSimulateStreamingForNext: (value: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -311,6 +324,9 @@ export const useChatStore = create<ChatState>()(
 
       // Epic 18.4.2b: Vendor clarification - defaults
       vendorClarification: null,
+
+      // Story 24.5: Simulated streaming flag - defaults
+      simulateStreamingForNext: false,
 
       addMessage: (message) =>
         set((state) => ({
@@ -662,6 +678,12 @@ export const useChatStore = create<ChatState>()(
       clearVendorClarification: () => {
         console.log('[chatStore] Clearing vendor clarification');
         set({ vendorClarification: null });
+      },
+
+      // Story 24.5: Simulated streaming flag action
+      setSimulateStreamingForNext: (value) => {
+        console.log('[chatStore] Setting simulateStreamingForNext:', value);
+        set({ simulateStreamingForNext: value });
       },
     }),
     {

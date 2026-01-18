@@ -9,6 +9,7 @@ import { DownloadButton } from './DownloadButton';
 import { FileChipInChat } from './FileChipInChat';
 import { ScoringResultCard } from './ScoringResultCard';
 import { useChatStore } from '@/stores/chatStore';
+import { useStreamingText } from '@/hooks/useStreamingText';
 import type { ScoringResultData, RiskRating, Recommendation, DimensionScoreData } from '@/types/scoring';
 
 /**
@@ -42,6 +43,8 @@ export interface ChatMessageProps {
   onDownloadAttachment?: (attachment: MessageAttachment) => void;
   /** Epic 22 Story 22.1.3: Whether this message contains the LAST scoring_result component */
   isLastScoringMessage?: boolean;
+  /** Story 24.5: Whether to simulate streaming for this message (mode switch guidance) */
+  simulateStreaming?: boolean;
 }
 
 export function ChatMessage({
@@ -56,9 +59,20 @@ export function ChatMessage({
   attachments = [],
   onDownloadAttachment,
   isLastScoringMessage = false,
+  simulateStreaming = false,
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const isSystem = role === 'system';
+
+  // Story 24.5: Use simulated streaming for mode switch guidance messages
+  const { displayedText, isStreaming: isSimulatedStreaming, isComplete } = useStreamingText({
+    text: content,
+    speed: 80, // 80 chars/sec - faster than Claude but still visible streaming effect
+    enabled: simulateStreaming,
+  });
+
+  // Use streamed text if simulating, otherwise use full content
+  const renderedContent = simulateStreaming ? displayedText : content;
 
   // Copy to clipboard state
   const [isCopied, setIsCopied] = useState(false);
@@ -171,7 +185,7 @@ export function ChatMessage({
                 )
               }}
             >
-              {content}
+              {renderedContent}
             </ReactMarkdown>
           </div>
 

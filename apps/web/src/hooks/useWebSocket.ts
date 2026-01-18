@@ -117,12 +117,13 @@ export function useWebSocket({
   }, []);
 
   // Epic 16.6.8: Import MessageAttachment type for attachments
+  // Story 24.1: Add isRegenerate parameter for retry context
   const sendMessage = useCallback(
-    (content: string, conversationId: string, attachments?: import('@/lib/websocket').MessageAttachment[]) => {
+    (content: string, conversationId: string, attachments?: import('@/lib/websocket').MessageAttachment[], isRegenerate?: boolean) => {
       if (!clientRef.current || !isConnected) {
         throw new Error('WebSocket not connected');
       }
-      clientRef.current.sendMessage(content, conversationId, attachments);
+      clientRef.current.sendMessage(content, conversationId, attachments, isRegenerate);
     },
     [isConnected]
   );

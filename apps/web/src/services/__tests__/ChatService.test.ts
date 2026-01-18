@@ -161,11 +161,32 @@ describe('ChatService', () => {
       // Should set loading
       expect(store.setLoading).toHaveBeenCalledWith(true);
 
-      // Should resend previous user message (index 2) - regenerateMessage doesn't pass attachments
-      expect(adapter.sendMessage).toHaveBeenCalledWith('How are you?', 'conv-123');
+      // Story 24.1: Should resend previous user message with isRegenerate: true
+      expect(adapter.sendMessage).toHaveBeenCalledWith('How are you?', 'conv-123', undefined, true);
 
       // Should not set error
       expect(store.setError).not.toHaveBeenCalled();
+    });
+
+    it('should pass isRegenerate: true to adapter.sendMessage (Story 24.1)', () => {
+      const adapter = createMockAdapter();
+      const store = createMockStore();
+      const service = new ChatService(adapter, store);
+
+      const messages: ChatMessage[] = [
+        createMessage('user', 'Explain photosynthesis'),
+        createMessage('assistant', 'Photosynthesis is...'),
+      ];
+
+      service.regenerateMessage(1, 'conv-123', messages);
+
+      // Story 24.1: Verify isRegenerate flag is passed
+      expect(adapter.sendMessage).toHaveBeenCalledWith(
+        'Explain photosynthesis',
+        'conv-123',
+        undefined,
+        true  // isRegenerate flag
+      );
     });
 
     it('should handle disconnected state', () => {
@@ -330,8 +351,8 @@ describe('ChatService', () => {
         service.regenerateMessage(1, 'conv-123', messages);
       }).not.toThrow();
 
-      // Should still regenerate - regenerateMessage doesn't pass attachments
-      expect(adapter.sendMessage).toHaveBeenCalledWith('Hello', 'conv-123');
+      // Story 24.1: Should still regenerate with isRegenerate: true
+      expect(adapter.sendMessage).toHaveBeenCalledWith('Hello', 'conv-123', undefined, true);
     });
 
     it('should regenerate middle message correctly', () => {
@@ -360,8 +381,8 @@ describe('ChatService', () => {
         messages[5],
       ]);
 
-      // Should resend user message at index 2 - regenerateMessage doesn't pass attachments
-      expect(adapter.sendMessage).toHaveBeenCalledWith('Second', 'conv-123');
+      // Story 24.1: Should resend user message with isRegenerate: true
+      expect(adapter.sendMessage).toHaveBeenCalledWith('Second', 'conv-123', undefined, true);
     });
   });
 

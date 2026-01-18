@@ -18,7 +18,7 @@ const STATUS_MESSAGES: Record<ScoringStatus, string[]> = {
     'Identifying answered questions...',
   ],
   scoring: [
-    'Analyzing responses against rubric...',
+    'Analyzing scoring...',
     'Evaluating risk dimensions...',
     'This may take a minute...',
     'Generating detailed findings...',

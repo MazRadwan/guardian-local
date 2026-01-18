@@ -66,8 +66,9 @@ export interface WebSocketAdapterInterface {
   disconnect: () => void;
 
   // Messaging operations
-  /** Epic 16.6.8: Send message with optional attachments */
-  sendMessage: (content: string, conversationId: string, attachments?: MessageAttachment[]) => void;
+  /** Epic 16.6.8: Send message with optional attachments
+   *  Story 24.1: Add isRegenerate flag for retry context */
+  sendMessage: (content: string, conversationId: string, attachments?: MessageAttachment[], isRegenerate?: boolean) => void;
   requestHistory: (conversationId: string, limit?: number) => void;
 
   // Conversation operations
@@ -183,8 +184,9 @@ export function useWebSocketAdapter({
 
     // Messaging operations
     // Epic 16.6.8: Pass attachments to underlying hook
-    sendMessage: (content: string, conversationId: string, attachments?: MessageAttachment[]) => {
-      wsHook.sendMessage(content, conversationId, attachments);
+    // Story 24.1: Pass isRegenerate flag for retry context
+    sendMessage: (content: string, conversationId: string, attachments?: MessageAttachment[], isRegenerate?: boolean) => {
+      wsHook.sendMessage(content, conversationId, attachments, isRegenerate);
     },
 
     requestHistory: (conversationId: string, limit?: number) => {

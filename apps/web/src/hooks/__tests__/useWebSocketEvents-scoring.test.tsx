@@ -103,6 +103,14 @@ describe('useWebSocketEvents - Scoring Events', () => {
   });
 
   describe('handleScoringProgress', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
     it('should update scoring progress with status and message', () => {
       const params = createMockParams();
       const { result } = renderHook(() => useWebSocketEvents(params));
@@ -137,6 +145,104 @@ describe('useWebSocketEvents - Scoring Events', () => {
       result.current.handleScoringProgress(payload);
 
       expect(mockStore.updateScoringProgress).not.toHaveBeenCalled();
+    });
+
+    // Story 24.2: Debounce/queue tests
+    it('should display all progress messages in sequence with minimum 500ms duration', async () => {
+      const params = createMockParams();
+      const { result } = renderHook(() => useWebSocketEvents(params));
+
+      const messages: ScoringProgressPayload[] = [
+        { conversationId: 'conv-123', status: 'parsing', message: 'Retrieving...' },
+        { conversationId: 'conv-123', status: 'parsing', message: 'Extracting...' },
+        { conversationId: 'conv-123', status: 'scoring', message: 'Analyzing...' },
+        { conversationId: 'conv-123', status: 'complete', message: 'Complete!' },
+      ];
+
+      // Emit messages rapidly (within 500ms)
+      for (const msg of messages) {
+        result.current.handleScoringProgress(msg);
+      }
+
+      // First message updates immediately
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledTimes(1);
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledWith({
+        status: 'parsing',
+        message: 'Retrieving...',
+        progress: undefined,
+        error: undefined,
+      });
+
+      // Wait for debounce to complete for subsequent messages
+      jest.advanceTimersByTime(2500);
+
+      // All messages should eventually be displayed (at minimum the last one after debounce)
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledTimes(2);
+      expect(mockStore.updateScoringProgress).toHaveBeenLastCalledWith({
+        status: 'complete',
+        message: 'Complete!',
+        progress: undefined,
+        error: undefined,
+      });
+    });
+
+    it('should enforce minimum display duration between updates', async () => {
+      const params = createMockParams();
+      const { result } = renderHook(() => useWebSocketEvents(params));
+
+      // First message
+      result.current.handleScoringProgress({
+        conversationId: 'conv-123',
+        status: 'parsing',
+        message: 'First',
+      });
+
+      // Second message immediately after
+      result.current.handleScoringProgress({
+        conversationId: 'conv-123',
+        status: 'parsing',
+        message: 'Second',
+      });
+
+      // Only first should update immediately
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledTimes(1);
+
+      // After 600ms (> MIN_DISPLAY_MS), second should be displayed
+      jest.advanceTimersByTime(600);
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledTimes(2);
+    });
+
+    it('should update immediately if enough time has passed since last update', async () => {
+      const params = createMockParams();
+      const { result } = renderHook(() => useWebSocketEvents(params));
+
+      // First message
+      result.current.handleScoringProgress({
+        conversationId: 'conv-123',
+        status: 'parsing',
+        message: 'First',
+      });
+
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledTimes(1);
+
+      // Wait longer than MIN_DISPLAY_MS
+      jest.advanceTimersByTime(600);
+
+      // Second message after enough time
+      result.current.handleScoringProgress({
+        conversationId: 'conv-123',
+        status: 'scoring',
+        message: 'Second',
+      });
+
+      // Second should update immediately
+      expect(mockStore.updateScoringProgress).toHaveBeenCalledTimes(2);
+      expect(mockStore.updateScoringProgress).toHaveBeenLastCalledWith({
+        status: 'scoring',
+        message: 'Second',
+        progress: undefined,
+        error: undefined,
+      });
     });
   });
 
