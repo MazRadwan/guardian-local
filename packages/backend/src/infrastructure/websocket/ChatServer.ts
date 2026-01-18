@@ -59,6 +59,8 @@ interface SendMessagePayload {
   }>;
   // Epic 16.6.9: File attachments now only send fileId (server validates and enriches)
   attachments?: Array<{ fileId: string }>;
+  // Story 24.1: Flag for regenerate requests - tells LLM to provide different response
+  isRegenerate?: boolean;
 }
 
 interface GetHistoryPayload {
@@ -140,7 +142,8 @@ export class ChatServer {
    * This ensures Claude sees uploaded document context without a visible chat message
    */
   private async buildConversationContext(
-    conversationId: string
+    conversationId: string,
+    isRegenerate?: boolean  // Story 24.1: Flag to add retry context to system prompt
   ): Promise<{
     messages: ClaudeMessage[];
     systemPrompt: string;
@@ -195,9 +198,15 @@ export class ChatServer {
       includeToolInstructions: true,
     });
 
+    // Story 24.1: Add retry context when regenerating to get different response
+    let systemPrompt = promptCache.systemPrompt;
+    if (isRegenerate) {
+      systemPrompt = `${systemPrompt}\n\nIMPORTANT: The user has requested a different response. Please provide a fresh perspective with different wording, examples, or approach. Avoid repeating your previous answer.`;
+    }
+
     return {
       messages,
-      systemPrompt: promptCache.systemPrompt,
+      systemPrompt,
       mode: conversation.mode,
       promptCache: {
         usePromptCache: promptCache.usePromptCache,
@@ -1343,7 +1352,11 @@ If the document appears to be a completed questionnaire, mention that it can be 
           // Get conversation context and generate Claude response
           // Note: buildConversationContext loads history which already includes
           // the message we just saved above, so no need to add it again
-          const { messages, systemPrompt, promptCache, mode } = await this.buildConversationContext(conversationId);
+          // Story 24.1: Pass isRegenerate flag to add retry context to system prompt
+          const { messages, systemPrompt, promptCache, mode } = await this.buildConversationContext(
+            conversationId,
+            payload.isRegenerate
+          );
 
           // =========================================================
           // Epic 18 Sprint 3: Mode-Specific Behavior

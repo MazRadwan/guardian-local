@@ -151,7 +151,8 @@ export class ChatService {
     // Note: User message already exists in UI at messageIndex-1, don't add it again
     this.store.setLoading(true);
     try {
-      this.adapter.sendMessage(previousMessage.content, conversationId);
+      // Story 24.1: Pass isRegenerate: true to get different response from LLM
+      this.adapter.sendMessage(previousMessage.content, conversationId, undefined, true);
     } catch (err) {
       this.store.setError('Failed to regenerate response');
       this.store.setLoading(false);
