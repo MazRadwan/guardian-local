@@ -111,6 +111,10 @@ partialize: (state) => ({
 
 ### Backend Changes
 
+**Critical pre-requisite - Fix conversation-assessment linkage:**
+- `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts` - Add `linkAssessment` call after scoring success
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts` - Add `linkAssessment` call after WebSocket scoring success
+
 **New API endpoint:**
 - `packages/backend/src/infrastructure/http/routes/scoring.routes.ts` - New route file
 - `packages/backend/src/infrastructure/http/controllers/ScoringRehydrationController.ts` - New controller
@@ -216,17 +220,19 @@ partialize: (state) => ({
 
 ### Story 22.3: Prevent Duplicate Card Rendering
 
-**Description:** Ensure only one scoring card renders, with fallback to message components if store is empty.
+**Description:** Ensure only one scoring card renders, with fallback to message components if store is empty. Uses latest-only rule when multiple scoring_result components exist in history.
 
 **Acceptance Criteria:**
 - [ ] Scoring card renders from store state when available (primary source)
 - [ ] If store is empty, render from `scoring_result` message component (fallback)
 - [ ] Never render BOTH (deduplicate)
+- [ ] If multiple `scoring_result` components exist in history, only render the LAST one (latest-only rule)
 - [ ] Card position is consistent (after narrative message)
 
 **Files Touched:**
-- `apps/web/src/components/chat/ChatInterface.tsx` - Implement fallback logic
-- `apps/web/src/components/chat/ChatMessage.tsx` - Conditional render based on store state
+- `apps/web/src/components/chat/MessageList.tsx` - Calculate lastScoringMessageIndex, pass `isLastScoringMessage` prop
+- `apps/web/src/components/chat/ChatMessage.tsx` - Add `isLastScoringMessage` prop, conditional render based on store state
+- `apps/web/src/components/chat/ChatInterface.tsx` - Add documentation comment
 
 **Agent:** frontend-agent
 

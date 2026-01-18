@@ -72,10 +72,12 @@ In `apps/web/src/components/chat/MessageList.tsx`:
 
 ```typescript
 // Find the LAST message index that has a scoring_result component
+// Note: ChatMessage interface has `components` at top level, not nested under `content`
+// See apps/web/src/lib/websocket.ts:55-60
 const lastScoringMessageIndex = messages.reduceRight(
   (found, msg, idx) => {
     if (found !== -1) return found;
-    const hasScoringResult = msg.content?.components?.some(
+    const hasScoringResult = msg.components?.some(
       (c) => c.type === 'scoring_result'
     );
     return hasScoringResult ? idx : -1;
