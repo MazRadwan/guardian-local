@@ -2,21 +2,29 @@
   "workflow": "claude-autonomous",
   "workflowVersion": "1.9.0",
   "epic": "22",
-  "phase": "planning",
+  "phase": "implementation",
   "status": "awaiting_gpt_review",
   "currentSprint": 1,
   "totalSprints": 1,
-  "completedStories": [],
+  "currentBatch": 1,
+  "totalBatches": 3,
+  "completedStories": [
+    "22.1.1",
+    "22.1.3",
+    "22.1.2",
+    "22.1.4"
+  ],
   "stuckStories": [],
   "approvedSprints": [
     "sprint-1"
   ],
   "startedAt": "2026-01-17T21:00:00.000Z",
+  "implementationStartedAt": "2026-01-17T23:30:00.000Z",
   "architectAttempts": 1,
   "specReviewAttempts": 2,
   "architectApprovedWithWarnings": false,
   "planAgentComplete": true,
-  "planCompleteAt": 1768697410.261568,
+  "planCompleteAt": 1768704570.09768,
   "architectReview": {
     "status": "approved",
     "attempt": 1,
@@ -24,20 +32,24 @@
   },
   "specReview": {
     "status": "approved_after_external_review",
-    "attempts": 3,
+    "attempts": 5,
     "fixesApplied": [
       "Story 22.1.1: Fixed test paths to match actual directory structure",
       "Story 22.1.4: Made ScoringResultCard.tsx explicit in Files Touched with data-testid requirements",
       "Story 22.1.4: Added fixture file to Tests Required"
     ],
     "externalReviewFixes": [
-      "Fixed response shape to match ScoringCompletePayload['result'] (lowercase enums, no vendorName/solutionName)",
+      "Fixed response shape to match ScoringCompletePayload['result'] (lowercase enums)",
       "Standardized controller naming to ScoringRehydrationController",
-      "Acknowledged dual backend persistence paths (DocumentUploadController vs ChatServer)",
+      "Added dual backend persistence paths (DocumentUploadController + ChatServer)",
       "Added in-flight guard (rehydratingRef) to Story 22.1.2 for React strict mode",
       "Fixed API client location to lib/api/scoring.ts",
-      "Changed E2E fixture format from YAML to PDF (upload API constraint)",
-      "Story 22.1.3 updated: now adds filter, not just verification"
+      "Changed E2E fixture format from YAML to PDF",
+      "Story 22.1.3: Changed to fallback strategy with latest-only rule",
+      "Added linkAssessment fix to BOTH DocumentUploadController AND ChatServer",
+      "Fixed msg.components data shape (not msg.content?.components)",
+      "Added MessageList.tsx with isLastScoringMessage prop",
+      "Fixed E2E path to apps/web/e2e/"
     ]
   },
   "executionPlan": {
@@ -50,7 +62,7 @@
           "22.1.3"
         ],
         "parallel": true,
-        "status": "pending"
+        "status": "complete"
       },
       {
         "id": 2,
@@ -58,7 +70,7 @@
           "22.1.2"
         ],
         "parallel": false,
-        "status": "pending"
+        "status": "complete"
       },
       {
         "id": 3,
@@ -66,8 +78,9 @@
           "22.1.4"
         ],
         "parallel": false,
-        "status": "pending"
+        "status": "complete"
       }
     ]
-  }
+  },
+  "verificationPassed": true
 }

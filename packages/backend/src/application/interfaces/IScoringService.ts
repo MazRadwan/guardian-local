@@ -21,6 +21,25 @@ export interface ScoringOutput {
   code?: ScoringErrorCode; // Epic 15 Story 5a.4: Structured error codes
 }
 
+/**
+ * Scoring rehydration response shape.
+ * Matches ScoringCompletePayload['result'] from frontend types.
+ */
+export interface ScoringRehydrationResult {
+  compositeScore: number;
+  recommendation: 'approve' | 'conditional' | 'decline' | 'more_info';
+  overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
+  executiveSummary: string;
+  keyFindings: string[];
+  dimensionScores: Array<{
+    dimension: string;
+    score: number;
+    riskRating: 'low' | 'medium' | 'high' | 'critical';
+  }>;
+  batchId: string;
+  assessmentId: string;
+}
+
 export interface IScoringService {
   /**
    * Execute scoring workflow for uploaded questionnaire
@@ -35,4 +54,18 @@ export interface IScoringService {
    * Abort an in-progress scoring operation
    */
   abort(conversationId: string): void;
+
+  /**
+   * Epic 22.1.1: Get scoring result for a conversation.
+   * Used for rehydrating scoring card after page refresh.
+   *
+   * @param conversationId - The conversation to fetch scoring for
+   * @param userId - The authenticated user (for ownership check)
+   * @returns The scoring result or null if not found/not linked
+   * @throws Error if user doesn't own the conversation
+   */
+  getResultForConversation(
+    conversationId: string,
+    userId: string
+  ): Promise<ScoringRehydrationResult | null>;
 }

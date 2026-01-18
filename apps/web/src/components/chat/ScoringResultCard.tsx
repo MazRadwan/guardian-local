@@ -145,7 +145,7 @@ export function ScoringResultCard({
   const [isExpanded, setIsExpanded] = useState(true);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" data-testid="scoring-result-card">
       {/* Header */}
       <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-gray-200">
         <div className="flex items-center justify-between">
@@ -158,7 +158,7 @@ export function ScoringResultCard({
               <p className="text-sm text-gray-500">10 dimensions analyzed</p>
             </div>
           </div>
-          <RecommendationBadge recommendation={result.recommendation} size="lg" />
+          <RecommendationBadge recommendation={result.recommendation} size="lg" data-testid="recommendation" />
         </div>
       </div>
 
@@ -168,13 +168,13 @@ export function ScoringResultCard({
           <div>
             <p className="text-sm text-gray-500">Composite Score</p>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold text-gray-900">{result.compositeScore}</span>
+              <span className="text-4xl font-bold text-gray-900" data-testid="composite-score">{result.compositeScore}</span>
               <span className="text-lg text-gray-400">/100</span>
             </div>
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-500">Overall Risk</p>
-            <p className={`text-lg font-semibold capitalize ${RISK_RATING_COLORS[result.overallRiskRating]}`}>
+            <p className={`text-lg font-semibold capitalize ${RISK_RATING_COLORS[result.overallRiskRating]}`} data-testid="overall-risk">
               {result.overallRiskRating}
             </p>
           </div>

@@ -831,6 +831,14 @@ ${sanitizedExcerpt}`;
             createdAt: reportMessage.createdAt,
           });
 
+          // Epic 22.1.1: Link assessment to conversation for rehydration
+          // Non-fatal - scoring already succeeded, don't emit scoring_error if this fails
+          try {
+            await this.conversationService.linkAssessment(conversationId, assessmentId);
+          } catch (linkError) {
+            console.warn(`[ChatServer] Failed to link assessment (non-fatal):`, linkError);
+          }
+
           console.log(`[ChatServer] Scoring completed: assessmentId=${assessmentId}, score=${scoringResult.report.payload.compositeScore}`);
 
           // =========================================================

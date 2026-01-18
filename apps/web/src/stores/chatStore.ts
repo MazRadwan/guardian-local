@@ -241,6 +241,13 @@ export interface ChatState {
   clearScoringResultForConversation: (conversationId: string) => void;
 
   /**
+   * Epic 22.1.2: Rehydrate scoring result from backend
+   * Called when conversation loads and no cached result exists
+   * Updates both per-conversation cache and current scoringResult if active
+   */
+  rehydrateScoringResult: (conversationId: string, result: ScoringCompletePayload['result']) => void;
+
+  /**
    * Epic 18.4.2b: Set vendor clarification (from vendor_clarification_needed event)
    */
   setVendorClarification: (payload: VendorClarificationNeededPayload) => void;
@@ -628,6 +635,22 @@ export const useChatStore = create<ChatState>()(
           const { [conversationId]: _, ...rest } = state.scoringResultByConversation;
           return { scoringResultByConversation: rest };
         });
+      },
+
+      // Epic 22.1.2: Rehydrate scoring result from backend
+      rehydrateScoringResult: (conversationId, result) => {
+        console.log('[chatStore] Rehydrating scoring result for conversation:', conversationId);
+        set((state) => ({
+          scoringResultByConversation: {
+            ...state.scoringResultByConversation,
+            [conversationId]: result,
+          },
+          // Also set the current scoringResult if this is the active conversation
+          scoringResult: state.activeConversationId === conversationId ? result : state.scoringResult,
+          scoringProgress: state.activeConversationId === conversationId
+            ? { status: 'complete', message: 'Analysis complete!' }
+            : state.scoringProgress,
+        }));
       },
 
       // Epic 18.4.2b: Vendor clarification actions

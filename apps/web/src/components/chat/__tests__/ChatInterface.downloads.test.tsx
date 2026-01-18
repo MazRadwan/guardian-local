@@ -94,6 +94,11 @@ jest.mock('next/navigation', () => ({
   useSearchParams: jest.fn(),
 }));
 
+// Epic 22.1.2: Mock the scoring API to prevent fetch interference
+jest.mock('@/lib/api/scoring', () => ({
+  fetchScoringResult: jest.fn().mockResolvedValue(null),
+}));
+
 describe('ChatInterface Download Durability (Story 13.3)', () => {
   const mockFns = {
     setPendingQuestionnaire: jest.fn(),
