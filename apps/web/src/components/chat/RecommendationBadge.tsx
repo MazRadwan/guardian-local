@@ -7,6 +7,7 @@ import { Recommendation } from '@/types/scoring';
 interface RecommendationBadgeProps {
   recommendation: Recommendation;
   size?: 'sm' | 'md' | 'lg';
+  'data-testid'?: string;
 }
 
 const RECOMMENDATION_CONFIG: Record<Recommendation, {
@@ -42,12 +43,13 @@ const SIZE_CLASSES = {
   lg: 'px-4 py-2 text-base gap-2',
 };
 
-export function RecommendationBadge({ recommendation, size = 'md' }: RecommendationBadgeProps) {
+export function RecommendationBadge({ recommendation, size = 'md', 'data-testid': testId }: RecommendationBadgeProps) {
   const config = RECOMMENDATION_CONFIG[recommendation];
 
   return (
     <span
       className={`inline-flex items-center font-semibold rounded-full border ${config.className} ${SIZE_CLASSES[size]}`}
+      data-testid={testId}
     >
       {config.icon}
       {config.label}

@@ -188,6 +188,19 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       );
     }
 
+    // Epic 22 Story 22.1.3: Find the LAST message index that has a scoring_result component
+    // Used for latest-only rule: only the last scoring_result should render as fallback
+    const lastScoringMessageIndex = messages.reduceRight(
+      (found, msg, idx) => {
+        if (found !== -1) return found;
+        const hasScoringResult = msg.components?.some(
+          (c) => c.type === 'scoring_result'
+        );
+        return hasScoringResult ? idx : -1;
+      },
+      -1
+    );
+
     return (
       <div className="relative flex h-full min-h-0 flex-col">
         {/* Inner scroll container */}
@@ -225,6 +238,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                   isRegenerating={regeneratingMessageIndex === index}
                   attachments={message.attachments as MessageAttachment[] | undefined}
                   onDownloadAttachment={onDownloadAttachment}
+                  isLastScoringMessage={index === lastScoringMessageIndex}
                 />
               </React.Fragment>
             ))}

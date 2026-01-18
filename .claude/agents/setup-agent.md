@@ -2,7 +2,7 @@
 name: setup-agent
 description: Setup Guardian project infrastructure (Epic 1 - monorepo, database, Docker)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Setup Agent - Epic 1

@@ -2,7 +2,7 @@
 name: prompt-refinement-agent
 description: Refine Guardian system prompt for web app (Epic 10 - Remove commands, align workflow)
 tools: Read, Write, Edit
-model: sonnet
+model: opus
 ---
 
 # Prompt Refinement Agent - Epic 10

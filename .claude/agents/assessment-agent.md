@@ -2,7 +2,7 @@
 name: assessment-agent
 description: Build vendor and assessment management system (Epic 5)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Assessment Agent - Epic 5

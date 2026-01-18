@@ -2,7 +2,7 @@
 name: login-agent
 description: Build login UI and protected routes (Epic 2.5)
 tools: Read, Write, Edit, Bash
-model: sonnet
+model: opus
 ---
 
 # Login Agent - Epic 2.5

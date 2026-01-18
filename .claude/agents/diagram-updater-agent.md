@@ -2,7 +2,7 @@
 name: diagram-updater-agent
 description: Validates and updates C4 architecture diagrams based on codebase changes
 tools: Read, Write, Edit, Bash, Glob, Grep
-model: sonnet
+model: opus
 ---
 
 # Diagram Updater Agent

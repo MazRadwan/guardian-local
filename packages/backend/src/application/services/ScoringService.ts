@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { IScoringService, ScoringInput, ScoringOutput } from '../interfaces/IScoringService.js';
+import { IScoringService, ScoringInput, ScoringOutput, ScoringRehydrationResult } from '../interfaces/IScoringService.js';
+import { IConversationRepository } from '../interfaces/IConversationRepository.js';
 import { IResponseRepository } from '../interfaces/IResponseRepository.js';
 import { IDimensionScoreRepository } from '../interfaces/IDimensionScoreRepository.js';
 import { IAssessmentResultRepository } from '../interfaces/IAssessmentResultRepository.js';
@@ -42,7 +43,8 @@ export class ScoringService implements IScoringService {
     private llmClient: ILLMClient,
     private promptBuilder: IPromptBuilder,
     private validator: ScoringPayloadValidator,
-    private transactionRunner: ITransactionRunner
+    private transactionRunner: ITransactionRunner,
+    private conversationRepo?: IConversationRepository
   ) {}
 
   async score(
@@ -459,5 +461,72 @@ export class ScoringService implements IScoringService {
         `Transaction failed while storing scores: ${errorMessage}`
       );
     }
+  }
+
+  /**
+   * Epic 22.1.1: Get scoring result for a conversation.
+   * Used for rehydrating scoring card after page refresh.
+   *
+   * Logic:
+   * 1. Look up conversation by ID
+   * 2. Verify user owns conversation (throw error if not)
+   * 3. Get assessmentId from conversation (return null if not linked)
+   * 4. Fetch latest assessmentResult for that assessment (most recent scoredAt)
+   * 5. Fetch dimensionScores for that batch
+   * 6. Map to ScoringRehydrationResult shape
+   */
+  async getResultForConversation(
+    conversationId: string,
+    userId: string
+  ): Promise<ScoringRehydrationResult | null> {
+    if (!this.conversationRepo) {
+      throw new Error('ConversationRepository not configured for rehydration');
+    }
+
+    // 1. Look up conversation
+    const conversation = await this.conversationRepo.findById(conversationId);
+    if (!conversation) {
+      return null;
+    }
+
+    // 2. Verify user owns conversation
+    if (conversation.userId !== userId) {
+      throw new UnauthorizedError(`User ${userId} does not own conversation ${conversationId}`);
+    }
+
+    // 3. Get assessmentId from conversation
+    if (!conversation.assessmentId) {
+      return null;
+    }
+
+    // 4. Fetch latest assessmentResult for that assessment
+    const assessmentResult = await this.assessmentResultRepo.findLatestByAssessmentId(
+      conversation.assessmentId
+    );
+    if (!assessmentResult) {
+      return null;
+    }
+
+    // 5. Fetch dimensionScores for that batch
+    const dimensionScores = await this.dimensionScoreRepo.findByBatchId(
+      conversation.assessmentId,
+      assessmentResult.batchId
+    );
+
+    // 6. Map to ScoringRehydrationResult shape
+    return {
+      compositeScore: assessmentResult.compositeScore,
+      recommendation: assessmentResult.recommendation,
+      overallRiskRating: assessmentResult.overallRiskRating,
+      executiveSummary: assessmentResult.executiveSummary || '',
+      keyFindings: assessmentResult.keyFindings || [],
+      dimensionScores: dimensionScores.map(ds => ({
+        dimension: ds.dimension,
+        score: ds.score,
+        riskRating: ds.riskRating,
+      })),
+      batchId: assessmentResult.batchId,
+      assessmentId: conversation.assessmentId,
+    };
   }
 }

@@ -7,6 +7,9 @@ flowchart TB
     Sidebar["Sidebar + ConversationList/Search"]
     QuestionnairePrompt["QuestionnairePromptCard"]
     DownloadBubble["Download/Export bubble"]
+    ScoreDashboard["ScoreDashboard"]
+    ScoringResultCard["ScoringResultCard + DimensionScoreBar"]
+    ProgressMessage["ProgressMessage (streaming feedback)"]
   end
 
   subgraph HooksState["Hooks, State & Persistence"]
@@ -18,6 +21,7 @@ flowchart TB
     useConversationMode["useConversationMode"]
     useQuestionnairePersistence["useQuestionnairePersistence (localStorage)"]
     useAuth["useAuth"]
+    useScoringProgress["useScoringProgress"]
     chatStore["Zustand chatStore\n(pendingQuestionnaire, generationSteps,\nquestionnaireMessageIndex, streamComplete,\nexportReadyByConversation)"]
     ChatServiceFE["ChatService (FE)"]
     ConversationServiceFE["ConversationService (FE)"]
@@ -45,6 +49,8 @@ flowchart TB
     QuestionnaireReadyService
     QuestionnaireGenerationService
     ExportService
+    ScoringService["ScoringService"]
+    ScoringExportService["ScoringExportService"]
   end
 
   subgraph Domain["Domain Entities"]
@@ -88,6 +94,9 @@ flowchart TB
   VerticalStepper --> chatStore
   QuestionnairePrompt --> chatStore
   DownloadBubble --> chatStore
+  ScoreDashboard --> useScoringProgress
+  ScoringResultCard --> chatStore
+  ProgressMessage --> chatStore
 
   useChatController --> ChatServiceFE
   useChatController --> ConversationServiceFE
@@ -98,6 +107,7 @@ flowchart TB
   useChatController --> useConversationMode
   useChatController --> useQuestionnairePersistence
   useChatController --> chatStore
+  useScoringProgress --> chatStore
 
   ChatServiceFE --> useWebSocketAdapter
   ConversationServiceFE --> useWebSocketAdapter
@@ -131,4 +141,8 @@ flowchart TB
   QuestionnaireGenerationService --> VendorService
   QuestionnaireGenerationService --> questionnaireToMarkdown
   ExportService --> Exporters
+  ScoringService --> ClaudeClient
+  ScoringService --> AssessmentRepo
+  ScoringExportService --> ScoringService
+  Controllers --> ScoringExportService
   ClaudeClient <--> ClaudeAPI

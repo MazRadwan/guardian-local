@@ -1,8 +1,14 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { ChatInterface } from '../ChatInterface';
 import { useChatStore } from '@/stores/chatStore';
 import type { ScoringCompletePayload } from '@/lib/websocket';
+
+// Epic 22.1.2: Mock the scoring API
+const mockFetchScoringResult = jest.fn();
+jest.mock('@/lib/api/scoring', () => ({
+  fetchScoringResult: (...args: unknown[]) => mockFetchScoringResult(...args),
+}));
 
 // Mock chat controller with messages (active state)
 const mockChatMessages = [
@@ -108,9 +114,16 @@ const mockScoringResult: ScoringCompletePayload['result'] = {
 
 describe('ChatInterface scoring result (Story 5c)', () => {
   beforeEach(() => {
+    // Reset mock
+    mockFetchScoringResult.mockReset();
+    // Default to returning null (no scoring result)
+    mockFetchScoringResult.mockResolvedValue(null);
+
     // Reset store to clean state
     useChatStore.setState({
       scoringResult: null,
+      scoringResultByConversation: {},
+      scoringProgress: { status: 'idle', message: '' },
       pendingQuestionnaire: null,
       questionnaireUIState: 'hidden',
     });
@@ -325,5 +338,182 @@ describe('ChatInterface scoring result in empty state', () => {
 
     // Welcome message should be hidden when scoring result is present
     expect(screen.queryByText('Welcome to Guardian')).not.toBeInTheDocument();
+  });
+});
+
+// Epic 22.1.2: Scoring rehydration tests
+describe('ChatInterface scoring rehydration (Epic 22.1.2)', () => {
+  beforeEach(() => {
+    // Reset mock
+    mockFetchScoringResult.mockReset();
+    mockFetchScoringResult.mockResolvedValue(null);
+
+    // Reset store to clean state
+    useChatStore.setState({
+      scoringResult: null,
+      scoringResultByConversation: {},
+      scoringProgress: { status: 'idle', message: '' },
+      pendingQuestionnaire: null,
+      questionnaireUIState: 'hidden',
+      activeConversationId: null,
+    });
+  });
+
+  it('fetches scoring result on conversation load when cache is empty', async () => {
+    mockFetchScoringResult.mockResolvedValue(mockScoringResult);
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      expect(mockFetchScoringResult).toHaveBeenCalledWith('conv-123', 'test-token');
+    });
+  });
+
+  it('does not fetch when scoring result is already in cache', async () => {
+    // Pre-populate cache
+    useChatStore.setState({
+      scoringResultByConversation: {
+        'conv-123': mockScoringResult,
+      },
+    });
+
+    render(<ChatInterface />);
+
+    // Give it time to potentially call the API
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(mockFetchScoringResult).not.toHaveBeenCalled();
+  });
+
+  it('logs message when cache hit occurs', async () => {
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+    // Pre-populate cache
+    useChatStore.setState({
+      scoringResultByConversation: {
+        'conv-123': mockScoringResult,
+      },
+    });
+
+    render(<ChatInterface />);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    // Should log cache hit and not fetch
+    expect(consoleSpy).toHaveBeenCalledWith('[ChatInterface] Scoring result already in cache');
+    expect(mockFetchScoringResult).not.toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('populates store on successful rehydration', async () => {
+    mockFetchScoringResult.mockResolvedValue(mockScoringResult);
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      const state = useChatStore.getState();
+      expect(state.scoringResultByConversation['conv-123']).toEqual(mockScoringResult);
+    });
+  });
+
+  it('sets scoringResult when rehydrating active conversation', async () => {
+    mockFetchScoringResult.mockResolvedValue(mockScoringResult);
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      const state = useChatStore.getState();
+      expect(state.scoringResult).toEqual(mockScoringResult);
+    });
+  });
+
+  it('sets scoringProgress to complete on successful rehydration', async () => {
+    mockFetchScoringResult.mockResolvedValue(mockScoringResult);
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      const state = useChatStore.getState();
+      expect(state.scoringProgress.status).toBe('complete');
+      expect(state.scoringProgress.message).toBe('Analysis complete!');
+    });
+  });
+
+  it('handles 404 gracefully (no result stored)', async () => {
+    // fetchScoringResult returns null for 404
+    mockFetchScoringResult.mockResolvedValue(null);
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      expect(mockFetchScoringResult).toHaveBeenCalled();
+    });
+
+    // Store should remain empty
+    const state = useChatStore.getState();
+    expect(state.scoringResultByConversation['conv-123']).toBeUndefined();
+    expect(state.scoringResult).toBeNull();
+  });
+
+  it('handles fetch errors gracefully', async () => {
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    mockFetchScoringResult.mockRejectedValue(new Error('Network error'));
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      expect(mockFetchScoringResult).toHaveBeenCalled();
+    });
+
+    // Should log warning but not crash
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith(
+        '[ChatInterface] Failed to rehydrate scoring result:',
+        expect.any(Error)
+      );
+    });
+
+    // Store should remain empty
+    const state = useChatStore.getState();
+    expect(state.scoringResultByConversation['conv-123']).toBeUndefined();
+
+    consoleSpy.mockRestore();
+  });
+
+  it('fetches when scoring status is idle and no cache', async () => {
+    mockFetchScoringResult.mockResolvedValue(null);
+
+    useChatStore.setState({
+      scoringProgress: { status: 'idle', message: '' },
+      scoringResultByConversation: {},
+    });
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      expect(mockFetchScoringResult).toHaveBeenCalledWith('conv-123', 'test-token');
+    });
+  });
+
+  it('fetches when scoring status is complete and no cache', async () => {
+    // This scenario: Previous scoring completed but result not in cache
+    // (e.g., cache was cleared)
+    mockFetchScoringResult.mockResolvedValue(null);
+
+    useChatStore.setState({
+      scoringProgress: { status: 'complete', message: 'Done' },
+      scoringResultByConversation: {},
+    });
+
+    render(<ChatInterface />);
+
+    await waitFor(() => {
+      expect(mockFetchScoringResult).toHaveBeenCalledWith('conv-123', 'test-token');
+    });
   });
 });

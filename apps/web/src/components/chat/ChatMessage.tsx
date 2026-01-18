@@ -8,6 +8,7 @@ import { User, ShieldCheck, Copy, Check, RefreshCw, AlertTriangle } from 'lucide
 import { DownloadButton } from './DownloadButton';
 import { FileChipInChat } from './FileChipInChat';
 import { ScoringResultCard } from './ScoringResultCard';
+import { useChatStore } from '@/stores/chatStore';
 import type { ScoringResultData, RiskRating, Recommendation, DimensionScoreData } from '@/types/scoring';
 
 /**
@@ -39,6 +40,8 @@ export interface ChatMessageProps {
   attachments?: MessageAttachment[];
   /** Epic 16.6.8: Callback when user clicks attachment to download */
   onDownloadAttachment?: (attachment: MessageAttachment) => void;
+  /** Epic 22 Story 22.1.3: Whether this message contains the LAST scoring_result component */
+  isLastScoringMessage?: boolean;
 }
 
 export function ChatMessage({
@@ -52,12 +55,41 @@ export function ChatMessage({
   isRegenerating = false,
   attachments = [],
   onDownloadAttachment,
+  isLastScoringMessage = false,
 }: ChatMessageProps) {
   const isUser = role === 'user';
   const isSystem = role === 'system';
 
   // Copy to clipboard state
   const [isCopied, setIsCopied] = useState(false);
+
+  // Epic 22 Story 22.1.3: Conditional scoring_result rendering with fallback strategy
+  // Get activeConversationId from store (ChatMessage doesn't have conversationId prop)
+  const activeConversationId = useChatStore((state) => state.activeConversationId);
+  const scoringResultInStore = useChatStore(
+    (state) => activeConversationId
+      ? state.scoringResultByConversation[activeConversationId]
+      : null
+  );
+
+  // Epic 22 Story 22.1.3: Filter out scoring_result from components when:
+  // 1. Store has result (prevent duplicate - store takes precedence)
+  // 2. OR this is NOT the last scoring message (latest-only rule)
+  const filteredComponents = components.filter((c) => {
+    if (c.type === 'scoring_result') {
+      // If store has result, skip rendering from message (store takes precedence)
+      if (scoringResultInStore) {
+        return false;
+      }
+      // If store is empty but this is NOT the last scoring message, skip (latest-only)
+      if (!isLastScoringMessage) {
+        return false;
+      }
+      // Fallback: render from message if store empty AND this is last scoring message
+      return true;
+    }
+    return true;
+  });
 
   const handleCopy = async () => {
     try {
@@ -159,9 +191,10 @@ export function ChatMessage({
           )}
 
           {/* Embedded components */}
-          {components.length > 0 && (
+          {/* Epic 22 Story 22.1.3: Use filteredComponents to prevent duplicate scoring_result rendering */}
+          {filteredComponents.length > 0 && (
             <div className="mt-4 space-y-2">
-              {components.map((component, index) => (
+              {filteredComponents.map((component, index) => (
                 <EmbeddedComponent key={index} component={component} />
               ))}
             </div>

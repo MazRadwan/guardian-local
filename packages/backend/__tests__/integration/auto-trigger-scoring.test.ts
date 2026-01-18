@@ -159,6 +159,7 @@ describe('Sprint 5a: Auto-trigger Scoring Event Emissions', () => {
           }
         },
         abort: jest.fn(),
+        getResultForConversation: async () => null,
       }
 
       await runScoringHarness(
@@ -213,6 +214,7 @@ describe('Sprint 5a: Auto-trigger Scoring Event Emissions', () => {
           }
         },
         abort: jest.fn(),
+        getResultForConversation: async () => null,
       }
 
       await runScoringHarness(
@@ -253,6 +255,7 @@ describe('Sprint 5a: Auto-trigger Scoring Event Emissions', () => {
           throw new Error('Unexpected database error')
         },
         abort: jest.fn(),
+        getResultForConversation: async () => null,
       }
 
       await runScoringHarness(
@@ -299,6 +302,7 @@ describe('Sprint 5a: Auto-trigger Scoring Event Emissions', () => {
           }
         },
         abort: jest.fn(),
+        getResultForConversation: async () => null,
       }
 
       await runScoringHarness(
@@ -348,6 +352,7 @@ describe('Sprint 5a: Auto-trigger Scoring Event Emissions', () => {
             code: code as ScoringOutput['code'],
           }),
           abort: jest.fn(),
+          getResultForConversation: async () => null,
         }
 
         await runScoringHarness(
