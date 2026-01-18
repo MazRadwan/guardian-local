@@ -432,7 +432,7 @@ describe('useWebSocketEvents', () => {
   });
 
   describe('handleConversationCreated', () => {
-    it('should add conversation to store', () => {
+    it('should add conversation to store with titleLoading flag', () => {
       const { result } = renderHook(() => useWebSocketEvents(defaultParams));
       const conversation: Conversation = {
         id: 'conv-new',
@@ -444,7 +444,13 @@ describe('useWebSocketEvents', () => {
 
       result.current.handleConversationCreated(conversation);
 
-      expect(mockAddConversation).toHaveBeenCalledWith(conversation);
+      // Story 25.5: New conversations have titleLoading: true for loading placeholder UX
+      expect(mockAddConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ...conversation,
+          titleLoading: true,
+        })
+      );
     });
 
     it('should mark conversation as just created', () => {

@@ -1369,6 +1369,43 @@ If the document appears to be a completed questionnaire, mention that it can be 
             // Extract file IDs from enriched attachments
             const fileIds = enrichedAttachments.map(a => a.fileId);
 
+            // Epic 25.4: Update conversation title with filename (if not manually edited)
+            // Use first file's name for the title
+            const firstFile = enrichedAttachments[0];
+            if (firstFile && firstFile.filename) {
+              const maxTitleLength = 50;
+              const prefix = 'Scoring: ';
+              const maxFilenameLength = maxTitleLength - prefix.length;
+
+              let filename = firstFile.filename;
+              if (filename.length > maxFilenameLength) {
+                // Truncate while preserving extension
+                const lastDot = filename.lastIndexOf('.');
+                const extension = lastDot > 0 ? filename.slice(lastDot) : '';
+                const baseName = lastDot > 0 ? filename.slice(0, lastDot) : filename;
+                const availableLength = maxFilenameLength - 3 - extension.length;
+                if (availableLength > 0) {
+                  filename = baseName.slice(0, availableLength) + '...' + extension;
+                } else {
+                  filename = filename.slice(0, maxFilenameLength - 3) + '...';
+                }
+              }
+
+              const scoringTitle = `${prefix}${filename}`;
+              const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
+                conversationId,
+                scoringTitle
+              );
+
+              if (titleUpdated) {
+                socket.emit('conversation_title_updated', {
+                  conversationId,
+                  title: scoringTitle,
+                });
+                console.log(`[ChatServer] Updated scoring title: "${scoringTitle}"`);
+              }
+            }
+
             // Epic 18.4.3: Pass user message for follow-up addressing
             // Only pass actual user text, not placeholder text for file-only uploads
             const userQueryForFollowUp = messageText && !messageText.startsWith('[Uploaded file')
@@ -2255,6 +2292,32 @@ Once uploaded, I'll analyze the responses and provide:
         questionCount: result.schema.metadata.questionCount,
         formats: ['pdf', 'word', 'excel'],
       });
+
+      // Epic 25.3: Update conversation title with vendor/solution name
+      // Only if title hasn't been manually edited by user
+      if (vendorName || solutionName) {
+        const titlePrefix = 'Assessment: ';
+        const titleName = vendorName || solutionName || '';
+        const maxTitleLength = 50;
+        let newTitle = `${titlePrefix}${titleName}`;
+        if (newTitle.length > maxTitleLength) {
+          newTitle = newTitle.slice(0, maxTitleLength - 3) + '...';
+        }
+
+        const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
+          conversationId,
+          newTitle
+        );
+
+        if (titleUpdated) {
+          // Emit WebSocket event for real-time sidebar update
+          socket.emit('conversation_title_updated', {
+            conversationId,
+            title: newTitle,
+          });
+          console.log(`[ChatServer] Updated assessment title: "${newTitle}"`);
+        }
+      }
 
       console.log(`[ChatServer] Questionnaire generation complete:`, {
         conversationId,

@@ -56,6 +56,8 @@ import { createExportRoutes } from './infrastructure/http/routes/export.routes.j
 import { createScoringExportRoutes } from './infrastructure/http/routes/scoring.export.routes.js';
 import { createScoringRoutes } from './infrastructure/http/routes/scoring.routes.js';
 import { createDocumentRoutes } from './infrastructure/http/routes/document.routes.js';
+import { createConversationRoutes } from './infrastructure/http/routes/conversation.routes.js';
+import { ConversationController } from './infrastructure/http/controllers/ConversationController.js';
 import { ScoringRehydrationController } from './infrastructure/http/controllers/ScoringRehydrationController.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
@@ -279,6 +281,10 @@ const documentUploadController = new DocumentUploadController(
 
 // Register document routes (Epic 16)
 server.registerRoutes('/api/documents', createDocumentRoutes(documentUploadController, authService));
+
+// Epic 25: Initialize conversation controller for title updates
+const conversationController = new ConversationController(conversationService, server.getIO());
+server.registerRoutes('/api/conversations', createConversationRoutes(conversationController, authService));
 
 // Finalize 404 handler (MUST be after all routes are registered)
 server.finalize404Handler();

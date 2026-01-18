@@ -204,4 +204,53 @@ export class ConversationService {
   async getMessageCount(conversationId: string): Promise<number> {
     return await this.messageRepo.count(conversationId);
   }
+
+  /**
+   * Update conversation title
+   * Epic 25: Chat Title Intelligence
+   *
+   * @param conversationId - Conversation to update
+   * @param title - New title
+   * @param manuallyEdited - If true, marks title as user-edited (prevents auto-updates)
+   */
+  async updateTitle(
+    conversationId: string,
+    title: string,
+    manuallyEdited: boolean = false
+  ): Promise<void> {
+    const conversation = await this.conversationRepo.findById(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    await this.conversationRepo.updateTitle(conversationId, title, manuallyEdited);
+  }
+
+  /**
+   * Update conversation title only if not manually edited
+   * Epic 25: Chat Title Intelligence
+   *
+   * @param conversationId - Conversation to update
+   * @param title - New title
+   * @returns true if title was updated, false if skipped (manually edited)
+   */
+  async updateTitleIfNotManuallyEdited(
+    conversationId: string,
+    title: string
+  ): Promise<boolean> {
+    const conversation = await this.conversationRepo.findById(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    if (conversation.titleManuallyEdited) {
+      console.log(`[ConversationService] Skipping title update for ${conversationId} - manually edited`);
+      return false;
+    }
+
+    await this.conversationRepo.updateTitle(conversationId, title, false);
+    return true;
+  }
 }
