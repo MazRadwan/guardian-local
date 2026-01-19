@@ -6,10 +6,33 @@
  *
  * Story 25.1: Core title generation with LLM
  * Story 25.2: Mode-aware title strategies
+ * Story 25.9: Skip LLM prompt message for scoring mode
  */
 
 import Anthropic from '@anthropic-ai/sdk';
 import { ConversationMode } from '../../domain/entities/Conversation.js';
+
+/**
+ * Placeholder titles for each mode
+ * Story 25.9: Centralized constants for consistency
+ */
+export const PLACEHOLDER_TITLES = {
+  DEFAULT: 'New Chat',
+  ASSESSMENT: 'New Assessment',
+  SCORING: 'Scoring Analysis',
+} as const;
+
+/**
+ * Check if a title is a placeholder (auto-generation should proceed)
+ * Story 25.9: Used for idempotency guard
+ *
+ * @param title - Title to check
+ * @returns true if title is null or a known placeholder
+ */
+export function isPlaceholderTitle(title: string | null | undefined): boolean {
+  if (!title) return true;
+  return Object.values(PLACEHOLDER_TITLES).includes(title as typeof PLACEHOLDER_TITLES[keyof typeof PLACEHOLDER_TITLES]);
+}
 
 /**
  * Context for title generation
@@ -151,7 +174,7 @@ export class TitleGenerationService {
       return { title, source: 'vendor' };
     }
 
-    return { title: 'New Assessment', source: 'default' };
+    return { title: PLACEHOLDER_TITLES.ASSESSMENT, source: 'default' };
   }
 
   /**
@@ -168,7 +191,7 @@ export class TitleGenerationService {
       return { title: formattedTitle, source: 'filename' };
     }
 
-    return { title: 'Scoring Analysis', source: 'default' };
+    return { title: PLACEHOLDER_TITLES.SCORING, source: 'default' };
   }
 
   /**
@@ -217,7 +240,7 @@ export class TitleGenerationService {
     }
 
     // Fallback if LLM fails
-    return { title: 'New Chat', source: 'default' };
+    return { title: PLACEHOLDER_TITLES.DEFAULT, source: 'default' };
   }
 
   /**

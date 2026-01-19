@@ -6,10 +6,17 @@ Improve chat history sidebar titles to be meaningful and context-aware instead o
 
 ## Problem Statement
 
+### Sprint 1 Issues (Resolved)
 Current title generation uses the first user message, which results in:
 - **Assessment mode**: Titles like "1" or "2" (user's assessment type selection)
 - **Scoring mode**: No meaningful title (file upload has no text)
 - **Consult mode**: Sometimes works, but single-word queries produce poor titles
+
+### Sprint 2 Issues (New)
+Post-Sprint 1 testing revealed UX refinements needed:
+- **Font too large**: Chat history titles are larger than ChatGPT's, causing excessive truncation
+- **Icon wastes space**: Chat bubble icon next to each title consumes ~24px of horizontal space
+- **Scoring title bug**: In scoring mode, LLM sends "[Upload file for analysis]" message BEFORE user uploads file. Title generation captures this prompt message instead of waiting for filename, resulting in titles like "[Uploaded file fo..." instead of "Scoring: vendor.pdf"
 
 ## Goals
 
@@ -58,14 +65,17 @@ Title:
 
 ## User Stories
 
-| Story | Description | Priority |
-|-------|-------------|----------|
-| 25.1 | Add title generation service with Claude API call | High |
-| 25.2 | Implement mode-aware title strategy (consult/assessment/scoring) | High |
-| 25.3 | Update title when vendor name is provided in assessment | Medium |
-| 25.4 | Use filename for scoring mode titles | Medium |
-| 25.5 | Add "Generating title..." placeholder UX | Low |
-| 25.6 | Add dropdown menu with rename/delete options (replace trash icon) | High |
+| Story | Description | Priority | Sprint |
+|-------|-------------|----------|--------|
+| 25.1 | Add title generation service with Claude API call | High | 1 |
+| 25.2 | Implement mode-aware title strategy (consult/assessment/scoring) | High | 1 |
+| 25.3 | Update title when vendor name is provided in assessment | Medium | 1 |
+| 25.4 | Use filename for scoring mode titles | Medium | 1 |
+| 25.5 | Add "Generating title..." placeholder UX | Low | 1 |
+| 25.6 | Add dropdown menu with rename/delete options (replace trash icon) | High | 1 |
+| 25.7 | Reduce chat history item font size for better density | High | 2 |
+| 25.8 | Remove chat icon from sidebar history items | High | 2 |
+| 25.9 | Fix scoring title to skip LLM prompt message | High | 2 |
 
 ### Story 25.6: Chat History Dropdown Menu
 
@@ -118,16 +128,22 @@ Title:
 
 ## Acceptance Criteria
 
-- [ ] Consult mode: Title reflects conversation topic (not "hi" or "help")
-- [ ] Assessment mode: Title includes vendor/solution name when available
-- [ ] Scoring mode: Title includes filename or vendor name
-- [ ] Titles update dynamically as context becomes available
-- [ ] Title generation does not block user interaction
-- [ ] Sidebar updates in real-time when title changes
-- [ ] Chat history items show `...` on hover (not trash icon)
-- [ ] Dropdown menu opens with Rename and Delete options
-- [ ] User can rename conversation title inline
-- [ ] Rename saves on Enter/blur, cancels on Escape
+### Sprint 1 (Complete)
+- [x] Consult mode: Title reflects conversation topic (not "hi" or "help")
+- [x] Assessment mode: Title includes vendor/solution name when available
+- [x] Scoring mode: Title includes filename or vendor name
+- [x] Titles update dynamically as context becomes available
+- [x] Title generation does not block user interaction
+- [x] Sidebar updates in real-time when title changes
+- [x] Chat history items show `...` on hover (not trash icon)
+- [x] Dropdown menu opens with Rename and Delete options
+- [x] User can rename conversation title inline
+- [x] Rename saves on Enter/blur, cancels on Escape
+
+### Sprint 2 (Refinements)
+- [ ] Chat history items use smaller font for better title visibility
+- [ ] Chat icon removed from history items to maximize title space
+- [ ] Scoring mode: Title waits for file upload, ignores LLM prompt message
 
 ## Files Likely Touched
 

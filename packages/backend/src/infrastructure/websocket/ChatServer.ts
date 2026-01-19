@@ -21,6 +21,7 @@ import type { MessageAttachment } from '../../domain/entities/Message.js';
 import { sanitizeForPrompt } from '../../utils/sanitize.js';
 import type { ScoringProgressEvent } from '../../domain/scoring/types.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
+import { PLACEHOLDER_TITLES, isPlaceholderTitle } from '../../application/services/TitleGenerationService.js';
 // Epic 18: Scoring now triggered on user Send (trigger-on-send pattern)
 
 /**
@@ -1338,15 +1339,29 @@ If the document appears to be a completed questionnaire, mention that it can be 
             attachments: enrichedAttachments,
           });
 
-          // Check if this is the first user message and emit title update
-          const messageCount = await this.conversationService.getMessageCount(conversationId);
-          if (messageCount === 1) {
-            // This is the first user message - generate and emit title
-            const title = await this.conversationService.getConversationTitle(conversationId);
-            socket.emit('conversation_title_updated', {
-              conversationId,
-              title,
-            });
+          // Story 25.9: Title generation with mode-aware guards
+          // Scoring mode titles ONLY come from filename (handled later in file upload flow)
+          // Get conversation to check mode and existing title
+          const conversationForTitle = await this.conversationService.getConversation(conversationId);
+          if (conversationForTitle) {
+            // Guard 1: Skip if title already set (idempotency) - unless it's a placeholder
+            // Guard 2: Skip for scoring mode - title set from filename in file upload flow
+            const shouldGenerateTitle =
+              isPlaceholderTitle(conversationForTitle.title) &&
+              conversationForTitle.mode !== 'scoring' &&
+              !conversationForTitle.titleManuallyEdited;
+
+            if (shouldGenerateTitle) {
+              const messageCount = await this.conversationService.getMessageCount(conversationId);
+              if (messageCount === 1) {
+                // This is the first user message - generate and emit title
+                const title = await this.conversationService.getConversationTitle(conversationId);
+                socket.emit('conversation_title_updated', {
+                  conversationId,
+                  title,
+                });
+              }
+            }
           }
 
           // Get conversation context and generate Claude response

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { MessageSquare, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { Conversation } from '@/stores/chatStore';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -108,7 +108,7 @@ export function ConversationListItem({
       onKeyDown={handleKeyDown}
       data-testid={`conversation-item-${conversation.id}`}
       className={cn(
-        'group relative flex items-center gap-3 rounded-lg p-3 transition-colors cursor-pointer h-12',
+        'group relative flex items-center rounded-lg pl-3 pr-3 py-2 transition-colors cursor-pointer min-h-10',
         isActive
           ? 'bg-blue-50 border-l-2 border-blue-500'
           : 'hover:bg-gray-100',
@@ -117,9 +117,6 @@ export function ConversationListItem({
       aria-label={`${displayTitle}, ${formattedTime}`}
       aria-current={isActive ? 'true' : 'false'}
     >
-      {/* Icon */}
-      <MessageSquare className="h-4 w-4 text-gray-500 flex-shrink-0" />
-
       {/* Content */}
       <div className="flex-1 min-w-0 flex items-center gap-2">
         {isEditing ? (
@@ -138,7 +135,7 @@ export function ConversationListItem({
           <span
             data-testid={`conversation-title-${conversation.id}`}
             className={cn(
-              'text-sm font-medium text-gray-900 truncate flex-1 transition-all duration-300',
+              'text-xs leading-tight font-medium text-gray-900 truncate flex-1 transition-all duration-300',
               conversation.titleLoading && 'animate-pulse text-gray-500'
             )}
           >

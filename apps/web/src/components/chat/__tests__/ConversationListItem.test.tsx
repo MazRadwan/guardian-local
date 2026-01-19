@@ -52,13 +52,6 @@ describe('ConversationListItem', () => {
       expect(screen.getByText('2 hours')).toBeInTheDocument();
     });
 
-    it('renders MessageSquare icon', () => {
-      const { container } = render(<ConversationListItem {...defaultProps} />);
-
-      const icon = container.querySelector('svg');
-      expect(icon).toBeInTheDocument();
-    });
-
     it('renders dropdown menu trigger on hover', () => {
       render(<ConversationListItem {...defaultProps} />);
 
@@ -421,11 +414,11 @@ describe('ConversationListItem', () => {
   });
 
   describe('Visual Styling', () => {
-    it('has correct height (48px)', () => {
+    it('has minimum height (40px) for click targets', () => {
       render(<ConversationListItem {...defaultProps} />);
 
       const item = screen.getByTestId('conversation-item-conv-123');
-      expect(item).toHaveClass('h-12'); // h-12 = 48px
+      expect(item).toHaveClass('min-h-10'); // min-h-10 = 40px
     });
 
     it('has rounded corners', () => {
@@ -435,11 +428,25 @@ describe('ConversationListItem', () => {
       expect(item).toHaveClass('rounded-lg');
     });
 
-    it('has padding', () => {
+    it('has left padding for visual balance', () => {
       render(<ConversationListItem {...defaultProps} />);
 
       const item = screen.getByTestId('conversation-item-conv-123');
-      expect(item).toHaveClass('p-3'); // p-3 = 12px padding
+      expect(item).toHaveClass('pl-3'); // pl-3 = 12px left padding
+    });
+
+    it('has smaller font size for compact display', () => {
+      render(<ConversationListItem {...defaultProps} />);
+
+      const titleElement = screen.getByTestId('conversation-title-conv-123');
+      expect(titleElement).toHaveClass('text-xs'); // text-xs for compact sidebar
+    });
+
+    it('has tight line height for title', () => {
+      render(<ConversationListItem {...defaultProps} />);
+
+      const titleElement = screen.getByTestId('conversation-title-conv-123');
+      expect(titleElement).toHaveClass('leading-tight');
     });
 
     it('has transition animation', () => {
