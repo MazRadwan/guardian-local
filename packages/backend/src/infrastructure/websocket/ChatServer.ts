@@ -668,16 +668,22 @@ ${sanitizedExcerpt}`;
   }
 
   /**
-   * Story 26.1: Generate LLM-based title after first Q&A exchange
+   * Story 26.1 & 26.4: Generate LLM-based title after Q&A exchanges
    *
    * Called after assistant response is complete. Fire-and-forget - errors logged but don't
    * affect the conversation. Uses TitleGenerationService for mode-aware title strategies.
    *
+   * Title Generation Triggers:
+   * - Consult mode: After first exchange (2 messages: user + assistant)
+   * - Assessment mode: Two triggers:
+   *   1. After first exchange (3 messages: preamble + user + assistant) - generic title
+   *   2. After vendor info (5 messages) - updates title with vendor context (Story 26.4)
+   * - Scoring mode: Skipped (titles come from filename)
+   *
    * Guards:
-   * - Only triggers after first exchange (2 messages: 1 user + 1 assistant)
-   * - Skips if title already set (not a placeholder)
    * - Skips if title was manually edited by user
-   * - Skips for scoring mode (titles come from filename)
+   * - For initial generation: skips if title already set (not a placeholder)
+   * - For vendor update: proceeds to update even if title exists
    *
    * @param socket - Client socket to emit title update
    * @param conversationId - Conversation to generate title for
@@ -696,37 +702,66 @@ ${sanitizedExcerpt}`;
         return;
       }
 
-      // Guard 2: Check message count - only generate on first user-assistant exchange
+      // Guard 2: Check message count for title generation triggers
       // - Consult mode: 2 messages (user + assistant)
-      // - Assessment mode: 3 messages (preamble + user + assistant)
+      // - Assessment mode: 3 messages (first exchange) OR 5 messages (after vendor info)
+      // Story 26.4: Second title generation at message 5 to include vendor name
       const messageCount = await this.conversationService.getMessageCount(conversationId);
-      const expectedCount = mode === 'assessment' ? 3 : 2;
-      if (messageCount !== expectedCount) {
+      const validCounts = mode === 'assessment' ? [3, 5] : [2];
+      if (!validCounts.includes(messageCount)) {
         return;
       }
 
-      // Guard 3: Check if title should be generated
+      // Check if this is a vendor info update (assessment mode at message 5)
+      const isVendorInfoUpdate = mode === 'assessment' && messageCount === 5;
+
+      // Guard 3: Check if conversation exists
       const conversation = await this.conversationService.getConversation(conversationId);
       if (!conversation) {
         return;
       }
 
-      // Guard 4: Skip if title already set (not a placeholder) or manually edited
-      if (!isPlaceholderTitle(conversation.title) || conversation.titleManuallyEdited) {
+      // Guard 4: Skip if title was manually edited by user
+      if (conversation.titleManuallyEdited) {
         return;
       }
 
-      // Get first user message for context
-      const firstUserMessage = await this.conversationService.getFirstUserMessage(conversationId);
-      if (!firstUserMessage || !firstUserMessage.content.text) {
-        console.warn('[ChatServer] No user message found for title generation');
+      // Guard 5: For initial generation, skip if title already set (not a placeholder)
+      // For vendor info update, proceed to update with better title
+      if (!isVendorInfoUpdate && !isPlaceholderTitle(conversation.title)) {
         return;
+      }
+
+      // Get the appropriate user message based on context
+      let userMessage: string | undefined;
+
+      if (isVendorInfoUpdate) {
+        // Story 26.4: Get second user message (vendor info) from conversation history
+        // Message order: [preamble, user-1 (type selection), assistant-1, user-2 (vendor info), assistant-2]
+        const history = await this.conversationService.getHistory(conversationId, 10, 0);
+        const userMessages = history.filter(m => m.role === 'user');
+        const secondUserMsg = userMessages[1]; // 0-indexed, second user message
+        userMessage = secondUserMsg?.content.text;
+
+        if (!userMessage) {
+          console.warn('[ChatServer] No vendor info message found for title update');
+          return;
+        }
+      } else {
+        // Initial generation: use first user message
+        const firstUserMessage = await this.conversationService.getFirstUserMessage(conversationId);
+        userMessage = firstUserMessage?.content.text;
+
+        if (!userMessage) {
+          console.warn('[ChatServer] No user message found for title generation');
+          return;
+        }
       }
 
       // Build context for title generation
       const titleContext: TitleContext = {
         mode,
-        userMessage: firstUserMessage.content.text,
+        userMessage,
         assistantResponse: assistantResponse,
       };
 
@@ -745,7 +780,8 @@ ${sanitizedExcerpt}`;
           conversationId,
           title: result.title,
         });
-        console.log(`[ChatServer] Generated ${mode} title (source: ${result.source}): "${result.title}"`);
+        const updateType = isVendorInfoUpdate ? 'vendor-update' : 'initial';
+        console.log(`[ChatServer] Generated ${mode} title (${updateType}, source: ${result.source}): "${result.title}"`);
       }
     } catch (error) {
       // Non-fatal - log and continue

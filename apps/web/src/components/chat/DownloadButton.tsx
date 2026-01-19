@@ -76,11 +76,26 @@ export function DownloadButton({
       const a = document.createElement('a');
       a.href = blobUrl;
 
-      // Set filename based on format and exportType with timestamp
-      const extension = format === 'word' ? 'docx' : format === 'excel' ? 'xlsx' : 'pdf';
-      const timestamp = new Date().toISOString().split('T')[0];
-      const prefix = exportType === 'scoring' ? 'scoring-report' : 'questionnaire';
-      a.download = `${prefix}-${timestamp}.${extension}`;
+      // Try to get filename from Content-Disposition header, fall back to generic
+      let filename: string;
+      const contentDisposition = response.headers.get('Content-Disposition');
+      if (contentDisposition) {
+        // Parse filename from header: attachment; filename="name.ext" or filename*=UTF-8''name.ext
+        const filenameMatch = contentDisposition.match(/filename[*]?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i);
+        filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : '';
+      } else {
+        filename = '';
+      }
+
+      // Fall back to generic filename if header parsing failed
+      if (!filename) {
+        const extension = format === 'word' ? 'docx' : format === 'excel' ? 'xlsx' : 'pdf';
+        const timestamp = new Date().toISOString().split('T')[0];
+        const prefix = exportType === 'scoring' ? 'scoring-report' : 'questionnaire';
+        filename = `${prefix}-${timestamp}.${extension}`;
+      }
+
+      a.download = filename;
 
       document.body.appendChild(a);
       a.click();

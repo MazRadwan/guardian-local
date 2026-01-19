@@ -8,12 +8,14 @@
 import { Request, Response, NextFunction } from 'express'
 import { ExportService } from '../../../application/services/ExportService'
 import { IAssessmentRepository } from '../../../application/interfaces/IAssessmentRepository'
+import { IVendorRepository } from '../../../application/interfaces/IVendorRepository'
 import { buildContentDisposition } from './DocumentUploadController.js'
 
 export class ExportController {
   constructor(
     private readonly exportService: ExportService,
-    private readonly assessmentRepository: IAssessmentRepository
+    private readonly assessmentRepository: IAssessmentRepository,
+    private readonly vendorRepository: IVendorRepository
   ) {}
 
   /**
@@ -34,12 +36,10 @@ export class ExportController {
       // Update assessment status to 'exported' on first download
       await this.updateStatusIfNeeded(id)
 
-      // Get assessment for filename
+      // Get assessment and vendor for filename
       const assessment = await this.assessmentRepository.findById(id)
-      const filename = this.generateFilename(
-        assessment?.vendorId || 'assessment',
-        'pdf'
-      )
+      const vendor = assessment ? await this.vendorRepository.findById(assessment.vendorId) : null
+      const filename = this.generateFilename(vendor?.name || 'questionnaire', 'pdf')
 
       // Set headers for file download (sanitized to prevent header injection)
       res.setHeader('Content-Type', 'application/pdf')
@@ -71,12 +71,10 @@ export class ExportController {
       // Update assessment status to 'exported' on first download
       await this.updateStatusIfNeeded(id)
 
-      // Get assessment for filename
+      // Get assessment and vendor for filename
       const assessment = await this.assessmentRepository.findById(id)
-      const filename = this.generateFilename(
-        assessment?.vendorId || 'assessment',
-        'docx'
-      )
+      const vendor = assessment ? await this.vendorRepository.findById(assessment.vendorId) : null
+      const filename = this.generateFilename(vendor?.name || 'questionnaire', 'docx')
 
       // Set headers for file download (sanitized to prevent header injection)
       res.setHeader(
@@ -111,12 +109,10 @@ export class ExportController {
       // Update assessment status to 'exported' on first download
       await this.updateStatusIfNeeded(id)
 
-      // Get assessment for filename
+      // Get assessment and vendor for filename
       const assessment = await this.assessmentRepository.findById(id)
-      const filename = this.generateFilename(
-        assessment?.vendorId || 'assessment',
-        'xlsx'
-      )
+      const vendor = assessment ? await this.vendorRepository.findById(assessment.vendorId) : null
+      const filename = this.generateFilename(vendor?.name || 'questionnaire', 'xlsx')
 
       // Set headers for file download (sanitized to prevent header injection)
       res.setHeader(
@@ -151,9 +147,16 @@ export class ExportController {
 
   /**
    * Generates filename for download
+   * Sanitizes vendor name for safe use in filename
    */
-  private generateFilename(vendorId: string, extension: string): string {
+  private generateFilename(vendorName: string, extension: string): string {
     const timestamp = new Date().toISOString().split('T')[0]
-    return `assessment-${vendorId}-${timestamp}.${extension}`
+    // Sanitize vendor name: replace spaces with hyphens, remove special chars, limit length
+    const sanitizedName = vendorName
+      .replace(/[^a-zA-Z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-')            // Replace spaces with hyphens
+      .substring(0, 50)                // Limit length
+      .toLowerCase()
+    return `questionnaire-${sanitizedName}-${timestamp}.${extension}`
   }
 }

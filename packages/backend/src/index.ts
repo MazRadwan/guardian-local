@@ -211,7 +211,7 @@ const authController = new AuthController(authService);
 const vendorController = new VendorController(assessmentService);
 const assessmentController = new AssessmentController(assessmentService);
 const questionController = new QuestionController(questionService);
-const exportController = new ExportController(exportService, assessmentRepo);
+const exportController = new ExportController(exportService, assessmentRepo, vendorRepo);
 const scoringExportController = new ScoringExportController(
   scoringExportService,
   assessmentRepo
