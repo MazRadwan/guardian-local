@@ -1,6 +1,7 @@
 import { ConversationService } from '../../src/application/services/ConversationService';
 import { IConversationRepository } from '../../src/application/interfaces/IConversationRepository';
 import { IMessageRepository } from '../../src/application/interfaces/IMessageRepository';
+import { IFileRepository } from '../../src/application/interfaces/IFileRepository';
 import { Conversation } from '../../src/domain/entities/Conversation';
 import { Message } from '../../src/domain/entities/Message';
 
@@ -26,14 +27,30 @@ const mockMessageRepo: jest.Mocked<IMessageRepository> = {
   getHistory: jest.fn(),
   count: jest.fn(),
   delete: jest.fn(),
+  deleteByConversationId: jest.fn(),
 };
+
+const mockFileRepo = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByIds: jest.fn(),
+  findByIdAndUser: jest.fn(),
+  findByIdAndConversation: jest.fn(),
+  updateIntakeContext: jest.fn(),
+  findByConversationWithContext: jest.fn(),
+  updateTextExcerpt: jest.fn(),
+  updateParseStatus: jest.fn(),
+  tryStartParsing: jest.fn(),
+  findByConversationWithExcerpt: jest.fn(),
+  deleteByConversationId: jest.fn(),
+} as jest.Mocked<IFileRepository>;
 
 describe('ConversationService', () => {
   let service: ConversationService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ConversationService(mockConversationRepo, mockMessageRepo);
+    service = new ConversationService(mockConversationRepo, mockMessageRepo, mockFileRepo);
   });
 
   describe('createConversation', () => {
@@ -233,6 +250,43 @@ describe('ConversationService', () => {
       await expect(service.getHistory('conv-123')).rejects.toThrow(
         'Conversation conv-123 not found'
       );
+    });
+  });
+
+  describe('deleteConversation', () => {
+    it('should delete messages and conversation when it exists', async () => {
+      const mockConversation = Conversation.fromPersistence({
+        id: 'conv-123',
+        userId: 'user-123',
+        mode: 'consult',
+        assessmentId: null,
+        status: 'active',
+        context: {},
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        completedAt: null,
+      });
+
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+      mockFileRepo.deleteByConversationId.mockResolvedValue();
+      mockMessageRepo.deleteByConversationId.mockResolvedValue();
+      mockConversationRepo.delete.mockResolvedValue();
+
+      await service.deleteConversation('conv-123');
+
+      expect(mockFileRepo.deleteByConversationId).toHaveBeenCalledWith('conv-123');
+      expect(mockMessageRepo.deleteByConversationId).toHaveBeenCalledWith('conv-123');
+      expect(mockConversationRepo.delete).toHaveBeenCalledWith('conv-123');
+    });
+
+    it('should be idempotent when conversation does not exist', async () => {
+      mockConversationRepo.findById.mockResolvedValue(null);
+
+      await service.deleteConversation('conv-missing');
+
+      expect(mockFileRepo.deleteByConversationId).not.toHaveBeenCalled();
+      expect(mockMessageRepo.deleteByConversationId).not.toHaveBeenCalled();
+      expect(mockConversationRepo.delete).not.toHaveBeenCalled();
     });
   });
 

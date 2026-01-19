@@ -20,6 +20,7 @@ type MockFileRepository = {
   updateParseStatus: jest.Mock<() => Promise<void>>;
   tryStartParsing: jest.Mock<() => Promise<boolean>>;
   findByConversationWithExcerpt: jest.Mock<() => Promise<never[]>>;
+  deleteByConversationId: jest.Mock<() => Promise<void>>;
 };
 
 /**
@@ -62,6 +63,7 @@ describe('VendorValidationService', () => {
       updateParseStatus: jest.fn<() => Promise<void>>(),
       tryStartParsing: jest.fn<() => Promise<boolean>>(),
       findByConversationWithExcerpt: jest.fn<() => Promise<never[]>>(),
+      deleteByConversationId: jest.fn<() => Promise<void>>(),
     };
     service = new VendorValidationService(
       mockFileRepository as unknown as IFileRepository

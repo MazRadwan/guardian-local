@@ -210,6 +210,10 @@ export class DrizzleFileRepository implements IFileRepository {
     }))
   }
 
+  async deleteByConversationId(conversationId: string): Promise<void> {
+    await this.db.delete(files).where(eq(files.conversationId, conversationId))
+  }
+
   private toDomain(row: typeof files.$inferSelect): FileRecord {
     return {
       id: row.id,

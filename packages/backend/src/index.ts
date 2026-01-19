@@ -134,7 +134,7 @@ const scoringWordExporter = new ScoringWordExporter();
 
 // Initialize services
 const authService = new AuthService(userRepo, jwtProvider);
-const conversationService = new ConversationService(conversationRepo, messageRepo);
+const conversationService = new ConversationService(conversationRepo, messageRepo, fileRepo);
 const vendorService = new VendorService(vendorRepo);
 const assessmentService = new AssessmentService(vendorRepo, assessmentRepo);
 const questionService = new QuestionService(claudeClient, questionRepo, assessmentRepo);

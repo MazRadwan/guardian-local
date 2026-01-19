@@ -151,6 +151,7 @@ describe('ScoringService', () => {
       updateParseStatus: jest.fn(),
       tryStartParsing: jest.fn(),
       findByConversationWithExcerpt: jest.fn(),
+      deleteByConversationId: jest.fn(),
     } as jest.Mocked<IFileRepository>
 
     // Mock file storage for retrieving file content

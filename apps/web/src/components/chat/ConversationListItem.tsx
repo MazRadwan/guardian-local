@@ -161,13 +161,13 @@ export function ConversationListItem({
             <button
               onClick={(e) => e.stopPropagation()}
               data-testid={`conversation-menu-trigger-${conversation.id}`}
-              className="hidden group-hover:flex items-center justify-center p-1 rounded hover:bg-gray-200 transition-colors"
+              className="flex items-center justify-center p-1 rounded hover:bg-gray-200 transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
               aria-label={`Options for ${displayTitle}`}
             >
               <MoreHorizontal className="h-4 w-4 text-gray-600" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
+          <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-40">
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();

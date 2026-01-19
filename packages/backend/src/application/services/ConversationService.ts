@@ -1,5 +1,6 @@
 import { IConversationRepository } from '../interfaces/IConversationRepository.js';
 import { IMessageRepository } from '../interfaces/IMessageRepository.js';
+import type { IFileRepository } from '../interfaces/IFileRepository.js';
 import { Conversation, ConversationMode } from '../../domain/entities/Conversation.js';
 import { Message } from '../../domain/entities/Message.js';
 import { CreateConversationDTO } from '../dtos/CreateConversationDTO.js';
@@ -8,7 +9,8 @@ import { SendMessageDTO } from '../dtos/SendMessageDTO.js';
 export class ConversationService {
   constructor(
     private conversationRepo: IConversationRepository,
-    private messageRepo: IMessageRepository
+    private messageRepo: IMessageRepository,
+    private fileRepo?: IFileRepository
   ) {}
 
   /**
@@ -146,11 +148,12 @@ export class ConversationService {
       return; // Silent success - conversation is already gone, deletion goal achieved
     }
 
-    // Delete all messages first (due to foreign key constraint)
-    const messages = await this.messageRepo.getHistory(conversationId, 1000);
-    for (const message of messages) {
-      await this.messageRepo.delete(message.id);
+    if (this.fileRepo) {
+      await this.fileRepo.deleteByConversationId(conversationId);
     }
+
+    // Delete all messages first (avoid FK issues and partial deletes)
+    await this.messageRepo.deleteByConversationId(conversationId);
 
     // Delete the conversation
     await this.conversationRepo.delete(conversationId);
