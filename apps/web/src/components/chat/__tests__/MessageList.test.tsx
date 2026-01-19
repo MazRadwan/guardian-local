@@ -18,6 +18,13 @@ jest.mock('../QuestionnaireMessage', () => ({
   ),
 }));
 
+// Mock TypingWelcome component to show text immediately (no typing animation in tests)
+jest.mock('../TypingWelcome', () => ({
+  TypingWelcome: ({ className }: { className?: string }) => (
+    <p className={className}>Start a conversation to assess AI vendors or get guidance.</p>
+  ),
+}));
+
 // Mock IntersectionObserver
 let mockIntersectionObserverCallback: IntersectionObserverCallback;
 const mockObserve = jest.fn();

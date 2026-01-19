@@ -36,14 +36,16 @@ interface TypingWelcomeProps {
 /**
  * TypingWelcome - Displays cycling welcome messages with typing effect
  *
- * Shows the initial message immediately, then cycles through mode-specific
+ * Types out the first message on mount, then cycles through mode-specific
  * suggestions with a typewriter effect. Respects prefers-reduced-motion.
  */
 export function TypingWelcome({ className = '' }: TypingWelcomeProps) {
-  const [displayedText, setDisplayedText] = useState(WELCOME_MESSAGES[0]);
+  // Start with empty text - will type out first message on mount
+  const [displayedText, setDisplayedText] = useState('');
   const [isFading, setIsFading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
 
   // Use refs for mutable state that shouldn't trigger re-renders
   const messageIndexRef = useRef(0);
@@ -111,19 +113,27 @@ export function TypingWelcome({ className = '' }: TypingWelcomeProps) {
     }, CONFIG.FADE_DURATION);
   };
 
-  // Main effect to start cycling
+  // Main effect to type first message on mount, then start cycling
   useEffect(() => {
+    if (hasStarted) return;
+    setHasStarted(true);
+
     if (prefersReducedMotion) {
+      // Show full text immediately if reduced motion preferred
+      setDisplayedText(WELCOME_MESSAGES[0]);
       return;
     }
 
-    // Start cycling after initial delay
-    cycleTimerRef.current = setTimeout(transitionToNext, CONFIG.INITIAL_DELAY);
+    // Type out the first message immediately on mount
+    typeMessage(WELCOME_MESSAGES[0], () => {
+      // After first message types, wait then start cycling
+      cycleTimerRef.current = setTimeout(transitionToNext, CONFIG.DISPLAY_DURATION);
+    });
 
     // Cleanup on unmount
     return clearAllTimers;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefersReducedMotion]);
+  }, [prefersReducedMotion, hasStarted]);
 
   return (
     <p
