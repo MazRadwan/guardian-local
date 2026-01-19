@@ -13,22 +13,56 @@ You are starting the **implementation phase** of the Opus-GPT automated workflow
 
 Execute story specifications using parallel specialist agents, with GPT-5.2 code review.
 
-## Step 1: Verify Prerequisites
+## Step 1: Workflow Validation
+
+**CRITICAL:** Check for workflow mismatch before proceeding.
+
+```python
+state_path = f"/tasks/epic-{epic}/.orchestrator-state.json"
+state = read_json_if_exists(state_path)
+
+if state and state.get("workflow") != "opus-gpt":
+    error(f"""
+    WORKFLOW MISMATCH DETECTED
+
+    This epic was started with: {state.get('workflow', 'unknown')}
+    You are trying to run: opus-gpt
+
+    Options:
+    1. Use the correct workflow command
+    2. Start fresh: rm {state_path}
+    """)
+    return
+```
+
+## Step 2: Scope Selection (ALWAYS PROMPT)
+
+**Ask user EVERY time** (not just when no state file):
+
+```
+What scope do you want to implement?
+
+[1] Full Epic - All sprints and stories
+[2] Single Sprint - Specify sprint number
+[3] Specific Stories - Specify story IDs (e.g., 26.1.1, 26.1.2)
+
+Custom GPT review prompt? [Enter for default]:
+```
+
+Store selection in state: `targetScope: "epic" | "sprint:2" | "stories:26.1.1,26.1.2"`
+
+## Step 3: Verify Prerequisites
 
 Check for:
 1. Story files exist in `/tasks/epic-{N}/`
-2. State file exists (or ask user for epic number)
+2. State file exists (create if new)
 
-If no state file, ask user:
-- **Epic number:** Which epic to implement?
-- **Scope:** Full epic, single sprint, or specific stories?
+## Step 4: Initialize/Resume State
 
-## Step 2: Initialize/Resume State
+If state exists AND matches selected scope, resume from current phase.
+If new or scope changed, update state file at `/tasks/epic-{N}/.orchestrator-state.json`
 
-If state exists, resume from current phase.
-If new, create state file at `/tasks/epic-{N}/.orchestrator-state.json`
-
-## Step 3: File Grouping (Parallelization)
+## Step 5: File Grouping (Parallelization)
 
 Invoke file-grouping-agent to create execution batches:
 
@@ -41,7 +75,7 @@ Task(
 )
 ```
 
-## Step 4: Execute Batches
+## Step 6: Execute Batches
 
 **RATE LIMIT OPTIMIZATION:** GPT code reviews happen every 2-3 batches, not every batch (~42% reduction).
 
@@ -55,7 +89,7 @@ Task(
 
 For each batch:
 
-### 4a. Spawn Specialists (Parallel)
+### 6a. Spawn Specialists (Parallel)
 
 ```
 // Parallel execution within batch
@@ -64,11 +98,11 @@ Task(subagent_type: "frontend-agent", prompt: "Implement story 19.0.2...", run_i
 Task(subagent_type: "backend-agent", prompt: "Implement story 19.0.3...", run_in_background: true)
 ```
 
-### 4b. Wait for Completion
+### 6b. Wait for Completion
 
 Collect summaries from all agents in batch.
 
-### 4c. Verification Phase
+### 6c. Verification Phase
 
 Run verification before GPT review:
 
@@ -78,7 +112,7 @@ pnpm lint
 pnpm typecheck
 ```
 
-### 4d. GPT Code Review
+### 6d. GPT Code Review
 
 **Primary: Codex CLI (recommended)**
 
@@ -149,26 +183,42 @@ mcp__codex__codex(
 )
 ```
 
-**Fallback: Opus code-review-agent (if GPT rate limited)**
+### GPT Error Handling (NO FALLBACK - Clean Exit)
 
-If GPT returns rate limit errors (HTTP 429, "quota exceeded"):
-1. Set `state.reviewFallback.usedOpus = true`
-2. Spawn `code-review-agent` for review
-3. Add batch to `state.reviewFallback.pendingGPTReReview`
-4. Continue automation
+**DO NOT use Opus fallback.** Exit cleanly on GPT errors so user can fix and resume.
 
-### 4e. Handle Pushback
+| Error | Action |
+|-------|--------|
+| **401 Unauthorized** | Log "GPT authentication failed. Check OPENAI_API_KEY." → Save state → Exit |
+| **429 Rate Limited** | Retry with exponential backoff (30s, 60s, 120s) → After 3 retries, save state → Exit |
+| **5xx Server Error** | Retry once after 30s → If still failing, save state → Exit |
+| **Timeout (>300s)** | Log "GPT request timed out" → Save state → Exit |
+
+On exit, save state for resume:
+```json
+{
+  "status": "gpt_error",
+  "errorType": "rate_limited",
+  "errorAt": "2026-01-19T16:17:21Z",
+  "resumeFrom": "batch_3_code_review",
+  "retryCount": 3
+}
+```
+
+Resume with: `/implement --resume` (or just `/implement` - will detect state and resume)
+
+### 6e. Handle Pushback
 
 1. Analyze GPT recommendations
 2. Agree or pushback (max 7 rounds)
 3. GPT gets final say after 7
 4. Log all exchanges
 
-### 4f. Update CLAUDE.md (Institutional Memory)
+### 6f. Update CLAUDE.md (Institutional Memory)
 
 If GPT caught issues, append learnings to scoped CLAUDE.md.
 
-### 4g. Commit Approved Batch
+### 6g. Commit Approved Batch
 
 **After GPT approves a batch**, commit the changes:
 
@@ -177,11 +227,11 @@ git add {file1} {file2} ...
 git commit -m "feat(epic-{N}): batch {X} - stories {story_list}"
 ```
 
-### 4h. Mark Batch Complete
+### 6h. Mark Batch Complete
 
 Update state and move to next batch.
 
-## Step 5: Sprint Final Pass
+## Step 7: Sprint Final Pass
 
 **After all batches complete**, do a holistic sprint review.
 
@@ -190,7 +240,7 @@ Update state and move to next batch.
 3. If MINOR issues → log to CLAUDE.md
 4. Output `<promise>SPRINT_REVIEWED</promise>`
 
-## Step 6: Completion
+## Step 8: Completion
 
 After sprint final pass approved:
 
@@ -207,10 +257,13 @@ If same error 3x: Log to `.stuck-log.md`, skip, continue.
 Retry once, then mark story as skipped.
 
 ### GPT Rate Limited
-Use Opus code-review-agent as fallback:
-1. Set `reviewFallback.usedOpus = true`
-2. Add batch to `pendingGPTReReview`
-3. Continue automation
+**NO FALLBACK.** Clean exit with state saved for resume.
+
+1. Retry with exponential backoff (30s, 60s, 120s)
+2. After 3 retries, save state with `status: "gpt_error"`, `errorType: "rate_limited"`
+3. Exit cleanly with message: "GPT rate limited. Wait and run `/implement` to resume."
+
+User fixes the issue (waits for rate limit, refreshes API key) then resumes.
 
 ## Important Rules
 
@@ -223,4 +276,4 @@ Use Opus code-review-agent as fallback:
 7. **Re-review is MANDATORY after fixes** - Don't skip just because tests pass
 8. **Checkpoint per-story** - Update completedStories immediately
 9. **Confidence threshold** - Don't auto-approve reviews with confidence < 0.5
-10. **Opus fallback for rate limits** - Prevent stalls
+10. **No Opus fallback** - Clean exit on GPT errors, resume when fixed

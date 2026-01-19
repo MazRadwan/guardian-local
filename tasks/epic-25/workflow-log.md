@@ -214,35 +214,63 @@ All changes were successful before the crash:
 ## Action Items
 
 ### Hook Fixes
-- [ ] Fix hook matchers to be more specific (regex anchors)
-- [ ] Replace full test suite with quick verification in hooks
-- [ ] Add timeout to hook commands
-- [ ] Consider removing `set -e` from hooks
+- [x] Fix hook matchers to be more specific (regex anchors) ✅ 2026-01-19
+- [x] Replace full test suite with quick verification in hooks ✅ 2026-01-19
+- [x] Add timeout to hook commands ✅ 2026-01-19
+- [x] Remove `set -e` from hooks ✅ 2026-01-19
 
 ### GPT Error Handling (NO FALLBACK)
-- [ ] Add retry logic with exponential backoff (30s, 60s, 120s)
-- [ ] Add clean exit on auth failure (401) with clear message
-- [ ] Add clean exit after 3 rate limit retries (429)
-- [ ] Save `resumeFrom` state on exit for `/implement --resume`
-- [ ] Remove any existing Opus fallback code from orchestrator-agent.md
+- [x] Add retry logic with exponential backoff (30s, 60s, 120s) ✅ 2026-01-19
+- [x] Add clean exit on auth failure (401) with clear message ✅ 2026-01-19
+- [x] Add clean exit after 3 rate limit retries (429) ✅ 2026-01-19
+- [x] Save `resumeFrom` state on exit for `/implement` resume ✅ 2026-01-19
+- [x] Remove Opus fallback from implement/SKILL.md ✅ 2026-01-19
+- [x] Remove Opus fallback from spec-design/SKILL.md ✅ 2026-01-19
 
 ### Workflow Separation
-- [ ] Separate hook directories: `opus-gpt/` and `claude/`
-- [ ] Add workflow-prefixed matchers in settings.json
-- [ ] Add workflow validation at start of each skill
-- [ ] Ensure claude-* commands don't touch opus-gpt state files
+- [x] Separate hook directories: `opus-gpt/` created ✅ 2026-01-19
+- [x] Add workflow-prefixed matchers in settings.json ✅ 2026-01-19
+- [x] Add workflow validation at start of implement skill ✅ 2026-01-19
+- [x] Workflow validation already existed in spec-design skill ✅ 2026-01-19
 
 ### Restore Missing Features (from original opus-gpt-automation-plan.md)
-- [ ] Scope selection should ALWAYS prompt (not just when no state file):
-  - [1] Full Epic
-  - [2] Single Sprint
-  - [3] Specific Stories
-- [ ] Custom GPT review prompt option: "Custom GPT-5.2 review prompt? [Enter for default]:"
-- [ ] Remove Opus fallback from implement/SKILL.md (lines 152-159, 209-213)
-- [ ] Replace fallback with clean exit + retry logic per GPT Error Handling Strategy
+- [x] Scope selection ALWAYS prompts in /implement ✅ 2026-01-19
+- [x] Custom GPT review prompt option added ✅ 2026-01-19
 
 ### Resume
 - [ ] Resume Epic 26 implementation from Story 26.4
+
+---
+
+## Fixes Applied (2026-01-19)
+
+### Files Changed
+
+1. **`.claude/settings.json`**
+   - Updated SubagentStop matchers to use regex anchors: `^plan-agent$`, `^(frontend-agent|backend-agent)$`
+   - Changed hook paths to new `opus-gpt/` directory
+
+2. **`.claude/hooks/opus-gpt/post-plan.sh`** (NEW)
+   - Lightweight hook for plan-agent
+   - Checks for `opus-gpt` workflow in state before running
+   - No heavy operations, just state update
+
+3. **`.claude/hooks/opus-gpt/post-implementation.sh`** (NEW)
+   - Lightweight hook for frontend/backend agents
+   - Quick typecheck and lint only (60s timeout each)
+   - Full test suite deferred to GPT review phase
+   - No `set -e` - errors handled gracefully
+
+4. **`.claude/skills/implement/SKILL.md`**
+   - Added workflow validation (Step 1)
+   - Added scope selection that ALWAYS prompts (Step 2)
+   - Removed Opus fallback, replaced with GPT error handling table
+   - Added state fields for resume: `status`, `errorType`, `resumeFrom`, `retryCount`
+   - Updated Important Rules
+
+5. **`.claude/skills/spec-design/SKILL.md`**
+   - Removed Opus fallback, replaced with GPT error handling table
+   - Updated Important Rules
 
 ---
 
