@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { ScoringResultCard } from './ScoringResultCard';
+import { TypingWelcome } from './TypingWelcome';
 import { AlertCircle, Shield } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
@@ -449,9 +450,7 @@ export function ChatInterface() {
           {!(scoringResult && scoringResult.assessmentId) && (
             <div className="text-center mb-8">
               <h1 className="text-2xl font-semibold bg-gradient-to-r from-sky-700 via-sky-500 to-sky-700 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer mb-2">Welcome to Guardian</h1>
-              <p className="bg-gradient-to-r from-sky-600 via-sky-400 to-sky-600 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer">
-                Start a conversation to assess AI vendors or get guidance.
-              </p>
+              <TypingWelcome className="bg-gradient-to-r from-sky-600 via-sky-400 to-sky-600 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer" />
             </div>
           )}
 
