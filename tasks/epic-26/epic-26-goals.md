@@ -62,52 +62,16 @@ Required safeguards to prevent stuck loading states:
 - Clean up timeouts to avoid memory leaks
 - On app initialization, clear any stale loading states
 
-## Optional Enhancement: Tool-Based Vendor Capture
-
-> **Status:** Optional, not required. Increases complexity and requires careful validation, gating, and testing.
-
-Story 26.3 proposes adding a tool the LLM can call when it captures vendor info during Q&A:
-
-```typescript
-{
-  name: "register_vendor_info",
-  description: "Register vendor/solution name captured during assessment conversation",
-  parameters: {
-    vendorName: string,
-    solutionName?: string
-  }
-}
-```
-
-**When it would help:** Title shows "Assessment: {vendor}" immediately when user mentions vendor mid-conversation, rather than waiting for questionnaire generation.
-
-**Why it's optional:** The two-phase fallback (26.1 + 26.2) covers the majority of cases. The tool adds:
-- Complexity (LLM must reliably call tool at right moment)
-- Validation requirements (sanitize vendor input)
-- Gating logic (prevent duplicate calls, handle failures)
-- Additional test cases
-
-**Recommendation:** Implement only if Phase 1 + Phase 2 proves insufficient in practice.
-
 ## User Stories
-
-### Required (Core Fix)
 
 | Story | Description | Priority |
 |-------|-------------|----------|
 | **26.1** | Generate LLM title for Assessment mode after first Q&A | **High** |
 | **26.2** | Upgrade title to "Assessment: {vendor}" on `generate_questionnaire` | **Medium** |
-| **26.4** | Shimmer timeout + cleanup (5s timeout, clear on disconnect/delete/error) | **Medium** |
-
-### Optional Enhancement
-
-| Story | Description | Priority |
-|-------|-------------|----------|
-| 26.3 | Add `register_vendor_info` tool for mid-conversation vendor capture | Low |
+| **26.3** | Shimmer timeout + cleanup (5s timeout, clear on disconnect/delete/error) | **Medium** |
 
 ## Acceptance Criteria
 
-### Required
 - [ ] Assessment mode conversations get LLM titles after first exchange (not stuck as "New Chat")
 - [ ] Title updates to "Assessment: {vendorName}" when `generate_questionnaire` fires with vendor info
 - [ ] `titleLoading` shimmer clears within 5 seconds via hard timeout
@@ -116,12 +80,6 @@ Story 26.3 proposes adding a tool the LLM can call when it captures vendor info 
 - [ ] Manual renames are never overwritten
 - [ ] No memory leaks from orphaned timeouts
 
-### Optional (Story 26.3 only)
-- [ ] `register_vendor_info` tool available in Assessment mode
-- [ ] Title updates immediately when LLM calls tool with vendor info
-- [ ] Tool validates and sanitizes vendor name input
-- [ ] Duplicate tool calls handled gracefully
-
 ## Technical Considerations
 
 ### Backend Changes (Stories 26.1, 26.2)
@@ -129,27 +87,16 @@ Story 26.3 proposes adding a tool the LLM can call when it captures vendor info 
 - Remove or adjust any Assessment-specific title skip logic
 - Existing `generate_questionnaire` handler already updates title (Epic 25.3)
 
-### Frontend Changes (Story 26.4)
+### Frontend Changes (Story 26.3)
 - Add timeout tracking with `Map<conversationId, { timeout, startTime }>`
 - Clear timeouts on unmount/delete using cleanup functions
 - On app load, iterate stored conversations and clear stale `titleLoading`
 - Ensure timeout fires only once per conversation
 
-### Optional Backend Changes (Story 26.3)
-- Add `register_vendor_info` to assessment mode tools
-- Validate and sanitize vendor name
-- Call `conversationService.updateTitleIfNotManuallyEdited()`
-- Emit `conversation_title_updated` WebSocket event
-
 ## Files Likely Touched
 
-### Required
 - `packages/backend/src/infrastructure/websocket/ChatServer.ts` - Remove Assessment skip, treat like Consult
 - `apps/web/src/stores/chatStore.ts` - Timeout tracking and cleanup
-
-### Optional (Story 26.3)
-- `packages/backend/src/infrastructure/ai/tools/index.ts` - Add tool
-- `packages/backend/src/infrastructure/websocket/ChatServer.ts` - Handle tool call
 
 ## Dependencies
 
@@ -160,6 +107,5 @@ Story 26.3 proposes adding a tool the LLM can call when it captures vendor info 
 ## Notes
 
 - This is a UX polish epic, not blocking core functionality
-- Implement Stories 26.1, 26.2, 26.4 first (required)
-- Story 26.3 only if two-phase approach proves insufficient in practice
-- Two-phase approach is simpler and covers 90%+ of use cases
+- Two-phase approach (26.1 + 26.2) is simple and covers 90%+ of use cases
+- Shimmer timeout (26.3) prevents stuck loading states in all edge cases
