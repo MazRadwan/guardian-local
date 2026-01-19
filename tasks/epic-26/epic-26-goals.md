@@ -43,7 +43,7 @@ This is the **recommended core solution** - addresses 90%+ of cases with minimal
 - Only if `titleManuallyEdited` is false
 - Uses existing infrastructure from Epic 25
 
-### Shimmer Timeout Safety (Story 26.4)
+### Shimmer Timeout Safety (Story 26.3)
 
 Required safeguards to prevent stuck loading states:
 
@@ -54,13 +54,13 @@ Required safeguards to prevent stuck loading states:
 | **Component unmount** | Clear timeout, cleanup state |
 | **Conversation delete** | Clear timeout, remove state |
 | **Error events** | Clear `titleLoading`, log error |
-| **App load (stale state)** | Clear any `titleLoading` older than threshold |
+| **App load (stale state)** | Clear any `titleLoading` older than 10s (2x timeout) |
 
 **Implementation requirements:**
 - Store timestamp when `titleLoading` starts
 - Run timeout once per conversation (avoid duplicates)
 - Clean up timeouts to avoid memory leaks
-- On app initialization, clear any stale loading states
+- On app initialization, clear any loading states with `startTime` older than 10 seconds
 
 ## User Stories
 
@@ -86,6 +86,7 @@ Required safeguards to prevent stuck loading states:
 - Modify title generation logic in `ChatServer.ts` to treat Assessment mode like Consult initially
 - Remove or adjust any Assessment-specific title skip logic
 - Existing `generate_questionnaire` handler already updates title (Epic 25.3)
+- **IMPORTANT:** Do NOT regress the scoring-mode skip guard from Epic 25 Sprint 2 (Story 25.9) - scoring mode must continue to skip ALL assistant messages and only set title from filename
 
 ### Frontend Changes (Story 26.3)
 - Add timeout tracking with `Map<conversationId, { timeout, startTime }>`
