@@ -424,6 +424,110 @@ describe('DrizzleMessageRepository Integration Tests', () => {
     })
   })
 
+  describe('findFirstAssistantMessage (Story 26.1)', () => {
+    it('should find first assistant message in conversation', async () => {
+      // Create user message first
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'What is AI governance?' },
+      })
+      await repository.create(message1)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Create first assistant message
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'AI governance refers to the framework...' },
+      })
+      await repository.create(message2)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      // Create second assistant message
+      const message3 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'Additionally, you should consider...' },
+      })
+      await repository.create(message3)
+
+      const firstAssistantMessage = await repository.findFirstAssistantMessage(testConversationId)
+
+      expect(firstAssistantMessage).not.toBeNull()
+      expect(firstAssistantMessage!.role).toBe('assistant')
+      expect(firstAssistantMessage!.content.text).toBe('AI governance refers to the framework...')
+    })
+
+    it('should return null when no assistant messages exist', async () => {
+      // Create only user and system messages
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'Hello!' },
+      })
+      await repository.create(message1)
+
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'system',
+        content: { text: 'System message' },
+      })
+      await repository.create(message2)
+
+      const firstAssistantMessage = await repository.findFirstAssistantMessage(testConversationId)
+
+      expect(firstAssistantMessage).toBeNull()
+    })
+
+    it('should return null for conversation with no messages', async () => {
+      const firstAssistantMessage = await repository.findFirstAssistantMessage(
+        '00000000-0000-0000-0000-000000000000'
+      )
+
+      expect(firstAssistantMessage).toBeNull()
+    })
+
+    it('should return first assistant message chronologically', async () => {
+      // Create messages in specific order with delays
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'Question 1' },
+      })
+      await repository.create(message1)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'First assistant response' },
+      })
+      await repository.create(message2)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      const message3 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'Question 2' },
+      })
+      await repository.create(message3)
+      await new Promise((resolve) => setTimeout(resolve, 10))
+
+      const message4 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'Second assistant response' },
+      })
+      await repository.create(message4)
+
+      const firstAssistantMessage = await repository.findFirstAssistantMessage(testConversationId)
+
+      expect(firstAssistantMessage).not.toBeNull()
+      expect(firstAssistantMessage!.content.text).toBe('First assistant response')
+    })
+  })
+
   describe('delete', () => {
     it('should delete message', async () => {
       const message = Message.create({

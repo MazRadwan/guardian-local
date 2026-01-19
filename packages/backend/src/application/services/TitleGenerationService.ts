@@ -136,18 +136,18 @@ export class TitleGenerationService {
    *
    * Story 25.2: Mode-specific title strategies
    * - Consult: LLM-generated from Q&A exchange
-   * - Assessment: "Assessment: {vendor_name}" or "New Assessment"
+   * - Assessment: "Assessment: {vendor_name}" or LLM fallback (Story 26.1)
    * - Scoring: "Scoring: {filename}" or "Scoring Analysis"
    */
   async generateModeAwareTitle(context: TitleContext): Promise<TitleGenerationResult> {
-    const { mode, metadata } = context;
+    const { mode } = context;
 
     switch (mode) {
       case 'assessment':
-        return this.generateAssessmentTitle(metadata);
+        return this.generateAssessmentTitle(context);
 
       case 'scoring':
-        return this.generateScoringTitle(metadata);
+        return this.generateScoringTitle(context.metadata);
 
       case 'consult':
       default:
@@ -157,13 +157,17 @@ export class TitleGenerationService {
 
   /**
    * Generate title for assessment mode
-   * Uses vendor name or solution name if available
+   * Uses vendor name or solution name if available, falls back to LLM
    *
    * Story 25.2: Assessment mode title strategy
+   * Story 26.1: LLM fallback when no vendor info available
    */
-  private generateAssessmentTitle(
-    metadata?: TitleContext['metadata']
-  ): TitleGenerationResult {
+  private async generateAssessmentTitle(
+    context: TitleContext
+  ): Promise<TitleGenerationResult> {
+    const { metadata } = context;
+
+    // If vendor info available, use it (takes precedence over LLM)
     if (metadata?.vendorName) {
       const title = this.sanitizeTitle(`Assessment: ${metadata.vendorName}`);
       return { title, source: 'vendor' };
@@ -174,6 +178,13 @@ export class TitleGenerationService {
       return { title, source: 'vendor' };
     }
 
+    // Story 26.1: No vendor info - generate LLM title from conversation context
+    const llmTitle = await this.generateTitle(context);
+    if (llmTitle) {
+      return { title: llmTitle, source: 'llm' };
+    }
+
+    // Fallback if LLM fails
     return { title: PLACEHOLDER_TITLES.ASSESSMENT, source: 'default' };
   }
 

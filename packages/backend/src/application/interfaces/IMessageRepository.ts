@@ -33,6 +33,12 @@ export interface IMessageRepository {
   findFirstUserMessage(conversationId: string): Promise<Message | null>;
 
   /**
+   * Find the first assistant message in a conversation (chronologically)
+   * Epic 25/Story 26.1: Used for LLM title generation context
+   */
+  findFirstAssistantMessage(conversationId: string): Promise<Message | null>;
+
+  /**
    * Delete message
    */
   delete(id: string): Promise<void>;

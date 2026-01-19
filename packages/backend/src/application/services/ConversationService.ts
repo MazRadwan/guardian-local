@@ -179,6 +179,7 @@ export class ConversationService {
   /**
    * Generate title for conversation from first user message
    * Returns 'New Chat' if no user messages exist
+   * @deprecated Use TitleGenerationService.generateModeAwareTitle() instead for LLM-based titles
    */
   async getConversationTitle(conversationId: string): Promise<string> {
     const firstUserMessage = await this.messageRepo.findFirstUserMessage(conversationId);
@@ -199,6 +200,22 @@ export class ConversationService {
     }
 
     return title;
+  }
+
+  /**
+   * Get the first user message in a conversation
+   * Epic 25/Story 26.1: Used for LLM title generation context
+   */
+  async getFirstUserMessage(conversationId: string): Promise<Message | null> {
+    return await this.messageRepo.findFirstUserMessage(conversationId);
+  }
+
+  /**
+   * Get the first assistant message in a conversation
+   * Epic 25/Story 26.1: Used for LLM title generation context
+   */
+  async getFirstAssistantMessage(conversationId: string): Promise<Message | null> {
+    return await this.messageRepo.findFirstAssistantMessage(conversationId);
   }
 
   /**

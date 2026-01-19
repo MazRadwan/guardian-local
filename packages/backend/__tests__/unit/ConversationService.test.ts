@@ -24,6 +24,7 @@ const mockMessageRepo: jest.Mocked<IMessageRepository> = {
   findById: jest.fn(),
   findByConversationId: jest.fn(),
   findFirstUserMessage: jest.fn(),
+  findFirstAssistantMessage: jest.fn(),
   getHistory: jest.fn(),
   count: jest.fn(),
   delete: jest.fn(),
@@ -400,6 +401,60 @@ describe('ConversationService', () => {
       await expect(
         service.updateTitleIfNotManuallyEdited('conv-123', 'New Title')
       ).rejects.toThrow('Conversation conv-123 not found');
+    });
+  });
+
+  describe('getFirstUserMessage (Story 26.1)', () => {
+    it('should return the first user message', async () => {
+      const mockMessage = Message.fromPersistence({
+        id: 'msg-1',
+        conversationId: 'conv-123',
+        role: 'user',
+        content: { text: 'What is AI governance?' },
+        createdAt: new Date(),
+      });
+
+      mockMessageRepo.findFirstUserMessage.mockResolvedValue(mockMessage);
+
+      const result = await service.getFirstUserMessage('conv-123');
+
+      expect(mockMessageRepo.findFirstUserMessage).toHaveBeenCalledWith('conv-123');
+      expect(result).toEqual(mockMessage);
+    });
+
+    it('should return null when no user messages exist', async () => {
+      mockMessageRepo.findFirstUserMessage.mockResolvedValue(null);
+
+      const result = await service.getFirstUserMessage('conv-123');
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('getFirstAssistantMessage (Story 26.1)', () => {
+    it('should return the first assistant message', async () => {
+      const mockMessage = Message.fromPersistence({
+        id: 'msg-2',
+        conversationId: 'conv-123',
+        role: 'assistant',
+        content: { text: 'AI governance refers to...' },
+        createdAt: new Date(),
+      });
+
+      mockMessageRepo.findFirstAssistantMessage.mockResolvedValue(mockMessage);
+
+      const result = await service.getFirstAssistantMessage('conv-123');
+
+      expect(mockMessageRepo.findFirstAssistantMessage).toHaveBeenCalledWith('conv-123');
+      expect(result).toEqual(mockMessage);
+    });
+
+    it('should return null when no assistant messages exist', async () => {
+      mockMessageRepo.findFirstAssistantMessage.mockResolvedValue(null);
+
+      const result = await service.getFirstAssistantMessage('conv-123');
+
+      expect(result).toBeNull();
     });
   });
 });

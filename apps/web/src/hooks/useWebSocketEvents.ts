@@ -224,8 +224,14 @@ export function useWebSocketEvents({
       // Transition to error state for questionnaire card to show retry
       useChatStore.getState().setQuestionnaireUIState('error');
       useChatStore.getState().setQuestionnaireError(errorMessage);
+
+      // Story 26.3: Clear title loading for active conversation on error
+      // This handles the case where title generation fails
+      if (activeConversationId) {
+        useChatStore.getState().setConversationTitleLoading(activeConversationId, false);
+      }
     },
-    [setError, finishStreaming, setLoading, setRegeneratingMessageIndex, setActiveConversation, requestNewChat]
+    [setError, finishStreaming, setLoading, setRegeneratingMessageIndex, setActiveConversation, requestNewChat, activeConversationId]
   );
 
   // Handler 4: Handle connection initialization/resume

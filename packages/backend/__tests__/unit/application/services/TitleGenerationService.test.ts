@@ -211,9 +211,61 @@ describe('TitleGenerationService', () => {
         expect(result.source).toBe('vendor');
       });
 
-      it('should fallback to "New Assessment" when no metadata', async () => {
+      it('should fallback to "New Assessment" when no metadata and no conversation context', async () => {
+        // Story 26.1: With no vendor info AND no user/assistant messages, falls back to default
         const context: TitleContext = {
           mode: 'assessment',
+        };
+
+        const result = await service.generateModeAwareTitle(context);
+
+        expect(result.title).toBe('New Assessment');
+        expect(result.source).toBe('default');
+      });
+
+      it('should use LLM when no vendor info but has conversation context (Story 26.1)', async () => {
+        mockCreate.mockResolvedValueOnce({
+          content: [{ type: 'text', text: 'AI Vendor Risk Evaluation' }],
+        });
+
+        const context: TitleContext = {
+          mode: 'assessment',
+          userMessage: 'I want to evaluate an AI vendor for our hospital',
+          assistantResponse: 'I can help you assess the vendor. Let me gather some information...',
+        };
+
+        const result = await service.generateModeAwareTitle(context);
+
+        expect(result.title).toBe('AI Vendor Risk Evaluation');
+        expect(result.source).toBe('llm');
+        expect(mockCreate).toHaveBeenCalled();
+      });
+
+      it('should prefer vendor name over LLM (Story 26.1)', async () => {
+        const context: TitleContext = {
+          mode: 'assessment',
+          userMessage: 'I want to evaluate an AI vendor',
+          assistantResponse: 'I can help you assess the vendor...',
+          metadata: {
+            vendorName: 'Acme AI',
+          },
+        };
+
+        const result = await service.generateModeAwareTitle(context);
+
+        // Vendor name takes precedence - LLM should NOT be called
+        expect(result.title).toBe('Assessment: Acme AI');
+        expect(result.source).toBe('vendor');
+        expect(mockCreate).not.toHaveBeenCalled();
+      });
+
+      it('should fallback to default if LLM fails for assessment (Story 26.1)', async () => {
+        mockCreate.mockRejectedValueOnce(new Error('API Error'));
+
+        const context: TitleContext = {
+          mode: 'assessment',
+          userMessage: 'I want to evaluate a vendor',
+          assistantResponse: 'I can help you...',
         };
 
         const result = await service.generateModeAwareTitle(context);
@@ -296,7 +348,7 @@ describe('TitleGenerationService', () => {
       expect(result.source).toBe('vendor');
     });
 
-    it('should not call LLM for assessment mode', async () => {
+    it('should not call LLM for assessment mode when vendor name is available', async () => {
       const context: TitleContext = {
         mode: 'assessment',
         metadata: {
@@ -306,7 +358,7 @@ describe('TitleGenerationService', () => {
 
       await service.generateModeAwareTitle(context);
 
-      // LLM should not be called for assessment titles
+      // LLM should not be called when vendor name is available
       expect(mockCreate).not.toHaveBeenCalled();
     });
   });
@@ -493,7 +545,7 @@ describe('TitleGenerationService', () => {
       expect(mockCreate).toHaveBeenCalled();
     });
 
-    it('should still use vendor/solution for assessment mode (not LLM)', async () => {
+    it('should use vendor/solution for assessment mode when available (not LLM)', async () => {
       const context: TitleContext = {
         mode: 'assessment',
         userMessage: 'I want to assess this vendor',
@@ -506,8 +558,28 @@ describe('TitleGenerationService', () => {
 
       expect(result.title).toBe('Assessment: HealthTech AI');
       expect(result.source).toBe('vendor');
-      // LLM should not be called for assessment mode
+      // LLM should not be called when vendor name is available
       expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('should use LLM for assessment mode when no vendor info (Story 26.1)', async () => {
+      mockCreate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Healthcare AI Evaluation' }],
+      });
+
+      const context: TitleContext = {
+        mode: 'assessment',
+        userMessage: 'I want to assess an AI vendor for radiology',
+        assistantResponse: 'I can help you evaluate this vendor...',
+        // No metadata/vendor info
+      };
+
+      const result = await service.generateModeAwareTitle(context);
+
+      expect(result.title).toBe('Healthcare AI Evaluation');
+      expect(result.source).toBe('llm');
+      // LLM should be called when no vendor info
+      expect(mockCreate).toHaveBeenCalled();
     });
   });
 });
