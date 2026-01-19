@@ -14,6 +14,7 @@ const customJestConfig = {
     '^tailwind-merge$': '<rootDir>/__mocks__/tailwind-merge.js',
     '^react-markdown$': '<rootDir>/__mocks__/react-markdown.js',
     '^remark-gfm$': '<rootDir>/__mocks__/remark-gfm.js',
+    '^remark-breaks$': '<rootDir>/__mocks__/remark-breaks.js',
   },
   transformIgnorePatterns: [
     'node_modules/(?!(react-markdown|remark-gfm|micromark|unist|unified|bail|is-plain-obj|trough|vfile|vfile-message|mdast-util|decode-named-character-reference|character-entities|property-information|hast-util|space-separated-tokens|comma-separated-tokens|trim-lines)/)',

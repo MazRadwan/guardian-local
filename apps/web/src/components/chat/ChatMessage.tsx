@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { cn } from '@/lib/utils';
 import { User, ShieldCheck, Copy, Check, RefreshCw, AlertTriangle } from 'lucide-react';
 import { DownloadButton } from './DownloadButton';
@@ -167,7 +168,7 @@ export function ChatMessage({
             [&>td]:p-2 [&>td]:border [&>td]:border-gray-300
           ">
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkBreaks]}
               components={{
                 table: ({node, ...props}) => (
                   <div className="overflow-x-auto w-full my-4 border rounded-lg">
