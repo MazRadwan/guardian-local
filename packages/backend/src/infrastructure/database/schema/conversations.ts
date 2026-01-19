@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, jsonb, timestamp, index, boolean } from 'drizzle-orm/pg-core'
 import { users } from './users'
 import { assessments } from './assessments'
 import type { ConversationContext } from '../../../domain/entities/Conversation.js'
@@ -21,6 +21,12 @@ export const conversations = pgTable(
     status: text('status').notNull().$type<'active' | 'completed'>().default('active'),
     // Domain type is source of truth for context structure (Epic 16: includes intakeContext)
     context: jsonb('context').$type<ConversationContext>(),
+
+    // Epic 25: Chat Title Intelligence
+    // Generated or user-edited conversation title
+    title: text('title'),
+    // Flag to prevent auto-updates from overwriting user-edited titles
+    titleManuallyEdited: boolean('title_manually_edited').default(false).notNull(),
 
     // Timestamps
     startedAt: timestamp('started_at').defaultNow().notNull(),

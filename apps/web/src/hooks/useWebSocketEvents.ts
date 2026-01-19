@@ -307,10 +307,16 @@ export function useWebSocketEvents({
   );
 
   // Handler 7: Handle new conversation creation
+  // Story 25.5: New conversations start with titleLoading: true for pulse animation
   const handleConversationCreated = useCallback(
     (conversation: Conversation) => {
       console.log('[useWebSocketEvents] New conversation created:', conversation.id);
-      addConversation(conversation);
+      // Story 25.5: Add conversation with titleLoading flag if title is "New Chat"
+      const conversationWithLoading = {
+        ...conversation,
+        titleLoading: conversation.title === 'New Chat' || !conversation.title,
+      };
+      addConversation(conversationWithLoading);
 
       // Mark this conversation as just created (to prevent loading history for it)
       markConversationAsJustCreated(conversation.id);
@@ -324,10 +330,13 @@ export function useWebSocketEvents({
   );
 
   // Handler 8: Update conversation title
+  // Story 25.5: Also clears titleLoading state when title is received
   const handleConversationTitleUpdated = useCallback(
     (conversationId: string, title: string) => {
       console.log('[useWebSocketEvents] Conversation title updated:', conversationId, title);
       updateConversationTitle(conversationId, title);
+      // Story 25.5: Clear title loading state when title arrives
+      useChatStore.getState().setConversationTitleLoading(conversationId, false);
     },
     [updateConversationTitle]
   );

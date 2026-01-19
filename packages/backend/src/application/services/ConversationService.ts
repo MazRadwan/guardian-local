@@ -1,5 +1,6 @@
 import { IConversationRepository } from '../interfaces/IConversationRepository.js';
 import { IMessageRepository } from '../interfaces/IMessageRepository.js';
+import type { IFileRepository } from '../interfaces/IFileRepository.js';
 import { Conversation, ConversationMode } from '../../domain/entities/Conversation.js';
 import { Message } from '../../domain/entities/Message.js';
 import { CreateConversationDTO } from '../dtos/CreateConversationDTO.js';
@@ -8,7 +9,8 @@ import { SendMessageDTO } from '../dtos/SendMessageDTO.js';
 export class ConversationService {
   constructor(
     private conversationRepo: IConversationRepository,
-    private messageRepo: IMessageRepository
+    private messageRepo: IMessageRepository,
+    private fileRepo?: IFileRepository
   ) {}
 
   /**
@@ -146,11 +148,12 @@ export class ConversationService {
       return; // Silent success - conversation is already gone, deletion goal achieved
     }
 
-    // Delete all messages first (due to foreign key constraint)
-    const messages = await this.messageRepo.getHistory(conversationId, 1000);
-    for (const message of messages) {
-      await this.messageRepo.delete(message.id);
+    if (this.fileRepo) {
+      await this.fileRepo.deleteByConversationId(conversationId);
     }
+
+    // Delete all messages first (avoid FK issues and partial deletes)
+    await this.messageRepo.deleteByConversationId(conversationId);
 
     // Delete the conversation
     await this.conversationRepo.delete(conversationId);
@@ -203,5 +206,54 @@ export class ConversationService {
    */
   async getMessageCount(conversationId: string): Promise<number> {
     return await this.messageRepo.count(conversationId);
+  }
+
+  /**
+   * Update conversation title
+   * Epic 25: Chat Title Intelligence
+   *
+   * @param conversationId - Conversation to update
+   * @param title - New title
+   * @param manuallyEdited - If true, marks title as user-edited (prevents auto-updates)
+   */
+  async updateTitle(
+    conversationId: string,
+    title: string,
+    manuallyEdited: boolean = false
+  ): Promise<void> {
+    const conversation = await this.conversationRepo.findById(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    await this.conversationRepo.updateTitle(conversationId, title, manuallyEdited);
+  }
+
+  /**
+   * Update conversation title only if not manually edited
+   * Epic 25: Chat Title Intelligence
+   *
+   * @param conversationId - Conversation to update
+   * @param title - New title
+   * @returns true if title was updated, false if skipped (manually edited)
+   */
+  async updateTitleIfNotManuallyEdited(
+    conversationId: string,
+    title: string
+  ): Promise<boolean> {
+    const conversation = await this.conversationRepo.findById(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    if (conversation.titleManuallyEdited) {
+      console.log(`[ConversationService] Skipping title update for ${conversationId} - manually edited`);
+      return false;
+    }
+
+    await this.conversationRepo.updateTitle(conversationId, title, false);
+    return true;
   }
 }

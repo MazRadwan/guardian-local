@@ -157,6 +157,7 @@ class MockFileRepository implements IFileRepository {
   async updateScoringParseResult(_fileId: string, _result: any): Promise<void> {}
   async delete(_id: string): Promise<void> {}
   async deleteByConversation(_conversationId: string): Promise<void> {}
+  async deleteByConversationId(_conversationId: string): Promise<void> {}
   // Epic 18 methods
   async updateTextExcerpt(_fileId: string, _excerpt: string): Promise<void> {}
   async updateParseStatus(_fileId: string, _status: any): Promise<void> {}

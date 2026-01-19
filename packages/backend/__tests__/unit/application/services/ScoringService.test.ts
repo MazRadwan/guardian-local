@@ -151,6 +151,7 @@ describe('ScoringService', () => {
       updateParseStatus: jest.fn(),
       tryStartParsing: jest.fn(),
       findByConversationWithExcerpt: jest.fn(),
+      deleteByConversationId: jest.fn(),
     } as jest.Mocked<IFileRepository>
 
     // Mock file storage for retrieving file content
@@ -231,6 +232,8 @@ describe('ScoringService', () => {
           startedAt: new Date(),
           lastActivityAt: new Date(),
           completedAt: null,
+          title: null,
+          titleManuallyEdited: false,
         })
       ),
       findByUserId: jest.fn(),
@@ -241,6 +244,7 @@ describe('ScoringService', () => {
       updateContext: jest.fn(),
       updateActivity: jest.fn(),
       delete: jest.fn(),
+      updateTitle: jest.fn(),
     } as jest.Mocked<IConversationRepository>
 
     validator = new ScoringPayloadValidator()

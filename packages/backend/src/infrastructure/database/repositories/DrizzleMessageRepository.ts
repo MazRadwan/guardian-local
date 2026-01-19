@@ -93,6 +93,10 @@ export class DrizzleMessageRepository implements IMessageRepository {
     await this.db.delete(messages).where(eq(messages.id, id));
   }
 
+  async deleteByConversationId(conversationId: string): Promise<void> {
+    await this.db.delete(messages).where(eq(messages.conversationId, conversationId));
+  }
+
   private toDomain(row: typeof messages.$inferSelect): Message {
     return Message.fromPersistence({
       id: row.id,

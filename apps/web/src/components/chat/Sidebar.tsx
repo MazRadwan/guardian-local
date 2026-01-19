@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { SquarePen, LogOut, Search, PanelLeft, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConversationList } from './ConversationList';
 import { ConversationSearchModal } from './ConversationSearchModal';
-import { Conversation } from '@/stores/chatStore';
+import { Conversation, useChatStore } from '@/stores/chatStore';
+import { updateConversationTitle } from '@/lib/api/conversation';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -21,6 +22,8 @@ interface SidebarProps {
   activeConversationId: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
+  // Auth token for API calls
+  token?: string;
 }
 
 export function Sidebar({
@@ -36,12 +39,21 @@ export function Sidebar({
   activeConversationId,
   onSelectConversation,
   onDeleteConversation,
+  token,
 }: SidebarProps) {
   // Mobile: drawer overlay pattern
   // Desktop: persistent sidebar with toggle
 
   // Search modal state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Get store actions for editing state and title updates
+  const editingConversationId = useChatStore((state) => state.editingConversationId);
+  const setEditingConversationId = useChatStore((state) => state.setEditingConversationId);
+  const updateStoreTitle = useChatStore((state) => state.updateConversationTitle);
+  const setConversationTitleManuallyEdited = useChatStore(
+    (state) => state.setConversationTitleManuallyEdited
+  );
 
   // Keyboard support: Close mobile drawer with Escape key
   useEffect(() => {
@@ -55,6 +67,41 @@ export function Sidebar({
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onCloseMobile]);
+
+  // Handle rename start
+  const handleRenameStart = useCallback((id: string) => {
+    setEditingConversationId(id);
+  }, [setEditingConversationId]);
+
+  // Handle rename cancel
+  const handleRenameCancel = useCallback(() => {
+    setEditingConversationId(null);
+  }, [setEditingConversationId]);
+
+  // Handle rename complete - API call
+  const handleRenameComplete = useCallback(
+    async (id: string, newTitle: string) => {
+      // Optimistically update the UI
+      updateStoreTitle(id, newTitle);
+      setEditingConversationId(null);
+
+      // Mark as manually edited to prevent auto-update
+      setConversationTitleManuallyEdited(id, true);
+
+      // Call API if token is available
+      if (token) {
+        try {
+          await updateConversationTitle(id, newTitle, token);
+          console.log('[Sidebar] Title updated successfully via API');
+        } catch (error) {
+          console.error('[Sidebar] Failed to update title via API:', error);
+          // Revert the optimistic update on failure would be nice,
+          // but for simplicity we keep the local change
+        }
+      }
+    },
+    [token, updateStoreTitle, setEditingConversationId, setConversationTitleManuallyEdited]
+  );
 
   return (
     <>
@@ -78,6 +125,7 @@ export function Sidebar({
         `}
         role="navigation"
         aria-label="Sidebar navigation"
+        data-testid="sidebar"
       >
         {/* Section 1: Header & Toggle */}
         {isMinimized ? (
@@ -157,8 +205,12 @@ export function Sidebar({
           <ConversationList
             conversations={conversations}
             activeConversationId={activeConversationId}
+            editingConversationId={editingConversationId}
             onSelectConversation={onSelectConversation}
             onDeleteConversation={onDeleteConversation}
+            onRenameStart={handleRenameStart}
+            onRenameComplete={handleRenameComplete}
+            onRenameCancel={handleRenameCancel}
           />
         )}
 

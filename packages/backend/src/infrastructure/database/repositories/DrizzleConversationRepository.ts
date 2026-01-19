@@ -32,6 +32,8 @@ export class DrizzleConversationRepository implements IConversationRepository {
         context: conversation.context as Record<string, unknown>,
         lastActivityAt: conversation.lastActivityAt,
         completedAt: conversation.completedAt,
+        title: conversation.title,
+        titleManuallyEdited: conversation.titleManuallyEdited,
       })
       .returning();
 
@@ -128,6 +130,23 @@ export class DrizzleConversationRepository implements IConversationRepository {
     await this.db.delete(conversations).where(eq(conversations.id, id));
   }
 
+  /**
+   * Update conversation title
+   * Epic 25: Chat Title Intelligence
+   */
+  async updateTitle(id: string, title: string, manuallyEdited?: boolean): Promise<void> {
+    const updates: { title: string; titleManuallyEdited?: boolean; lastActivityAt: Date } = {
+      title,
+      lastActivityAt: new Date(),
+    };
+
+    if (manuallyEdited !== undefined) {
+      updates.titleManuallyEdited = manuallyEdited;
+    }
+
+    await this.db.update(conversations).set(updates).where(eq(conversations.id, id));
+  }
+
   private toDomain(row: typeof conversations.$inferSelect): Conversation {
     return Conversation.fromPersistence({
       id: row.id,
@@ -139,6 +158,8 @@ export class DrizzleConversationRepository implements IConversationRepository {
       startedAt: row.startedAt,
       lastActivityAt: row.lastActivityAt,
       completedAt: row.completedAt,
+      title: row.title,
+      titleManuallyEdited: row.titleManuallyEdited,
     });
   }
 }

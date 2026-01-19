@@ -15,7 +15,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { isAuthenticated, isLoading, user, logout } = useAuth();
+  const { isAuthenticated, isLoading, user, logout, token } = useAuth();
 
   // Questionnaire persistence for logout cleanup (Story 4.3.5)
   const persistence = useQuestionnairePersistence(user?.id);
@@ -109,6 +109,7 @@ export default function DashboardLayout({
         activeConversationId={activeConversationId}
         onSelectConversation={setActiveConversation}
         onDeleteConversation={requestDeleteConversation}
+        token={token ?? undefined}
       />
 
       {/* Main Content Area */}

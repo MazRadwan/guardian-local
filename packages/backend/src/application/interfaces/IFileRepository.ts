@@ -151,4 +151,10 @@ export interface IFileRepository {
    * fallback hierarchy: intakeContext → textExcerpt → S3 re-read.
    */
   findByConversationWithExcerpt(conversationId: string): Promise<FileWithExcerpt[]>
+
+  /**
+   * Delete all files for a conversation
+   * Used when removing a conversation to avoid FK conflicts
+   */
+  deleteByConversationId(conversationId: string): Promise<void>
 }

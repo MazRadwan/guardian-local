@@ -45,4 +45,10 @@ export interface IConversationRepository {
    * Delete conversation
    */
   delete(id: string): Promise<void>;
+
+  /**
+   * Update conversation title
+   * Epic 25: Chat Title Intelligence
+   */
+  updateTitle(id: string, title: string, manuallyEdited?: boolean): Promise<void>;
 }

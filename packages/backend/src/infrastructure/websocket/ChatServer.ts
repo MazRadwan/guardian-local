@@ -21,6 +21,7 @@ import type { MessageAttachment } from '../../domain/entities/Message.js';
 import { sanitizeForPrompt } from '../../utils/sanitize.js';
 import type { ScoringProgressEvent } from '../../domain/scoring/types.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
+import { PLACEHOLDER_TITLES, isPlaceholderTitle } from '../../application/services/TitleGenerationService.js';
 // Epic 18: Scoring now triggered on user Send (trigger-on-send pattern)
 
 /**
@@ -1338,15 +1339,29 @@ If the document appears to be a completed questionnaire, mention that it can be 
             attachments: enrichedAttachments,
           });
 
-          // Check if this is the first user message and emit title update
-          const messageCount = await this.conversationService.getMessageCount(conversationId);
-          if (messageCount === 1) {
-            // This is the first user message - generate and emit title
-            const title = await this.conversationService.getConversationTitle(conversationId);
-            socket.emit('conversation_title_updated', {
-              conversationId,
-              title,
-            });
+          // Story 25.9: Title generation with mode-aware guards
+          // Scoring mode titles ONLY come from filename (handled later in file upload flow)
+          // Get conversation to check mode and existing title
+          const conversationForTitle = await this.conversationService.getConversation(conversationId);
+          if (conversationForTitle) {
+            // Guard 1: Skip if title already set (idempotency) - unless it's a placeholder
+            // Guard 2: Skip for scoring mode - title set from filename in file upload flow
+            const shouldGenerateTitle =
+              isPlaceholderTitle(conversationForTitle.title) &&
+              conversationForTitle.mode !== 'scoring' &&
+              !conversationForTitle.titleManuallyEdited;
+
+            if (shouldGenerateTitle) {
+              const messageCount = await this.conversationService.getMessageCount(conversationId);
+              if (messageCount === 1) {
+                // This is the first user message - generate and emit title
+                const title = await this.conversationService.getConversationTitle(conversationId);
+                socket.emit('conversation_title_updated', {
+                  conversationId,
+                  title,
+                });
+              }
+            }
           }
 
           // Get conversation context and generate Claude response
@@ -1368,6 +1383,43 @@ If the document appears to be a completed questionnaire, mention that it can be 
 
             // Extract file IDs from enriched attachments
             const fileIds = enrichedAttachments.map(a => a.fileId);
+
+            // Epic 25.4: Update conversation title with filename (if not manually edited)
+            // Use first file's name for the title
+            const firstFile = enrichedAttachments[0];
+            if (firstFile && firstFile.filename) {
+              const maxTitleLength = 50;
+              const prefix = 'Scoring: ';
+              const maxFilenameLength = maxTitleLength - prefix.length;
+
+              let filename = firstFile.filename;
+              if (filename.length > maxFilenameLength) {
+                // Truncate while preserving extension
+                const lastDot = filename.lastIndexOf('.');
+                const extension = lastDot > 0 ? filename.slice(lastDot) : '';
+                const baseName = lastDot > 0 ? filename.slice(0, lastDot) : filename;
+                const availableLength = maxFilenameLength - 3 - extension.length;
+                if (availableLength > 0) {
+                  filename = baseName.slice(0, availableLength) + '...' + extension;
+                } else {
+                  filename = filename.slice(0, maxFilenameLength - 3) + '...';
+                }
+              }
+
+              const scoringTitle = `${prefix}${filename}`;
+              const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
+                conversationId,
+                scoringTitle
+              );
+
+              if (titleUpdated) {
+                socket.emit('conversation_title_updated', {
+                  conversationId,
+                  title: scoringTitle,
+                });
+                console.log(`[ChatServer] Updated scoring title: "${scoringTitle}"`);
+              }
+            }
 
             // Epic 18.4.3: Pass user message for follow-up addressing
             // Only pass actual user text, not placeholder text for file-only uploads
@@ -2255,6 +2307,32 @@ Once uploaded, I'll analyze the responses and provide:
         questionCount: result.schema.metadata.questionCount,
         formats: ['pdf', 'word', 'excel'],
       });
+
+      // Epic 25.3: Update conversation title with vendor/solution name
+      // Only if title hasn't been manually edited by user
+      if (vendorName || solutionName) {
+        const titlePrefix = 'Assessment: ';
+        const titleName = vendorName || solutionName || '';
+        const maxTitleLength = 50;
+        let newTitle = `${titlePrefix}${titleName}`;
+        if (newTitle.length > maxTitleLength) {
+          newTitle = newTitle.slice(0, maxTitleLength - 3) + '...';
+        }
+
+        const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
+          conversationId,
+          newTitle
+        );
+
+        if (titleUpdated) {
+          // Emit WebSocket event for real-time sidebar update
+          socket.emit('conversation_title_updated', {
+            conversationId,
+            title: newTitle,
+          });
+          console.log(`[ChatServer] Updated assessment title: "${newTitle}"`);
+        }
+      }
 
       console.log(`[ChatServer] Questionnaire generation complete:`, {
         conversationId,

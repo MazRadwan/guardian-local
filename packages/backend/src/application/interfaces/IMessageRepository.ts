@@ -36,4 +36,9 @@ export interface IMessageRepository {
    * Delete message
    */
   delete(id: string): Promise<void>;
+
+  /**
+   * Delete all messages for a conversation
+   */
+  deleteByConversationId(conversationId: string): Promise<void>;
 }

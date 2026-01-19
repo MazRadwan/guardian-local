@@ -441,6 +441,47 @@ describe('DrizzleMessageRepository Integration Tests', () => {
     })
   })
 
+  describe('deleteByConversationId', () => {
+    it('should delete only messages for the target conversation', async () => {
+      const otherConversation = Conversation.create({
+        userId: testUserId,
+        mode: 'consult',
+      })
+      const createdOtherConversation =
+        await conversationRepository.create(otherConversation)
+
+      const message1 = Message.create({
+        conversationId: testConversationId,
+        role: 'user',
+        content: { text: 'Delete me 1' },
+      })
+      const message2 = Message.create({
+        conversationId: testConversationId,
+        role: 'assistant',
+        content: { text: 'Delete me 2' },
+      })
+      const message3 = Message.create({
+        conversationId: createdOtherConversation.id,
+        role: 'user',
+        content: { text: 'Keep me' },
+      })
+
+      const created1 = await repository.create(message1)
+      const created2 = await repository.create(message2)
+      const created3 = await repository.create(message3)
+
+      await repository.deleteByConversationId(testConversationId)
+
+      const found1 = await repository.findById(created1.id)
+      const found2 = await repository.findById(created2.id)
+      const found3 = await repository.findById(created3.id)
+
+      expect(found1).toBeNull()
+      expect(found2).toBeNull()
+      expect(found3).not.toBeNull()
+    })
+  })
+
   describe('JSONB content persistence', () => {
     it('should persist and retrieve simple text content', async () => {
       const message = Message.create({

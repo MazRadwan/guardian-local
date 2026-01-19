@@ -1,6 +1,7 @@
 import { ConversationService } from '../../src/application/services/ConversationService';
 import { IConversationRepository } from '../../src/application/interfaces/IConversationRepository';
 import { IMessageRepository } from '../../src/application/interfaces/IMessageRepository';
+import { IFileRepository } from '../../src/application/interfaces/IFileRepository';
 import { Conversation } from '../../src/domain/entities/Conversation';
 import { Message } from '../../src/domain/entities/Message';
 
@@ -15,6 +16,7 @@ const mockConversationRepo: jest.Mocked<IConversationRepository> = {
   updateContext: jest.fn(),
   updateActivity: jest.fn(),
   delete: jest.fn(),
+  updateTitle: jest.fn(),
 };
 
 const mockMessageRepo: jest.Mocked<IMessageRepository> = {
@@ -25,14 +27,30 @@ const mockMessageRepo: jest.Mocked<IMessageRepository> = {
   getHistory: jest.fn(),
   count: jest.fn(),
   delete: jest.fn(),
+  deleteByConversationId: jest.fn(),
 };
+
+const mockFileRepo = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByIds: jest.fn(),
+  findByIdAndUser: jest.fn(),
+  findByIdAndConversation: jest.fn(),
+  updateIntakeContext: jest.fn(),
+  findByConversationWithContext: jest.fn(),
+  updateTextExcerpt: jest.fn(),
+  updateParseStatus: jest.fn(),
+  tryStartParsing: jest.fn(),
+  findByConversationWithExcerpt: jest.fn(),
+  deleteByConversationId: jest.fn(),
+} as jest.Mocked<IFileRepository>;
 
 describe('ConversationService', () => {
   let service: ConversationService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new ConversationService(mockConversationRepo, mockMessageRepo);
+    service = new ConversationService(mockConversationRepo, mockMessageRepo, mockFileRepo);
   });
 
   describe('createConversation', () => {
@@ -232,6 +250,156 @@ describe('ConversationService', () => {
       await expect(service.getHistory('conv-123')).rejects.toThrow(
         'Conversation conv-123 not found'
       );
+    });
+  });
+
+  describe('deleteConversation', () => {
+    it('should delete messages and conversation when it exists', async () => {
+      const mockConversation = Conversation.fromPersistence({
+        id: 'conv-123',
+        userId: 'user-123',
+        mode: 'consult',
+        assessmentId: null,
+        status: 'active',
+        context: {},
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        completedAt: null,
+      });
+
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+      mockFileRepo.deleteByConversationId.mockResolvedValue();
+      mockMessageRepo.deleteByConversationId.mockResolvedValue();
+      mockConversationRepo.delete.mockResolvedValue();
+
+      await service.deleteConversation('conv-123');
+
+      expect(mockFileRepo.deleteByConversationId).toHaveBeenCalledWith('conv-123');
+      expect(mockMessageRepo.deleteByConversationId).toHaveBeenCalledWith('conv-123');
+      expect(mockConversationRepo.delete).toHaveBeenCalledWith('conv-123');
+    });
+
+    it('should be idempotent when conversation does not exist', async () => {
+      mockConversationRepo.findById.mockResolvedValue(null);
+
+      await service.deleteConversation('conv-missing');
+
+      expect(mockFileRepo.deleteByConversationId).not.toHaveBeenCalled();
+      expect(mockMessageRepo.deleteByConversationId).not.toHaveBeenCalled();
+      expect(mockConversationRepo.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateTitle (Epic 25)', () => {
+    it('should update conversation title', async () => {
+      const mockConversation = Conversation.fromPersistence({
+        id: 'conv-123',
+        userId: 'user-123',
+        mode: 'consult',
+        assessmentId: null,
+        status: 'active',
+        context: {},
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        completedAt: null,
+        title: null,
+        titleManuallyEdited: false,
+      });
+
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+      mockConversationRepo.updateTitle.mockResolvedValue();
+
+      await service.updateTitle('conv-123', 'New Title', false);
+
+      expect(mockConversationRepo.updateTitle).toHaveBeenCalledWith('conv-123', 'New Title', false);
+    });
+
+    it('should update title with manuallyEdited flag', async () => {
+      const mockConversation = Conversation.fromPersistence({
+        id: 'conv-123',
+        userId: 'user-123',
+        mode: 'consult',
+        assessmentId: null,
+        status: 'active',
+        context: {},
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        completedAt: null,
+        title: null,
+        titleManuallyEdited: false,
+      });
+
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+      mockConversationRepo.updateTitle.mockResolvedValue();
+
+      await service.updateTitle('conv-123', 'User Edited Title', true);
+
+      expect(mockConversationRepo.updateTitle).toHaveBeenCalledWith('conv-123', 'User Edited Title', true);
+    });
+
+    it('should throw error if conversation not found', async () => {
+      mockConversationRepo.findById.mockResolvedValue(null);
+
+      await expect(service.updateTitle('conv-123', 'New Title')).rejects.toThrow(
+        'Conversation conv-123 not found'
+      );
+    });
+  });
+
+  describe('updateTitleIfNotManuallyEdited (Epic 25)', () => {
+    it('should update title if not manually edited', async () => {
+      const mockConversation = Conversation.fromPersistence({
+        id: 'conv-123',
+        userId: 'user-123',
+        mode: 'consult',
+        assessmentId: null,
+        status: 'active',
+        context: {},
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        completedAt: null,
+        title: 'Old Title',
+        titleManuallyEdited: false,
+      });
+
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+      mockConversationRepo.updateTitle.mockResolvedValue();
+
+      const result = await service.updateTitleIfNotManuallyEdited('conv-123', 'Auto Generated Title');
+
+      expect(result).toBe(true);
+      expect(mockConversationRepo.updateTitle).toHaveBeenCalledWith('conv-123', 'Auto Generated Title', false);
+    });
+
+    it('should skip update if title was manually edited', async () => {
+      const mockConversation = Conversation.fromPersistence({
+        id: 'conv-123',
+        userId: 'user-123',
+        mode: 'consult',
+        assessmentId: null,
+        status: 'active',
+        context: {},
+        startedAt: new Date(),
+        lastActivityAt: new Date(),
+        completedAt: null,
+        title: 'User Custom Title',
+        titleManuallyEdited: true,
+      });
+
+      mockConversationRepo.findById.mockResolvedValue(mockConversation);
+
+      const result = await service.updateTitleIfNotManuallyEdited('conv-123', 'Auto Generated Title');
+
+      expect(result).toBe(false);
+      expect(mockConversationRepo.updateTitle).not.toHaveBeenCalled();
+    });
+
+    it('should throw error if conversation not found', async () => {
+      mockConversationRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.updateTitleIfNotManuallyEdited('conv-123', 'New Title')
+      ).rejects.toThrow('Conversation conv-123 not found');
     });
   });
 });

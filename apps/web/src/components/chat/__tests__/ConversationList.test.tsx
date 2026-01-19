@@ -4,10 +4,20 @@ import { Conversation } from '@/stores/chatStore';
 
 // Mock ConversationListItem to simplify testing
 jest.mock('../ConversationListItem', () => ({
-  ConversationListItem: jest.fn(({ conversation, isActive, onClick, onDelete }) => (
+  ConversationListItem: jest.fn(({
+    conversation,
+    isActive,
+    isEditing,
+    onClick,
+    onDelete,
+    onRenameStart,
+    onRenameComplete,
+    onRenameCancel,
+  }) => (
     <div
       data-testid={`conversation-item-${conversation.id}`}
       data-active={isActive}
+      data-editing={isEditing}
       onClick={() => onClick(conversation.id)}
     >
       <span>{conversation.title}</span>
@@ -15,6 +25,10 @@ jest.mock('../ConversationListItem', () => ({
         e.stopPropagation();
         onDelete(conversation.id);
       }}>Delete</button>
+      <button onClick={(e) => {
+        e.stopPropagation();
+        onRenameStart(conversation.id);
+      }}>Rename</button>
     </div>
   )),
 }));
@@ -46,6 +60,20 @@ describe('ConversationList', () => {
 
   const mockOnSelectConversation = jest.fn();
   const mockOnDeleteConversation = jest.fn();
+  const mockOnRenameStart = jest.fn();
+  const mockOnRenameComplete = jest.fn();
+  const mockOnRenameCancel = jest.fn();
+
+  const defaultProps = {
+    conversations: mockConversations,
+    activeConversationId: null as string | null,
+    editingConversationId: null as string | null,
+    onSelectConversation: mockOnSelectConversation,
+    onDeleteConversation: mockOnDeleteConversation,
+    onRenameStart: mockOnRenameStart,
+    onRenameComplete: mockOnRenameComplete,
+    onRenameCancel: mockOnRenameCancel,
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -55,10 +83,8 @@ describe('ConversationList', () => {
     it('shows empty state when no conversations', () => {
       render(
         <ConversationList
+          {...defaultProps}
           conversations={[]}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -68,10 +94,8 @@ describe('ConversationList', () => {
     it('empty state has correct styling', () => {
       const { container } = render(
         <ConversationList
+          {...defaultProps}
           conversations={[]}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -85,10 +109,8 @@ describe('ConversationList', () => {
     it('does not render conversation items when empty', () => {
       render(
         <ConversationList
+          {...defaultProps}
           conversations={[]}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -98,14 +120,7 @@ describe('ConversationList', () => {
 
   describe('List Rendering', () => {
     it('renders all conversations', () => {
-      render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      render(<ConversationList {...defaultProps} />);
 
       expect(screen.getByText('First Conversation')).toBeInTheDocument();
       expect(screen.getByText('Second Conversation')).toBeInTheDocument();
@@ -113,14 +128,7 @@ describe('ConversationList', () => {
     });
 
     it('renders correct number of conversation items', () => {
-      render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      render(<ConversationList {...defaultProps} />);
 
       const items = screen.getAllByTestId(/conversation-item/);
       expect(items).toHaveLength(3);
@@ -129,10 +137,8 @@ describe('ConversationList', () => {
     it('passes correct props to ConversationListItem', () => {
       render(
         <ConversationList
-          conversations={mockConversations}
+          {...defaultProps}
           activeConversationId="conv-2"
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -143,10 +149,8 @@ describe('ConversationList', () => {
     it('marks only active conversation as active', () => {
       render(
         <ConversationList
-          conversations={mockConversations}
+          {...defaultProps}
           activeConversationId="conv-2"
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -156,14 +160,7 @@ describe('ConversationList', () => {
     });
 
     it('handles null activeConversationId', () => {
-      render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      render(<ConversationList {...defaultProps} />);
 
       const items = screen.getAllByTestId(/conversation-item/);
       items.forEach((item) => {
@@ -172,58 +169,54 @@ describe('ConversationList', () => {
     });
   });
 
-  describe('Scrollable Container', () => {
-    it('has scrollable container', () => {
-      const { container } = render(
+  describe('Editing State (Story 25.6)', () => {
+    it('passes isEditing=true to correct conversation', () => {
+      render(
         <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
+          {...defaultProps}
+          editingConversationId="conv-2"
         />
       );
+
+      expect(screen.getByTestId('conversation-item-conv-1')).toHaveAttribute('data-editing', 'false');
+      expect(screen.getByTestId('conversation-item-conv-2')).toHaveAttribute('data-editing', 'true');
+      expect(screen.getByTestId('conversation-item-conv-3')).toHaveAttribute('data-editing', 'false');
+    });
+
+    it('handles null editingConversationId', () => {
+      render(<ConversationList {...defaultProps} />);
+
+      const items = screen.getAllByTestId(/conversation-item/);
+      items.forEach((item) => {
+        expect(item).toHaveAttribute('data-editing', 'false');
+      });
+    });
+  });
+
+  describe('Scrollable Container', () => {
+    it('has scrollable container', () => {
+      const { container } = render(<ConversationList {...defaultProps} />);
 
       const scrollContainer = container.firstChild as HTMLElement;
       expect(scrollContainer).toHaveClass('overflow-y-auto');
     });
 
     it('has flex-1 to take available space', () => {
-      const { container } = render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      const { container } = render(<ConversationList {...defaultProps} />);
 
       const scrollContainer = container.firstChild as HTMLElement;
       expect(scrollContainer).toHaveClass('flex-1');
     });
 
     it('has gap between items', () => {
-      const { container } = render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      const { container } = render(<ConversationList {...defaultProps} />);
 
       const itemsContainer = container.querySelector('.gap-1');
       expect(itemsContainer).toBeInTheDocument();
     });
 
     it('has padding around items', () => {
-      const { container } = render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      const { container } = render(<ConversationList {...defaultProps} />);
 
       const itemsContainer = container.querySelector('.p-2');
       expect(itemsContainer).toBeInTheDocument();
@@ -232,14 +225,7 @@ describe('ConversationList', () => {
 
   describe('Selection Propagation', () => {
     it('calls onSelectConversation when conversation clicked', () => {
-      render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      render(<ConversationList {...defaultProps} />);
 
       const item = screen.getByTestId('conversation-item-conv-2');
       item.click();
@@ -249,14 +235,7 @@ describe('ConversationList', () => {
     });
 
     it('calls onDeleteConversation when delete clicked', () => {
-      render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      render(<ConversationList {...defaultProps} />);
 
       const item = screen.getByTestId('conversation-item-conv-1');
       const deleteButton = within(item).getByText('Delete');
@@ -267,14 +246,7 @@ describe('ConversationList', () => {
     });
 
     it('does not call onSelectConversation when delete clicked', () => {
-      render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      render(<ConversationList {...defaultProps} />);
 
       const item = screen.getByTestId('conversation-item-conv-1');
       const deleteButton = within(item).getByText('Delete');
@@ -282,16 +254,25 @@ describe('ConversationList', () => {
 
       expect(mockOnSelectConversation).not.toHaveBeenCalled();
     });
+
+    it('calls onRenameStart when rename clicked', () => {
+      render(<ConversationList {...defaultProps} />);
+
+      const item = screen.getByTestId('conversation-item-conv-1');
+      const renameButton = within(item).getByText('Rename');
+      renameButton.click();
+
+      expect(mockOnRenameStart).toHaveBeenCalledWith('conv-1');
+      expect(mockOnRenameStart).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Edge Cases', () => {
     it('handles single conversation', () => {
       render(
         <ConversationList
+          {...defaultProps}
           conversations={[mockConversations[0]]}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -310,10 +291,8 @@ describe('ConversationList', () => {
 
       render(
         <ConversationList
+          {...defaultProps}
           conversations={manyConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -324,10 +303,8 @@ describe('ConversationList', () => {
     it('handles conversation with no active state', () => {
       render(
         <ConversationList
-          conversations={mockConversations}
+          {...defaultProps}
           activeConversationId="non-existent-id"
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -338,14 +315,7 @@ describe('ConversationList', () => {
     });
 
     it('re-renders when conversations change', () => {
-      const { rerender } = render(
-        <ConversationList
-          conversations={mockConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
-        />
-      );
+      const { rerender } = render(<ConversationList {...defaultProps} />);
 
       expect(screen.getAllByTestId(/conversation-item/)).toHaveLength(3);
 
@@ -359,10 +329,8 @@ describe('ConversationList', () => {
 
       rerender(
         <ConversationList
+          {...defaultProps}
           conversations={newConversations}
-          activeConversationId={null}
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -373,10 +341,8 @@ describe('ConversationList', () => {
     it('re-renders when activeConversationId changes', () => {
       const { rerender } = render(
         <ConversationList
-          conversations={mockConversations}
+          {...defaultProps}
           activeConversationId="conv-1"
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
@@ -385,15 +351,35 @@ describe('ConversationList', () => {
 
       rerender(
         <ConversationList
-          conversations={mockConversations}
+          {...defaultProps}
           activeConversationId="conv-2"
-          onSelectConversation={mockOnSelectConversation}
-          onDeleteConversation={mockOnDeleteConversation}
         />
       );
 
       expect(screen.getByTestId('conversation-item-conv-1')).toHaveAttribute('data-active', 'false');
       expect(screen.getByTestId('conversation-item-conv-2')).toHaveAttribute('data-active', 'true');
+    });
+
+    it('re-renders when editingConversationId changes', () => {
+      const { rerender } = render(
+        <ConversationList
+          {...defaultProps}
+          editingConversationId="conv-1"
+        />
+      );
+
+      expect(screen.getByTestId('conversation-item-conv-1')).toHaveAttribute('data-editing', 'true');
+      expect(screen.getByTestId('conversation-item-conv-2')).toHaveAttribute('data-editing', 'false');
+
+      rerender(
+        <ConversationList
+          {...defaultProps}
+          editingConversationId="conv-2"
+        />
+      );
+
+      expect(screen.getByTestId('conversation-item-conv-1')).toHaveAttribute('data-editing', 'false');
+      expect(screen.getByTestId('conversation-item-conv-2')).toHaveAttribute('data-editing', 'true');
     });
   });
 });

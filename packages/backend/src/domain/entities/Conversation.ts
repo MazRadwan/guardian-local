@@ -29,6 +29,7 @@ export interface CreateConversationData {
   mode?: ConversationMode;
   assessmentId?: string;
   context?: ConversationContext;
+  title?: string;
 }
 
 export class Conversation {
@@ -41,7 +42,9 @@ export class Conversation {
     public context: ConversationContext,
     public readonly startedAt: Date,
     public lastActivityAt: Date,
-    public completedAt: Date | null
+    public completedAt: Date | null,
+    public title: string | null,
+    public titleManuallyEdited: boolean
   ) {}
 
   /**
@@ -62,6 +65,8 @@ export class Conversation {
       context: data.context || {},
       lastActivityAt: now,
       completedAt: null,
+      title: data.title || null,
+      titleManuallyEdited: false,
     } as Omit<Conversation, 'id' | 'startedAt'>;
   }
 
@@ -78,6 +83,8 @@ export class Conversation {
     startedAt: Date;
     lastActivityAt: Date;
     completedAt: Date | null;
+    title?: string | null;
+    titleManuallyEdited?: boolean;
   }): Conversation {
     return new Conversation(
       data.id,
@@ -88,7 +95,9 @@ export class Conversation {
       data.context,
       data.startedAt,
       data.lastActivityAt,
-      data.completedAt
+      data.completedAt,
+      data.title ?? null,
+      data.titleManuallyEdited ?? false
     );
   }
 
@@ -142,6 +151,26 @@ export class Conversation {
    */
   isActive(): boolean {
     return this.status === 'active';
+  }
+
+  /**
+   * Update conversation title
+   * Epic 25: Chat Title Intelligence
+   */
+  updateTitle(title: string, manuallyEdited: boolean = false): void {
+    this.title = title;
+    if (manuallyEdited) {
+      this.titleManuallyEdited = true;
+    }
+    this.updateActivity();
+  }
+
+  /**
+   * Check if title can be auto-updated
+   * Returns false if user has manually edited the title
+   */
+  canAutoUpdateTitle(): boolean {
+    return !this.titleManuallyEdited;
   }
 
   /**

@@ -182,13 +182,17 @@ describe('useChatController', () => {
       appendComponentToLastAssistantMessage: jest.fn(),
     });
 
-    // Mock getState for useChatStore (for questionnaire methods)
+    // Mock getState for useChatStore (for questionnaire methods and title updates)
     (useChatStore as any).getState = jest.fn().mockReturnValue({
       setQuestionnaireUIState: jest.fn(),
       setPendingQuestionnaire: jest.fn(),
       setQuestionnaireError: jest.fn(),
       setGenerating: jest.fn(),
       resetGenerationStep: jest.fn(),
+      // Epic 25: Title generation state
+      setConversationTitleLoading: jest.fn(),
+      setConversationTitleManuallyEdited: jest.fn(),
+      setEditingConversationId: jest.fn(),
     });
 
     // Default useWebSocketAdapter mock
@@ -1328,7 +1332,13 @@ describe('useChatController', () => {
         onConversationCreated!(newConversation);
       });
 
-      expect(mockAddConversation).toHaveBeenCalledWith(newConversation);
+      // Story 25.5: New conversations have titleLoading: true for loading placeholder UX
+      expect(mockAddConversation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ...newConversation,
+          titleLoading: true,
+        })
+      );
       expect(mockSetActiveConversation).toHaveBeenCalledWith('new-conv-123');
       // localStorage.setItem and router.replace now handled by useConversationSync
     });

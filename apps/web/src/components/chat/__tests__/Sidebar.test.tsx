@@ -1,14 +1,43 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { Sidebar } from '../Sidebar';
-import { Conversation } from '@/stores/chatStore';
+import { Conversation, useChatStore } from '@/stores/chatStore';
 
 // Mock ConversationList component
 jest.mock('../ConversationList', () => ({
-  ConversationList: jest.fn(({ conversations }) => (
+  ConversationList: jest.fn(({
+    conversations,
+    editingConversationId,
+    onRenameStart,
+    onRenameComplete,
+    onRenameCancel,
+  }) => (
     <div data-testid="conversation-list">
       {conversations.length > 0 ? 'Conversations' : 'No conversations yet'}
+      {editingConversationId && <span data-testid="editing-id">{editingConversationId}</span>}
     </div>
   )),
+}));
+
+// Mock the conversation API
+jest.mock('@/lib/api/conversation', () => ({
+  updateConversationTitle: jest.fn().mockResolvedValue({ conversationId: 'conv-1', title: 'New Title' }),
+}));
+
+// Mock zustand store
+const mockSetEditingConversationId = jest.fn();
+const mockUpdateConversationTitle = jest.fn();
+const mockSetConversationTitleManuallyEdited = jest.fn();
+
+jest.mock('@/stores/chatStore', () => ({
+  useChatStore: jest.fn((selector) => {
+    const state = {
+      editingConversationId: null,
+      setEditingConversationId: mockSetEditingConversationId,
+      updateConversationTitle: mockUpdateConversationTitle,
+      setConversationTitleManuallyEdited: mockSetConversationTitleManuallyEdited,
+    };
+    return selector(state);
+  }),
 }));
 
 describe('Sidebar', () => {
@@ -41,6 +70,7 @@ describe('Sidebar', () => {
     activeConversationId: 'conv-1',
     onSelectConversation: jest.fn(),
     onDeleteConversation: jest.fn(),
+    token: 'test-token',
   };
 
   beforeEach(() => {
@@ -86,6 +116,12 @@ describe('Sidebar', () => {
       render(<Sidebar {...propsWithoutUser} />);
 
       expect(screen.queryByText('Test User')).not.toBeInTheDocument();
+    });
+
+    it('has data-testid on sidebar', () => {
+      render(<Sidebar {...mockProps} />);
+
+      expect(screen.getByTestId('sidebar')).toBeInTheDocument();
     });
   });
 
@@ -301,14 +337,14 @@ describe('Sidebar', () => {
     });
 
     it('has aria-expanded attribute on toggle button', () => {
-      const { container } = render(<Sidebar {...mockProps} isMinimized={false} />);
+      render(<Sidebar {...mockProps} isMinimized={false} />);
 
       const toggleButton = screen.getByTitle('Minimize sidebar');
       expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('has aria-expanded false when sidebar is minimized', () => {
-      const { container } = render(<Sidebar {...mockProps} isMinimized={true} />);
+      render(<Sidebar {...mockProps} isMinimized={true} />);
 
       const toggleButton = screen.getByTitle('Expand sidebar');
       expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
@@ -483,6 +519,18 @@ describe('Sidebar', () => {
         onSelectConversation: mockProps.onSelectConversation,
         onDeleteConversation: mockProps.onDeleteConversation,
       });
+    });
+
+    it('passes editingConversationId to ConversationList', () => {
+      const ConversationListMock = require('../ConversationList').ConversationList;
+
+      render(<Sidebar {...mockProps} />);
+
+      const lastCall = ConversationListMock.mock.calls[ConversationListMock.mock.calls.length - 1];
+      expect(lastCall[0]).toHaveProperty('editingConversationId');
+      expect(lastCall[0]).toHaveProperty('onRenameStart');
+      expect(lastCall[0]).toHaveProperty('onRenameComplete');
+      expect(lastCall[0]).toHaveProperty('onRenameCancel');
     });
   });
 });
