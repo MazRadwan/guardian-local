@@ -14,6 +14,44 @@ import { useStreamingText } from '@/hooks/useStreamingText';
 import type { ScoringResultData, RiskRating, Recommendation, DimensionScoreData } from '@/types/scoring';
 
 /**
+ * Post-process markdown to add spacing before section headers.
+ * Claude often outputs single newlines where double newlines are needed.
+ * This function detects bold headers and ensures blank lines precede them.
+ */
+function addSectionSpacing(markdown: string): string {
+  // Pattern: A line starting with **text** that isn't already preceded by a blank line
+  // We want to add a blank line before bold text that starts a new section
+
+  // Split into lines for processing
+  const lines = markdown.split('\n');
+  const result: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prevLine = i > 0 ? lines[i - 1] : '';
+
+    // Check if this line starts with bold text (section header pattern)
+    // Patterns: "**Header**" or "**Header:**" or "**Header** -" etc.
+    const isBoldHeader = /^\*\*[^*]+\*\*/.test(line.trim());
+
+    // Check if previous line is empty (already has spacing)
+    const prevIsEmpty = prevLine.trim() === '';
+
+    // Check if this is the very first line (don't add spacing at start)
+    const isFirstLine = i === 0;
+
+    // Add blank line before bold headers that don't already have one
+    if (isBoldHeader && !prevIsEmpty && !isFirstLine) {
+      result.push(''); // Add blank line
+    }
+
+    result.push(line);
+  }
+
+  return result.join('\n');
+}
+
+/**
  * Epic 16.6.8: File attachment metadata for chat messages
  */
 export interface MessageAttachment {
@@ -73,7 +111,10 @@ export function ChatMessage({
   });
 
   // Use streamed text if simulating, otherwise use full content
-  const renderedContent = simulateStreaming ? displayedText : content;
+  // Apply section spacing post-processing to add blank lines before headers
+  const baseContent = simulateStreaming ? displayedText : content;
+  const renderedContent = addSectionSpacing(baseContent);
+
 
   // Copy to clipboard state
   const [isCopied, setIsCopied] = useState(false);
@@ -161,11 +202,12 @@ export function ChatMessage({
         <div className={cn(!isUser && !isSystem && 'bg-sky-50 rounded-xl p-5 mt-2', (isUser || isSystem) && 'mt-2')}>
           {/* Message content */}
           <div className="prose prose-slate prose-base max-w-none break-words
-            prose-p:leading-7 prose-li:leading-7
+            prose-p:leading-7 prose-p:my-4 prose-li:leading-7
             prose-pre:p-0 prose-pre:bg-transparent
             [&>table]:my-4
             [&>th]:bg-gray-100 [&>th]:p-2 [&>th]:text-left [&>th]:border [&>th]:border-gray-300
             [&>td]:p-2 [&>td]:border [&>td]:border-gray-300
+            [&_strong]:block [&_strong]:mt-4 [&_strong]:first:mt-0
           ">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
