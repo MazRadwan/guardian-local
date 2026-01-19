@@ -163,13 +163,29 @@ mcp__codex__codex(
 )
 ```
 
-**Fallback: Opus Agents (if GPT rate limited)**
+### GPT Error Handling (NO FALLBACK - Clean Exit)
 
-If GPT returns rate limit errors (HTTP 429, "quota exceeded"), use Opus agents:
-1. Set `state.reviewFallback.usedOpus = true`
-2. Use `architect-agent` for structural review
-3. Use `spec-review-agent` for feasibility review
-4. Add to `state.reviewFallback.pendingGPTReReview` for later
+**DO NOT use Opus fallback.** Exit cleanly on GPT errors so user can fix and resume.
+
+| Error | Action |
+|-------|--------|
+| **401 Unauthorized** | Log "GPT authentication failed. Check OPENAI_API_KEY." → Save state → Exit |
+| **429 Rate Limited** | Retry with exponential backoff (30s, 60s, 120s) → After 3 retries, save state → Exit |
+| **5xx Server Error** | Retry once after 30s → If still failing, save state → Exit |
+| **Timeout (>300s)** | Log "GPT request timed out" → Save state → Exit |
+
+On exit, save state for resume:
+```json
+{
+  "status": "gpt_error",
+  "errorType": "rate_limited",
+  "errorAt": "2026-01-19T16:17:21Z",
+  "resumeFrom": "sprint_batch_1_2_review",
+  "retryCount": 3
+}
+```
+
+Resume with: `/spec-design` (will detect state and resume)
 
 ### Handle Review Response
 
@@ -222,7 +238,7 @@ Plan is ready. Run `/implement` to begin implementation.
 5. **Log all GPT exchanges** - Audit trail in .review-log.md
 6. **Respect 7 retry limit** - GPT gets final say after that
 7. **Be specific in plan-agent prompt** - Files Touched is critical
-8. **Opus fallback for rate limits** - If GPT rate limited, use code-review-agent
+8. **No Opus fallback** - Clean exit on GPT errors, resume when fixed
 
 ## Output
 

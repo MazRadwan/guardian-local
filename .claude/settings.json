@@ -15,20 +15,20 @@
     ],
     "SubagentStop": [
       {
-        "matcher": "plan-agent",
+        "matcher": "^plan-agent$",
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/post-plan.sh"
+            "command": ".claude/hooks/opus-gpt/post-plan.sh"
           }
         ]
       },
       {
-        "matcher": "frontend-agent|backend-agent",
+        "matcher": "^(frontend-agent|backend-agent)$",
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/post-implementation.sh"
+            "command": ".claude/hooks/opus-gpt/post-implementation.sh"
           }
         ]
       }
