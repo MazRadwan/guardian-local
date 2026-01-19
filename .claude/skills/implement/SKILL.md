@@ -80,7 +80,82 @@ pnpm typecheck
 
 ### 4d. GPT Code Review
 
-Send batch results to GPT-5.2 using `codex review` command.
+**Primary: Codex CLI (recommended)**
+
+```bash
+# Kill any orphaned codex processes first
+pkill -f "codex.*mcp-server" 2>/dev/null || true
+
+# Use gtimeout on macOS (brew install coreutils)
+gtimeout 300 codex review - <<'EOF'
+## TASK
+Review code implementation for Epic {epic_id}: Batch {batch_num}.
+
+## EXPECTED OUTCOME
+Identify issues in THIS batch's code only.
+Return STATUS: APPROVED or STATUS: NEEDS_REVISION with findings.
+
+## CONTEXT
+Batch: {batch_num}
+Stories completed: {story_list}
+Files changed: {file_list}
+
+Test Results:
+- Unit tests: {pass/fail}
+- Lint: {pass/fail}
+- Typecheck: {pass/fail}
+
+## CONSTRAINTS
+- Clean architecture: domain → application → infrastructure
+- Existing codebase patterns
+- No regressions
+- OWASP security standards
+
+## MUST DO
+- Verify code matches story acceptance criteria
+- Check for security vulnerabilities
+- Verify error handling
+- Check architectural boundaries
+
+## MUST NOT DO
+- Review files not in this batch
+- Flag previously-approved code
+- Nitpick style without substance
+
+## OUTPUT FORMAT
+
+**CRITICAL: Response MUST start with exactly:**
+STATUS: APPROVED
+or
+STATUS: NEEDS_REVISION
+
+REQUIRED CHANGES (if any):
+1. [Change] — Why: [rationale]
+
+RECOMMENDATIONS (optional):
+- [Improvement] — Why: [benefit]
+
+**CONFIDENCE: [0.0-1.0] is REQUIRED.**
+EOF
+```
+
+**Alternative: Codex MCP Tool**
+
+```
+mcp__codex__codex(
+  prompt: "{same prompt as above}",
+  model: "gpt-5.2-codex",
+  sandbox: "read-only"
+)
+```
+
+**Fallback: Opus code-review-agent (if GPT rate limited)**
+
+If GPT returns rate limit errors (HTTP 429, "quota exceeded"):
+1. Set `state.reviewFallback.usedOpus = true`
+2. Spawn `code-review-agent` for review
+3. Add batch to `state.reviewFallback.pendingGPTReReview`
+4. Continue automation
 
 ### 4e. Handle Pushback
 

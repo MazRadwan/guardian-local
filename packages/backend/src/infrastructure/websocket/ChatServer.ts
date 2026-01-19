@@ -21,7 +21,7 @@ import type { MessageAttachment } from '../../domain/entities/Message.js';
 import { sanitizeForPrompt } from '../../utils/sanitize.js';
 import type { ScoringProgressEvent } from '../../domain/scoring/types.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
-import { PLACEHOLDER_TITLES, isPlaceholderTitle } from '../../application/services/TitleGenerationService.js';
+import { TitleGenerationService, TitleContext, PLACEHOLDER_TITLES, isPlaceholderTitle } from '../../application/services/TitleGenerationService.js';
 // Epic 18: Scoring now triggered on user Send (trigger-on-send pattern)
 
 /**
@@ -91,6 +91,8 @@ export class ChatServer {
   private promptCacheManager: PromptCacheManager;
   private pendingConversationCreations: Map<string, { conversationId: string; timestamp: number }>;
   private abortedStreams: Set<string> = new Set();
+  // Story 26.1: TitleGenerationService for LLM-based title generation
+  private titleGenerationService: TitleGenerationService;
 
   constructor(
     io: SocketIOServer,
@@ -121,6 +123,8 @@ export class ChatServer {
     this.jwtSecret = jwtSecret;
     this.promptCacheManager = promptCacheManager;
     this.pendingConversationCreations = new Map();
+    // Story 26.1: Initialize TitleGenerationService with API key from environment
+    this.titleGenerationService = new TitleGenerationService(process.env.ANTHROPIC_API_KEY);
     this.setupNamespace();
 
     // Clean up stale pending creations every 5 seconds
@@ -268,6 +272,36 @@ export class ChatServer {
 
     // Safe to return (but still truncate for safety)
     return message.slice(0, 200);
+  }
+
+  /**
+   * Validate vendor/solution name - rejects invalid values like numeric-only, single chars, etc.
+   * Story 26.2 fix: Prevent bad tool input like "1" from becoming "Assessment: 1"
+   *
+   * Invalid values:
+   * - Numeric-only strings ("1", "123")
+   * - Single character strings
+   * - Assessment option tokens ("option1", "choice_a", etc.)
+   * - null/undefined/empty
+   *
+   * @returns true if valid vendor name, false otherwise
+   */
+  private isValidVendorName(value: string | null | undefined): boolean {
+    if (!value || typeof value !== 'string') return false;
+
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+
+    // Reject numeric-only values
+    if (/^\d+$/.test(trimmed)) return false;
+
+    // Reject single character values
+    if (trimmed.length < 2) return false;
+
+    // Reject assessment option tokens (option1, choice_a, etc.)
+    if (/^(option|choice|select|item|answer)[_\-]?\d*[a-z]?$/i.test(trimmed)) return false;
+
+    return true;
   }
 
   /**
@@ -630,6 +664,128 @@ ${sanitizedExcerpt}`;
         // Mark as failed but continue with other files
         await this.fileRepository.updateParseStatus(fileId, 'failed').catch(() => {});
       }
+    }
+  }
+
+  /**
+   * Story 26.1 & 26.4: Generate LLM-based title after Q&A exchanges
+   *
+   * Called after assistant response is complete. Fire-and-forget - errors logged but don't
+   * affect the conversation. Uses TitleGenerationService for mode-aware title strategies.
+   *
+   * Title Generation Triggers:
+   * - Consult mode: After first exchange (2 messages: user + assistant)
+   * - Assessment mode: Two triggers:
+   *   1. After first exchange (3 messages: preamble + user + assistant) - generic title
+   *   2. After vendor info (5 messages) - updates title with vendor context (Story 26.4)
+   * - Scoring mode: Skipped (titles come from filename)
+   *
+   * Guards:
+   * - Skips if title was manually edited by user
+   * - For initial generation: skips if title already set (not a placeholder)
+   * - For vendor update: proceeds to update even if title exists
+   *
+   * @param socket - Client socket to emit title update
+   * @param conversationId - Conversation to generate title for
+   * @param mode - Conversation mode (consult, assessment, scoring)
+   * @param assistantResponse - The assistant's response text (for LLM context)
+   */
+  private async generateTitleIfNeeded(
+    socket: AuthenticatedSocket,
+    conversationId: string,
+    mode: 'consult' | 'assessment' | 'scoring',
+    assistantResponse: string
+  ): Promise<void> {
+    try {
+      // Guard 1: Skip for scoring mode - titles come from filename (handled in file upload flow)
+      if (mode === 'scoring') {
+        return;
+      }
+
+      // Guard 2: Check message count for title generation triggers
+      // - Consult mode: 2 messages (user + assistant)
+      // - Assessment mode: 3 messages (first exchange) OR 5 messages (after vendor info)
+      // Story 26.4: Second title generation at message 5 to include vendor name
+      const messageCount = await this.conversationService.getMessageCount(conversationId);
+      const validCounts = mode === 'assessment' ? [3, 5] : [2];
+      if (!validCounts.includes(messageCount)) {
+        return;
+      }
+
+      // Check if this is a vendor info update (assessment mode at message 5)
+      const isVendorInfoUpdate = mode === 'assessment' && messageCount === 5;
+
+      // Guard 3: Check if conversation exists
+      const conversation = await this.conversationService.getConversation(conversationId);
+      if (!conversation) {
+        return;
+      }
+
+      // Guard 4: Skip if title was manually edited by user
+      if (conversation.titleManuallyEdited) {
+        return;
+      }
+
+      // Guard 5: For initial generation, skip if title already set (not a placeholder)
+      // For vendor info update, proceed to update with better title
+      if (!isVendorInfoUpdate && !isPlaceholderTitle(conversation.title)) {
+        return;
+      }
+
+      // Get the appropriate user message based on context
+      let userMessage: string | undefined;
+
+      if (isVendorInfoUpdate) {
+        // Story 26.4: Get second user message (vendor info) from conversation history
+        // Message order: [preamble, user-1 (type selection), assistant-1, user-2 (vendor info), assistant-2]
+        const history = await this.conversationService.getHistory(conversationId, 10, 0);
+        const userMessages = history.filter(m => m.role === 'user');
+        const secondUserMsg = userMessages[1]; // 0-indexed, second user message
+        userMessage = secondUserMsg?.content.text;
+
+        if (!userMessage) {
+          console.warn('[ChatServer] No vendor info message found for title update');
+          return;
+        }
+      } else {
+        // Initial generation: use first user message
+        const firstUserMessage = await this.conversationService.getFirstUserMessage(conversationId);
+        userMessage = firstUserMessage?.content.text;
+
+        if (!userMessage) {
+          console.warn('[ChatServer] No user message found for title generation');
+          return;
+        }
+      }
+
+      // Build context for title generation
+      const titleContext: TitleContext = {
+        mode,
+        userMessage,
+        assistantResponse: assistantResponse,
+      };
+
+      // Generate title using TitleGenerationService
+      const result = await this.titleGenerationService.generateModeAwareTitle(titleContext);
+
+      // Update title in database (only if not manually edited)
+      const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
+        conversationId,
+        result.title
+      );
+
+      if (titleUpdated) {
+        // Emit title update event for real-time sidebar update
+        socket.emit('conversation_title_updated', {
+          conversationId,
+          title: result.title,
+        });
+        const updateType = isVendorInfoUpdate ? 'vendor-update' : 'initial';
+        console.log(`[ChatServer] Generated ${mode} title (${updateType}, source: ${result.source}): "${result.title}"`);
+      }
+    } catch (error) {
+      // Non-fatal - log and continue
+      console.error('[ChatServer] Error in generateTitleIfNeeded:', error);
     }
   }
 
@@ -1339,30 +1495,9 @@ If the document appears to be a completed questionnaire, mention that it can be 
             attachments: enrichedAttachments,
           });
 
-          // Story 25.9: Title generation with mode-aware guards
-          // Scoring mode titles ONLY come from filename (handled later in file upload flow)
-          // Get conversation to check mode and existing title
-          const conversationForTitle = await this.conversationService.getConversation(conversationId);
-          if (conversationForTitle) {
-            // Guard 1: Skip if title already set (idempotency) - unless it's a placeholder
-            // Guard 2: Skip for scoring mode - title set from filename in file upload flow
-            const shouldGenerateTitle =
-              isPlaceholderTitle(conversationForTitle.title) &&
-              conversationForTitle.mode !== 'scoring' &&
-              !conversationForTitle.titleManuallyEdited;
-
-            if (shouldGenerateTitle) {
-              const messageCount = await this.conversationService.getMessageCount(conversationId);
-              if (messageCount === 1) {
-                // This is the first user message - generate and emit title
-                const title = await this.conversationService.getConversationTitle(conversationId);
-                socket.emit('conversation_title_updated', {
-                  conversationId,
-                  title,
-                });
-              }
-            }
-          }
+          // Story 26.1: Title generation moved AFTER assistant response
+          // Title generation now happens after `assistant_done` event (see below)
+          // because LLM title generation needs both user message AND assistant response
 
           // Get conversation context and generate Claude response
           // Note: buildConversationContext loads history which already includes
@@ -1585,6 +1720,13 @@ If the document appears to be a completed questionnaire, mention that it can be 
                   // Non-fatal - conversation continues with excerpt-based context
                 });
               }
+
+              // Story 26.1: LLM-based title generation after first Q&A exchange
+              // Fire-and-forget - errors are logged but don't affect the conversation
+              this.generateTitleIfNeeded(socket, conversationId, mode, fullResponse).catch(err => {
+                console.error('[ChatServer] Title generation failed:', err);
+                // Non-fatal - conversation continues with placeholder title
+              });
             } else {
               console.log(`[ChatServer] Stream aborted - partial response saved (${fullResponse.length} chars)`);
             }
@@ -2308,11 +2450,24 @@ Once uploaded, I'll analyze the responses and provide:
         formats: ['pdf', 'word', 'excel'],
       });
 
-      // Epic 25.3: Update conversation title with vendor/solution name
+      // Epic 25.3 / Story 26.2: Update conversation title with vendor/solution name
+      // Two-phase title behavior:
+      //   Phase 1 (Story 26.1): LLM generates title after first Q&A exchange
+      //   Phase 2 (Story 26.2): Title upgrades to "Assessment: {vendor}" when questionnaire generated
       // Only if title hasn't been manually edited by user
-      if (vendorName || solutionName) {
+      //
+      // Story 26.2 fix: Use post-generation metadata for title (not pre-generation payload)
+      // and validate vendor names to reject invalid values like "1"
+      const postGenVendor = result.schema.metadata.vendorName;
+      const postGenSolution = result.schema.metadata.solutionName;
+
+      // Validate vendor/solution name - reject numeric-only, single chars, option tokens
+      const validatedVendor = this.isValidVendorName(postGenVendor) ? postGenVendor : null;
+      const validatedSolution = this.isValidVendorName(postGenSolution) ? postGenSolution : null;
+
+      if (validatedVendor || validatedSolution) {
         const titlePrefix = 'Assessment: ';
-        const titleName = vendorName || solutionName || '';
+        const titleName = validatedVendor || validatedSolution || '';
         const maxTitleLength = 50;
         let newTitle = `${titlePrefix}${titleName}`;
         if (newTitle.length > maxTitleLength) {
@@ -2332,6 +2487,9 @@ Once uploaded, I'll analyze the responses and provide:
           });
           console.log(`[ChatServer] Updated assessment title: "${newTitle}"`);
         }
+      } else if (postGenVendor || postGenSolution) {
+        // Log when vendor name was rejected (for debugging)
+        console.log(`[ChatServer] Skipping title upgrade - invalid vendor/solution: vendor="${postGenVendor}", solution="${postGenSolution}"`);
       }
 
       console.log(`[ChatServer] Questionnaire generation complete:`, {

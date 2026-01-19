@@ -100,6 +100,77 @@ For sprint batches (every 2 sprints):
 | 3-4 | [1-2], [3-4] | 2 |
 | 5-6 | [1-2], [3-4], [5-6] | 3 |
 
+### GPT Invocation Methods
+
+**Primary: Codex CLI (recommended)**
+
+```bash
+# Kill any orphaned codex processes first
+pkill -f "codex.*mcp-server" 2>/dev/null || true
+
+# Use gtimeout on macOS (brew install coreutils)
+gtimeout 300 codex review - <<'EOF'
+## TASK
+Review sprint specifications for Epic {epic_id}: {sprint_ids}.
+
+## EXPECTED OUTCOME
+Identify issues in THESE sprint specs only.
+Return STATUS: APPROVED or STATUS: NEEDS_REVISION with findings.
+
+## CONTEXT
+Sprint: {sprint_ids}
+Stories: {story_count}
+
+{sprint_summary}
+{story_specs}
+
+## CONSTRAINTS
+- Clean architecture: domain → application → infrastructure
+- Existing codebase patterns (search to verify)
+- Files Touched sections must be accurate
+
+## MUST DO
+- Search the codebase for each file in 'Files Touched' sections
+- Verify proposed changes don't conflict with existing code
+- Check for missing dependencies or breaking changes
+- Validate technical approach against existing patterns
+
+## MUST NOT DO
+- Review files not in these specs
+- Flag previously-approved code
+- Nitpick style without substance
+
+## OUTPUT FORMAT
+
+**CRITICAL: Response MUST start with exactly:**
+STATUS: APPROVED
+or
+STATUS: NEEDS_REVISION
+
+[If NEEDS_REVISION: findings by severity - CRITICAL, HIGH, MEDIUM, LOW]
+
+**CONFIDENCE: [0.0-1.0] is REQUIRED.**
+EOF
+```
+
+**Alternative: Codex MCP Tool**
+
+```
+mcp__codex__codex(
+  prompt: "{same prompt as above}",
+  model: "gpt-5.2-codex",
+  sandbox: "read-only"
+)
+```
+
+**Fallback: Opus Agents (if GPT rate limited)**
+
+If GPT returns rate limit errors (HTTP 429, "quota exceeded"), use Opus agents:
+1. Set `state.reviewFallback.usedOpus = true`
+2. Use `architect-agent` for structural review
+3. Use `spec-review-agent` for feasibility review
+4. Add to `state.reviewFallback.pendingGPTReReview` for later
+
 ### Handle Review Response
 
 For each sprint:

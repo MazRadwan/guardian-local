@@ -89,6 +89,26 @@ export class DrizzleMessageRepository implements IMessageRepository {
     return row ? this.toDomain(row) : null;
   }
 
+  /**
+   * Find the first assistant message in a conversation (chronologically)
+   * Epic 25/Story 26.1: Used for LLM title generation context
+   */
+  async findFirstAssistantMessage(conversationId: string): Promise<Message | null> {
+    const [row] = await this.db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.role, 'assistant')
+        )
+      )
+      .orderBy(asc(messages.createdAt))
+      .limit(1);
+
+    return row ? this.toDomain(row) : null;
+  }
+
   async delete(id: string): Promise<void> {
     await this.db.delete(messages).where(eq(messages.id, id));
   }

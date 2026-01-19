@@ -64,6 +64,43 @@ export class QuestionnaireReadyService implements IToolUseHandler {
   }
 
   /**
+   * Validate vendor/solution name - rejects invalid values like numeric-only, single chars, etc.
+   * Story 26.2 fix: Prevent bad tool input like "1" from becoming "Assessment: 1"
+   *
+   * Invalid values:
+   * - Numeric-only strings ("1", "123")
+   * - Single character strings
+   * - Strings less than 2 meaningful characters
+   * - Assessment option tokens ("option1", "choice_a", etc.)
+   *
+   * @returns validated string or null if invalid
+   */
+  private validateVendorName(value: unknown): string | null {
+    const sanitized = this.sanitizeString(value);
+    if (!sanitized) return null;
+
+    // Reject numeric-only values
+    if (/^\d+$/.test(sanitized)) {
+      console.log(`[QuestionnaireReadyService] Rejecting numeric-only vendor name: "${sanitized}"`);
+      return null;
+    }
+
+    // Reject single character values
+    if (sanitized.length < 2) {
+      console.log(`[QuestionnaireReadyService] Rejecting too-short vendor name: "${sanitized}"`);
+      return null;
+    }
+
+    // Reject assessment option tokens (option1, choice_a, etc.)
+    if (/^(option|choice|select|item|answer)[_\-]?\d*[a-z]?$/i.test(sanitized)) {
+      console.log(`[QuestionnaireReadyService] Rejecting option token vendor name: "${sanitized}"`);
+      return null;
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Sanitize string array input - filters non-strings, returns null if empty
    */
   private sanitizeStringArray(value: unknown): string[] | null {
@@ -144,12 +181,13 @@ export class QuestionnaireReadyService implements IToolUseHandler {
       };
     }
 
-    // 4. Build payload for frontend with sanitized inputs
+    // 4. Build payload for frontend with sanitized and validated inputs
+    // Story 26.2 fix: Use validateVendorName to reject invalid values like "1"
     const payload: QuestionnaireReadyPayload = {
       conversationId: context.conversationId,
       assessmentType: toolInput.assessment_type,
-      vendorName: this.sanitizeString(toolInput.vendor_name),
-      solutionName: this.sanitizeString(toolInput.solution_name),
+      vendorName: this.validateVendorName(toolInput.vendor_name),
+      solutionName: this.validateVendorName(toolInput.solution_name),
       contextSummary: this.sanitizeString(toolInput.context_summary),
       estimatedQuestions: this.getEstimatedQuestions(
         toolInput.assessment_type,

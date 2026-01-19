@@ -20,6 +20,15 @@ export interface Conversation {
   titleManuallyEdited?: boolean;
 }
 
+/**
+ * Story 26.3: Timeout tracking for title loading shimmer
+ * Stores timeout reference and start time for each conversation
+ */
+interface TitleLoadingState {
+  timeout: ReturnType<typeof setTimeout>;
+  startTime: number;
+}
+
 export interface ChatState {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -36,6 +45,13 @@ export interface ChatState {
   activeConversationId: string | null;
   newChatRequested: boolean; // Flag to request new conversation creation
   deleteConversationRequested: string | null; // Conversation ID to delete
+
+  /**
+   * Story 26.3: Track title loading timeouts
+   * Map of conversationId -> { timeout, startTime }
+   * NOTE: Map is used here because it's not persisted (Map doesn't serialize to localStorage well)
+   */
+  titleLoadingTimeouts: Map<string, TitleLoadingState>;
 
   /**
    * Story 25.6: ID of conversation currently being renamed inline
@@ -190,6 +206,32 @@ export interface ChatState {
    */
   setConversationTitleManuallyEdited: (id: string, edited: boolean) => void;
 
+  /**
+   * Story 26.3: Start a timeout for title loading shimmer
+   * If timeout fires, automatically clears the loading state
+   * @param conversationId - Conversation ID
+   */
+  startTitleLoadingTimeout: (conversationId: string) => void;
+
+  /**
+   * Story 26.3: Clear the title loading timeout for a conversation
+   * Called when title arrives or conversation is deleted
+   * @param conversationId - Conversation ID
+   */
+  clearTitleLoadingTimeout: (conversationId: string) => void;
+
+  /**
+   * Story 26.3: Clear all title loading states older than 10 seconds
+   * Called on app initialization to handle stale states from page reload
+   */
+  cleanupStaleTitleLoadingStates: () => void;
+
+  /**
+   * Story 26.3: Clear all title loading states (used for disconnect)
+   * Called when WebSocket disconnects
+   */
+  clearAllTitleLoadingStates: () => void;
+
   // Export readiness actions
   setExportReady: (conversationId: string, payload: ExportReadyPayload) => void;
   clearExportReady: (conversationId: string) => void;
@@ -320,6 +362,9 @@ export const useChatStore = create<ChatState>()(
       newChatRequested: false,
       deleteConversationRequested: null,
       editingConversationId: null,
+
+      // Story 26.3: Title loading timeout tracking
+      titleLoadingTimeouts: new Map(),
 
       // Export readiness cache - defaults
       exportReadyByConversation: {},
@@ -502,20 +547,30 @@ export const useChatStore = create<ChatState>()(
 
       // Delete conversation immediately (used by tests and direct local operations)
       // For WebSocket-triggered deletes, use requestDeleteConversation instead
-      deleteConversation: (id) =>
+      // Story 26.3: Also clears any pending title loading timeout
+      deleteConversation: (id) => {
+        // Clear title loading timeout first to prevent memory leaks
+        get().clearTitleLoadingTimeout(id);
+
         set((state) => ({
           conversations: state.conversations.filter((conv) => conv.id !== id),
           // Clear active conversation if it's the one being deleted
           activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
-        })),
+        }));
+      },
 
       // Remove conversation from list after backend confirms deletion
-      removeConversationFromList: (id) =>
+      // Story 26.3: Also clears any pending title loading timeout
+      removeConversationFromList: (id) => {
+        // Clear title loading timeout first to prevent memory leaks
+        get().clearTitleLoadingTimeout(id);
+
         set((state) => ({
           conversations: state.conversations.filter((conv) => conv.id !== id),
           // Clear active conversation if it's the one being deleted
           activeConversationId: state.activeConversationId === id ? null : state.activeConversationId,
-        })),
+        }));
+      },
 
       updateConversationTitle: (id, title) =>
         set((state) => ({
@@ -559,8 +614,18 @@ export const useChatStore = create<ChatState>()(
       },
 
       // Story 25.5: Set title loading state for a conversation
+      // Story 26.3: Also manages timeout lifecycle
       setConversationTitleLoading: (id, loading) => {
         console.log('[chatStore] Setting title loading for conversation:', id, loading);
+
+        if (loading) {
+          // Start timeout when loading begins
+          get().startTitleLoadingTimeout(id);
+        } else {
+          // Clear timeout when loading ends
+          get().clearTitleLoadingTimeout(id);
+        }
+
         set((state) => ({
           conversations: state.conversations.map((conv) =>
             conv.id === id ? { ...conv, titleLoading: loading } : conv
@@ -576,6 +641,94 @@ export const useChatStore = create<ChatState>()(
             conv.id === id ? { ...conv, titleManuallyEdited: edited } : conv
           ),
         }));
+      },
+
+      // Story 26.3: Start a timeout for title loading shimmer (5 second hard timeout)
+      startTitleLoadingTimeout: (conversationId) => {
+        const state = get();
+
+        // Idempotency: Don't start multiple timeouts for same conversation
+        if (state.titleLoadingTimeouts.has(conversationId)) {
+          console.log('[chatStore] Timeout already exists for conversation:', conversationId);
+          return;
+        }
+
+        const startTime = Date.now();
+        const timeout = setTimeout(() => {
+          console.log('[chatStore] Title loading timeout fired for:', conversationId);
+          // Clear the loading state
+          get().setConversationTitleLoading(conversationId, false);
+          // Note: clearTitleLoadingTimeout is called by setConversationTitleLoading(false)
+        }, 5000); // 5 second hard timeout
+
+        set((state) => {
+          const newTimeouts = new Map(state.titleLoadingTimeouts);
+          newTimeouts.set(conversationId, { timeout, startTime });
+          return { titleLoadingTimeouts: newTimeouts };
+        });
+
+        console.log('[chatStore] Started title loading timeout for:', conversationId);
+      },
+
+      // Story 26.3: Clear the title loading timeout for a conversation
+      clearTitleLoadingTimeout: (conversationId) => {
+        const state = get();
+        const existing = state.titleLoadingTimeouts.get(conversationId);
+
+        if (existing) {
+          clearTimeout(existing.timeout);
+          set((state) => {
+            const newTimeouts = new Map(state.titleLoadingTimeouts);
+            newTimeouts.delete(conversationId);
+            return { titleLoadingTimeouts: newTimeouts };
+          });
+          console.log('[chatStore] Cleared title loading timeout for:', conversationId);
+        }
+      },
+
+      // Story 26.3: Clear all title loading states older than 10 seconds (stale cleanup)
+      cleanupStaleTitleLoadingStates: () => {
+        const state = get();
+        const now = Date.now();
+        const STALE_THRESHOLD_MS = 10000; // 10 seconds
+
+        let clearedCount = 0;
+        state.conversations.forEach((conv) => {
+          if (conv.titleLoading) {
+            const timeoutState = state.titleLoadingTimeouts.get(conv.id);
+            const age = timeoutState ? now - timeoutState.startTime : STALE_THRESHOLD_MS + 1;
+
+            // If older than threshold, clear it
+            if (age > STALE_THRESHOLD_MS) {
+              get().setConversationTitleLoading(conv.id, false);
+              clearedCount++;
+            }
+          }
+        });
+
+        if (clearedCount > 0) {
+          console.log('[chatStore] Cleaned up', clearedCount, 'stale title loading states');
+        }
+      },
+
+      // Story 26.3: Clear all title loading states (used for disconnect)
+      clearAllTitleLoadingStates: () => {
+        const state = get();
+
+        // Clear all timeouts
+        state.titleLoadingTimeouts.forEach((timeoutState, conversationId) => {
+          clearTimeout(timeoutState.timeout);
+        });
+
+        // Clear all titleLoading flags from conversations
+        set((state) => ({
+          titleLoadingTimeouts: new Map(),
+          conversations: state.conversations.map((conv) =>
+            conv.titleLoading ? { ...conv, titleLoading: false } : conv
+          ),
+        }));
+
+        console.log('[chatStore] Cleared all title loading states');
       },
 
       // Export readiness actions

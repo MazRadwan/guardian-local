@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
+import { useChatStore } from '@/stores/chatStore';
 
 export interface UseWebSocketOptions {
   url: string;
@@ -113,6 +114,10 @@ export function useWebSocket({
       clientRef.current.disconnect();
       clientRef.current = null;
       setIsConnected(false);
+
+      // Story 26.3: Clear all title loading states on disconnect
+      // This prevents stuck shimmer states when connection drops
+      useChatStore.getState().clearAllTitleLoadingStates();
     }
   }, []);
 
