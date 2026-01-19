@@ -25,23 +25,49 @@ Currently in Assessment mode:
 3. Clear `titleLoading` state appropriately (no stuck shimmer)
 4. Handle edge cases gracefully (wrong mode, abandoned flow)
 
-## Proposed Approach
+## Primary Approach: Two-Phase Title Generation
 
-### Two-Phase Title Generation for Assessment Mode
+This is the **recommended core solution** - addresses 90%+ of cases with minimal complexity.
 
-**Phase 1: Immediate LLM Title (like Consult mode)**
+### Phase 1: Immediate LLM Title (Story 26.1)
+
 - After first meaningful Q&A exchange, generate LLM-based title
+- Treat Assessment mode like Consult mode for initial title generation
 - Example: "AI Vendor Risk Assessment Questions"
-- Clears the shimmer, provides context
+- Clears the shimmer immediately, provides meaningful context
 
-**Phase 2: Upgrade to Vendor Title (when available)**
+### Phase 2: Upgrade to Vendor Title (Story 26.2)
+
 - When `generate_questionnaire` fires with vendorName/solutionName
 - Update title to "Assessment: {vendorName}"
 - Only if `titleManuallyEdited` is false
+- Uses existing infrastructure from Epic 25
 
-### Alternative: Tool-Based Vendor Capture
+### Shimmer Timeout Safety (Story 26.4)
 
-Add a tool the LLM can call when it captures vendor info during Q&A:
+Required safeguards to prevent stuck loading states:
+
+| Trigger | Action |
+|---------|--------|
+| **5s hard timeout** | Clear `titleLoading`, set fallback title |
+| **WebSocket disconnect** | Clear `titleLoading` |
+| **Component unmount** | Clear timeout, cleanup state |
+| **Conversation delete** | Clear timeout, remove state |
+| **Error events** | Clear `titleLoading`, log error |
+| **App load (stale state)** | Clear any `titleLoading` older than threshold |
+
+**Implementation requirements:**
+- Store timestamp when `titleLoading` starts
+- Run timeout once per conversation (avoid duplicates)
+- Clean up timeouts to avoid memory leaks
+- On app initialization, clear any stale loading states
+
+## Optional Enhancement: Tool-Based Vendor Capture
+
+> **Status:** Optional, not required. Increases complexity and requires careful validation, gating, and testing.
+
+Story 26.3 proposes adding a tool the LLM can call when it captures vendor info during Q&A:
+
 ```typescript
 {
   name: "register_vendor_info",
@@ -53,53 +79,87 @@ Add a tool the LLM can call when it captures vendor info during Q&A:
 }
 ```
 
-When called:
-1. Store vendor info in conversation context
-2. Update title to "Assessment: {vendorName}"
-3. Emit `conversation_title_updated` WebSocket event
+**When it would help:** Title shows "Assessment: {vendor}" immediately when user mentions vendor mid-conversation, rather than waiting for questionnaire generation.
+
+**Why it's optional:** The two-phase fallback (26.1 + 26.2) covers the majority of cases. The tool adds:
+- Complexity (LLM must reliably call tool at right moment)
+- Validation requirements (sanitize vendor input)
+- Gating logic (prevent duplicate calls, handle failures)
+- Additional test cases
+
+**Recommendation:** Implement only if Phase 1 + Phase 2 proves insufficient in practice.
 
 ## User Stories
 
+### Required (Core Fix)
+
 | Story | Description | Priority |
 |-------|-------------|----------|
-| 26.1 | Generate LLM title for Assessment mode after first Q&A | High |
-| 26.2 | Upgrade title to "Assessment: {vendor}" when vendor captured | Medium |
-| 26.3 | Add `register_vendor_info` tool for explicit capture (optional) | Low |
-| 26.4 | Clear titleLoading state with timeout fallback | Medium |
+| **26.1** | Generate LLM title for Assessment mode after first Q&A | **High** |
+| **26.2** | Upgrade title to "Assessment: {vendor}" on `generate_questionnaire` | **Medium** |
+| **26.4** | Shimmer timeout + cleanup (5s timeout, clear on disconnect/delete/error) | **Medium** |
+
+### Optional Enhancement
+
+| Story | Description | Priority |
+|-------|-------------|----------|
+| 26.3 | Add `register_vendor_info` tool for mid-conversation vendor capture | Low |
 
 ## Acceptance Criteria
 
-- [ ] Assessment mode conversations get titles after first exchange (not stuck as "New Chat")
-- [ ] Title updates to "Assessment: {vendorName}" when vendor info is captured
-- [ ] `titleLoading` shimmer clears within 5 seconds (timeout fallback)
+### Required
+- [ ] Assessment mode conversations get LLM titles after first exchange (not stuck as "New Chat")
+- [ ] Title updates to "Assessment: {vendorName}" when `generate_questionnaire` fires with vendor info
+- [ ] `titleLoading` shimmer clears within 5 seconds via hard timeout
+- [ ] `titleLoading` clears on disconnect, unmount, delete, and error events
+- [ ] Stale `titleLoading` states cleared on app initialization
 - [ ] Manual renames are never overwritten
-- [ ] Users in wrong mode still get meaningful titles
+- [ ] No memory leaks from orphaned timeouts
+
+### Optional (Story 26.3 only)
+- [ ] `register_vendor_info` tool available in Assessment mode
+- [ ] Title updates immediately when LLM calls tool with vendor info
+- [ ] Tool validates and sanitizes vendor name input
+- [ ] Duplicate tool calls handled gracefully
 
 ## Technical Considerations
 
-### Backend Changes
+### Backend Changes (Stories 26.1, 26.2)
 - Modify title generation logic in `ChatServer.ts` to treat Assessment mode like Consult initially
-- Add hook in `generate_questionnaire` to upgrade title with vendor name
-- Optionally add `register_vendor_info` tool to assessment mode tools
+- Remove or adjust any Assessment-specific title skip logic
+- Existing `generate_questionnaire` handler already updates title (Epic 25.3)
 
-### Frontend Changes
-- Ensure `titleLoading` timeout (5s) is implemented
-- Handle title upgrade smoothly (no flicker)
+### Frontend Changes (Story 26.4)
+- Add timeout tracking with `Map<conversationId, { timeout, startTime }>`
+- Clear timeouts on unmount/delete using cleanup functions
+- On app load, iterate stored conversations and clear stale `titleLoading`
+- Ensure timeout fires only once per conversation
+
+### Optional Backend Changes (Story 26.3)
+- Add `register_vendor_info` to assessment mode tools
+- Validate and sanitize vendor name
+- Call `conversationService.updateTitleIfNotManuallyEdited()`
+- Emit `conversation_title_updated` WebSocket event
 
 ## Files Likely Touched
 
-- `packages/backend/src/infrastructure/websocket/ChatServer.ts`
-- `packages/backend/src/application/services/TitleGenerationService.ts`
-- `packages/backend/src/infrastructure/ai/tools/index.ts` (if adding tool)
-- `apps/web/src/stores/chatStore.ts` (timeout handling)
+### Required
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts` - Remove Assessment skip, treat like Consult
+- `apps/web/src/stores/chatStore.ts` - Timeout tracking and cleanup
+
+### Optional (Story 26.3)
+- `packages/backend/src/infrastructure/ai/tools/index.ts` - Add tool
+- `packages/backend/src/infrastructure/websocket/ChatServer.ts` - Handle tool call
 
 ## Dependencies
 
 - Epic 25 Sprint 1 & 2 complete (title generation infrastructure)
 - Existing Assessment mode flow
+- Existing `generate_questionnaire` title update logic
 
 ## Notes
 
 - This is a UX polish epic, not blocking core functionality
-- Can be implemented incrementally (Phase 1 first, Phase 2 later)
-- Tool-based approach (Story 26.3) is optional enhancement
+- Implement Stories 26.1, 26.2, 26.4 first (required)
+- Story 26.3 only if two-phase approach proves insufficient in practice
+- Two-phase approach is simpler and covers 90%+ of use cases
