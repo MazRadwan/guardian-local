@@ -778,4 +778,113 @@ describe('Vendor title upgrade (Story 26.2)', () => {
       });
     });
   });
+
+  /**
+   * Story 26.2 fix: Invalid vendor name validation tests
+   * These tests verify that bad vendor names are rejected
+   */
+  describe('invalid vendor name validation', () => {
+    // Helper to test vendor name validation (mimics ChatServer.isValidVendorName)
+    function isValidVendorName(value: string | null | undefined): boolean {
+      if (!value || typeof value !== 'string') return false;
+      const trimmed = value.trim();
+      if (!trimmed) return false;
+      if (/^\d+$/.test(trimmed)) return false;
+      if (trimmed.length < 2) return false;
+      if (/^(option|choice|select|item|answer)[_\-]?\d*[a-z]?$/i.test(trimmed)) return false;
+      return true;
+    }
+
+    it('should reject numeric-only vendor names like "1"', () => {
+      expect(isValidVendorName('1')).toBe(false);
+      expect(isValidVendorName('123')).toBe(false);
+      expect(isValidVendorName('42')).toBe(false);
+    });
+
+    it('should reject single character vendor names', () => {
+      expect(isValidVendorName('A')).toBe(false);
+      expect(isValidVendorName('x')).toBe(false);
+    });
+
+    it('should reject assessment option tokens', () => {
+      expect(isValidVendorName('option1')).toBe(false);
+      expect(isValidVendorName('option_1')).toBe(false);
+      expect(isValidVendorName('choice_a')).toBe(false);
+      expect(isValidVendorName('Choice-2')).toBe(false);
+      expect(isValidVendorName('select1')).toBe(false);
+      expect(isValidVendorName('item_3')).toBe(false);
+      expect(isValidVendorName('answer')).toBe(false);
+    });
+
+    it('should reject null/undefined/empty values', () => {
+      expect(isValidVendorName(null)).toBe(false);
+      expect(isValidVendorName(undefined)).toBe(false);
+      expect(isValidVendorName('')).toBe(false);
+      expect(isValidVendorName('   ')).toBe(false);
+    });
+
+    it('should accept valid vendor names', () => {
+      expect(isValidVendorName('Acme Corp')).toBe(true);
+      expect(isValidVendorName('AI Solutions Inc.')).toBe(true);
+      expect(isValidVendorName('HealthTech AI')).toBe(true);
+      expect(isValidVendorName('AB')).toBe(true); // Min 2 chars
+      expect(isValidVendorName('Company123')).toBe(true); // Not numeric-only
+    });
+
+    it('should NOT upgrade title when vendor name is invalid (e.g., "1")', async () => {
+      const conversationService = createMockVendorTitleService({
+        updateResult: true,
+      });
+      const emitCallback = jest.fn();
+
+      // Invalid vendor name "1" should NOT trigger title upgrade
+      const invalidVendor = '1';
+      const validatedVendor = isValidVendorName(invalidVendor) ? invalidVendor : null;
+
+      if (validatedVendor) {
+        await upgradeVendorTitle(
+          'conv-123',
+          validatedVendor,
+          undefined,
+          conversationService,
+          emitCallback
+        );
+      }
+
+      // Title should NOT be updated
+      expect(conversationService.updateTitleIfNotManuallyEdited).not.toHaveBeenCalled();
+      expect(emitCallback).not.toHaveBeenCalled();
+    });
+
+    it('should fallback to solutionName when vendorName is invalid', async () => {
+      const conversationService = createMockVendorTitleService({
+        updateResult: true,
+      });
+      const emitCallback = jest.fn();
+
+      // Invalid vendor name, but valid solution name
+      const invalidVendor = '1';
+      const validSolution = 'DiagnosticBot';
+      const validatedVendor = isValidVendorName(invalidVendor) ? invalidVendor : null;
+      const validatedSolution = isValidVendorName(validSolution) ? validSolution : null;
+
+      const titleName = validatedVendor || validatedSolution;
+
+      if (titleName) {
+        await upgradeVendorTitle(
+          'conv-123',
+          titleName,
+          undefined,
+          conversationService,
+          emitCallback
+        );
+      }
+
+      // Should use solution name since vendor is invalid
+      expect(conversationService.updateTitleIfNotManuallyEdited).toHaveBeenCalledWith(
+        'conv-123',
+        'Assessment: DiagnosticBot'
+      );
+    });
+  });
 });

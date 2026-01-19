@@ -441,4 +441,130 @@ describe('QuestionnaireReadyService', () => {
       expect(payload.estimatedQuestions).toBe(35); // Default for quick
     });
   });
+
+  /**
+   * Story 26.2 fix: Vendor name validation tests
+   * These tests verify that invalid vendor names are rejected
+   */
+  describe('vendor name validation (Story 26.2 fix)', () => {
+    it('should reject numeric-only vendor_name like "1"', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: '1', // Invalid: numeric-only
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBeNull(); // Should be rejected
+    });
+
+    it('should reject numeric-only solution_name', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          solution_name: '123',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.solutionName).toBeNull();
+    });
+
+    it('should reject single character vendor_name', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: 'A',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBeNull();
+    });
+
+    it('should reject option token vendor_name like "option1"', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: 'option1',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBeNull();
+    });
+
+    it('should reject option token with underscore like "choice_a"', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: 'choice_a',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBeNull();
+    });
+
+    it('should accept valid vendor names with numbers', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: 'Company123',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBe('Company123'); // Valid: not numeric-only
+    });
+
+    it('should accept valid vendor names', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: 'Acme Healthcare AI',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBe('Acme Healthcare AI');
+    });
+
+    it('should accept minimum valid vendor name (2 chars)', async () => {
+      const input: ToolUseInput = {
+        ...baseInput,
+        input: {
+          assessment_type: 'quick',
+          vendor_name: 'AB',
+        },
+      };
+
+      const result = await service.handle(input, baseContext);
+
+      const payload = result.emitEvent?.payload as unknown as QuestionnaireReadyPayload;
+      expect(payload.vendorName).toBe('AB');
+    });
+  });
 });

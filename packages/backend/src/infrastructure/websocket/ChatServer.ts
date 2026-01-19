@@ -275,6 +275,36 @@ export class ChatServer {
   }
 
   /**
+   * Validate vendor/solution name - rejects invalid values like numeric-only, single chars, etc.
+   * Story 26.2 fix: Prevent bad tool input like "1" from becoming "Assessment: 1"
+   *
+   * Invalid values:
+   * - Numeric-only strings ("1", "123")
+   * - Single character strings
+   * - Assessment option tokens ("option1", "choice_a", etc.)
+   * - null/undefined/empty
+   *
+   * @returns true if valid vendor name, false otherwise
+   */
+  private isValidVendorName(value: string | null | undefined): boolean {
+    if (!value || typeof value !== 'string') return false;
+
+    const trimmed = value.trim();
+    if (!trimmed) return false;
+
+    // Reject numeric-only values
+    if (/^\d+$/.test(trimmed)) return false;
+
+    // Reject single character values
+    if (trimmed.length < 2) return false;
+
+    // Reject assessment option tokens (option1, choice_a, etc.)
+    if (/^(option|choice|select|item|answer)[_\-]?\d*[a-z]?$/i.test(trimmed)) return false;
+
+    return true;
+  }
+
+  /**
    * Format multiple document contexts as synthetic assistant message for Claude
    *
    * Epic 17.3: Multi-document support - aggregates context from all uploaded files
@@ -2386,9 +2416,19 @@ Once uploaded, I'll analyze the responses and provide:
       //   Phase 1 (Story 26.1): LLM generates title after first Q&A exchange
       //   Phase 2 (Story 26.2): Title upgrades to "Assessment: {vendor}" when questionnaire generated
       // Only if title hasn't been manually edited by user
-      if (vendorName || solutionName) {
+      //
+      // Story 26.2 fix: Use post-generation metadata for title (not pre-generation payload)
+      // and validate vendor names to reject invalid values like "1"
+      const postGenVendor = result.schema.metadata.vendorName;
+      const postGenSolution = result.schema.metadata.solutionName;
+
+      // Validate vendor/solution name - reject numeric-only, single chars, option tokens
+      const validatedVendor = this.isValidVendorName(postGenVendor) ? postGenVendor : null;
+      const validatedSolution = this.isValidVendorName(postGenSolution) ? postGenSolution : null;
+
+      if (validatedVendor || validatedSolution) {
         const titlePrefix = 'Assessment: ';
-        const titleName = vendorName || solutionName || '';
+        const titleName = validatedVendor || validatedSolution || '';
         const maxTitleLength = 50;
         let newTitle = `${titlePrefix}${titleName}`;
         if (newTitle.length > maxTitleLength) {
@@ -2408,6 +2448,9 @@ Once uploaded, I'll analyze the responses and provide:
           });
           console.log(`[ChatServer] Updated assessment title: "${newTitle}"`);
         }
+      } else if (postGenVendor || postGenSolution) {
+        // Log when vendor name was rejected (for debugging)
+        console.log(`[ChatServer] Skipping title upgrade - invalid vendor/solution: vendor="${postGenVendor}", solution="${postGenSolution}"`);
       }
 
       console.log(`[ChatServer] Questionnaire generation complete:`, {
