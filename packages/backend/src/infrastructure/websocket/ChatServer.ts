@@ -696,9 +696,12 @@ ${sanitizedExcerpt}`;
         return;
       }
 
-      // Guard 2: Check message count - only generate on first exchange (2 messages)
+      // Guard 2: Check message count - only generate on first user-assistant exchange
+      // - Consult mode: 2 messages (user + assistant)
+      // - Assessment mode: 3 messages (preamble + user + assistant)
       const messageCount = await this.conversationService.getMessageCount(conversationId);
-      if (messageCount !== 2) {
+      const expectedCount = mode === 'assessment' ? 3 : 2;
+      if (messageCount !== expectedCount) {
         return;
       }
 
