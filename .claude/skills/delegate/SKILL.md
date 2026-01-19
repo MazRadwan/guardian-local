@@ -209,6 +209,78 @@ If same error 3x:
     └── <promise>SCOPE_COMPLETE</promise>
 ```
 
+## GPT Integration
+
+**Primary: Codex CLI (recommended)**
+
+```bash
+# Kill any orphaned codex processes first
+pkill -f "codex.*mcp-server" 2>/dev/null || true
+
+# Use gtimeout on macOS (brew install coreutils)
+gtimeout 300 codex review - <<'EOF'
+## TASK
+Review {type} for Epic {epic_id}: {batch_or_sprint_id}.
+
+## EXPECTED OUTCOME
+Identify issues in THIS {batch/sprint} only.
+Return STATUS: APPROVED or STATUS: NEEDS_REVISION with findings.
+
+## CONTEXT
+{Specific context: stories, files changed, test results}
+
+## CONSTRAINTS
+- Clean architecture: domain → application → infrastructure
+- Existing codebase patterns
+- No regressions
+
+## MUST DO
+- Focus ONLY on items listed in CONTEXT
+- Search codebase for conflicts
+- Verify architectural boundaries
+
+## MUST NOT DO
+- Review files not in this batch
+- Flag previously-approved code
+- Nitpick style without substance
+
+## RE-REVIEW & PUSHBACK
+- Re-review cycle continues until STATUS: APPROVED
+- Agent may pushback with reasoning - evaluate objectively
+- After 7 pushback rounds, you have final say
+
+## OUTPUT FORMAT
+
+**CRITICAL: Response MUST start with exactly:**
+STATUS: APPROVED
+or
+STATUS: NEEDS_REVISION
+
+[If NEEDS_REVISION: findings by severity - CRITICAL, HIGH, MEDIUM, LOW]
+
+**CONFIDENCE: [0.0-1.0] is REQUIRED.**
+EOF
+```
+
+**Alternative: Codex MCP Tool**
+
+```
+mcp__codex__codex(
+  prompt: "{same prompt as above}",
+  model: "gpt-5.2-codex",
+  sandbox: "read-only"
+)
+```
+
+**Fallback: Opus Agents (if GPT rate limited)**
+
+If GPT returns rate limit errors (HTTP 429, "quota exceeded"):
+1. Set `state.reviewFallback.usedOpus = true`
+2. For spec review: use `architect-agent` + `spec-review-agent`
+3. For code review: use `code-review-agent`
+4. Add to `state.reviewFallback.pendingGPTReReview`
+5. Continue automation
+
 ## Important Rules
 
 1. **User only at start and end** - No intervention during workflow
