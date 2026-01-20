@@ -88,6 +88,9 @@ export function useChatController(): UseChatControllerReturn {
   const messageListRef = useRef<HTMLDivElement>(null);
   const hasInitialized = useRef(false);
 
+  // Pending message ref - stores message to send after auto-creating conversation
+  const pendingMessageRef = useRef<{ content: string; attachments?: MessageAttachment[] } | null>(null);
+
   // Questionnaire persistence (Story 4.3.5)
   const persistence = useQuestionnairePersistence(user?.id);
 
@@ -484,12 +487,34 @@ export function useChatController(): UseChatControllerReturn {
     }
   }, [deleteConversationRequested, isConnected, conversationService, clearDeleteConversationRequest]);
 
+  // Send pending message after conversation is auto-created
+  useEffect(() => {
+    if (activeConversationId && pendingMessageRef.current && isConnected) {
+      console.log('[useChatController] Sending pending message to new conversation:', activeConversationId);
+      const { content, attachments } = pendingMessageRef.current;
+      pendingMessageRef.current = null;
+
+      // Small delay to ensure conversation is fully set up
+      setTimeout(() => {
+        chatService.sendMessage(content, activeConversationId, attachments);
+      }, 100);
+    }
+  }, [activeConversationId, isConnected, chatService]);
+
   const handleSendMessage = useCallback(
     (content: string, attachments?: MessageAttachment[]) => {
+      // If no active conversation, auto-create one and queue the message
+      if (!activeConversationId && isConnected) {
+        console.log('[useChatController] No active conversation, auto-creating and queuing message');
+        pendingMessageRef.current = { content, attachments };
+        conversationService.createConversation(mode);
+        return;
+      }
+
       // Epic 16.6.8: Delegate to chat service with optional attachments
       chatService.sendMessage(content, activeConversationId, attachments);
     },
-    [chatService, activeConversationId]
+    [chatService, activeConversationId, isConnected, conversationService, mode]
   );
 
   const handleModeChange = useCallback(
