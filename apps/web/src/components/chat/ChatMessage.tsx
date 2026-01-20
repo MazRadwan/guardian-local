@@ -361,7 +361,8 @@ function EmbeddedForm({ data }: { data: Record<string, any> }) {
   );
 }
 
-const VALID_FORMATS = ['pdf', 'word', 'excel'] as const;
+// Only show Word and PDF - Excel removed per user request
+const VALID_FORMATS = ['word', 'pdf'] as const;
 type ValidFormat = typeof VALID_FORMATS[number];
 
 function isValidFormat(format: unknown): format is ValidFormat {
@@ -380,8 +381,15 @@ function EmbeddedDownload({ data }: { data: Record<string, any> }) {
     return null;
   }
 
-  // Filter to valid formats only
-  const validFormats = data.formats.filter(isValidFormat);
+  // Filter to valid formats only (word and pdf), sorted with word first
+  const validFormats = data.formats
+    .filter(isValidFormat)
+    .sort((a, b) => {
+      // Word first, then PDF
+      if (a === 'word') return -1;
+      if (b === 'word') return 1;
+      return 0;
+    });
   if (validFormats.length === 0) {
     console.warn('[EmbeddedDownload] No valid formats found:', data.formats);
     return null;
