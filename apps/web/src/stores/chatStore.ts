@@ -540,6 +540,7 @@ export const useChatStore = create<ChatState>()(
         // This prevents wiping rehydrated questionnaire state when WebSocket events
         // call setActiveConversation with the same ID after rehydration
         const currentId = get().activeConversationId;
+        console.log('[chatStore] setActiveConversation:', { currentId, newId: id });
         if (currentId === id) {
           console.log('[chatStore] setActiveConversation called with same ID, skipping clear');
           return;

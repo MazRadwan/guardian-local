@@ -155,6 +155,7 @@ describe('useChatController export persistence', () => {
       setPendingQuestionnaire: jest.fn(),
       setQuestionnaireError: jest.fn(),
       setGenerating: jest.fn(),
+      setQuestionnaireStreamComplete: jest.fn(),
     });
 
     const mockPersistence = {

@@ -418,7 +418,20 @@ export function useChatController(): UseChatControllerReturn {
     if (storedExport) {
       console.log('[useChatController] Export data found in localStorage, restoring');
       setExportReady(activeConversationId, storedExport);
+
+      // BUGFIX: Also restore the payload - required for QuestionnairePromptCard to mount
+      // Without pendingQuestionnaire, the card won't render even with exportData
+      const storedPayload = persistence.loadPayload
+        ? persistence.loadPayload(activeConversationId)
+        : null;
+      if (storedPayload) {
+        console.log('[useChatController] Payload found in localStorage, restoring for card render');
+        useChatStore.getState().setPendingQuestionnaire(storedPayload);
+      }
+
       useChatStore.getState().setQuestionnaireUIState('download');
+      // BUGFIX: Set stream complete so gatedExportData is not null
+      useChatStore.getState().setQuestionnaireStreamComplete(true);
       return;
     }
 
