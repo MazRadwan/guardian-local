@@ -43,7 +43,7 @@ async validateOwnership(conversationId: string, userId: string): Promise<void> {
     console.warn(
       `[ConversationHandler] User ${userId} attempted to access conversation ${conversationId} owned by ${conversation.userId}`
     );
-    throw new Error('You do not have access to this conversation');
+    throw new Error('Unauthorized: You do not have access to this conversation');
   }
 }
 ```
@@ -89,7 +89,7 @@ describe('validateOwnership', () => {
     });
 
     await expect(handler.validateOwnership('conv-1', 'user-1'))
-      .rejects.toThrow('do not have access');
+      .rejects.toThrow('Unauthorized: You do not have access to this conversation');
   });
 });
 ```

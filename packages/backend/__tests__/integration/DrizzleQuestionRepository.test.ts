@@ -21,11 +21,12 @@ describe('DrizzleQuestionRepository Integration Tests', () => {
   beforeEach(async () => {
     repository = new DrizzleQuestionRepository();
 
-    // Clean up test data
+    // Clean up test data - use CASCADE to handle FK constraints
+    // Order: questions → assessments (CASCADE handles conversations FK)
     await db.delete(questions);
-    await db.delete(assessments);
-    await db.delete(vendors);
-    await db.delete(users);
+    await db.execute(sql`TRUNCATE TABLE assessments CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE vendors CASCADE`);
+    await db.execute(sql`TRUNCATE TABLE users CASCADE`);
 
     // Create test user
     const [user] = await db

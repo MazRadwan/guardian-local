@@ -8,17 +8,20 @@
 
 ## Description
 
-Add `handleVendorSelected()` method to ScoringHandler for the vendor clarification flow. When multiple vendors are detected, the user selects one, and scoring proceeds for that vendor only.
+Add `handleVendorSelected()` method to ScoringHandler for the vendor clarification flow. When multiple vendors are detected, the user selects one via `vendor_selected` event, and scoring proceeds for only that vendor's files.
 
 ---
 
 ## Acceptance Criteria
 
 - [ ] `handleVendorSelected()` implemented
-- [ ] Validates selected vendor is in the list
-- [ ] Filters files to selected vendor
-- [ ] Proceeds with scoring for selected vendor
-- [ ] Unit tests cover selection and validation
+- [ ] Retrieves pending clarification from `socket.data.pendingVendorClarifications` Map by conversationId
+- [ ] Validates selected vendor name (non-empty, exists in pending vendors list)
+- [ ] Normalizes vendor name comparison (trim, lowercase)
+- [ ] Clears pending clarification after selection
+- [ ] Emits confirmation message before resuming scoring
+- [ ] Calls `triggerScoringOnSend()` with selected vendor's fileIds
+- [ ] Unit tests cover selection, validation, and normalization
 
 ---
 
@@ -27,58 +30,107 @@ Add `handleVendorSelected()` method to ScoringHandler for the vendor clarificati
 ```typescript
 // Add to ScoringHandler.ts
 
+interface PendingVendorClarification {
+  conversationId: string;
+  userId: string;
+  fileIds: string[];
+  userQuery?: string;
+  vendors: Array<{ name: string; fileCount: number; fileIds: string[] }>;
+}
+
 /**
  * Handle vendor selection after clarification prompt
  *
- * @param socket - Client socket
- * @param payload - Contains conversationId, selectedVendor
+ * CRITICAL BEHAVIORS TO PRESERVE:
+ * 1. Lookup by conversationId in socket.data.pendingVendorClarifications Map
+ * 2. Normalize vendor name with trim() and toLowerCase() for comparison
+ * 3. Clear pending clarification for this conversation after selection
+ * 4. Emit confirmation message before resuming scoring
  */
 async handleVendorSelected(
   socket: IAuthenticatedSocket,
   payload: {
     conversationId: string;
-    selectedVendor: string;
+    vendorName: string;
   }
 ): Promise<void> {
-  try {
-    const { conversationId, selectedVendor } = payload;
+  const userId = socket.userId;
+  if (!userId) {
+    console.error('[ScoringHandler] vendor_selected called without authenticated user');
+    socket.emit('error', { event: 'vendor_selected', message: 'Not authenticated' });
+    return;
+  }
 
-    console.log(`[ScoringHandler] Vendor selected: ${selectedVendor} for ${conversationId}`);
-
-    // Get files for conversation
-    const files = await this.fileRepository.findByConversation(conversationId);
-
-    // Filter to selected vendor's files
-    const vendorFiles = files.filter(f => {
-      const vendorName = f.intakeContext?.vendorName;
-      return vendorName === selectedVendor || !vendorName;
-    });
-
-    if (vendorFiles.length === 0) {
-      socket.emit('error', {
-        event: 'vendor_selected',
-        message: 'No files found for selected vendor',
-      });
-      return;
-    }
-
-    const fileIds = vendorFiles.map(f => f.id);
-
-    // Proceed with scoring
-    socket.emit('scoring_progress', {
-      conversationId,
-      status: 'vendor_confirmed',
-      message: `Proceeding with scoring for ${selectedVendor}`,
-    });
-
-    await this.triggerScoring(socket, conversationId, fileIds);
-  } catch (error) {
-    console.error('[ScoringHandler] Error handling vendor selection:', error);
+  // Guard: Validate vendorName is present and non-empty
+  if (!payload.vendorName || typeof payload.vendorName !== 'string' || payload.vendorName.trim().length === 0) {
+    console.warn('[ScoringHandler] vendor_selected called with missing/empty vendorName');
     socket.emit('error', {
       event: 'vendor_selected',
-      message: sanitizeErrorForClient(error, 'Failed to process vendor selection'),
+      message: 'Vendor name is required',
     });
+    return;
   }
+
+  // Guard: Validate conversationId is present
+  if (!payload.conversationId || typeof payload.conversationId !== 'string') {
+    console.warn('[ScoringHandler] vendor_selected called with missing conversationId');
+    socket.emit('error', {
+      event: 'vendor_selected',
+      message: 'Conversation ID is required',
+    });
+    return;
+  }
+
+  // Look up pending clarification by conversationId (Map-based storage)
+  const pendingMap = socket.data.pendingVendorClarifications as Map<string, PendingVendorClarification> | undefined;
+  const pending = pendingMap?.get(payload.conversationId);
+
+  if (!pending) {
+    console.warn(`[ScoringHandler] vendor_selected called without pending clarification for conversation ${payload.conversationId}`);
+    socket.emit('error', {
+      event: 'vendor_selected',
+      message: 'No pending vendor clarification for this conversation',
+    });
+    return;
+  }
+
+  // Find the selected vendor's files (normalize with trim() for comparison)
+  const normalizedVendorName = payload.vendorName.trim().toLowerCase();
+  const selectedVendor = pending.vendors.find(
+    v => v.name.trim().toLowerCase() === normalizedVendorName
+  );
+
+  if (!selectedVendor) {
+    console.warn(`[ScoringHandler] Unknown vendor selected: ${payload.vendorName}`);
+    socket.emit('error', {
+      event: 'vendor_selected',
+      message: `Unknown vendor: ${payload.vendorName}`,
+    });
+    return;
+  }
+
+  console.log(
+    `[ScoringHandler] User selected vendor "${selectedVendor.name}" with ${selectedVendor.fileIds.length} files`
+  );
+
+  // Clear pending clarification for this conversation
+  pendingMap?.delete(payload.conversationId);
+
+  // Emit confirmation message
+  socket.emit('message', {
+    role: 'assistant',
+    content: `Starting scoring for ${selectedVendor.name}...`,
+    conversationId: pending.conversationId,
+  });
+
+  // Resume scoring with only the selected vendor's files
+  await this.triggerScoringOnSend(
+    socket,
+    pending.conversationId,
+    pending.userId,
+    selectedVendor.fileIds,
+    pending.userQuery
+  );
 }
 ```
 
@@ -95,55 +147,119 @@ async handleVendorSelected(
 
 ```typescript
 describe('handleVendorSelected', () => {
+  beforeEach(() => {
+    // Setup pending clarification in socket.data
+    mockSocket.data.pendingVendorClarifications = new Map([
+      ['conv-1', {
+        conversationId: 'conv-1',
+        userId: 'user-1',
+        fileIds: ['f1', 'f2', 'f3'],
+        userQuery: 'How risky is this?',
+        vendors: [
+          { name: 'Vendor A', fileCount: 2, fileIds: ['f1', 'f2'] },
+          { name: 'Vendor B', fileCount: 1, fileIds: ['f3'] },
+        ],
+      }],
+    ]);
+  });
+
   it('should filter files to selected vendor and trigger scoring', async () => {
-    mockFileRepository.findByConversation.mockResolvedValue([
-      { id: 'f1', intakeContext: { vendorName: 'Vendor A' } },
-      { id: 'f2', intakeContext: { vendorName: 'Vendor B' } },
-      { id: 'f3', intakeContext: { vendorName: 'Vendor A' } },
-    ]);
-    mockScoringService.scoreConversation.mockResolvedValue({ score: 85 });
+    const triggerSpy = jest.spyOn(handler, 'triggerScoringOnSend').mockResolvedValue();
 
     await handler.handleVendorSelected(mockSocket, {
       conversationId: 'conv-1',
-      selectedVendor: 'Vendor A',
+      vendorName: 'Vendor A',
     });
 
-    // Should have called scoring with only Vendor A files
-    expect(mockSocket.emit).toHaveBeenCalledWith('scoring_progress', expect.objectContaining({
-      status: 'vendor_confirmed',
-      message: expect.stringContaining('Vendor A'),
+    expect(mockSocket.emit).toHaveBeenCalledWith('message', expect.objectContaining({
+      content: expect.stringContaining('Vendor A'),
     }));
+    expect(triggerSpy).toHaveBeenCalledWith(
+      mockSocket,
+      'conv-1',
+      'user-1',
+      ['f1', 'f2'],  // Only Vendor A's files
+      'How risky is this?'  // User query preserved
+    );
   });
 
-  it('should include files with no vendor (unknown)', async () => {
-    mockFileRepository.findByConversation.mockResolvedValue([
-      { id: 'f1', intakeContext: { vendorName: 'Vendor A' } },
-      { id: 'f2', intakeContext: null },
-    ]);
+  it('should normalize vendor name (case insensitive, trimmed)', async () => {
+    const triggerSpy = jest.spyOn(handler, 'triggerScoringOnSend').mockResolvedValue();
 
     await handler.handleVendorSelected(mockSocket, {
       conversationId: 'conv-1',
-      selectedVendor: 'Vendor A',
+      vendorName: '  VENDOR a  ',  // Different case, extra whitespace
     });
 
-    // Both files should be included (vendor match + unknown)
-    expect(mockSocket.emit).toHaveBeenCalledWith('scoring_progress', expect.objectContaining({
-      status: 'vendor_confirmed',
-    }));
+    expect(triggerSpy).toHaveBeenCalledWith(
+      mockSocket,
+      'conv-1',
+      'user-1',
+      ['f1', 'f2'],
+      'How risky is this?'
+    );
   });
 
-  it('should emit error if no files for vendor', async () => {
-    mockFileRepository.findByConversation.mockResolvedValue([
-      { id: 'f1', intakeContext: { vendorName: 'Vendor B' } },
-    ]);
+  it('should clear pending clarification after selection', async () => {
+    jest.spyOn(handler, 'triggerScoringOnSend').mockResolvedValue();
 
     await handler.handleVendorSelected(mockSocket, {
       conversationId: 'conv-1',
-      selectedVendor: 'Vendor A',
+      vendorName: 'Vendor A',
+    });
+
+    expect(mockSocket.data.pendingVendorClarifications.has('conv-1')).toBe(false);
+  });
+
+  it('should emit error if no pending clarification exists', async () => {
+    mockSocket.data.pendingVendorClarifications = new Map();
+
+    await handler.handleVendorSelected(mockSocket, {
+      conversationId: 'conv-1',
+      vendorName: 'Vendor A',
     });
 
     expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
       event: 'vendor_selected',
+      message: expect.stringContaining('No pending vendor clarification'),
+    }));
+  });
+
+  it('should emit error if vendor name is empty', async () => {
+    await handler.handleVendorSelected(mockSocket, {
+      conversationId: 'conv-1',
+      vendorName: '   ',
+    });
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
+      event: 'vendor_selected',
+      message: 'Vendor name is required',
+    }));
+  });
+
+  it('should emit error if selected vendor not in list', async () => {
+    await handler.handleVendorSelected(mockSocket, {
+      conversationId: 'conv-1',
+      vendorName: 'Unknown Vendor',
+    });
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
+      event: 'vendor_selected',
+      message: expect.stringContaining('Unknown vendor'),
+    }));
+  });
+
+  it('should emit error if user not authenticated', async () => {
+    mockSocket.userId = undefined;
+
+    await handler.handleVendorSelected(mockSocket, {
+      conversationId: 'conv-1',
+      vendorName: 'Vendor A',
+    });
+
+    expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
+      event: 'vendor_selected',
+      message: 'Not authenticated',
     }));
   });
 });
@@ -154,5 +270,8 @@ describe('handleVendorSelected', () => {
 ## Definition of Done
 
 - [ ] handleVendorSelected implemented
-- [ ] File filtering by vendor works
+- [ ] Lookup by conversationId in socket.data Map
+- [ ] Vendor name normalization (trim, lowercase)
+- [ ] Pending clarification cleared after selection
+- [ ] Confirmation message emitted
 - [ ] Unit tests passing

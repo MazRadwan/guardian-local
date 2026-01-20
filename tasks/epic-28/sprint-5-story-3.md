@@ -119,6 +119,13 @@ export class ToolUseRegistry {
 ## Tests Required
 
 ```typescript
+import {
+  IToolUseHandler,
+  ToolUseInput,
+  ToolUseContext,
+  ToolUseResult
+} from '../../../application/interfaces/IToolUseHandler';
+
 describe('ToolUseRegistry', () => {
   let registry: ToolUseRegistry;
 
@@ -127,52 +134,109 @@ describe('ToolUseRegistry', () => {
   });
 
   describe('register', () => {
-    it('should register a handler', () => {
-      const mockHandler: IToolUseHandler = { handle: jest.fn() };
-      registry.register('test_tool', mockHandler);
+    it('should register handler using handler.toolName', () => {
+      const mockHandler: IToolUseHandler = {
+        toolName: 'test_tool',
+        handle: jest.fn(),
+      };
+
+      registry.register(mockHandler);
+
       expect(registry.hasHandler('test_tool')).toBe(true);
+      expect(registry.getHandler('test_tool')).toBe(mockHandler);
     });
 
     it('should overwrite existing handler with warning', () => {
       const consoleSpy = jest.spyOn(console, 'warn');
-      const handler1: IToolUseHandler = { handle: jest.fn() };
-      const handler2: IToolUseHandler = { handle: jest.fn() };
+      const handler1: IToolUseHandler = {
+        toolName: 'test_tool',
+        handle: jest.fn(),
+      };
+      const handler2: IToolUseHandler = {
+        toolName: 'test_tool',
+        handle: jest.fn(),
+      };
 
-      registry.register('test_tool', handler1);
-      registry.register('test_tool', handler2);
+      registry.register(handler1);
+      registry.register(handler2);
 
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Overwriting'));
       expect(registry.getHandler('test_tool')).toBe(handler2);
     });
+
+    it('should list all registered tool names', () => {
+      registry.register({ toolName: 'tool_a', handle: jest.fn() });
+      registry.register({ toolName: 'tool_b', handle: jest.fn() });
+
+      expect(registry.getRegisteredTools()).toEqual(['tool_a', 'tool_b']);
+    });
   });
 
   describe('dispatch', () => {
-    it('should dispatch to registered handler', async () => {
+    it('should dispatch with ToolUseInput and ToolUseContext', async () => {
       const mockHandler: IToolUseHandler = {
-        handle: jest.fn().mockResolvedValue({ success: true }),
+        toolName: 'questionnaire_ready',
+        handle: jest.fn().mockResolvedValue({ handled: true }),
       };
-      registry.register('test_tool', mockHandler);
+      registry.register(mockHandler);
 
-      const result = await registry.dispatch(
-        'test_tool',
-        { foo: 'bar' },
-        { conversationId: 'conv-1', userId: 'user-1' }
-      );
+      const input: ToolUseInput = {
+        toolName: 'questionnaire_ready',
+        toolUseId: 'tool-123',
+        input: { vendorName: 'TestVendor' },
+      };
+      const context: ToolUseContext = {
+        conversationId: 'conv-1',
+        userId: 'user-1',
+        assessmentId: 'assess-1',
+        mode: 'assessment',
+      };
 
-      expect(mockHandler.handle).toHaveBeenCalledWith(
-        { foo: 'bar' },
-        { conversationId: 'conv-1', userId: 'user-1' }
-      );
+      const result = await registry.dispatch(input, context);
+
+      expect(mockHandler.handle).toHaveBeenCalledWith(input, context);
       expect(result.handled).toBe(true);
     });
 
     it('should return handled: false for unknown tool', async () => {
-      const result = await registry.dispatch(
-        'unknown_tool',
-        {},
-        { conversationId: 'conv-1', userId: 'user-1' }
-      );
+      const input: ToolUseInput = {
+        toolName: 'unknown_tool',
+        toolUseId: 'tool-456',
+        input: {},
+      };
+      const context: ToolUseContext = {
+        conversationId: 'conv-1',
+        userId: 'user-1',
+        assessmentId: null,
+      };
+
+      const result = await registry.dispatch(input, context);
+
       expect(result.handled).toBe(false);
+    });
+
+    it('should catch handler errors and return handled: false with error', async () => {
+      const mockHandler: IToolUseHandler = {
+        toolName: 'error_tool',
+        handle: jest.fn().mockRejectedValue(new Error('Handler failed')),
+      };
+      registry.register(mockHandler);
+
+      const input: ToolUseInput = {
+        toolName: 'error_tool',
+        toolUseId: 'tool-789',
+        input: {},
+      };
+      const context: ToolUseContext = {
+        conversationId: 'conv-1',
+        userId: 'user-1',
+        assessmentId: null,
+      };
+
+      const result = await registry.dispatch(input, context);
+
+      expect(result.handled).toBe(false);
+      expect(result.error).toBe('Handler failed');
     });
   });
 });

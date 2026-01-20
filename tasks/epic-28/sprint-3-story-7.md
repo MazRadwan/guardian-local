@@ -18,8 +18,10 @@ Add mode-specific guidance messages to ModeSwitchHandler. When switching to asse
 - [ ] Guidance message persisted and emitted for scoring mode
 - [ ] No guidance message for consult mode (default mode)
 - [ ] Messages stored as constants for easy updates
+- [ ] **Guidance persistence**: Messages persisted via `conversationService.sendMessage()` with `role: 'assistant'`
+- [ ] **Guidance emission**: Messages emitted via standard `message` event (NOT separate guidance event)
 - [ ] Unit tests verify guidance message persistence and emission
-- [ ] Idempotent: no guidance if already in requested mode
+- [ ] Idempotent: no guidance if already in requested mode (mode not switched = no guidance)
 
 ---
 
@@ -71,9 +73,11 @@ Once uploaded, I'll analyze the responses and provide:
 // Update handleSwitchMode to emit guidance
 async handleSwitchMode(
   socket: IAuthenticatedSocket,
-  payload: { mode: string; conversationId?: string }
+  payload: { conversationId?: string; mode?: ChatMode }
 ): Promise<void> {
   // ... existing validation code ...
+  // NOTE: conversationId is REQUIRED in payload (no socket.conversationId fallback)
+  // Validation must check: if (!conversationId || !mode) { emit error with 'conversationId and mode are required' }
 
   // Idempotent: already in requested mode
   if (conversation.mode === mode) {
@@ -81,6 +85,7 @@ async handleSwitchMode(
     return;
   }
 
+  // Use switchMode (not updateMode)
   await this.conversationService.switchMode(conversationId, mode);
   socket.emit('conversation_mode_updated', { conversationId, mode });
 
@@ -134,6 +139,9 @@ private async sendGuidanceMessage(
 
 ```typescript
 describe('mode guidance messages', () => {
+  // NOTE: All tests must include conversationId in payload (required, no socket fallback)
+  // Use switchMode (not updateMode)
+
   it('should persist and emit guidance for assessment mode', async () => {
     mockConversationService.getConversation.mockResolvedValue({
       id: 'conv-1',
@@ -148,7 +156,10 @@ describe('mode guidance messages', () => {
       createdAt: new Date(),
     });
 
-    await handler.handleSwitchMode(mockSocket, { mode: 'assessment' });
+    await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'assessment' });
+
+    // Verify mode switched
+    expect(mockConversationService.switchMode).toHaveBeenCalledWith('conv-1', 'assessment');
 
     // Verify message persisted
     expect(mockConversationService.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
@@ -177,8 +188,9 @@ describe('mode guidance messages', () => {
       createdAt: new Date(),
     });
 
-    await handler.handleSwitchMode(mockSocket, { mode: 'scoring' });
+    await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'scoring' });
 
+    expect(mockConversationService.switchMode).toHaveBeenCalledWith('conv-1', 'scoring');
     expect(mockConversationService.sendMessage).toHaveBeenCalled();
     expect(mockSocket.emit).toHaveBeenCalledWith('message', expect.any(Object));
   });
@@ -190,8 +202,9 @@ describe('mode guidance messages', () => {
       mode: 'assessment',
     });
 
-    await handler.handleSwitchMode(mockSocket, { mode: 'consult' });
+    await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'consult' });
 
+    expect(mockConversationService.switchMode).toHaveBeenCalledWith('conv-1', 'consult');
     expect(mockSocket.emit).toHaveBeenCalledWith('conversation_mode_updated', expect.any(Object));
     // No sendMessage call for guidance
     expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
@@ -204,7 +217,7 @@ describe('mode guidance messages', () => {
       mode: 'assessment', // Already in assessment
     });
 
-    await handler.handleSwitchMode(mockSocket, { mode: 'assessment' });
+    await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'assessment' });
 
     // Mode not switched, no guidance
     expect(mockConversationService.switchMode).not.toHaveBeenCalled();

@@ -20,6 +20,7 @@ We need to refactor to use the shared validation while preserving the sanitizati
 
 - [ ] QuestionnaireReadyService uses `isValidVendorName` from utils/sanitize for validation
 - [ ] `validateVendorName()` method updated to use shared validation + existing sanitization
+- [ ] **Story 26.2 parity test**: QuestionnaireReadyService still rejects numeric/option-token vendor names ("1", "2", "123") via shared `isValidVendorName`
 - [ ] No behavioral changes (same outputs for same inputs)
 - [ ] Existing tests pass
 
@@ -73,7 +74,27 @@ This preserves the sanitization step and return type while using the shared vali
 
 ## Tests Required
 
-No new tests needed - existing service tests verify behavior.
+```typescript
+// Verify Story 26.2 parity - QuestionnaireReadyService rejects via shared validation
+describe('QuestionnaireReadyService validateVendorName', () => {
+  it('should reject numeric-only values via isValidVendorName', () => {
+    // These must still be rejected after consolidation
+    expect(service.validateVendorName('1')).toBeNull();
+    expect(service.validateVendorName('123')).toBeNull();
+    expect(service.validateVendorName('42')).toBeNull();
+  });
+
+  it('should reject single character option tokens', () => {
+    expect(service.validateVendorName('A')).toBeNull();
+    expect(service.validateVendorName('B')).toBeNull();
+  });
+
+  it('should accept valid vendor names after sanitization', () => {
+    expect(service.validateVendorName('Acme Corp')).toBe('Acme Corp');
+    expect(service.validateVendorName('  AWS  ')).toBe('AWS'); // sanitized
+  });
+});
+```
 
 Run to verify:
 ```bash

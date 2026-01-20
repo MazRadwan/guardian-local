@@ -18,7 +18,11 @@ Extract streaming utilities (`chunkMarkdown`, `streamMarkdownToSocket`, `sleep`)
 - [ ] Contains `chunkMarkdown()`, `streamToSocket()`, `sleep()` methods
 - [ ] Uses `ISocketEmitter` interface (not concrete Socket.IO type)
 - [ ] Supports abort handling via callback
-- [ ] Unit tests achieve >90% coverage
+- [ ] **CRITICAL: Abort handling preserves `assistant_aborted` vs `assistant_done` semantics**
+  - Aborted streams emit `assistant_aborted` (NOT `assistant_done`)
+  - Completed streams emit `assistant_done` with full text
+- [ ] Unit tests achieve >90% coverage with explicit abort path tests
+- [ ] Tests cover chunk boundary edge cases
 - [ ] ChatServer.ts continues to compile (will integrate in later story)
 
 ---
@@ -200,6 +204,63 @@ describe('StreamingHandler', () => {
       expect(onAborted).toHaveBeenCalled();
       // Should not emit assistant_done when aborted
       expect(mockSocket.emit).not.toHaveBeenCalledWith('assistant_done', expect.any(Object));
+    });
+
+    it('should emit assistant_aborted via onAborted callback (not assistant_done)', async () => {
+      // This test ensures UX regression is caught - aborted streams must NOT complete normally
+      mockSocket.emit = jest.fn();
+      let abortTriggered = false;
+
+      await handler.streamToSocket(
+        mockSocket,
+        'Content that will be aborted mid-stream for testing purposes',
+        'conv-456',
+        () => !abortTriggered && (abortTriggered = true, false) || true, // Abort after first check
+        () => mockSocket.emit('assistant_aborted', { conversationId: 'conv-456' })
+      );
+
+      // Verify assistant_aborted was emitted
+      expect(mockSocket.emit).toHaveBeenCalledWith('assistant_aborted', { conversationId: 'conv-456' });
+      // Verify assistant_done was NOT emitted
+      const doneCall = (mockSocket.emit as jest.Mock).mock.calls.find(
+        call => call[0] === 'assistant_done'
+      );
+      expect(doneCall).toBeUndefined();
+    });
+  });
+
+  describe('chunk edge cases', () => {
+    it('should handle content exactly at chunk boundary', () => {
+      const handler = new StreamingHandler(10, 5);
+      const chunks = handler.chunkMarkdown('1234567890'); // Exactly 10 chars
+      expect(chunks).toEqual(['1234567890']);
+    });
+
+    it('should handle content one char over chunk boundary', () => {
+      const handler = new StreamingHandler(10, 5);
+      const chunks = handler.chunkMarkdown('12345678901'); // 11 chars
+      expect(chunks.length).toBe(2);
+      expect(chunks.join('')).toBe('12345678901');
+    });
+
+    it('should handle very long content without hanging', async () => {
+      const handler = new StreamingHandler(80, 1); // 1ms delay
+      const longContent = 'x'.repeat(10000);
+      mockSocket.emit = jest.fn();
+
+      await handler.streamToSocket(
+        mockSocket,
+        longContent,
+        'conv-789',
+        () => false,
+        jest.fn()
+      );
+
+      // Should complete and emit assistant_done
+      expect(mockSocket.emit).toHaveBeenCalledWith('assistant_done', expect.objectContaining({
+        conversationId: 'conv-789',
+        fullText: longContent,
+      }));
     });
   });
 });

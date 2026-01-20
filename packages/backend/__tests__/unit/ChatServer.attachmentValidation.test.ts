@@ -27,7 +27,7 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
   let sendMessageHandler: (payload: any) => Promise<void>;
   let getHistoryHandler: (payload: any) => Promise<void>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
     emittedEvents = [];
 
@@ -145,23 +145,11 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
     };
 
     // Mock namespace to capture event handlers
+    // Story 28.4.4: ConnectionHandler.handleConnection() is async, so we need to
+    // store the connection handler and call it after ChatServer is created
     mockNamespace = {
       use: jest.fn(),
-      on: jest.fn((event, handler) => {
-        if (event === 'connection') {
-          // Simulate connection and capture event handlers
-          handler(mockSocket);
-          // Extract send_message and get_history handlers
-          mockSocket.on.mock.calls.forEach(([eventName, eventHandler]: [string, any]) => {
-            if (eventName === 'send_message') {
-              sendMessageHandler = eventHandler;
-            }
-            if (eventName === 'get_history') {
-              getHistoryHandler = eventHandler;
-            }
-          });
-        }
-      }),
+      on: jest.fn(),
       emit: jest.fn(),
     };
 
@@ -199,6 +187,25 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
       mockQuestionService,
       mockFileRepository
     );
+
+    // Story 28.4.4: Trigger connection and extract handlers AFTER ChatServer is created
+    // The connection handler is registered on namespace.on('connection', handler)
+    const connectionHandler = mockNamespace.on.mock.calls.find(
+      (call: any[]) => call[0] === 'connection'
+    )?.[1];
+    if (connectionHandler) {
+      // Trigger the connection handler (async) and wait for completion
+      await connectionHandler(mockSocket);
+      // Extract send_message and get_history handlers from socket.on calls
+      mockSocket.on.mock.calls.forEach(([eventName, eventHandler]: [string, any]) => {
+        if (eventName === 'send_message') {
+          sendMessageHandler = eventHandler;
+        }
+        if (eventName === 'get_history') {
+          getHistoryHandler = eventHandler;
+        }
+      });
+    }
   });
 
   describe('send_message with attachments', () => {

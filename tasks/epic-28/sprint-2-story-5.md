@@ -17,8 +17,19 @@ Add connection and resume logic to ConnectionHandler. This includes the critical
 - [ ] `handleConnection()` method added to ConnectionHandler
 - [ ] **CRITICAL: `socket.join(\`user:${userId}\`)` preserved**
 - [ ] Resume conversation logic preserved
-- [ ] `connection_ready` event emitted with correct payload
+- [ ] **Resume failure behavior preserved**:
+  - Resume failures do NOT auto-create conversations (logs and waits for `start_new_conversation`)
+  - `socket.conversationId` remains `undefined` when no valid resume occurs
+- [ ] `connection_ready` event emitted with **ALL current payload fields** to avoid frontend regressions:
+  - `message: string` - Human-readable connection status
+  - `userId: string` - Authenticated user ID
+  - `conversationId?: string` - Resumed conversation ID (if any)
+  - `resumed: boolean` - Whether conversation was resumed
+  - `hasActiveConversation: boolean` - Whether user has active conversation
+  - `assessmentId?: string` - Assessment ID from conversation (if any)
 - [ ] Unit tests verify room join
+- [ ] Unit tests verify ALL connection_ready payload fields
+- [ ] Unit tests verify resume failure does NOT auto-create and leaves socket.conversationId unset
 - [ ] Integration with DocumentUploadController verified
 
 ---
@@ -113,14 +124,39 @@ describe('handleConnection', () => {
     expect(socket.join).toHaveBeenCalledWith('user:user-123');
   });
 
-  it('should emit connection_ready', async () => {
+  it('should emit connection_ready with ALL required payload fields (new connection)', async () => {
     const socket = createMockSocket('user-123');
     await handler.handleConnection(socket, mockChatContext);
 
-    expect(socket.emit).toHaveBeenCalledWith('connection_ready', expect.objectContaining({
+    expect(socket.emit).toHaveBeenCalledWith('connection_ready', {
+      message: 'Connected to Guardian chat server',
       userId: 'user-123',
+      conversationId: undefined,
       resumed: false,
-    }));
+      hasActiveConversation: false,
+      assessmentId: null,
+    });
+  });
+
+  it('should emit connection_ready with ALL required payload fields (resumed)', async () => {
+    mockConversationService.getConversation.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'user-123',
+      mode: 'assessment',
+      assessmentId: 'assess-1',
+    });
+
+    const socket = createMockSocket('user-123', 'conv-1');
+    await handler.handleConnection(socket, mockChatContext);
+
+    expect(socket.emit).toHaveBeenCalledWith('connection_ready', {
+      message: 'Reconnected to existing conversation',
+      userId: 'user-123',
+      conversationId: 'conv-1',
+      resumed: true,
+      hasActiveConversation: true,
+      assessmentId: 'assess-1',
+    });
   });
 
   it('should resume valid conversation', async () => {
@@ -147,6 +183,45 @@ describe('handleConnection', () => {
     const result = await handler.handleConnection(socket, mockChatContext);
 
     expect(result.resumed).toBe(false);
+  });
+
+  describe('resume failure behavior', () => {
+    it('should NOT auto-create conversation when resume fails', async () => {
+      mockConversationService.getConversation.mockResolvedValue(null); // Not found
+
+      const socket = createMockSocket('user-123', 'invalid-conv-id');
+      const result = await handler.handleConnection(socket, mockChatContext);
+
+      // Should NOT call createConversation - waits for explicit start_new_conversation
+      expect(mockConversationService.createConversation).not.toHaveBeenCalled();
+      expect(result.resumed).toBe(false);
+      expect(result.conversation).toBeNull();
+    });
+
+    it('should leave socket.conversationId unset when no valid resume', async () => {
+      mockConversationService.getConversation.mockResolvedValue(null);
+
+      const socket = createMockSocket('user-123', 'invalid-conv-id');
+      await handler.handleConnection(socket, mockChatContext);
+
+      expect(socket.conversationId).toBeUndefined();
+    });
+
+    it('should emit connection_ready with resumed:false and no conversationId on failure', async () => {
+      mockConversationService.getConversation.mockRejectedValue(new Error('DB error'));
+
+      const socket = createMockSocket('user-123', 'conv-1');
+      await handler.handleConnection(socket, mockChatContext);
+
+      expect(socket.emit).toHaveBeenCalledWith('connection_ready', {
+        message: 'Connected to Guardian chat server',
+        userId: 'user-123',
+        conversationId: undefined,
+        resumed: false,
+        hasActiveConversation: false,
+        assessmentId: null,
+      });
+    });
   });
 });
 

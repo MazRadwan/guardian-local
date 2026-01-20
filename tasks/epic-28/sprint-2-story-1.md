@@ -30,7 +30,7 @@ Create the `ChatContext` interface to formally model shared state that handlers 
 // infrastructure/websocket/ChatContext.ts
 
 import { RateLimiter } from './RateLimiter';
-import { PromptCacheManager } from '../../application/services/PromptCacheManager';
+import { PromptCacheManager } from '../ai/PromptCacheManager';
 
 /**
  * ChatContext - Shared state for WebSocket handlers

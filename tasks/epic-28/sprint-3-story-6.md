@@ -19,7 +19,8 @@ Create ModeSwitchHandler to handle mode switching between consult, assessment, a
 - [ ] Validates mode is one of: consult, assessment, scoring
 - [ ] Persists mode change to conversation
 - [ ] Emits `conversation_mode_updated` event (actual event name in codebase)
-- [ ] Unit tests cover valid/invalid modes
+- [ ] **Idempotent mode switches**: `conversation_mode_updated` emitted even when already in requested mode (no mode change, but event still fires)
+- [ ] Unit tests cover valid/invalid modes and idempotent switch behavior
 
 ---
 
@@ -43,7 +44,7 @@ export class ModeSwitchHandler {
 
   async handleSwitchMode(
     socket: IAuthenticatedSocket,
-    payload: { mode: string; conversationId?: string }
+    payload: { conversationId?: string; mode?: ChatMode }
   ): Promise<void> {
     try {
       if (!socket.userId) {
@@ -51,31 +52,49 @@ export class ModeSwitchHandler {
         return;
       }
 
-      const conversationId = payload.conversationId || socket.conversationId;
-      if (!conversationId) {
-        socket.emit('error', { event: 'switch_mode', message: 'No active conversation' });
+      const { conversationId, mode } = payload;
+
+      // Both conversationId and mode are required (NO socket.conversationId fallback)
+      if (!conversationId || !mode) {
+        socket.emit('error', {
+          event: 'switch_mode',
+          message: 'conversationId and mode are required',
+        });
         return;
       }
 
       // Validate mode
-      const mode = payload.mode as ChatMode;
       if (!VALID_MODES.includes(mode)) {
         socket.emit('error', {
           event: 'switch_mode',
-          message: `Invalid mode: ${payload.mode}. Must be one of: ${VALID_MODES.join(', ')}`,
+          message: `Invalid mode: ${mode}. Must be one of: ${VALID_MODES.join(', ')}`,
         });
         return;
       }
 
       // Validate ownership
+      await this.validateConversationOwnership(conversationId, socket.userId);
+
       const conversation = await this.conversationService.getConversation(conversationId);
-      if (!conversation || conversation.userId !== socket.userId) {
-        socket.emit('error', { event: 'switch_mode', message: 'Conversation not found' });
+      if (!conversation) {
+        socket.emit('error', {
+          event: 'switch_mode',
+          message: `Conversation ${conversationId} not found`,
+        });
         return;
       }
 
-      // Update mode
-      await this.conversationService.updateMode(conversationId, mode);
+      // Idempotent: already in requested mode
+      if (conversation.mode === mode) {
+        socket.emit('conversation_mode_updated', {
+          conversationId,
+          mode,
+        });
+        return;
+      }
+
+      // Switch mode (uses switchMode, not updateMode)
+      await this.conversationService.switchMode(conversationId, mode);
 
       console.log(`[ModeSwitchHandler] Switched conversation ${conversationId} to ${mode} mode`);
 
@@ -89,6 +108,26 @@ export class ModeSwitchHandler {
         event: 'switch_mode',
         message: sanitizeErrorForClient(error, 'Failed to switch mode'),
       });
+    }
+  }
+
+  /**
+   * Validate that a conversation belongs to the requesting user
+   * @throws Error if conversation not found or doesn't belong to user
+   */
+  private async validateConversationOwnership(
+    conversationId: string,
+    userId: string
+  ): Promise<void> {
+    const conversation = await this.conversationService.getConversation(conversationId);
+
+    if (!conversation) {
+      throw new Error(`Conversation ${conversationId} not found`);
+    }
+
+    if (conversation.userId !== userId) {
+      console.warn(`[ModeSwitchHandler] SECURITY: User ${userId} attempted to access conversation ${conversationId} owned by ${conversation.userId}`);
+      throw new Error('Unauthorized: You do not have access to this conversation');
     }
   }
 }
@@ -114,12 +153,11 @@ describe('ModeSwitchHandler', () => {
   beforeEach(() => {
     mockConversationService = {
       getConversation: jest.fn(),
-      updateMode: jest.fn(),
+      switchMode: jest.fn(),
     } as any;
     mockSocket = {
       id: 'socket-1',
       userId: 'user-1',
-      conversationId: 'conv-1',
       emit: jest.fn(),
     } as any;
     handler = new ModeSwitchHandler(mockConversationService);
@@ -133,9 +171,9 @@ describe('ModeSwitchHandler', () => {
         mode: 'consult',
       });
 
-      await handler.handleSwitchMode(mockSocket, { mode: 'assessment' });
+      await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'assessment' });
 
-      expect(mockConversationService.updateMode).toHaveBeenCalledWith('conv-1', 'assessment');
+      expect(mockConversationService.switchMode).toHaveBeenCalledWith('conv-1', 'assessment');
       expect(mockSocket.emit).toHaveBeenCalledWith('conversation_mode_updated', {
         conversationId: 'conv-1',
         mode: 'assessment',
@@ -143,22 +181,55 @@ describe('ModeSwitchHandler', () => {
     });
 
     it('should reject invalid mode', async () => {
-      await handler.handleSwitchMode(mockSocket, { mode: 'invalid' });
+      mockConversationService.getConversation.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        mode: 'consult',
+      });
+
+      await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'invalid' as any });
 
       expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
         message: expect.stringContaining('Invalid mode'),
       }));
-      expect(mockConversationService.updateMode).not.toHaveBeenCalled();
+      expect(mockConversationService.switchMode).not.toHaveBeenCalled();
     });
 
-    it('should reject if no conversation', async () => {
-      mockSocket.conversationId = undefined;
-
+    it('should reject if conversationId missing', async () => {
       await handler.handleSwitchMode(mockSocket, { mode: 'assessment' });
 
       expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
-        message: 'No active conversation',
+        event: 'switch_mode',
+        message: 'conversationId and mode are required',
       }));
+    });
+
+    it('should reject if mode missing', async () => {
+      await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1' });
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', expect.objectContaining({
+        event: 'switch_mode',
+        message: 'conversationId and mode are required',
+      }));
+    });
+
+    it('should emit conversation_mode_updated even when already in requested mode (idempotent)', async () => {
+      mockConversationService.getConversation.mockResolvedValue({
+        id: 'conv-1',
+        userId: 'user-1',
+        mode: 'assessment', // Already in assessment mode
+      });
+
+      await handler.handleSwitchMode(mockSocket, { conversationId: 'conv-1', mode: 'assessment' });
+
+      // Should NOT call switchMode (already in that mode)
+      expect(mockConversationService.switchMode).not.toHaveBeenCalled();
+
+      // But SHOULD still emit the event (idempotent acknowledgment)
+      expect(mockSocket.emit).toHaveBeenCalledWith('conversation_mode_updated', {
+        conversationId: 'conv-1',
+        mode: 'assessment',
+      });
     });
   });
 });

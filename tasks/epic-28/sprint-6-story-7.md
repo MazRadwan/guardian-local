@@ -24,6 +24,17 @@ Update index.ts to wire all new dependencies for ChatServer, including TitleGene
 
 ## Technical Approach
 
+**IMPORTANT:** TitleGenerationService takes an API key string, NOT a claudeClient.
+
+See TitleGenerationService constructor (line 80):
+```typescript
+constructor(private readonly apiKey?: string) {
+  if (apiKey) {
+    this.client = new Anthropic({ apiKey });
+  }
+}
+```
+
 ```typescript
 // index.ts
 
@@ -31,8 +42,8 @@ import { TitleGenerationService } from './application/services/TitleGenerationSe
 
 // ... existing service creation ...
 
-// Create title generation service
-const titleGenerationService = new TitleGenerationService(claudeClient);
+// Create title generation service - takes API key, NOT claudeClient
+const titleGenerationService = new TitleGenerationService(process.env.ANTHROPIC_API_KEY);
 
 // Create chat server with all dependencies
 const chatServer = new ChatServer(
@@ -51,7 +62,7 @@ const chatServer = new ChatServer(
   promptCacheManager,
   enrichmentService,
   documentSummaryService,
-  titleGenerationService  // New explicit dependency
+  titleGenerationService  // New explicit dependency (API key based)
 );
 ```
 

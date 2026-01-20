@@ -47,9 +47,12 @@ constructor(...existing deps...) {
   // ...existing initialization...
 
   // Create context builders
+  // NOTE: ConversationContextBuilder requires fileRepository for intake context injection
+  // (see Story 28.2.1 - formatMultiDocContextForClaude uses fileRepository.findByConversationWithContext)
   this.contextBuilder = new ConversationContextBuilder(
     this.conversationService,
-    this.promptCacheManager
+    this.promptCacheManager,
+    this.fileRepository  // REQUIRED for intake context injection
   );
   this.fileContextBuilder = new FileContextBuilder(
     this.fileRepository,

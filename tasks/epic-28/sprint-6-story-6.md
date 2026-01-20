@@ -27,6 +27,11 @@ Final refactoring pass to reduce ChatServer to ~200 lines. It should only orches
 
 ## Technical Approach
 
+**Key Implementation Notes:**
+1. **Tool registry**: Use `toolRegistry.register(handler)` - handler has `toolName` property
+2. **emitToConversation**: Preserve existing signature from ChatServer (line 2687-2689)
+3. **streamMessage**: Preserve existing signature from ChatServer (line 2694-2698)
+
 Final ChatServer structure:
 ```typescript
 export class ChatServer {
@@ -60,9 +65,9 @@ export class ChatServer {
     this.scoringHandler = new ScoringHandler(...);
     this.questionnaireHandler = new QuestionnaireHandler(...);
 
-    // Create tool registry
+    // Create tool registry - register handler directly (has toolName property)
     this.toolRegistry = new ToolUseRegistry();
-    this.toolRegistry.register('questionnaire_ready', questionnaireReadyService);
+    this.toolRegistry.register(questionnaireReadyService);  // handler.toolName = 'questionnaire_ready'
 
     // Setup namespace
     this.setupNamespace();
@@ -101,19 +106,23 @@ export class ChatServer {
     });
   }
 
-  // Public helpers for external use
+  /**
+   * Emit event to all sockets in a conversation room
+   * Preserve existing signature from ChatServer (line 2687-2689)
+   */
   emitToConversation(conversationId: string, event: string, data: unknown): void {
-    this.io.of('/chat').to(conversationId).emit(event, data);
+    this.io.of('/chat').emit(event, { conversationId, ...(data as object) });
   }
 
-  streamMessage(socket: IAuthenticatedSocket, message: string, conversationId: string): Promise<void> {
-    return this.streamingHandler.streamToSocket(
-      socket,
-      message,
+  /**
+   * Stream a message chunk to a conversation
+   * Preserve existing signature from ChatServer (line 2694-2698)
+   */
+  streamMessage(conversationId: string, chunk: string): void {
+    this.io.of('/chat').emit('message:stream', {
       conversationId,
-      () => this.chatContext.abortedStreams.has(conversationId),
-      () => { /* cleanup */ }
-    );
+      chunk,
+    });
   }
 }
 ```

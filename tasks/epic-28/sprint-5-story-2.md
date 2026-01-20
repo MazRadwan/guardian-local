@@ -1,4 +1,4 @@
-# Story 28.9.2: Extract MessageHandler.ts (attachment processing)
+# Story 28.9.2: Extract MessageHandler.ts (file context building)
 
 **Sprint:** 5 - Core Message Flow
 **Agent:** backend-agent
@@ -8,17 +8,20 @@
 
 ## Description
 
-Add attachment processing logic to MessageHandler. This handles file references in messages and builds file context.
+Add file context building logic to MessageHandler. This builds the document context for Claude prompts using FileContextBuilder.
+
+**NOTE:** File validation (ownership, conversation membership) is handled in **Story 28.9.1** via `findByIdAndConversation`. This story focuses ONLY on building context from already-validated files.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `processAttachments()` method implemented
-- [ ] Uses FileContextBuilder for file context
-- [ ] Validates file IDs belong to conversation
-- [ ] Handles missing files gracefully
-- [ ] Unit tests cover attachment scenarios
+- [ ] `buildFileContext()` method implemented
+- [ ] Uses FileContextBuilder for document context generation
+- [ ] Accepts `enrichedAttachments` from validation (NOT raw fileIds from payload)
+- [ ] Handles no-attachments case (uses all conversation files)
+- [ ] Handles specific files case (scopes to validated fileIds)
+- [ ] Unit tests cover context building scenarios
 
 ---
 
@@ -28,32 +31,41 @@ Add attachment processing logic to MessageHandler. This handles file references 
 // Add to MessageHandler.ts
 
 import { FileContextBuilder } from '../context/FileContextBuilder';
+import type { MessageAttachment } from '../../../domain/entities/Message';
 
 export class MessageHandler {
   constructor(
     private readonly conversationService: ConversationService,
-    private readonly fileContextBuilder: FileContextBuilder
+    private readonly fileRepository: IFileRepository,
+    private readonly rateLimiter: RateLimiter,
+    private readonly fileContextBuilder?: FileContextBuilder  // Optional, for context building
   ) {}
 
   /**
-   * Process message attachments and build file context
+   * Build file context for Claude prompt
+   *
+   * NOTE: This method receives enrichedAttachments that have ALREADY been
+   * validated by validateSendMessage(). It does NOT re-validate.
+   *
+   * @param conversationId - The conversation ID
+   * @param enrichedAttachments - Pre-validated attachments from validation step
    */
-  async processAttachments(
+  async buildFileContext(
     conversationId: string,
-    fileIds?: string[]
-  ): Promise<{
-    fileContext: string;
-    processedFileIds: string[];
-  }> {
-    if (!fileIds || fileIds.length === 0) {
-      // No specific files - use all conversation files
-      const fileContext = await this.fileContextBuilder.build(conversationId);
-      return { fileContext, processedFileIds: [] };
+    enrichedAttachments?: MessageAttachment[]
+  ): Promise<string> {
+    if (!this.fileContextBuilder) {
+      return '';  // FileContextBuilder not configured
     }
 
-    // Scope to specific files
-    const fileContext = await this.fileContextBuilder.build(conversationId, fileIds);
-    return { fileContext, processedFileIds: fileIds };
+    if (!enrichedAttachments || enrichedAttachments.length === 0) {
+      // No specific files - use all conversation files
+      return await this.fileContextBuilder.build(conversationId);
+    }
+
+    // Scope to specific validated files
+    const fileIds = enrichedAttachments.map(a => a.fileId);
+    return await this.fileContextBuilder.build(conversationId, fileIds);
   }
 }
 ```
@@ -70,24 +82,51 @@ export class MessageHandler {
 ## Tests Required
 
 ```typescript
-describe('processAttachments', () => {
-  it('should build context for all files when no IDs provided', async () => {
-    mockFileContextBuilder.build.mockResolvedValue('## Attached Documents...');
+import type { MessageAttachment } from '../../../domain/entities/Message';
 
-    const result = await handler.processAttachments('conv-1');
+describe('buildFileContext', () => {
+  it('should return empty string when FileContextBuilder not configured', async () => {
+    const handlerNoBuilder = new MessageHandler(
+      mockConversationService,
+      mockFileRepository,
+      mockRateLimiter,
+      undefined  // No FileContextBuilder
+    );
 
-    expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1');
-    expect(result.fileContext).toContain('Attached');
-    expect(result.processedFileIds).toEqual([]);
+    const result = await handlerNoBuilder.buildFileContext('conv-1');
+
+    expect(result).toBe('');
   });
 
-  it('should build context for specific files when IDs provided', async () => {
-    mockFileContextBuilder.build.mockResolvedValue('## Specific files...');
+  it('should build context for all files when no attachments provided', async () => {
+    mockFileContextBuilder.build.mockResolvedValue('\n\n--- Attached Documents ---\n...');
 
-    const result = await handler.processAttachments('conv-1', ['file-1', 'file-2']);
+    const result = await handler.buildFileContext('conv-1');
+
+    expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1');
+    expect(result).toContain('Attached Documents');
+  });
+
+  it('should build context for all files when empty attachments array', async () => {
+    mockFileContextBuilder.build.mockResolvedValue('\n\n--- Attached Documents ---\n...');
+
+    const result = await handler.buildFileContext('conv-1', []);
+
+    expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1');
+  });
+
+  it('should scope to specific files when enrichedAttachments provided', async () => {
+    mockFileContextBuilder.build.mockResolvedValue('Scoped context');
+
+    const enrichedAttachments: MessageAttachment[] = [
+      { fileId: 'file-1', filename: 'doc.pdf', mimeType: 'application/pdf', size: 1024 },
+      { fileId: 'file-2', filename: 'data.xlsx', mimeType: 'application/xlsx', size: 2048 },
+    ];
+
+    const result = await handler.buildFileContext('conv-1', enrichedAttachments);
 
     expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1', ['file-1', 'file-2']);
-    expect(result.processedFileIds).toEqual(['file-1', 'file-2']);
+    expect(result).toBe('Scoped context');
   });
 });
 ```
@@ -96,5 +135,7 @@ describe('processAttachments', () => {
 
 ## Definition of Done
 
-- [ ] processAttachments implemented
+- [ ] buildFileContext implemented
+- [ ] Accepts enrichedAttachments (not raw fileIds)
+- [ ] Validation responsibility documented in story 28.9.1
 - [ ] Unit tests passing

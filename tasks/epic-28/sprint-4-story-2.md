@@ -8,17 +8,20 @@
 
 ## Description
 
-Add `buildScoringFollowUpContext()` method to ScoringHandler. This builds context for follow-up questions during scoring, including previous scores and remaining areas to assess.
+Add `buildScoringFollowUpContext()` method to ScoringHandler. This is a **synchronous formatting function** that takes a completed scoring report and formats it for Claude context injection when the user has a follow-up query after scoring.
+
+**CRITICAL:** This method is ONLY used when `userQuery` exists after scoring completes. It does NOT fetch scoring state - it receives the report directly.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] `buildScoringFollowUpContext()` implemented
-- [ ] Includes previous scoring results
-- [ ] Includes areas not yet fully assessed
-- [ ] Formats context for Claude prompt injection
-- [ ] Unit tests cover context building
+- [ ] `buildScoringFollowUpContext(report)` implemented as **synchronous pure function**
+- [ ] **Takes report parameter directly** (NOT conversationId - no service call)
+- [ ] Formats composite score, risk rating, recommendation
+- [ ] Formats dimension scores with name, score out of 10, and risk rating
+- [ ] Formats key findings and executive summary
+- [ ] Unit tests verify formatting output
 
 ---
 
@@ -27,51 +30,53 @@ Add `buildScoringFollowUpContext()` method to ScoringHandler. This builds contex
 ```typescript
 // Add to ScoringHandler.ts
 
-interface ScoringFollowUpContext {
-  previousScores: Array<{
+interface ScoringReportPayload {
+  compositeScore: number;
+  overallRiskRating: string;
+  recommendation: string;
+  executiveSummary: string;
+  keyFindings: string[];
+  dimensionScores: Array<{
     dimension: string;
     score: number;
-    rationale: string;
+    riskRating: string;
   }>;
-  unassessedAreas: string[];
-  totalDimensions: number;
-  completedDimensions: number;
 }
 
 /**
- * Build context for follow-up questions during scoring
+ * Epic 18.4.3: Build scoring context for follow-up questions
+ *
+ * CRITICAL: This is a synchronous formatting function that takes the report
+ * directly - it does NOT call any service to fetch scoring state.
+ *
+ * Only called when userQuery exists after scoring completes.
+ * Formats the scoring results as context for Claude to reference
+ * when answering user questions about the assessment.
  */
-async buildScoringFollowUpContext(conversationId: string): Promise<string> {
-  const scoringState = await this.scoringService.getScoringState(conversationId);
+buildScoringFollowUpContext(report: { payload: ScoringReportPayload }): string {
+  const { payload } = report;
 
-  if (!scoringState || scoringState.scores.length === 0) {
-    return '';
-  }
-
-  const context: ScoringFollowUpContext = {
-    previousScores: scoringState.scores.map(s => ({
-      dimension: s.dimension,
-      score: s.score,
-      rationale: s.rationale,
-    })),
-    unassessedAreas: scoringState.unassessedDimensions,
-    totalDimensions: 10,
-    completedDimensions: scoringState.scores.length,
-  };
+  // Format dimension scores for context (score out of 10, not 5)
+  const dimensionSummary = payload.dimensionScores
+    .map(ds => `- ${ds.dimension}: ${ds.score}/10 (${ds.riskRating})`)
+    .join('\n');
 
   return `
-## Previous Scoring Progress
+## Scoring Results Context
 
-Completed ${context.completedDimensions} of ${context.totalDimensions} dimensions.
+**Composite Score:** ${payload.compositeScore}/100
+**Overall Risk Rating:** ${payload.overallRiskRating}
+**Recommendation:** ${payload.recommendation}
 
-### Scores Assigned:
-${context.previousScores.map(s => `- **${s.dimension}**: ${s.score}/5 - ${s.rationale}`).join('\n')}
+### Dimension Scores:
+${dimensionSummary}
 
-### Areas Still Needing Assessment:
-${context.unassessedAreas.map(a => `- ${a}`).join('\n')}
+### Key Findings:
+${payload.keyFindings.map(f => `- ${f}`).join('\n')}
 
-Please continue the assessment focusing on the unassessed areas.
-`.trim();
+### Executive Summary:
+${payload.executiveSummary}
+`;
 }
 ```
 
@@ -88,29 +93,83 @@ Please continue the assessment focusing on the unassessed areas.
 
 ```typescript
 describe('buildScoringFollowUpContext', () => {
-  it('should return empty string when no scoring state', async () => {
-    mockScoringService.getScoringState.mockResolvedValue(null);
+  it('should format composite score and risk rating', () => {
+    const report = {
+      payload: {
+        compositeScore: 72,
+        overallRiskRating: 'Moderate',
+        recommendation: 'Proceed with conditions',
+        executiveSummary: 'Vendor shows adequate security controls.',
+        keyFindings: ['Strong encryption', 'Missing audit logs'],
+        dimensionScores: [
+          { dimension: 'Data Security', score: 8, riskRating: 'Low' },
+          { dimension: 'Privacy', score: 6, riskRating: 'Moderate' },
+        ],
+      },
+    };
 
-    const result = await handler.buildScoringFollowUpContext('conv-1');
+    const result = handler.buildScoringFollowUpContext(report);
 
-    expect(result).toBe('');
+    expect(result).toContain('**Composite Score:** 72/100');
+    expect(result).toContain('**Overall Risk Rating:** Moderate');
+    expect(result).toContain('**Recommendation:** Proceed with conditions');
   });
 
-  it('should format previous scores', async () => {
-    mockScoringService.getScoringState.mockResolvedValue({
-      scores: [
-        { dimension: 'Data Security', score: 4, rationale: 'Strong encryption' },
-        { dimension: 'Privacy', score: 3, rationale: 'Adequate policies' },
-      ],
-      unassessedDimensions: ['Bias', 'Transparency'],
-    });
+  it('should format dimension scores with /10 scale', () => {
+    const report = {
+      payload: {
+        compositeScore: 72,
+        overallRiskRating: 'Moderate',
+        recommendation: 'Proceed',
+        executiveSummary: 'Summary',
+        keyFindings: [],
+        dimensionScores: [
+          { dimension: 'Data Security', score: 8, riskRating: 'Low' },
+          { dimension: 'Bias Mitigation', score: 5, riskRating: 'High' },
+        ],
+      },
+    };
 
-    const result = await handler.buildScoringFollowUpContext('conv-1');
+    const result = handler.buildScoringFollowUpContext(report);
 
-    expect(result).toContain('Data Security');
-    expect(result).toContain('4/5');
-    expect(result).toContain('Bias');
-    expect(result).toContain('Transparency');
+    expect(result).toContain('- Data Security: 8/10 (Low)');
+    expect(result).toContain('- Bias Mitigation: 5/10 (High)');
+  });
+
+  it('should format key findings as bullet points', () => {
+    const report = {
+      payload: {
+        compositeScore: 60,
+        overallRiskRating: 'High',
+        recommendation: 'Caution',
+        executiveSummary: 'Summary',
+        keyFindings: ['Finding one', 'Finding two', 'Finding three'],
+        dimensionScores: [],
+      },
+    };
+
+    const result = handler.buildScoringFollowUpContext(report);
+
+    expect(result).toContain('- Finding one');
+    expect(result).toContain('- Finding two');
+    expect(result).toContain('- Finding three');
+  });
+
+  it('should include executive summary', () => {
+    const report = {
+      payload: {
+        compositeScore: 80,
+        overallRiskRating: 'Low',
+        recommendation: 'Approved',
+        executiveSummary: 'This vendor demonstrates excellent security practices.',
+        keyFindings: [],
+        dimensionScores: [],
+      },
+    };
+
+    const result = handler.buildScoringFollowUpContext(report);
+
+    expect(result).toContain('This vendor demonstrates excellent security practices.');
   });
 });
 ```
@@ -119,5 +178,6 @@ describe('buildScoringFollowUpContext', () => {
 
 ## Definition of Done
 
-- [ ] buildScoringFollowUpContext implemented
+- [ ] buildScoringFollowUpContext implemented as synchronous pure function
+- [ ] Takes report parameter directly (not conversationId)
 - [ ] Unit tests passing

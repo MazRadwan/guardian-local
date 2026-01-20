@@ -8,9 +8,17 @@
 
 ## Description
 
-Implement ScoringModeStrategy for scoring mode behavior (trigger scoring after response).
+Implement ScoringModeStrategy for scoring mode behavior.
 
 **Note:** This story is optional. Skip if time is limited.
+
+**IMPORTANT - Scoring Mode with Attachments Bypass:**
+In the current ChatServer implementation (lines 1508-1576), scoring mode with attachments **bypasses Claude entirely** and triggers `triggerScoringOnSend()` directly. This means:
+- The ScoringModeStrategy's `postProcess` will NOT be called when attachments are present
+- The strategy only applies to scoring mode **without** attachments (follow-up questions)
+- The actual scoring is triggered synchronously in the send_message handler, not via strategy
+
+This strategy should handle **follow-up scoring questions** (text-only, no new attachments).
 
 ---
 
@@ -18,9 +26,9 @@ Implement ScoringModeStrategy for scoring mode behavior (trigger scoring after r
 
 - [ ] `ScoringModeStrategy.ts` created at `infrastructure/websocket/modes/`
 - [ ] Implements IModeStrategy
-- [ ] Scoring trigger in postProcess
-- [ ] System prompt enhancement for scoring
-- [ ] Unit tests cover strategy behavior
+- [ ] **Handles follow-up questions only** (scoring with attachments bypasses strategy)
+- [ ] System prompt enhancement for scoring context
+- [ ] Unit tests cover strategy behavior for follow-up scenarios
 
 ---
 
@@ -34,26 +42,39 @@ import { IModeStrategy, ModeContext, PreProcessResult, PostProcessResult } from 
 export class ScoringModeStrategy implements IModeStrategy {
   readonly mode = 'scoring' as const;
 
+  /**
+   * Pre-process for scoring mode.
+   * Note: Messages WITH attachments bypass Claude entirely (trigger-on-send pattern).
+   * This strategy only handles follow-up questions (text-only).
+   */
   async preProcess(context: ModeContext): Promise<PreProcessResult> {
+    // No pre-processing needed - scoring with attachments is handled directly
     return {};
   }
 
+  /**
+   * Post-process for scoring mode follow-up questions.
+   * Note: This is NOT called for initial scoring (attachments trigger scoring directly).
+   */
   async postProcess(context: ModeContext, response: string): Promise<PostProcessResult> {
-    // Trigger scoring if documents present
+    // For follow-up questions, we don't re-trigger scoring
+    // The original scoring results are already in conversation history
     return {
-      triggerScoring: context.hasDocuments,
+      triggerScoring: false,  // Follow-ups don't re-trigger
     };
   }
 
   async enhanceSystemPrompt(basePrompt: string, context: ModeContext): Promise<string> {
     return `${basePrompt}
 
-## Scoring Mode Instructions
-Analyze completed vendor questionnaires using the Guardian rubric. Provide:
-- Composite risk score (0-100)
-- Per-dimension breakdown
-- Executive summary
-- Recommendation (Approve/Conditional/Decline)`;
+## Scoring Mode Context
+You are in scoring mode. The user may ask follow-up questions about:
+- A previous scoring analysis
+- Specific dimension scores
+- Risk recommendations
+- Vendor evaluation details
+
+Refer to the conversation history for the original scoring results.`;
   }
 }
 ```

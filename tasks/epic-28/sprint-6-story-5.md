@@ -23,20 +23,36 @@ Fix the hidden TitleGenerationService dependency. Currently ChatServer creates i
 
 ## Technical Approach
 
+**IMPORTANT:** TitleGenerationService takes an API key string, NOT a claudeClient.
+
+See ChatServer line 127:
+```typescript
+this.titleGenerationService = new TitleGenerationService(process.env.ANTHROPIC_API_KEY);
+```
+
+And TitleGenerationService constructor (line 80):
+```typescript
+constructor(private readonly apiKey?: string) {
+  if (apiKey) {
+    this.client = new Anthropic({ apiKey });
+  }
+}
+```
+
 1. Update ChatServer constructor:
 ```typescript
 // Before:
 constructor(
   // ...17 explicit dependencies...
 ) {
-  // Hidden dependency:
-  this.titleService = new TitleGenerationService(this.claudeClient);
+  // Hidden dependency (currently creates its own Anthropic client):
+  this.titleGenerationService = new TitleGenerationService(process.env.ANTHROPIC_API_KEY);
 }
 
 // After:
 constructor(
   // ...17 explicit dependencies...,
-  private readonly titleService: TitleGenerationService  // Now explicit
+  private readonly titleGenerationService: TitleGenerationService  // Now explicit
 ) {
   // No internal instantiation
 }
@@ -44,7 +60,8 @@ constructor(
 
 2. Update index.ts wiring (see Story 28.11.3):
 ```typescript
-const titleGenerationService = new TitleGenerationService(claudeClient);
+// TitleGenerationService takes API key string, NOT claudeClient
+const titleGenerationService = new TitleGenerationService(process.env.ANTHROPIC_API_KEY);
 
 const chatServer = new ChatServer(
   // ...existing dependencies...,

@@ -18,6 +18,10 @@ Refactor ChatServer to use the new `ChatContext` object instead of individual cl
 - [ ] `pendingConversationCreations` Map moved to ChatContext
 - [ ] `abortedStreams` Set moved to ChatContext
 - [ ] All references updated to use `this.chatContext.*`
+- [ ] **CRITICAL: Pending-conversation cleanup interval MUST be preserved**
+  - The `setInterval` at ChatServer:132 cleans stale entries from pendingCreations
+  - This cleanup must remain functional after migration to ChatContext
+  - Update interval to reference `this.chatContext.pendingCreations`
 - [ ] No behavioral changes
 - [ ] All existing tests pass
 
@@ -45,6 +49,17 @@ private readonly chatContext: ChatContext;
 constructor(...) {
   // ...existing initialization...
   this.chatContext = createChatContext(this.rateLimiter, this.promptCacheManager);
+
+  // PRESERVE: Cleanup interval for stale pending conversation creations
+  // This prevents memory leaks from abandoned conversation creation attempts
+  setInterval(() => {
+    const now = Date.now();
+    for (const [userId, { timestamp }] of this.chatContext.pendingCreations.entries()) {
+      if (now - timestamp > 1000) { // 1 second timeout
+        this.chatContext.pendingCreations.delete(userId);
+      }
+    }
+  }, 5000).unref();
 }
 ```
 
