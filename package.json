@@ -38,6 +38,6 @@
     "socket.io-client": "^4.8.1"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["bcrypt"]
+    "onlyBuiltDependencies": ["bcrypt", "esbuild", "puppeteer", "sharp"]
   }
 }
