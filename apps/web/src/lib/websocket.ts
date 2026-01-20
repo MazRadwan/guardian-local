@@ -386,7 +386,8 @@ export class WebSocketClient {
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
-        this.socket = io(this.config.url, {
+        // Connect to /chat namespace (backend uses io.of('/chat'))
+        this.socket = io(`${this.config.url}/chat`, {
           auth: {
             token: this.config.token,
             conversationId: this.config.conversationId, // Pass conversationId to resume session
