@@ -49,7 +49,7 @@ ChatServer.ts is a "God Class" with 18 dependencies (17 explicit + 1 hidden) and
 ```
 infrastructure/websocket/
 ├── ChatServer.ts              # Slim orchestrator (~200 lines)
-├── ChatContext.ts             # Shared state interface
+├── ChatContext.ts             # Shared state interface (infrastructure-only)
 ├── handlers/
 │   ├── ConnectionHandler.ts   # Auth, connect, resume, rooms, disconnect
 │   ├── MessageHandler.ts      # send_message, tool use routing
@@ -65,18 +65,20 @@ infrastructure/websocket/
 │   ├── ConsultModeStrategy.ts   # Auto-summarize, file context
 │   ├── AssessmentModeStrategy.ts # Background enrichment, tools
 │   └── ScoringModeStrategy.ts   # Scoring trigger logic
-└── streaming/
-    └── MarkdownStreamer.ts    # Simulated streaming, chunking
+└── StreamingHandler.ts        # Simulated streaming, chunking (matches docs)
 ```
 
-**Note:** Sanitization utilities extend existing `packages/backend/src/utils/sanitize.ts` (no new file).
+**Notes:**
+- Sanitization utilities extend existing `packages/backend/src/utils/sanitize.ts` (no new file)
+- `StreamingHandler.ts` name matches `docs/design/architecture/implementation-guide.md`
 
 ---
 
 ## Shared State Model
 
 ```typescript
-// ChatContext.ts - Cross-cutting shared state
+// ChatContext.ts - Cross-cutting shared state (INFRASTRUCTURE LAYER ONLY)
+// Per architecture-layers.md: No Socket.IO types, no WebSocket concerns leak to application/domain
 export interface ChatContext {
   /** Idempotency guard for conversation creation */
   pendingCreations: Map<string, { conversationId: string; timestamp: number }>;
@@ -90,9 +92,24 @@ export interface ChatContext {
   /** Prompt cache manager */
   promptCache: PromptCacheManager;
 }
+
+// Socket abstraction - handlers receive this interface, not concrete Socket type
+export interface IAuthenticatedSocket {
+  readonly id: string;
+  readonly userId: string;
+  readonly userEmail?: string;
+  readonly userRole?: string;
+  conversationId?: string;
+  data: Record<string, unknown>;
+  emit(event: string, data: unknown): void;
+  join(room: string): void;
+}
 ```
 
-Handlers receive `ChatContext` instead of threading individual parameters.
+**Architecture Constraints:**
+- `ChatContext` is infrastructure-only, not passed to application/domain layers
+- Handlers receive `IAuthenticatedSocket` interface, not concrete Socket.IO type
+- Application services injected via interfaces (not via ChatContext - avoid service locator)
 
 ---
 
@@ -103,14 +120,15 @@ Handlers receive `ChatContext` instead of threading individual parameters.
 - 28.1.1: Extend `utils/sanitize.ts` with `sanitizeErrorForClient()` and `isValidVendorName()`
 - 28.1.2: Remove duplicate `sanitizeForPrompt` from ChatServer (use existing)
 - 28.1.3: Remove duplicate `isValidVendorName` from QuestionnaireReadyService
-- 28.1.4: Extract `MarkdownStreamer.ts` (chunkMarkdown, streamToSocket, sleep)
+- 28.1.4: Extract `StreamingHandler.ts` (chunkMarkdown, streamToSocket, sleep) - name matches docs
 - 28.1.5: Update ChatServer to import consolidated utilities
 
 **Acceptance Criteria:**
 - Single source of truth for sanitization in `utils/sanitize.ts`
 - All existing ChatServer tests pass
-- New unit tests for MarkdownStreamer
+- New unit tests for StreamingHandler
 - No changes to index.ts wiring
+- Naming aligns with `docs/design/architecture/implementation-guide.md`
 
 ---
 
@@ -149,8 +167,13 @@ Handlers receive `ChatContext` instead of threading individual parameters.
 
 **Acceptance Criteria:**
 - ConnectionHandler has unit tests
-- Auth middleware preserved
+- Auth middleware preserved (JWT verification)
 - Resume conversation logic works
+- **CRITICAL: `user:{userId}` room join preserved** - DocumentUploadController depends on this for:
+  - `upload_progress` events
+  - `intake_context_ready` events
+  - `scoring_parse_ready` events
+- `connection_ready` event emits with correct payload (userId, conversationId, resumed flag)
 - E2E websocket tests pass
 
 ---
@@ -211,11 +234,17 @@ Handlers receive `ChatContext` instead of threading individual parameters.
 - 28.9.3: Register QuestionnaireReadyService via registry (not hard-coded)
 - 28.9.4: Mode-specific routing (consult/assessment/scoring)
 
+**Architecture Constraints:**
+- Tool registry lives in **infrastructure layer** (not application/domain)
+- Application services (QuestionnaireReadyService) injected via constructor, not via ChatContext
+- ChatContext is for shared state only - **NOT a service locator**
+
 **Acceptance Criteria:**
 - All existing ChatServer tests pass
 - MessageHandler has comprehensive unit tests
 - Tool handlers registered by name, extensible for future tools
 - Mode-specific callbacks work correctly
+- Clean architecture maintained: infrastructure → application (not vice versa)
 
 ---
 
@@ -298,6 +327,8 @@ Handlers receive `ChatContext` instead of threading individual parameters.
 
 ## Reviewer Feedback Incorporated
 
+### Round 1
+
 | Feedback | Resolution |
 |----------|------------|
 | Missing ConnectionHandler phase | Added Phase 4 for connection/auth extraction |
@@ -307,3 +338,12 @@ Handlers receive `ChatContext` instead of threading individual parameters.
 | Missing E2E in verification | Added test:e2e and full test suite to checklist |
 | Hard-coded tool use | Phase 9 implements IToolUseHandler registry pattern |
 | TitleGenerationService hidden | Phase 11 injects it explicitly |
+
+### Round 2
+
+| Feedback | Resolution |
+|----------|------------|
+| ChatContext transport-agnostic | Added architecture constraints: infrastructure-only, IAuthenticatedSocket interface |
+| Naming alignment (StreamingHandler vs MarkdownStreamer) | Renamed to `StreamingHandler.ts` to match implementation-guide.md |
+| ConnectionHandler must preserve room join | Added CRITICAL note: `user:{userId}` room join for DocumentUploadController events |
+| IToolUseHandler registry not a service locator | Added architecture constraints: registry in infrastructure, services via constructor DI |
