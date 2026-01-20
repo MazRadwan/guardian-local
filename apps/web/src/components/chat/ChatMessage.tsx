@@ -207,7 +207,6 @@ export function ChatMessage({
             [&>table]:my-4
             [&>th]:bg-gray-100 [&>th]:p-2 [&>th]:text-left [&>th]:border [&>th]:border-gray-300
             [&>td]:p-2 [&>td]:border [&>td]:border-gray-300
-            [&_strong]:block [&_strong]:mt-4 [&_strong]:first:mt-0
           ">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
