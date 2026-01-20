@@ -139,6 +139,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
 
   /**
    * Stream message from Claude with real-time chunks
+   * Includes retry logic for overloaded errors
    */
   async *streamMessage(
     messages: ClaudeMessage[],
@@ -150,76 +151,111 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
       : undefined;
 
-    try {
-      const stream = await this.client.messages.stream(
-        {
-          model: this.model,
-          max_tokens: this.maxTokens,
-          system,
-          messages: messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
-          // Add tools if provided
-          ...(tools && tools.length > 0 && { tools }),
-        },
-        requestOptions
-      );
+    let lastError: Error | null = null;
 
-      // Track tool use blocks during streaming
-      const toolUseBlocks: ToolUseBlock[] = [];
-      let currentToolUse: Partial<ToolUseBlock> | null = null;
-      let toolInputJson = '';
+    for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
+      try {
+        const stream = await this.client.messages.stream(
+          {
+            model: this.model,
+            max_tokens: this.maxTokens,
+            system,
+            messages: messages.map((msg) => ({
+              role: msg.role,
+              content: msg.content,
+            })),
+            // Add tools if provided
+            ...(tools && tools.length > 0 && { tools }),
+          },
+          requestOptions
+        );
 
-      for await (const event of stream) {
-        if (event.type === 'content_block_start') {
-          if (event.content_block.type === 'tool_use') {
-            // Start tracking a new tool use
-            currentToolUse = {
-              type: 'tool_use',
-              id: event.content_block.id,
-              name: event.content_block.name,
-            };
-            toolInputJson = '';
-          }
-        } else if (event.type === 'content_block_delta') {
-          if (event.delta.type === 'text_delta') {
-            yield {
-              content: event.delta.text,
-              isComplete: false,
-            };
-          } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
-            // Accumulate tool input JSON
-            toolInputJson += event.delta.partial_json;
-          }
-        } else if (event.type === 'content_block_stop') {
-          if (currentToolUse) {
-            // Parse accumulated JSON and complete the tool use block
-            try {
-              currentToolUse.input = JSON.parse(toolInputJson || '{}');
-            } catch {
-              currentToolUse.input = {};
+        // Track tool use blocks during streaming
+        const toolUseBlocks: ToolUseBlock[] = [];
+        let currentToolUse: Partial<ToolUseBlock> | null = null;
+        let toolInputJson = '';
+
+        for await (const event of stream) {
+          if (event.type === 'content_block_start') {
+            if (event.content_block.type === 'tool_use') {
+              // Start tracking a new tool use
+              currentToolUse = {
+                type: 'tool_use',
+                id: event.content_block.id,
+                name: event.content_block.name,
+              };
+              toolInputJson = '';
             }
-            toolUseBlocks.push(currentToolUse as ToolUseBlock);
-            currentToolUse = null;
-            toolInputJson = '';
+          } else if (event.type === 'content_block_delta') {
+            if (event.delta.type === 'text_delta') {
+              yield {
+                content: event.delta.text,
+                isComplete: false,
+              };
+            } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
+              // Accumulate tool input JSON
+              toolInputJson += event.delta.partial_json;
+            }
+          } else if (event.type === 'content_block_stop') {
+            if (currentToolUse) {
+              // Parse accumulated JSON and complete the tool use block
+              try {
+                currentToolUse.input = JSON.parse(toolInputJson || '{}');
+              } catch {
+                currentToolUse.input = {};
+              }
+              toolUseBlocks.push(currentToolUse as ToolUseBlock);
+              currentToolUse = null;
+              toolInputJson = '';
+            }
+          } else if (event.type === 'message_stop') {
+            // Final chunk with any tool uses
+            yield {
+              content: '',
+              isComplete: true,
+              toolUse: toolUseBlocks.length > 0 ? toolUseBlocks : undefined,
+              stopReason: stream.currentMessage?.stop_reason || 'end_turn',
+            };
           }
-        } else if (event.type === 'message_stop') {
-          // Final chunk with any tool uses
-          yield {
-            content: '',
-            isComplete: true,
-            toolUse: toolUseBlocks.length > 0 ? toolUseBlocks : undefined,
-            stopReason: stream.currentMessage?.stop_reason || 'end_turn',
-          };
         }
+
+        // If we get here without error, the stream completed successfully
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        const errorMessage = (error as Error).message || '';
+
+        // Check if this is a retryable error (overloaded, rate limit, etc.)
+        const isRetryable =
+          errorMessage.includes('overloaded') ||
+          errorMessage.includes('rate_limit') ||
+          errorMessage.includes('529') ||
+          errorMessage.includes('503');
+
+        if (!isRetryable) {
+          // Non-retryable error, throw immediately
+          throw new ClaudeAPIError(`Streaming failed: ${errorMessage}`, error as Error);
+        }
+
+        // If this is the last attempt, don't wait
+        if (attempt === this.retryAttempts - 1) {
+          break;
+        }
+
+        // Log retry attempt
+        console.log(
+          `[ClaudeClient] Retryable error (attempt ${attempt + 1}/${this.retryAttempts}): ${errorMessage}. Retrying in ${this.retryDelays[attempt]}ms...`
+        );
+
+        // Wait before retry (exponential backoff)
+        await this.sleep(this.retryDelays[attempt]);
       }
-    } catch (error) {
-      throw new ClaudeAPIError(
-        `Streaming failed: ${(error as Error).message}`,
-        error as Error
-      );
     }
+
+    throw new ClaudeAPIError(
+      `Streaming failed after ${this.retryAttempts} attempts: ${lastError?.message}`,
+      lastError || undefined
+    );
   }
 
   /**
