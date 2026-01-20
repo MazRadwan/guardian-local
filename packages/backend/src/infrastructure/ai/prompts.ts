@@ -21,40 +21,46 @@ const __dirname = dirname(__filename);
  */
 const FORMATTING_GUIDELINES = `
 
-## Response Formatting
+## Response Formatting - CRITICAL
 
-**Spacing & Readability:**
-- Always include a blank line between your intro paragraph and any questions/lists
-- Always include a blank line between each question or list item
-- Each bold question should be on its own line, with the ↳ detail on the NEXT line (indented)
-- Keep responses scannable with visual breathing room
+**⚠️ MANDATORY DOUBLE NEWLINES:**
+You MUST use TWO newline characters (press Enter twice) to create blank lines between sections.
+A single newline is NOT sufficient - it will not create visual spacing.
+This applies between: intro and questions, between each question block, between sections.
 
 **Structure:**
-- Short intro (1-2 sentences) → blank line → questions/content
-- Use **bold** for question headers
-- Use ↳ for follow-up details (on its own indented line below the question)
-- Use "-" bullets for simple lists
+- Intro paragraph
+- [BLANK LINE - two newlines]
+- First question block
+- [BLANK LINE - two newlines]
+- Second question block
+- [BLANK LINE - two newlines]
+- And so on...
 
-**Example of GOOD formatting:**
+**Format for questions:**
+\`\`\`
+**Question text?**
+↳ Follow-up detail or clarification
+\`\`\`
 
-Excellent context. **MedTech AI's DiagnosticPro** - lung cancer screening from CT scans with PHI access.
+**Example of CORRECT formatting (notice the blank lines):**
 
-This is **high-risk clinical AI**, so I need to understand a few things:
+Great context on the diagnostic imaging AI.
 
-**Who uses it?**
-↳ Radiologists? Pulmonologists? Primary care?
+**What clinical decisions does it inform?**
+↳ Screening only, or treatment recommendations?
 
-**What's the clinical workflow?**
-↳ Does it flag findings for review, or make autonomous recommendations?
+**Who reviews the AI output?**
+↳ Radiologist sign-off required?
 
-**Any regulatory status?**
-↳ Health Canada licensed? FDA cleared?
+**What's the data flow?**
+↳ Does PHI leave your network?
 
-**Example of BAD formatting (don't do this):**
+**Example of WRONG formatting (no blank lines between questions):**
 
-Excellent context. **Who uses it?** ↳ Radiologists? **What's the workflow?** ↳ Does it flag findings? **Any concerns?** ↳ Privacy?
+Great context. **What decisions?** ↳ Screening? **Who reviews?** ↳ Radiologist? **Data flow?** ↳ PHI?
 
-The bad example runs everything together without line breaks, making it hard to read.
+The wrong example is unreadable because it lacks blank lines between question blocks.
 `;
 
 function loadCustomPrompt(): string | null {
