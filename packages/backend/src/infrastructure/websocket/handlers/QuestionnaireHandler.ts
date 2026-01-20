@@ -195,7 +195,24 @@ export class QuestionnaireHandler {
       await this.conversationService.sendMessage({
         conversationId,
         role: 'assistant',
-        content: { text: result.markdown },
+        content: {
+          text: result.markdown,
+          // Persist a durable download bubble as part of message history.
+          // This mirrors scoring_result persistence and ensures download buttons survive:
+          // - page reloads
+          // - conversation switching
+          // - future sessions on another device/browser (history is DB-backed)
+          components: [
+            {
+              type: 'download' as const,
+              data: {
+                assessmentId: result.assessmentId,
+                questionCount: result.schema.metadata.questionCount,
+                formats: ['pdf', 'word', 'excel'],
+              },
+            },
+          ],
+        },
       });
 
       // Phase 3: Persistence complete

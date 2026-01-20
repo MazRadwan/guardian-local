@@ -599,7 +599,19 @@ describe('QuestionnaireHandler', () => {
         expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
           conversationId: 'conv-1',
           role: 'assistant',
-          content: { text: '# Test Questionnaire\n\n1. Question one' },
+          content: {
+            text: '# Test Questionnaire\n\n1. Question one',
+            components: [
+              {
+                type: 'download',
+                data: {
+                  assessmentId: result.assessmentId,
+                  questionCount: result.schema.metadata.questionCount,
+                  formats: ['pdf', 'word', 'excel'],
+                },
+              },
+            ],
+          },
         });
       });
 
