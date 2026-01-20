@@ -536,6 +536,15 @@ export const useChatStore = create<ChatState>()(
         }),
 
       setActiveConversation: (id) => {
+        // BUGFIX: Make idempotent - only clear state if conversation is actually changing
+        // This prevents wiping rehydrated questionnaire state when WebSocket events
+        // call setActiveConversation with the same ID after rehydration
+        const currentId = get().activeConversationId;
+        if (currentId === id) {
+          console.log('[chatStore] setActiveConversation called with same ID, skipping clear');
+          return;
+        }
+
         set({ activeConversationId: id });
         // Clear via action (DRY - uses same logic, enables future analytics)
         get().clearPendingQuestionnaire();
