@@ -712,8 +712,6 @@ export function useWebSocketEvents({
         id: `scoring-error-${Date.now()}`,
         role: 'assistant',
         content: `⚠️ **Scoring Error**\n\n${userMessage}`,
-        conversationId: data.conversationId,
-        createdAt: new Date().toISOString(),
       });
 
       // Re-focus composer so user can try again
