@@ -20,6 +20,7 @@ import {
   ToolUseContext,
 } from '../interfaces/IToolUseHandler.js';
 import { ConversationService } from './ConversationService.js';
+import { isValidVendorName } from '../../utils/sanitize.js';
 
 /**
  * Input schema for questionnaire_ready tool
@@ -67,6 +68,8 @@ export class QuestionnaireReadyService implements IToolUseHandler {
    * Validate vendor/solution name - rejects invalid values like numeric-only, single chars, etc.
    * Story 26.2 fix: Prevent bad tool input like "1" from becoming "Assessment: 1"
    *
+   * Uses shared validation from utils/sanitize (Story 28.1.4 consolidation).
+   *
    * Invalid values:
    * - Numeric-only strings ("1", "123")
    * - Single character strings
@@ -79,21 +82,9 @@ export class QuestionnaireReadyService implements IToolUseHandler {
     const sanitized = this.sanitizeString(value);
     if (!sanitized) return null;
 
-    // Reject numeric-only values
-    if (/^\d+$/.test(sanitized)) {
-      console.log(`[QuestionnaireReadyService] Rejecting numeric-only vendor name: "${sanitized}"`);
-      return null;
-    }
-
-    // Reject single character values
-    if (sanitized.length < 2) {
-      console.log(`[QuestionnaireReadyService] Rejecting too-short vendor name: "${sanitized}"`);
-      return null;
-    }
-
-    // Reject assessment option tokens (option1, choice_a, etc.)
-    if (/^(option|choice|select|item|answer)[_\-]?\d*[a-z]?$/i.test(sanitized)) {
-      console.log(`[QuestionnaireReadyService] Rejecting option token vendor name: "${sanitized}"`);
+    // Use shared validation from utils/sanitize
+    if (!isValidVendorName(sanitized)) {
+      console.log(`[QuestionnaireReadyService] Rejecting invalid vendor name: "${sanitized}"`);
       return null;
     }
 

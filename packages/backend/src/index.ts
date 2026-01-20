@@ -68,6 +68,7 @@ import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidato
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 import { TextExtractionService } from './infrastructure/extraction/TextExtractionService.js';
 import { VendorValidationService } from './application/services/VendorValidationService.js';
+import { TitleGenerationService } from './application/services/TitleGenerationService.js';
 import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativePromptBuilder.js';
 import { ExportNarrativeGenerator } from './infrastructure/ai/ExportNarrativeGenerator.js';
 import { DrizzleTransactionRunner } from './infrastructure/database/DrizzleTransactionRunner.js';
@@ -187,6 +188,9 @@ const textExtractionService = new TextExtractionService();
 // Epic 18.4: Initialize vendor validation service
 const vendorValidationService = new VendorValidationService(fileRepo);
 
+// Story 28.11.1: Initialize TitleGenerationService for LLM-based title generation
+const titleGenerationService = new TitleGenerationService(ANTHROPIC_API_KEY);
+
 // Initialize scoring components (Epic 15, Epic 20: added transactionRunner, Epic 22: added conversationRepo)
 const scoringPromptBuilder = new ScoringPromptBuilder();
 const scoringPayloadValidator = new ScoringPayloadValidator();
@@ -259,7 +263,8 @@ const chatServer = new ChatServer(
   fileStorage,              // Epic 18: Context injection fallback
   textExtractionService,    // Epic 18: Context injection fallback
   documentParserService,    // Epic 18: Background enrichment (implements IIntakeDocumentParser)
-  vendorValidationService   // Epic 18.4: Vendor validation for multi-vendor clarification
+  vendorValidationService,  // Epic 18.4: Vendor validation for multi-vendor clarification
+  titleGenerationService    // Story 28.11.1: LLM-based title generation
 );
 
 console.log('[App] ChatServer initialized');

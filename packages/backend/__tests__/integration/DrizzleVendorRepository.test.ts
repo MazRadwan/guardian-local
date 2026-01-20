@@ -2,6 +2,7 @@
  * Integration tests for DrizzleVendorRepository
  */
 
+import { sql } from 'drizzle-orm'
 import { db } from '../../src/infrastructure/database/client'
 import { vendors } from '../../src/infrastructure/database/schema/vendors'
 import { DrizzleVendorRepository } from '../../src/infrastructure/database/repositories/DrizzleVendorRepository'
@@ -15,8 +16,8 @@ describe('DrizzleVendorRepository Integration Tests', () => {
   })
 
   afterEach(async () => {
-    // Clean up test data after each test
-    await db.delete(vendors)
+    // Clean up test data after each test - use CASCADE to handle FK constraints
+    await db.execute(sql`TRUNCATE TABLE vendors CASCADE`)
   })
 
   describe('create()', () => {
