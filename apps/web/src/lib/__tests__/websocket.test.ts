@@ -50,11 +50,13 @@ describe('WebSocketClient', () => {
       await client.connect();
 
       expect(mockIo).toHaveBeenCalledWith(
-        'http://localhost:8000',
+        'http://localhost:8000/chat',
         expect.objectContaining({
-          auth: { token: 'test-token' },
+          auth: { token: 'test-token', conversationId: undefined },
           transports: ['websocket', 'polling'],
           reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
         })
       );
     });

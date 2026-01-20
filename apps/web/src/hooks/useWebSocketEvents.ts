@@ -464,6 +464,13 @@ export function useWebSocketEvents({
       // NOTE: Legacy injection removed - QuestionnairePromptCard handles download UI
       useChatStore.getState().setQuestionnaireUIState('download');
       useChatStore.getState().setGenerating(false);
+
+      // IMPORTANT: On session resume, there is no questionnaire streaming happening,
+      // so we must bypass the "wait for stream complete" gate (Story 14.1.5) or the
+      // download buttons will stay hidden forever.
+      if (data.resumed) {
+        useChatStore.getState().setQuestionnaireStreamComplete(true);
+      }
     },
     [activeConversationId, setExportReady, persistence]
   );

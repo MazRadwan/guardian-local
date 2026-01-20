@@ -860,6 +860,24 @@ describe('useWebSocketEvents', () => {
         // Should stay at 3, not mark complete
         expect(useChatStore.getState().currentGenerationStep).toBe(3);
       });
+
+      it('should set questionnaire stream complete when export_ready is from resume', () => {
+        useChatStore.setState({ isQuestionnaireStreamComplete: false });
+        const { result } = renderHook(() => useWebSocketEvents({
+          ...defaultParams,
+          activeConversationId: 'conv-1',
+        }));
+
+        result.current.handleExportReady({
+          conversationId: 'conv-1',
+          formats: ['pdf', 'word', 'excel'],
+          assessmentId: 'test-123',
+          questionCount: 50,
+          resumed: true,
+        });
+
+        expect(useChatStore.getState().isQuestionnaireStreamComplete).toBe(true);
+      });
     });
 
     describe('error handling', () => {

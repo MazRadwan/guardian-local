@@ -48,7 +48,7 @@ describe('useWebSocket', () => {
 
     await waitFor(() => {
       expect(require('socket.io-client').io).toHaveBeenCalledWith(
-        mockUrl,
+        `${mockUrl}/chat`,
         expect.objectContaining({
           transports: ['websocket', 'polling'],
         })

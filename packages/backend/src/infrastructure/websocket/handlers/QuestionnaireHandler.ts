@@ -57,6 +57,11 @@ export interface ExportReadyPayload {
   assessmentId: string;
   questionCount: number;
   formats: string[];
+  /**
+   * True when export_ready is emitted as a session-resume response to get_export_status.
+   * This allows the frontend to bypass stream-order gating (no active streaming on resume).
+   */
+  resumed?: boolean;
 }
 
 /**
@@ -418,6 +423,7 @@ export class QuestionnaireHandler {
         assessmentId: assessment.id,
         questionCount,
         formats: ['word', 'pdf', 'excel'],
+        resumed: true,
       } as ExportReadyPayload);
 
       console.log(`[QuestionnaireHandler] Export status ready:`, {

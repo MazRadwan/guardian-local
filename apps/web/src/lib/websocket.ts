@@ -80,6 +80,11 @@ export interface ExportReadyPayload {
   assessmentId: string;
   formats: Array<'pdf' | 'word' | 'excel'>;
   questionCount: number;
+  /**
+   * True when export_ready is emitted as a session-resume response to get_export_status.
+   * Used to bypass stream gating on the frontend (no active questionnaire streaming).
+   */
+  resumed?: boolean;
 }
 
 export interface ExtractionFailedPayload {

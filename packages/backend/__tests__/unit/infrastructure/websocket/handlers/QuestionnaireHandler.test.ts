@@ -891,6 +891,7 @@ describe('QuestionnaireHandler', () => {
           assessmentId: 'assess-123',
           questionCount: 42,
           formats: ['word', 'pdf', 'excel'],
+          resumed: true,
         });
       });
 
