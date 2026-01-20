@@ -34,8 +34,32 @@ flowchart TB
   end
 
   subgraph Backend["Backend (Express 5 + Socket.IO)"]
-    ChatServer["ChatServer (/chat namespace)"]
+    ChatServer["ChatServer (orchestrator)"]
     RateLimiter["RateLimiter"]
+
+    subgraph Handlers["WebSocket Handlers"]
+      ConnectionHandler["ConnectionHandler"]
+      ConversationHandler["ConversationHandler"]
+      MessageHandler["MessageHandler"]
+      ModeSwitchHandler["ModeSwitchHandler"]
+      QuestionnaireHandler["QuestionnaireHandler"]
+      ScoringHandler["ScoringHandler"]
+    end
+
+    subgraph ModeStrategies["Mode Strategies"]
+      AssessmentModeStrategy["AssessmentModeStrategy"]
+      ConsultModeStrategy["ConsultModeStrategy"]
+      ScoringModeStrategy["ScoringModeStrategy"]
+    end
+
+    subgraph ContextBuilders["Context Builders"]
+      ConversationContextBuilder["ConversationContextBuilder"]
+      FileContextBuilder["FileContextBuilder"]
+    end
+
+    StreamingHandler["StreamingHandler"]
+    ToolUseRegistry["ToolUseRegistry"]
+
     HttpRoutes["HTTP routes:\n/api/auth\n/api/vendors\n/api/assessments\n/api/questions\n/api/assessments/:id/export/{pdf|word|excel}"]
     Controllers["Auth / Vendor / Assessment /\nQuestion / Export Controllers"]
   end
@@ -88,6 +112,7 @@ flowchart TB
     ClaudeAPI["Anthropic Claude API"]
   end
 
+  %% Presentation to Hooks
   ChatInterface --> useChatController
   Sidebar --> useChatController
   MessageList --> chatStore
@@ -98,6 +123,7 @@ flowchart TB
   ScoringResultCard --> chatStore
   ProgressMessage --> chatStore
 
+  %% Hooks internal connections
   useChatController --> ChatServiceFE
   useChatController --> ConversationServiceFE
   useChatController --> useWebSocketAdapter
@@ -109,20 +135,53 @@ flowchart TB
   useChatController --> chatStore
   useScoringProgress --> chatStore
 
+  %% Hooks to WebSocket
   ChatServiceFE --> useWebSocketAdapter
   ConversationServiceFE --> useWebSocketAdapter
   useWebSocketAdapter --> WSClient
   WSClient --> ClientEvents
   WSClient --> ServerEvents
 
+  %% WebSocket to Backend
   ClientEvents --> ChatServer
   ChatServer --> ServerEvents
   ChatServer --> RateLimiter
-  ChatServer --> ConversationService
-  ChatServer --> QuestionnaireReadyService
-  ChatServer --> QuestionnaireGenerationService
+
+  %% ChatServer to Handlers (Epic 28 modular architecture)
+  ChatServer --> ConnectionHandler
+  ChatServer --> ConversationHandler
+  ChatServer --> MessageHandler
+  ChatServer --> ModeSwitchHandler
+  ChatServer --> QuestionnaireHandler
+  ChatServer --> ScoringHandler
+
+  %% Handlers use Mode Strategies
+  MessageHandler --> AssessmentModeStrategy
+  MessageHandler --> ConsultModeStrategy
+  MessageHandler --> ScoringModeStrategy
+
+  %% Handlers use Context Builders
+  MessageHandler --> ConversationContextBuilder
+  MessageHandler --> FileContextBuilder
+
+  %% Handlers use Utilities
+  MessageHandler --> StreamingHandler
+  ScoringHandler --> StreamingHandler
+  MessageHandler --> ToolUseRegistry
+
+  %% Handlers to Services
+  ConnectionHandler --> ConversationService
+  ConversationHandler --> ConversationService
+  MessageHandler --> ConversationService
+  QuestionnaireHandler --> QuestionnaireReadyService
+  QuestionnaireHandler --> QuestionnaireGenerationService
+  ScoringHandler --> ScoringService
+
+  %% ChatServer to AI
   ChatServer --> PromptCacheManager
   PromptCacheManager --> ClaudeClient
+
+  %% HTTP Routes
   ChatServer --> HttpRoutes
   HttpRoutes --> Controllers
   Controllers --> AuthService
@@ -131,6 +190,7 @@ flowchart TB
   Controllers --> QuestionService
   Controllers --> ExportService
 
+  %% Services to Data/AI
   AuthService --> JWTProvider
   ConversationService --> ConversationRepo --> Tables
   ConversationService --> MessageRepo --> Tables

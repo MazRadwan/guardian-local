@@ -2,11 +2,11 @@
 # Maps diagram nodes to actual code paths for validation
 # Used by diagram-updater-agent
 #
-# VALIDATED: 2026-01-17 - Paths verified against actual codebase
-# UPDATED: 2026-01-17 - Added 9 new components to not_in_diagram tracking
+# VALIDATED: 2026-01-20 - Paths verified against actual codebase
+# UPDATED: 2026-01-20 - Added Epic 28 ChatServer modular architecture (handlers, mode strategies, context builders)
 
 diagram: architecture-latest.mmd
-last_verified: "2026-01-17"
+last_verified: "2026-01-20"
 
 # Subgraph to directory mappings
 subgraphs:
@@ -231,6 +231,101 @@ nodes:
     validation_strategy: directory
     status: EXISTS
     note: "AuthController, AssessmentController, VendorController, ExportController, etc."
+
+  # === Backend Layer - WebSocket Handlers (Epic 28) ===
+  ConnectionHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/ConnectionHandler.ts"]
+    exports: ["ConnectionHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Handles socket connection, authentication, and connection_ready events"
+
+  ConversationHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/ConversationHandler.ts"]
+    exports: ["ConversationHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Handles conversation CRUD: create, list, delete, title generation"
+
+  MessageHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts"]
+    exports: ["MessageHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Core message processing, streaming, tool use orchestration"
+
+  ModeSwitchHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeSwitchHandler.ts"]
+    exports: ["ModeSwitchHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Handles mode switching between consult, assessment, scoring"
+
+  QuestionnaireHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts"]
+    exports: ["QuestionnaireHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Questionnaire generation, export status, export_ready events"
+
+  ScoringHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/ScoringHandler.ts"]
+    exports: ["ScoringHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Scoring workflow, vendor clarifications, scoring progress"
+
+  # === Backend Layer - Mode Strategies (Epic 28) ===
+  AssessmentModeStrategy:
+    paths: ["packages/backend/src/infrastructure/websocket/modes/AssessmentModeStrategy.ts"]
+    exports: ["AssessmentModeStrategy"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Implements IModeStrategy for assessment mode context building"
+
+  ConsultModeStrategy:
+    paths: ["packages/backend/src/infrastructure/websocket/modes/ConsultModeStrategy.ts"]
+    exports: ["ConsultModeStrategy"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Implements IModeStrategy for consult mode context building"
+
+  ScoringModeStrategy:
+    paths: ["packages/backend/src/infrastructure/websocket/modes/ScoringModeStrategy.ts"]
+    exports: ["ScoringModeStrategy"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Implements IModeStrategy for scoring mode context building"
+
+  # === Backend Layer - Context Builders (Epic 28) ===
+  ConversationContextBuilder:
+    paths: ["packages/backend/src/infrastructure/websocket/context/ConversationContextBuilder.ts"]
+    exports: ["ConversationContextBuilder"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Builds conversation context for Claude API calls"
+
+  FileContextBuilder:
+    paths: ["packages/backend/src/infrastructure/websocket/context/FileContextBuilder.ts"]
+    exports: ["FileContextBuilder"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Builds file/attachment context for Claude API calls"
+
+  # === Backend Layer - Utilities (Epic 28) ===
+  StreamingHandler:
+    paths: ["packages/backend/src/infrastructure/websocket/StreamingHandler.ts"]
+    exports: ["StreamingHandler"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Handles streaming responses from Claude to client"
+
+  ToolUseRegistry:
+    paths: ["packages/backend/src/infrastructure/websocket/ToolUseRegistry.ts"]
+    exports: ["ToolUseRegistry"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Tracks tool use blocks during Claude streaming responses"
 
   # === Services Layer ===
   AuthService:

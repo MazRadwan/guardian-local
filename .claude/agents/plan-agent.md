@@ -170,11 +170,35 @@ Existing tests that may need updates or could break:
 - [ ] [Specific test to write]
 - [ ] [Specific test to write]
 
+## QA Verification (Frontend Stories Only)
+
+**REQUIRED for all frontend stories with UI changes.**
+
+**Route:** `/path/to/page`
+**Wait For:** `[data-testid="main-element"]` (element that indicates page is loaded)
+
+**Steps:**
+1. action: verify_exists, selector: `[data-testid="feature-element"]`
+2. action: click, selector: `[data-testid="action-button"]`
+3. action: verify_text, selector: `.result-text`, expected: "Expected result"
+4. action: verify_not_exists, selector: `[data-testid="error-message"]`
+
+**Available Actions:**
+- `verify_exists` - Element should be present
+- `verify_not_exists` - Element should NOT be present
+- `verify_text` - Element text should contain expected string
+- `click` - Click on element
+- `fill` - Fill input with value (add `value: "text"`)
+- `hover` - Hover over element
+
+**Screenshot:** `qa-{story.id}.png` (auto-captured after all steps)
+
 ## Definition of Done
 - [ ] All acceptance criteria met
 - [ ] Tests written and passing
 - [ ] No TypeScript errors
 - [ ] No lint errors
+- [ ] Browser QA passed (frontend stories)
 ```
 
 ## Planning Process
@@ -290,6 +314,7 @@ Before completing:
 - [ ] Every story has Tests Affected section (existing tests that may break)
 - [ ] Every story has agent assignment
 - [ ] Every story has required tests listed
+- [ ] **Every frontend story has QA Verification section**
 - [ ] No story is too large (5+ unrelated files)
 - [ ] Sprint dependencies are documented
 - [ ] **Sprint overview has Dependency Graph with File Overlap Analysis**

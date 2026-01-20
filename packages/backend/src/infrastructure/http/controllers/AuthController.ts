@@ -87,12 +87,13 @@ export class AuthController {
   }
 
   /**
-   * Dev mode quick login (development only)
+   * Dev mode quick login (development or when explicitly enabled)
    * POST /api/auth/dev-login
    */
   devLogin = async (req: Request, res: Response): Promise<void> => {
-    // Only allow in development
-    if (process.env.NODE_ENV !== 'development') {
+    // Only allow in development or when explicitly enabled
+    const devLoginEnabled = process.env.NODE_ENV === 'development' || process.env.ENABLE_DEV_LOGIN === 'true'
+    if (!devLoginEnabled) {
       res.status(404).json({
         success: false,
         error: 'Not found',

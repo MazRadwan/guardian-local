@@ -1,26 +1,36 @@
 ---
 name: spec-design
-description: Planning phase - create sprint/story specs with batched GPT deep review. Use for Opus-GPT workflow epic planning with plan-agent and GPT-5.2 validation.
+description: Opus-GPT planning phase - create sprint/story specs with GPT deep review loops. Use for Opus-GPT workflow epic planning with plan-agent and GPT-5.2 validation.
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Task, WebFetch
+model: opus
 ---
 
-# Spec Design - Planning Phase
+# Spec Design - Opus-GPT Planning Phase
 
 You are starting the **planning phase** of the Opus-GPT automated workflow.
 
+**CRITICAL:** This skill runs in the main conversation context so you CAN spawn subagents via the Task tool.
+
 ## Your Task
 
-Create detailed sprint and story specifications with **batched GPT deep analysis** (every 2 sprints to reduce API calls).
+Create detailed sprint and story specifications with **per-sprint GPT deep review loops** until each sprint is approved.
+
+---
 
 ## Step 1: Gather Context
 
 Ask user for:
+
 1. **Epic number:** Which epic to plan?
 2. **Goals document:** Location of epic goals (e.g., `tasks/epic-19/epic-19-goals.md`)
 3. **Scope:** Full epic, single sprint, or specific stories?
+4. **Custom GPT review prompt:** (Enter for default)
+
+---
 
 ## Step 2: Initialize State
 
-**First, check for existing state and workflow compatibility:**
+**CRITICAL:** Include `workflow` field for compatibility checking.
 
 ```python
 state_path = f"/tasks/epic-{N}/.orchestrator-state.json"
@@ -42,15 +52,38 @@ if existing_state:
 
         Cannot proceed with mismatched workflow.
         """)
-        return  # Exit command
+        return
     else:
         # Same workflow - resume from existing state
         log(f"Resuming opus-gpt workflow from phase: {existing_state['phase']}")
         state = existing_state
 else:
-    # No existing state - create new
-    state = create_new_state()
+    # Create new state
+    state = {
+        "workflow": "opus-gpt",
+        "workflowVersion": "1.0.0",
+        "epic": N,
+        "scope": scope,
+        "phase": "planning",
+        "status": "started",
+        "currentSprint": 0,
+        "totalSprints": 0,
+        "approvedSprints": [],
+        "codex": {
+            "roundCount": 0,
+            "lastResponse": "",
+            "mode": "bash"
+        },
+        "reviewRounds": {
+            "specPerSprint": {},
+            "specFinalPass": 0
+        },
+        "startedAt": now_iso()
+    }
+    write_json(state_path, state)
 ```
+
+---
 
 ## Step 3: Invoke Plan Agent
 
@@ -63,187 +96,421 @@ Task(
     Goals: {goals document path}
     Scope: {scope}
 
-    Requirements:
-    - Each story must have 'Files Touched' section (critical for parallelization)
-    - Each story must have agent assignment (frontend-agent or backend-agent)
-    - Each story must have testable acceptance criteria
+    REQUIREMENTS (CRITICAL):
+    1. Each story MUST have 'Files Touched' section (enables parallelization)
+    2. Each story MUST have agent assignment (frontend-agent or backend-agent)
+    3. Each story MUST have testable acceptance criteria
+    4. Each story MUST have 'Tests Required' section
+    5. Each story MUST have 'Tests Affected' section (existing tests that may break)
+    6. Each frontend story with UI changes MUST have 'QA Verification' section
+
+    PARALLEL PLANNING (CRITICAL):
+    7. Sprint overview MUST have 'Dependency Graph' with File Overlap Analysis
+    8. Sprint overview MUST have 'Parallel Execution Strategy' with Phases
+    9. Stories in same phase must NOT touch same files
 
     Output files to /tasks/epic-{N}/"
 )
 ```
 
-## Step 4: Batched Sprint GPT Deep Review
+---
 
-**RATE LIMIT OPTIMIZATION:** Review every 2 sprints together to reduce API calls (~42% reduction).
+## Step 4: GPT Sprint Spec Review Loop (MANDATORY)
 
-### Flow
+**For each sprint, run the Opus↔GPT review loop until approval:**
 
+```python
+MAX_REVIEW_ROUNDS = 7
+
+for sprint_id in sprints:
+    review_round = 0
+    approved = False
+
+    state.currentSprint = sprint_id
+    save_state()
+
+    log(f"📋 Starting review for Sprint {sprint_id}")
+
+    while not approved and review_round < MAX_REVIEW_ROUNDS:
+        review_round += 1
+        state.reviewRounds.specPerSprint[sprint_id] = review_round
+        save_state()
+
+        log(f"🤖 GPT Review Round {review_round} for Sprint {sprint_id}")
+
+        # 1. Read sprint spec content
+        sprint_content = read_sprint_spec(sprint_id)
+        stories_content = read_sprint_stories(sprint_id)
+
+        # 2. Invoke GPT via Codex CLI
+        gpt_response = invoke_codex_review(
+            type="sprint_spec",
+            sprint_id=sprint_id,
+            content={
+                "sprint_overview": sprint_content,
+                "stories": stories_content
+            }
+        )
+
+        # 3. Parse response
+        status = parse_status(gpt_response)  # "APPROVED" or "NEEDS_REVISION"
+        confidence = parse_confidence(gpt_response)  # 0.0 - 1.0
+        findings = parse_findings(gpt_response) if status == "NEEDS_REVISION" else []
+
+        # 4. Log to .review-log.md
+        append_review_log(f"sprint_{sprint_id}_spec", review_round, gpt_response)
+
+        # 5. Handle result
+        if status == "APPROVED" and confidence >= 0.5:
+            log(f"✅ Sprint {sprint_id} spec APPROVED (round {review_round}, confidence {confidence})")
+            state.approvedSprints.append(sprint_id)
+            approved = True
+            break
+
+        elif status == "APPROVED" and confidence < 0.5:
+            log(f"⚠️ Low confidence approval ({confidence}) - requiring re-review")
+            # Continue loop
+
+        elif status == "NEEDS_REVISION":
+            log(f"📝 Sprint {sprint_id} spec needs revision (round {review_round})")
+
+            for finding in findings:
+                severity = finding.severity  # CRITICAL, HIGH, MEDIUM, LOW
+                file_affected = finding.file or "sprint overview"
+
+                if opus_agrees_with_finding(finding):
+                    # Apply fix to spec
+                    apply_spec_fix(sprint_id, finding)
+                    log(f"  ✓ Fixed ({severity}) in {file_affected}: {finding.summary}")
+                else:
+                    # Create pushback response for next round
+                    pushback = create_pushback_response(finding)
+                    log(f"  ↩ Pushback ({severity}): {finding.summary}")
+                    log(f"    Reasoning: {pushback.reasoning}")
+
+            save_state()
+            # Continue loop for re-review...
+
+    # After loop exits
+    if not approved:
+        log(f"⚠️ Max review rounds ({MAX_REVIEW_ROUNDS}) reached for Sprint {sprint_id}")
+        log("GPT has final say - applying all remaining recommendations")
+        apply_all_remaining_gpt_recommendations(sprint_id)
+        state.approvedSprints.append(sprint_id)
+
+    output(f"<promise>SPRINT_SPEC_APPROVED</promise>")
+    save_state()
 ```
-For sprint batches (every 2 sprints):
-    │
-    ├── Send sprints 1-2 specs to GPT with Deep Analysis Prompt
-    │
-    ├── Re-review loop until GPT approves
-    │
-    ├── Output: <promise>SPRINT_BATCH_APPROVED</promise>
-    │
-    ├── Send sprints 3-4 specs to GPT (if applicable)
-    │
-    └── Continue until all sprint batches approved
+
+---
+
+## Step 5: Spec Final Pass (Holistic Review)
+
+**After all sprints individually approved**, run holistic cross-sprint review:
+
+```python
+state.phase = "spec_final_pass"
+save_state()
+
+log("🔍 Running Spec Final Pass (holistic review)...")
+
+# Gather all approved sprint summaries
+all_sprints_content = gather_all_sprint_summaries()
+
+# GPT holistic review
+gpt_response = invoke_codex_review(
+    type="spec_final_pass",
+    content=all_sprints_content,
+    focus=[
+        "cross-sprint dependencies",
+        "file conflicts across sprints",
+        "architectural consistency",
+        "scope coverage vs goals",
+        "integration risks",
+        "missing gaps"
+    ]
+)
+
+# Same review loop pattern
+review_round = 0
+approved = False
+
+while not approved and review_round < MAX_REVIEW_ROUNDS:
+    review_round += 1
+    state.reviewRounds.specFinalPass = review_round
+    save_state()
+
+    status = parse_status(gpt_response)
+    confidence = parse_confidence(gpt_response)
+    findings = parse_findings(gpt_response)
+
+    append_review_log("spec_final_pass", review_round, gpt_response)
+
+    if status == "APPROVED" and confidence >= 0.5:
+        log(f"✅ Spec Final Pass APPROVED (round {review_round})")
+        approved = True
+        break
+
+    elif status == "NEEDS_REVISION":
+        for finding in findings:
+            if opus_agrees_with_finding(finding):
+                apply_cross_sprint_fix(finding)
+            else:
+                create_pushback_response(finding)
+
+        # Re-invoke GPT for next round
+        gpt_response = invoke_codex_review(
+            type="spec_final_pass_recheck",
+            previous_findings=findings,
+            fixes_applied=get_fixes_applied()
+        )
+
+if not approved:
+    apply_all_remaining_gpt_recommendations("final_pass")
 ```
 
-### Review Schedule
+---
 
-| Total Sprints | Batches | GPT Calls |
-|---------------|---------|-----------|
-| 1-2 | [1-2] | 1 |
-| 3-4 | [1-2], [3-4] | 2 |
-| 5-6 | [1-2], [3-4], [5-6] | 3 |
+## Step 6: Finalize
 
-### GPT Invocation Methods
+```python
+state.phase = "complete"
+state.status = "plan_approved"
+save_state()
 
-**Primary: Codex CLI (recommended)**
+# Commit approved specs
+git_add(f"tasks/epic-{epic}/")
+git_commit(f"spec(epic-{epic}): approved sprint specs")
+
+# Summary
+summary = f"""
+## Planning Complete
+
+**Epic:** {N}
+**Scope:** {scope}
+**Sprints:** {len(state.approvedSprints)}
+**Total Stories:** {count_stories()}
+**GPT Review Rounds:** {sum(state.reviewRounds.specPerSprint.values()) + state.reviewRounds.specFinalPass}
+
+### Sprints Approved
+{format_sprint_list(state.approvedSprints)}
+
+### Artifacts Created
+- Sprint overviews: /tasks/epic-{N}/sprint-*-overview.md
+- Story specs: /tasks/epic-{N}/sprint-*-story-*.md
+- Review log: /tasks/epic-{N}/.review-log.md
+- State: /tasks/epic-{N}/.orchestrator-state.json
+
+Plan is ready. Run `/implement` to begin implementation.
+"""
+
+output(summary)
+output("<promise>PLAN_APPROVED</promise>")
+```
+
+---
+
+## GPT Integration (Codex CLI)
+
+**Primary method - Bash with heredoc:**
 
 ```bash
 # Kill any orphaned codex processes first
 pkill -f "codex.*mcp-server" 2>/dev/null || true
 
 # Use gtimeout on macOS (brew install coreutils)
-gtimeout 300 codex review - <<'EOF'
+RESPONSE=$(gtimeout 300 codex review - <<'EOF'
+CRITICAL: Your response MUST begin with exactly:
+STATUS: APPROVED
+or
+STATUS: NEEDS_REVISION
+
+CONFIDENCE: [0.0-1.0] is REQUIRED at the end.
+
+---
+
 ## TASK
-Review sprint specifications for Epic {epic_id}: {sprint_ids}.
+Review sprint specifications for Epic {epic_id}: Sprint {sprint_id}.
 
 ## EXPECTED OUTCOME
-Identify issues in THESE sprint specs only.
+Identify issues in THIS sprint's specs only.
 Return STATUS: APPROVED or STATUS: NEEDS_REVISION with findings.
 
 ## CONTEXT
-Sprint: {sprint_ids}
+Sprint: {sprint_id}
 Stories: {story_count}
 
+### Sprint Overview
 {sprint_summary}
+
+### Stories
 {story_specs}
 
 ## CONSTRAINTS
 - Clean architecture: domain → application → infrastructure
 - Existing codebase patterns (search to verify)
 - Files Touched sections must be accurate
+- Parallel Execution Strategy must be valid (no file conflicts within phases)
 
-## MUST DO
-- Search the codebase for each file in 'Files Touched' sections
+## MUST DO (DEEP ANALYSIS REQUIRED)
+- Search the codebase for EACH file in 'Files Touched' sections
 - Verify proposed changes don't conflict with existing code
 - Check for missing dependencies or breaking changes
 - Validate technical approach against existing patterns
+- Verify phase groupings have no file conflicts
+- Check that QA Verification sections exist for frontend stories
 
 ## MUST NOT DO
 - Review files not in these specs
 - Flag previously-approved code
 - Nitpick style without substance
+- Approve without actually searching the codebase
+
+## RE-REVIEW & PUSHBACK
+- Re-review cycle continues until STATUS: APPROVED
+- Agent may pushback with reasoning - evaluate objectively
+- After 7 pushback rounds, you have final say
 
 ## OUTPUT FORMAT
+STATUS: APPROVED | STATUS: NEEDS_REVISION
 
-**CRITICAL: Response MUST start with exactly:**
-STATUS: APPROVED
-or
-STATUS: NEEDS_REVISION
+REQUIRED CHANGES (if any):
+1. [Story/Section] — [Change] — Why: [rationale] — Severity: [CRITICAL|HIGH|MEDIUM|LOW]
 
-[If NEEDS_REVISION: findings by severity - CRITICAL, HIGH, MEDIUM, LOW]
+RECOMMENDATIONS (optional):
+- [Improvement] — Why: [benefit]
 
-**CONFIDENCE: [0.0-1.0] is REQUIRED.**
+CONFIDENCE: [0.0-1.0]
 EOF
-```
-
-**Alternative: Codex MCP Tool**
-
-```
-mcp__codex__codex(
-  prompt: "{same prompt as above}",
-  model: "gpt-5.2-codex",
-  sandbox: "read-only"
 )
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo "ERROR: Codex failed with exit code $EXIT_CODE"
+    echo "Response: $RESPONSE"
+fi
 ```
 
-### GPT Error Handling (NO FALLBACK - Clean Exit)
+---
 
-**DO NOT use Opus fallback.** Exit cleanly on GPT errors so user can fix and resume.
+## Error Handling (NO Opus Fallback)
 
-| Error | Action |
-|-------|--------|
-| **401 Unauthorized** | Log "GPT authentication failed. Check OPENAI_API_KEY." → Save state → Exit |
-| **429 Rate Limited** | Retry with exponential backoff (30s, 60s, 120s) → After 3 retries, save state → Exit |
-| **5xx Server Error** | Retry once after 30s → If still failing, save state → Exit |
-| **Timeout (>300s)** | Log "GPT request timed out" → Save state → Exit |
+**CRITICAL:** Do NOT fall back to Opus agents on GPT errors. Clean exit so user can fix and resume.
 
-On exit, save state for resume:
-```json
-{
-  "status": "gpt_error",
-  "errorType": "rate_limited",
-  "errorAt": "2026-01-19T16:17:21Z",
-  "resumeFrom": "sprint_batch_1_2_review",
-  "retryCount": 3
-}
+```python
+def handle_gpt_error(error, error_code):
+    if "rate_limit" in error or error_code == 429:
+        state.status = "gpt_error"
+        state.errorType = "rate_limited"
+        state.errorAt = now()
+        state.resumeFrom = f"sprint_{current_sprint}_spec_review"
+        save_state()
+
+        log("""
+        ⚠️ GPT Rate Limited
+
+        State saved. To resume:
+        1. Wait for rate limit to reset
+        2. Run: /spec-design
+        """)
+        exit()
+
+    elif error_code == 401:
+        state.status = "gpt_error"
+        state.errorType = "auth_failed"
+        save_state()
+
+        log("❌ GPT authentication failed. Check OPENAI_API_KEY.")
+        exit()
+
+    elif error_code >= 500:
+        # Retry once
+        if state.retryCount < 1:
+            state.retryCount += 1
+            save_state()
+            sleep(30)
+            return "retry"
+
+        state.status = "gpt_error"
+        state.errorType = "server_error"
+        save_state()
+        log("❌ GPT server error. Try again later.")
+        exit()
 ```
 
-Resume with: `/spec-design` (will detect state and resume)
+---
 
-### Handle Review Response
+## Story Template Requirements
 
-For each sprint:
-1. If GPT has CRITICAL/HIGH issues → make changes → re-submit for review
-2. If Opus disagrees → pushback loop (max 7 retries, GPT final say)
-3. Continue until GPT approves with no CRITICAL/HIGH items
-4. Log to `.review-log.md`
-5. Add sprint to `approvedSprints`
-6. Output `<promise>SPRINT_SPEC_APPROVED</promise>`
-7. Move to next sprint
+**Each story MUST include these sections:**
 
-## Step 5: Spec Final Pass
+```markdown
+# Story {epic}.{sprint}.{story}: [Title]
 
-**After all sprints individually approved**, do a holistic review.
+## Description
+[What and why]
 
-Focus on:
-1. **Cross-sprint dependencies:** Are they correctly ordered?
-2. **File conflicts across sprints:** Do later sprints assume earlier changes?
-3. **Architectural consistency:** Does the sum align with clean architecture?
-4. **Scope creep:** Does the total scope match the original goals?
-5. **Integration risks:** Will these pieces work together?
-6. **Missing gaps:** Anything implied by goals but not covered?
+## Acceptance Criteria
+- [ ] [Testable criterion 1]
+- [ ] [Testable criterion 2]
 
-## Step 6: Finalize
+## Technical Approach
+[How to implement]
 
-Once spec final pass approved:
-1. Update state: `phase: "complete"`, `status: "plan_approved"`
-2. Write to `.review-log.md`
-3. **Commit approved specs**
-4. Output: `<promise>PLAN_APPROVED</promise>`
+## Files Touched
+- `path/to/file1.ts` - [what changes]
+- `path/to/file2.ts` - [what changes]
 
+## Tests Affected
+Existing tests that may break:
+- `__tests__/path/to/test.ts` - [why affected]
+- None expected (if applicable)
+
+## Agent Assignment
+- [x] frontend-agent OR backend-agent
+
+## Tests Required
+- [ ] [Specific test 1]
+- [ ] [Specific test 2]
+
+## QA Verification (Frontend Stories Only)
+**Route:** `/path/to/page`
+**Wait For:** `[data-testid="element"]`
+
+**Steps:**
+1. action: verify_exists, selector: `[data-testid="feature"]`
+2. action: click, selector: `[data-testid="button"]`
+3. action: verify_text, selector: `.result`, expected: "Expected text"
+
+## Definition of Done
+- [ ] All acceptance criteria met
+- [ ] Tests written and passing
+- [ ] No TypeScript errors
+- [ ] No lint errors
 ```
-## Planning Complete
 
-**Epic:** {N}
-**Scope:** {scope}
-**Sprints:** {list}
-**Stories:** {count}
-
-Plan is ready. Run `/implement` to begin implementation.
-```
+---
 
 ## Important Rules
 
-1. **Review per-sprint** - Don't review entire epic at once
-2. **Deep analysis** - GPT must search codebase, verify files, check conflicts
-3. **Spec final pass is mandatory** - Catches cross-sprint issues
-4. **Always initialize state file first** - Enables resume if interrupted
-5. **Log all GPT exchanges** - Audit trail in .review-log.md
-6. **Respect 7 retry limit** - GPT gets final say after that
-7. **Be specific in plan-agent prompt** - Files Touched is critical
-8. **No Opus fallback** - Clean exit on GPT errors, resume when fixed
+1. **Runs in main context** - Can spawn subagents via Task tool
+2. **Per-sprint review loops** - Each sprint gets MANDATORY Opus↔GPT loop
+3. **Deep analysis required** - GPT must search codebase, verify files
+4. **Spec final pass is mandatory** - Catches cross-sprint issues
+5. **QA sections for frontend** - Every frontend story needs QA Verification
+6. **Parallel planning included** - Plan-agent creates phases upfront
+7. **Log all GPT exchanges** - Audit trail in .review-log.md
+8. **Respect 7 round limit** - GPT gets final say after that
+9. **No Opus fallback** - Clean exit on GPT errors, resume when fixed
+10. **Checkpoint frequently** - Update state after each review round
 
-## Output
+---
 
-When complete, the following should exist:
-- `/tasks/epic-{N}/.orchestrator-state.json` - State with phase: complete
-- `/tasks/epic-{N}/sprint-*.md` - Sprint files
-- `/tasks/epic-{N}/sprint-*-story-*.md` - Story files
-- `/tasks/epic-{N}/.review-log.md` - GPT exchange log
+## Completion Promises
+
+| Promise | Meaning |
+|---------|---------|
+| `SPRINT_SPEC_APPROVED` | Individual sprint spec approved |
+| `PLAN_APPROVED` | All specs approved (after final pass) |
+| `ERROR` | Critical failure, needs user |

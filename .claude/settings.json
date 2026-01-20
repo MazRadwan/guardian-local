@@ -29,6 +29,10 @@
           {
             "type": "command",
             "command": ".claude/hooks/opus-gpt/post-implementation.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/opus-gpt/trigger-gpt-review.sh"
           }
         ]
       }
