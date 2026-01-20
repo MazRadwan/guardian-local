@@ -39,6 +39,7 @@ const mockQuestionRepository = {
 const mockAssessmentService = {
   createAssessment: jest.fn(),
   getAssessment: jest.fn(),
+  updateAssessmentStatus: jest.fn(),
 };
 
 const mockVendorService = {
@@ -103,6 +104,8 @@ describe('QuestionnaireGenerationService', () => {
     mockConversationService.getConversation.mockResolvedValue({ assessmentId: null });
     mockVendorService.findOrCreateDefault.mockResolvedValue({ id: 'vendor-1', name: 'Default Vendor' });
     mockAssessmentService.createAssessment.mockResolvedValue({ assessmentId: 'assessment-123' });
+    mockAssessmentService.getAssessment.mockResolvedValue({ id: 'assessment-123', status: 'draft' });
+    mockAssessmentService.updateAssessmentStatus.mockResolvedValue({ id: 'assessment-123', status: 'questions_generated' });
     mockQuestionRepository.replaceAllForAssessment.mockResolvedValue([]);
     mockConversationService.linkAssessment.mockResolvedValue(undefined);
   });
@@ -126,6 +129,23 @@ describe('QuestionnaireGenerationService', () => {
       expect(result.schema.sections).toEqual(schema.sections);
       expect(result.assessmentId).toBe('assessment-123');
       expect(result.markdown).toContain('# Test Vendor Assessment Questionnaire');
+    });
+
+    it('marks assessment as questions_generated after persisting questions when assessment is draft', async () => {
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+
+      await service.generate({
+        conversationId: 'conv-1',
+        userId: 'user-1',
+        assessmentType: 'comprehensive',
+      });
+
+      expect(mockAssessmentService.getAssessment).toHaveBeenCalledWith('assessment-123');
+      expect(mockAssessmentService.updateAssessmentStatus).toHaveBeenCalledWith(
+        'assessment-123',
+        'questions_generated'
+      );
     });
 
     it('extracts schema from toolUse response (Story 5.3.1)', async () => {

@@ -396,6 +396,20 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
 
     // Atomically replace questions (handles re-generation without duplicate key errors)
     await this.questionRepository.replaceAllForAssessment(assessmentId, questions);
+
+    // CRITICAL: Mark assessment as questions_generated if it's still draft.
+    // Without this, the export endpoints won't promote it to 'exported' (they only
+    // update status when current status is 'questions_generated'), and scoring will
+    // fail with ASSESSMENT_NOT_EXPORTED (status stays 'draft').
+    try {
+      const assessment = await this.assessmentService.getAssessment(assessmentId);
+      if (assessment && assessment.status === 'draft') {
+        await this.assessmentService.updateAssessmentStatus(assessmentId, 'questions_generated');
+      }
+    } catch (error) {
+      // Non-fatal: questions are already persisted. Status can be recovered later.
+      console.warn('[QuestionnaireGenerationService] Failed to update assessment status to questions_generated:', error);
+    }
   }
 
   /**
