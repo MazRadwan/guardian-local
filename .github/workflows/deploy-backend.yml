@@ -1,0 +1,38 @@
+name: Deploy Backend to AWS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/backend/**'
+      - 'packages/shared/**'
+      - 'pnpm-lock.yaml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 16.54.72.26
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/guardian-app
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Installing dependencies..."
+            pnpm install --frozen-lockfile
+
+            echo "Restarting backend..."
+            pm2 restart guardian-backend
+
+            echo "Checking status..."
+            pm2 status
+
+            echo "Deployment complete!"
