@@ -174,7 +174,9 @@ export interface IAuthenticatedSocket {
   - `intake_context_ready` events
   - `scoring_parse_ready` events
 - `connection_ready` event emits with correct payload (userId, conversationId, resumed flag)
-- E2E websocket tests pass
+- **Integration tests pass:**
+  - `__tests__/integration/attachment-flow.test.ts`
+  - `__tests__/e2e/websocket-chat.test.ts`
 
 ---
 
@@ -270,11 +272,18 @@ export interface IAuthenticatedSocket {
 - 28.11.4: Preserve public API (emitToConversation, streamMessage)
 - 28.11.5: Update index.ts to wire TitleGenerationService
 
+**Architecture Constraints (Preserved from Earlier Phases):**
+- ChatContext is infrastructure-only, no Socket.IO leakage to application/domain
+- Handlers receive `IAuthenticatedSocket` interface, not concrete Socket type
+- Tool registry in infrastructure layer, services via constructor DI (not service locator)
+- `user:{userId}` room join preserved for DocumentUploadController integration
+
 **Acceptance Criteria:**
-- ChatServer is a thin orchestrator
-- All dependencies injected (no hidden instantiation)
+- ChatServer is a thin orchestrator (~200 lines)
+- All dependencies explicitly injected (no hidden instantiation)
 - All integration points work
-- Full test suite passes
+- Full test suite passes (unit, integration, E2E)
+- Architecture constraints verified in code review
 
 ---
 
@@ -347,3 +356,10 @@ export interface IAuthenticatedSocket {
 | Naming alignment (StreamingHandler vs MarkdownStreamer) | Renamed to `StreamingHandler.ts` to match implementation-guide.md |
 | ConnectionHandler must preserve room join | Added CRITICAL note: `user:{userId}` room join for DocumentUploadController events |
 | IToolUseHandler registry not a service locator | Added architecture constraints: registry in infrastructure, services via constructor DI |
+
+### Round 3
+
+| Feedback | Resolution |
+|----------|------------|
+| Name specific integration tests for Phase 4 | Added `attachment-flow.test.ts` and `websocket-chat.test.ts` to acceptance criteria |
+| Mirror architecture constraints in final phase | Added "Architecture Constraints (Preserved from Earlier Phases)" section to Phase 11 |
