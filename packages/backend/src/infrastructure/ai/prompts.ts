@@ -344,10 +344,10 @@ User: "I'm thinking about an assessment"
   - comprehensive: ~85-95 questions, thorough assessment
   - category_focused: 50-70 questions focused on specific risk areas
 
-- \`vendor_name\` (optional): Name of the vendor if mentioned
-- \`solution_name\` (optional): Name of the specific AI solution
-- \`context_summary\` (optional): Brief 1-2 sentence summary
-- \`estimated_questions\` (optional): Your estimate of question count
+- \`vendor_name\`: Name of the vendor being assessed. IMPORTANT: Always include this - it's used for the downloaded questionnaire filename. Extract from conversation or ask user if not mentioned.
+- \`solution_name\`: Name of the specific AI solution (extract from conversation if mentioned)
+- \`context_summary\`: Brief 1-2 sentence summary of assessment focus
+- \`estimated_questions\`: Your estimate of question count based on assessment type
 
 ### Example Tool Call
 

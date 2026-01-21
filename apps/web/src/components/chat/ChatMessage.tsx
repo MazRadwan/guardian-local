@@ -174,10 +174,10 @@ export function ChatMessage({
       role="article"
       aria-label={`${role} message`}
     >
-      {/* Avatar */}
+      {/* Avatar - hidden on mobile for more content space */}
       <div
         className={cn(
-          'flex w-10 h-10 shrink-0 items-center justify-center rounded-full',
+          'hidden md:flex w-10 h-10 shrink-0 items-center justify-center rounded-full',
           isUser ? 'bg-sky-100' : 'bg-sky-500'
         )}
       >
@@ -190,7 +190,7 @@ export function ChatMessage({
 
       {/* Content */}
       <div className={cn('flex-1 min-w-0 overflow-hidden', isUser && 'flex flex-col items-end')}>
-        {/* Role label */}
+        {/* Role label - always visible, provides context on mobile where avatar is hidden */}
         <div className={cn(
           'text-sm font-semibold',
           isUser ? 'text-gray-900' : 'text-sky-600'
@@ -402,21 +402,34 @@ function EmbeddedDownload({ data }: { data: Record<string, any> }) {
 
   return (
     <div
-      className="rounded-lg border border-green-200 bg-green-50 p-4"
+      className="rounded-lg border border-slate-200 bg-slate-50 p-4"
       data-testid="download-component"
     >
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-green-700 font-medium">
+        <span className="text-slate-700 font-medium">
           Questionnaire ready ({questionCount} questions)
         </span>
       </div>
       <div className="flex flex-wrap gap-2">
-        {validFormats.map((format) => (
-          <DownloadButton
+        {validFormats.map((format, index) => (
+          <button
             key={format}
-            assessmentId={data.assessmentId}
-            format={format}
-          />
+            type="button"
+            onClick={() => {
+              // Trigger download via DownloadButton's logic
+              const link = document.createElement('a');
+              link.href = `${process.env.NEXT_PUBLIC_API_URL}/api/assessments/${data.assessmentId}/export/${format}`;
+              link.download = '';
+              link.click();
+            }}
+            className={
+              index === 0
+                ? 'inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-slate-800 text-white hover:bg-slate-700 transition-colors'
+                : 'px-3 py-2 text-sm rounded-lg text-slate-600 hover:text-slate-800 hover:bg-slate-200 transition-colors'
+            }
+          >
+            {format.charAt(0).toUpperCase() + format.slice(1)}
+          </button>
         ))}
       </div>
     </div>

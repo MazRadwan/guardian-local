@@ -180,13 +180,16 @@ export function useWebSocketEvents({
       }
 
       // If this is the first chunk, start a new streaming message
-      if (messages.length === 0 || messages[messages.length - 1].role !== 'assistant') {
+      // IMPORTANT: Access messages directly from store to avoid infinite re-render loop
+      // (previously had `messages` in deps which caused Maximum update depth exceeded)
+      const currentMessages = useChatStore.getState().messages;
+      if (currentMessages.length === 0 || currentMessages[currentMessages.length - 1].role !== 'assistant') {
         startStreaming();
         setLoading(false); // Hide typing indicator, show streaming message instead
       }
       appendToLastMessage(chunk);
     },
-    [activeConversationId, messages, startStreaming, appendToLastMessage, setLoading]
+    [activeConversationId, startStreaming, appendToLastMessage, setLoading]
   );
 
   // Handler 3: Handle WebSocket errors

@@ -62,18 +62,18 @@ describe('QuestionnaireMessage', () => {
   });
 
   describe('Avatar', () => {
-    it('renders Guardian avatar with purple background', () => {
+    it('renders Guardian avatar with sky-500 background', () => {
       const { container } = render(<QuestionnaireMessage {...defaultProps} />);
 
-      const avatar = container.querySelector('.bg-purple-600.rounded-full');
+      const avatar = container.querySelector('.bg-sky-500.rounded-full');
       expect(avatar).toBeInTheDocument();
-      expect(avatar).toHaveClass('h-8', 'w-8');
+      expect(avatar).toHaveClass('h-10', 'w-10');
     });
 
-    it('contains Bot icon inside avatar', () => {
+    it('contains ShieldCheck icon inside avatar', () => {
       const { container } = render(<QuestionnaireMessage {...defaultProps} />);
 
-      const avatar = container.querySelector('.bg-purple-600');
+      const avatar = container.querySelector('.bg-sky-500');
       const icon = avatar?.querySelector('svg');
       expect(icon).toBeInTheDocument();
     });
@@ -85,7 +85,7 @@ describe('QuestionnaireMessage', () => {
 
       const label = screen.getByText('Guardian');
       expect(label).toBeInTheDocument();
-      expect(label).toHaveClass('text-sm', 'font-semibold', 'text-gray-900');
+      expect(label).toHaveClass('text-sm', 'font-semibold', 'text-sky-600');
     });
   });
 

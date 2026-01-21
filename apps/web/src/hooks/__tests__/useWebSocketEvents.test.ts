@@ -12,6 +12,9 @@ const createMockComposerRef = () => ({
   },
 });
 
+// Track mock store messages for getState() calls in handleMessageStream
+let mockStoreMessages: ChatMessage[] = [];
+
 describe('useWebSocketEvents', () => {
   // Mock store actions
   const mockAddMessage = jest.fn();
@@ -77,6 +80,7 @@ describe('useWebSocketEvents', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     sessionStorage.clear();
+    mockStoreMessages = []; // Reset store messages
   });
 
   describe('Initialization', () => {
@@ -222,12 +226,17 @@ describe('useWebSocketEvents', () => {
     });
 
     it('should append subsequent chunks without starting streaming again', () => {
+      // Mock getState to return existing messages
+      const messagesWithAssistant = [
+        { role: 'user' as const, content: 'Hello', timestamp: new Date() },
+        { role: 'assistant' as const, content: 'Partial', timestamp: new Date() },
+      ];
+      const getStateSpy = jest.spyOn(useChatStore, 'getState').mockReturnValue({
+        messages: messagesWithAssistant,
+      } as ReturnType<typeof useChatStore.getState>);
+
       const { result } = renderHook(() => useWebSocketEvents({
         ...defaultParams,
-        messages: [
-          { role: 'user', content: 'Hello', timestamp: new Date() },
-          { role: 'assistant', content: 'Partial', timestamp: new Date() },
-        ],
         activeConversationId: 'conv-1',
       }));
 
@@ -235,6 +244,8 @@ describe('useWebSocketEvents', () => {
 
       expect(mockStartStreaming).not.toHaveBeenCalled();
       expect(mockAppendToLastMessage).toHaveBeenCalledWith('more text');
+
+      getStateSpy.mockRestore();
     });
 
     it('should clear loading state when streaming starts', () => {

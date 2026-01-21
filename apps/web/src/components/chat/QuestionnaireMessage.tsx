@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Bot } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 import { QuestionnairePromptCard, QuestionnaireUIState } from './QuestionnairePromptCard';
 import { QuestionnaireReadyPayload } from '@/lib/websocket';
 import type { Step } from '@/types/stepper';
@@ -81,15 +81,15 @@ export function QuestionnaireMessage({
       aria-label="assistant message"
       data-testid="questionnaire-message"
     >
-      {/* Avatar - matches ChatMessage assistant avatar */}
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600">
-        <Bot className="h-5 w-5 text-white" aria-hidden="true" />
+      {/* Avatar - matches ChatMessage assistant avatar, hidden on mobile */}
+      <div className="hidden md:flex w-10 h-10 shrink-0 items-center justify-center rounded-full bg-sky-500">
+        <ShieldCheck className="h-5 w-5 text-white" aria-hidden="true" />
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0 space-y-3 overflow-hidden">
-        {/* Role label */}
-        <div className="text-sm font-semibold text-gray-900">Guardian</div>
+        {/* Role label - always visible, provides context on mobile where avatar is hidden */}
+        <div className="text-sm font-semibold text-sky-600">Guardian</div>
 
         {/* Questionnaire Card - rendered inline, no extra card styling */}
         <QuestionnairePromptCard

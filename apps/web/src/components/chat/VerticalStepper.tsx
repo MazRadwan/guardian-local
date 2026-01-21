@@ -60,7 +60,7 @@ export const VerticalStepper = React.memo<VerticalStepperProps>(
                   className={`
                     w-5 h-5 rounded-full flex items-center justify-center text-xs transition-all duration-300
                     ${isComplete ? 'bg-emerald-500 text-white' : ''}
-                    ${isActive ? 'bg-blue-500 text-white ring-2 ring-blue-200' : ''}
+                    ${isActive ? 'bg-sky-500 text-white ring-2 ring-sky-200' : ''}
                   `}
                   data-testid={`step-indicator-${step.id}`}
                   data-state={isComplete ? 'complete' : isActive ? 'active' : 'pending'}
@@ -103,7 +103,7 @@ export const VerticalStepper = React.memo<VerticalStepperProps>(
                   `}
                 >
                   {step.label}
-                  {isActive && <span className="text-blue-500 animate-pulse">...</span>}
+                  {isActive && <span className="text-sky-500 animate-pulse">...</span>}
                 </div>
               </div>
             </div>

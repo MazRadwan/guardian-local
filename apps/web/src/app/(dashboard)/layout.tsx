@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useChatStore } from '@/stores/chatStore';
 import { useQuestionnairePersistence } from '@/hooks/useQuestionnairePersistence';
 import { Sidebar } from '@/components/chat/Sidebar';
-import { PanelLeft } from 'lucide-react';
+import { PanelLeft, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DashboardLayout({
@@ -119,13 +119,16 @@ export default function DashboardLayout({
           ${sidebarMinimized ? 'md:ml-12' : 'md:ml-64'}
         `}
       >
-        {/* Mobile Header (Hidden on Desktop) */}
-        <header className="md:hidden flex shrink-0 items-center justify-between bg-white px-4 py-2 border-b">
-           <Button variant="ghost" onClick={handleMobileToggle} aria-label="Toggle sidebar">
+        {/* Mobile Header (Hidden on Desktop) - Sticky with backdrop blur for scroll-under effect */}
+        <header className="md:hidden flex shrink-0 items-center justify-between bg-white/80 backdrop-blur-sm px-4 py-3 sticky top-0 z-40">
+           <Button variant="ghost" size="icon" onClick={handleMobileToggle} aria-label="Toggle sidebar">
              <PanelLeft className="h-5 w-5" />
            </Button>
-           <span className="font-semibold">Guardian</span>
-           <div className="w-8" /> {/* Spacer */}
+           <div className="flex items-center gap-2">
+             <ShieldCheck className="h-6 w-6 text-sky-500" />
+             <span className="font-semibold text-sky-600">Guardian</span>
+           </div>
+           <div className="w-10" /> {/* Spacer to balance toggle button */}
         </header>
 
         {/* Main Content */}

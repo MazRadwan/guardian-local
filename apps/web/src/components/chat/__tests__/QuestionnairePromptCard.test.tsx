@@ -125,7 +125,7 @@ describe('QuestionnairePromptCard', () => {
       expect(screen.getByText(/Generating questionnaire for your comprehensive assessment/i)).toBeInTheDocument();
     });
 
-    it('shows disabled generate button with "Generating..." text during generation', () => {
+    it('hides generate button during generation (stepper shows progress instead)', () => {
       render(
         <QuestionnairePromptCard
           {...defaultProps}
@@ -135,10 +135,48 @@ describe('QuestionnairePromptCard', () => {
           isRunning={true}
         />
       );
-      const button = screen.getByTestId('generate-questionnaire-btn');
-      expect(button).toBeInTheDocument();
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Generating...');
+      const button = screen.queryByTestId('generate-questionnaire-btn');
+      expect(button).not.toBeInTheDocument();
+    });
+
+    it('shows "Generating Assessment" in stepper header initially', () => {
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="generating"
+          steps={mockSteps}
+          currentStep={1}
+          isRunning={true}
+        />
+      );
+      expect(screen.getByText('Generating Assessment')).toBeInTheDocument();
+    });
+
+    it('alternates to "This may take a minute..." after 5 seconds', async () => {
+      jest.useFakeTimers();
+
+      render(
+        <QuestionnairePromptCard
+          {...defaultProps}
+          uiState="generating"
+          steps={mockSteps}
+          currentStep={1}
+          isRunning={true}
+        />
+      );
+
+      // Initially shows "Generating Assessment"
+      expect(screen.getByText('Generating Assessment')).toBeInTheDocument();
+
+      // Advance timers by 5 seconds and flush pending state updates
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      // Now should show alternating message
+      expect(screen.getByText('This may take a minute...')).toBeInTheDocument();
+
+      jest.useRealTimers();
     });
   });
 
@@ -1158,7 +1196,7 @@ describe('QuestionnairePromptCard', () => {
       expect(button).toHaveAttribute('type', 'button');
     });
 
-    it('has aria-busy when generating', () => {
+    it('is hidden when generating (stepper shows progress instead)', () => {
       render(
         <QuestionnairePromptCard
           {...defaultProps}
@@ -1167,50 +1205,15 @@ describe('QuestionnairePromptCard', () => {
         />
       );
 
-      const button = screen.getByTestId('generate-questionnaire-btn');
-      expect(button).toHaveAttribute('aria-busy', 'true');
+      const button = screen.queryByTestId('generate-questionnaire-btn');
+      expect(button).not.toBeInTheDocument();
     });
 
-    it('does not have aria-busy when not generating', () => {
-      render(<QuestionnairePromptCard {...defaultProps} />);
-
-      const button = screen.getByTestId('generate-questionnaire-btn');
-      expect(button).toHaveAttribute('aria-busy', 'false');
-    });
-
-    it('has disabled styling', () => {
-      render(
-        <QuestionnairePromptCard
-          {...defaultProps}
-          uiState="generating"
-          currentStep={0}
-        />
-      );
-
-      const button = screen.getByTestId('generate-questionnaire-btn');
-      expect(button).toBeDisabled();
-      expect(button).toHaveClass('disabled:opacity-50');
-      expect(button).toHaveClass('disabled:cursor-not-allowed');
-    });
-
-    it('displays correct content when not generating', () => {
+    it('displays correct content when ready', () => {
       render(<QuestionnairePromptCard {...defaultProps} />);
 
       const button = screen.getByTestId('generate-questionnaire-btn');
       expect(button).toHaveTextContent('Generate Questionnaire');
-    });
-
-    it('displays loading content when generating', () => {
-      render(
-        <QuestionnairePromptCard
-          {...defaultProps}
-          uiState="generating"
-          currentStep={0}
-        />
-      );
-
-      const button = screen.getByTestId('generate-questionnaire-btn');
-      expect(button).toHaveTextContent('Generating...');
     });
 
     it('contains icon element', () => {

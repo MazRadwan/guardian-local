@@ -2,7 +2,7 @@
 
 import React, { forwardRef, useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { FileText, Loader2, Download, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react';
+import { FileText, Download, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react';
 import { QuestionnaireReadyPayload } from '@/lib/websocket';
 import { cn } from '@/lib/utils';
 import { VerticalStepper } from './VerticalStepper';
@@ -82,6 +82,11 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
     // Story 13.4.4: Collapse/expand state
     const [isExpanded, setIsExpanded] = useState(true);
 
+    // Alternating status message state (like ProgressMessage)
+    const [showWaitMessage, setShowWaitMessage] = useState(false);
+    const [isAlternating, setIsAlternating] = useState(false);
+    const lastGeneratingState = useRef(false);
+
     // Story 13.6.1: Timer ref for collapse (enables manual clearing in 13.6.2)
     const collapseTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -157,6 +162,39 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
         setIsExpanded(true);
       }
     }, [isRunning, currentStep]);
+
+    // Alternating status message effect (like ProgressMessage Story 24.3)
+    // Reset when generation starts/stops
+    useEffect(() => {
+      const isGeneratingNow = hasStartedGeneration && !isComplete;
+
+      if (isGeneratingNow !== lastGeneratingState.current) {
+        lastGeneratingState.current = isGeneratingNow;
+        setShowWaitMessage(false);
+        setIsAlternating(false);
+      }
+
+      if (!isGeneratingNow) return;
+
+      // Start showing wait message after 5 seconds
+      const waitTimer = setTimeout(() => {
+        setShowWaitMessage(true);
+        setIsAlternating(true);
+      }, 5000);
+
+      return () => clearTimeout(waitTimer);
+    }, [hasStartedGeneration, isComplete]);
+
+    // Alternate between messages every 3 seconds
+    useEffect(() => {
+      if (!isAlternating || isComplete) return;
+
+      const alternateTimer = setInterval(() => {
+        setShowWaitMessage(prev => !prev);
+      }, 3000);
+
+      return () => clearInterval(alternateTimer);
+    }, [isAlternating, isComplete]);
 
     // ─────────────────────────────────────────────────────────────
     // ERROR STATE
@@ -329,9 +367,17 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
               aria-controls="stepper-content-generating"
             >
               <div className="flex items-center gap-2">
-                {/* Spinner or checkmark based on state */}
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm font-medium text-slate-700">Generating Assessment</span>
+                {/* Spinner */}
+                <div className="w-5 h-5 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+                {/* Alternating status message */}
+                <span
+                  className={cn(
+                    'text-sm font-medium transition-all duration-300',
+                    showWaitMessage ? 'text-sky-600' : 'text-slate-700'
+                  )}
+                >
+                  {showWaitMessage ? 'This may take a minute...' : 'Generating Assessment'}
+                </span>
               </div>
               <ChevronDown
                 className={cn(
@@ -392,33 +438,25 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
           </div>
         )}
 
-        {/* Generate button - Story 14.2.1: Primary dark styling per Appendix */}
-        <button
-          type="button"
-          data-testid="generate-questionnaire-btn"
-          onClick={onGenerate}
-          disabled={isGenerating || hasStartedGeneration}
-          aria-busy={hasStartedGeneration}
-          className={cn(
-            'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
-            'bg-slate-800 text-white',
-            'hover:bg-slate-700',
-            'focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2',
-            'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-800'
-          )}
-        >
-          {hasStartedGeneration ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <FileText className="h-4 w-4" />
-              Generate Questionnaire
-            </>
-          )}
-        </button>
+        {/* Generate button - hidden during generation (stepper shows progress instead) */}
+        {!hasStartedGeneration && (
+          <button
+            type="button"
+            data-testid="generate-questionnaire-btn"
+            onClick={onGenerate}
+            disabled={isGenerating}
+            className={cn(
+              'inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors',
+              'bg-slate-800 text-white',
+              'hover:bg-slate-700',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2',
+              'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-slate-800'
+            )}
+          >
+            <FileText className="h-4 w-4" />
+            Generate Questionnaire
+          </button>
+        )}
       </div>
     );
   }
