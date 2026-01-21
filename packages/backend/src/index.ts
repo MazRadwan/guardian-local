@@ -1,5 +1,4 @@
 // Load environment variables FIRST (before any imports that need env vars)
-// CI/CD test: 2026-01-20 v2
 import { config } from 'dotenv';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
