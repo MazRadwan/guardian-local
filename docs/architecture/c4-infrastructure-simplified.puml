@@ -47,23 +47,92 @@ package "HTTP / Controllers" {
     }
 }
 
-package "WebSocket" {
+package "WebSocket (Epic 28 Modular)" {
     class ChatServer {
-        -conversationService: ConversationService
-        -questionnaireService: QuestionnaireGenerationService
-        -scoringService: ScoringService
-        +onConnection(socket)
-        +onMessage(socket, data)
-        +onDisconnect(socket)
-        +emitStreamChunk(chunk)
-        +emitToolUse(tool, data)
+        -handlers: Handler[]
+        -modeStrategies: ModeStrategyFactory
+        +initialize(io)
+        +registerHandlers()
     }
 
-    class RateLimiter {
-        -windowMs: number
-        -maxRequests: number
-        +checkLimit(userId): boolean
-        +resetLimit(userId): void
+    package "Handlers" {
+        class ConnectionHandler {
+            +handleConnection(socket)
+            +handleDisconnect(socket)
+            +emitConnectionReady()
+        }
+
+        class MessageHandler {
+            -streamingHandler: StreamingHandler
+            -toolUseRegistry: ToolUseRegistry
+            +handleSendMessage(data)
+            +streamResponse(callback)
+        }
+
+        class ConversationHandler {
+            +handleStartNew()
+            +handleGetHistory()
+            +handleGetConversations()
+            +handleDeleteConversation()
+        }
+
+        class ModeSwitchHandler {
+            +handleSwitchMode(mode)
+            +emitModeGuidance()
+        }
+
+        class QuestionnaireHandler {
+            +handleGenerateQuestionnaire()
+            +handleGetExportStatus()
+            +emitExportReady()
+        }
+
+        class ScoringHandler {
+            +handleScoringFlow()
+            +handleVendorClarification()
+            +emitScoringProgress()
+        }
+    }
+
+    package "Mode Strategies" {
+        interface IModeStrategy {
+            +buildSystemPrompt(): string
+            +getTools(): Tool[]
+            +validateContext(): boolean
+        }
+
+        class ConsultModeStrategy
+        class AssessmentModeStrategy
+        class ScoringModeStrategy
+    }
+
+    package "Context Builders" {
+        class ConversationContextBuilder {
+            +buildContext(conversation)
+            +includeHistory(messages)
+        }
+
+        class FileContextBuilder {
+            +buildFileContext(files)
+            +includeIntakeContext()
+        }
+    }
+
+    package "Utilities" {
+        class StreamingHandler {
+            +stream(response, callback)
+            +handleChunk(chunk)
+        }
+
+        class ToolUseRegistry {
+            +registerToolUse(block)
+            +getActiveTools()
+        }
+
+        class RateLimiter {
+            +checkLimit(userId): boolean
+            +resetLimit(userId): void
+        }
     }
 }
 
@@ -78,14 +147,11 @@ package "AI / Claude Integration" {
 
     class PromptCacheManager {
         -cache: Map<string, CachedPrompt>
-        -ttlMs: number
         +get(key): string
         +set(key, prompt): void
-        +invalidate(key): void
     }
 
     class DocumentParserService {
-        -visionClient: IVisionClient
         +parseDocument(file): ParsedContent
         +extractText(file): string
     }
@@ -94,43 +160,64 @@ package "AI / Claude Integration" {
         +buildPrompt(assessment, responses): string
         +buildSystemPrompt(): string
     }
+
+    class ExportNarrativeGenerator {
+        +generateNarrative(result): string
+        +claimGeneration(resultId): boolean
+    }
 }
 
 package "Database / Repositories" {
     class DrizzleUserRepository {
-        -db: DrizzleClient
         +findById(id): User
         +findByEmail(email): User
         +save(user): User
-        +delete(id): void
     }
 
     class DrizzleConversationRepository {
-        -db: DrizzleClient
         +findById(id): Conversation
         +findByUserId(userId): Conversation[]
         +save(conversation): Conversation
+        +updateTitle(id, title): void
     }
 
     class DrizzleAssessmentRepository {
-        -db: DrizzleClient
         +findById(id): Assessment
         +findByVendorId(vendorId): Assessment[]
         +save(assessment): Assessment
     }
 
     class DrizzleMessageRepository {
-        -db: DrizzleClient
         +findByConversationId(id): Message[]
         +save(message): Message
+    }
+
+    class DrizzleResponseRepository {
+        +findByAssessmentId(id): Response[]
+        +saveBatch(responses): void
+        +deleteOrphans(cutoff): number
+    }
+
+    class DrizzleDimensionScoreRepository {
+        +findByAssessmentId(id): DimensionScore[]
+        +saveBatch(scores): void
+    }
+
+    class DrizzleAssessmentResultRepository {
+        +findByAssessmentId(id): AssessmentResult
+        +save(result): AssessmentResult
+        +claimNarrativeGeneration(id): boolean
+    }
+
+    class DrizzleFileRepository {
+        +findByConversationId(id): File[]
+        +save(file): File
     }
 }
 
 package "Export" {
     class PDFExporter {
         +generate(data): Buffer
-        +addHeader(doc)
-        +addScores(doc, scores)
     }
 
     class WordExporter {
@@ -139,13 +226,16 @@ package "Export" {
 
     class ExcelExporter {
         +generate(data): Buffer
-        +createWorksheet(data)
     }
 
     class ScoringPDFExporter {
         +generate(result): Buffer
         +renderDimensionScores(scores)
         +renderExecutiveSummary(summary)
+    }
+
+    class ScoringWordExporter {
+        +generate(result): Buffer
     }
 }
 
@@ -156,20 +246,11 @@ package "Storage" {
         +retrieve(path): Buffer
         +delete(path): void
     }
-
-    class S3FileStorage {
-        -bucket: string
-        -client: S3Client
-        +save(file, key): string
-        +retrieve(key): Buffer
-        +getSignedUrl(key): string
-    }
 }
 
 package "Auth" {
     class JWTProvider {
         -secret: string
-        -expiresIn: string
         +sign(payload): string
         +verify(token): TokenPayload
     }
@@ -177,24 +258,46 @@ package "Auth" {
 
 database "PostgreSQL" as DB
 
-' Controllers use services (shown conceptually)
-AuthController ..> JWTProvider
-ChatServer --> ClaudeClient
+' ChatServer -> Handlers
+ChatServer --> ConnectionHandler
+ChatServer --> MessageHandler
+ChatServer --> ConversationHandler
+ChatServer --> ModeSwitchHandler
+ChatServer --> QuestionnaireHandler
+ChatServer --> ScoringHandler
+
+' Handlers -> Mode Strategies
+MessageHandler --> IModeStrategy
+ConsultModeStrategy ..|> IModeStrategy
+AssessmentModeStrategy ..|> IModeStrategy
+ScoringModeStrategy ..|> IModeStrategy
+
+' Handlers -> Context Builders
+MessageHandler --> ConversationContextBuilder
+MessageHandler --> FileContextBuilder
+
+' Handlers -> Utilities
+MessageHandler --> StreamingHandler
+MessageHandler --> ToolUseRegistry
 ChatServer --> RateLimiter
 
 ' AI components
+MessageHandler --> ClaudeClient
 ClaudeClient --> PromptCacheManager
-DocumentParserService --> ClaudeClient
-ScoringPromptBuilder ..> ClaudeClient : builds prompts for
+ScoringHandler --> ScoringPromptBuilder
+ExportNarrativeGenerator --> ClaudeClient
 
 ' Repositories -> DB
 DrizzleUserRepository --> DB
 DrizzleConversationRepository --> DB
 DrizzleAssessmentRepository --> DB
 DrizzleMessageRepository --> DB
+DrizzleResponseRepository --> DB
+DrizzleDimensionScoreRepository --> DB
+DrizzleAssessmentResultRepository --> DB
+DrizzleFileRepository --> DB
 
-' Export relationships
-PDFExporter --> LocalFileStorage
-ScoringPDFExporter --> LocalFileStorage
+' Controllers -> Auth
+AuthController ..> JWTProvider
 
 @enduml

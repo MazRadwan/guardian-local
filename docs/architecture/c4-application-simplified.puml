@@ -25,6 +25,7 @@ package "Services" {
         +sendMessage(dto: SendMessageDTO): Message
         +getHistory(conversationId): Message[]
         +switchMode(conversationId, mode): void
+        +updateTitle(conversationId, title): void
     }
 
     class AssessmentService {
@@ -33,6 +34,7 @@ package "Services" {
         +create(dto: CreateAssessmentDTO): Assessment
         +updateStatus(id, status): void
         +getByVendor(vendorId): Assessment[]
+        +markScored(id): void
     }
 
     class VendorService {
@@ -49,12 +51,29 @@ package "Services" {
         +parseQuestions(rawOutput): Question[]
     }
 
+    class QuestionnaireReadyService {
+        -assessmentService: AssessmentService
+        -vendorService: VendorService
+        +checkReadiness(conversationId): ReadinessResult
+        +getVendorContext(): VendorContext
+    }
+
     class ScoringService {
         -claudeClient: IClaudeClient
         -validator: ScoringPayloadValidator
         -resultRepo: IAssessmentResultRepository
+        -dimensionRepo: IDimensionScoreRepository
         +scoreAssessment(assessmentId): ScoringResult
         +streamProgress(callback): void
+        +persistResults(result): void
+    }
+
+    class ScoringExportService {
+        -scoringService: ScoringService
+        -pdfExporter: ScoringPDFExporter
+        -wordExporter: ScoringWordExporter
+        +exportToPDF(assessmentId): Buffer
+        +exportToWord(assessmentId): Buffer
     }
 
     class ExportService {
@@ -70,6 +89,18 @@ package "Services" {
         +validateFile(file): ValidationResult
         +getAllowedTypes(): string[]
         +getMaxSize(): number
+    }
+
+    class OrphanCleanupService {
+        -responseRepo: IResponseRepository
+        +cleanupOrphanedResponses(cutoff): number
+        +scheduleCleanup(): void
+    }
+
+    class TitleGenerationService {
+        -claudeClient: IClaudeClient
+        +generateTitle(messages): string
+        +shouldUpdateTitle(conversation): boolean
     }
 }
 
@@ -97,6 +128,13 @@ package "DTOs" {
         +content: string
         +attachments?: FileAttachment[]
     }
+
+    class ScoringResultDTO {
+        +compositeScore: number
+        +recommendation: Recommendation
+        +overallRiskRating: RiskRating
+        +dimensionScores: DimensionScoreDTO[]
+    }
 }
 
 package "Interfaces (Ports)" {
@@ -110,6 +148,30 @@ package "Interfaces (Ports)" {
         +findById(id): Conversation
         +findByUserId(userId): Conversation[]
         +save(conversation): Conversation
+        +updateTitle(id, title, manual): void
+    }
+
+    interface IAssessmentRepository {
+        +findById(id): Assessment
+        +findByVendorId(vendorId): Assessment[]
+        +save(assessment): Assessment
+    }
+
+    interface IResponseRepository {
+        +findByAssessmentId(id): Response[]
+        +saveBatch(responses): void
+        +deleteOrphans(cutoff): number
+    }
+
+    interface IDimensionScoreRepository {
+        +findByAssessmentId(id): DimensionScore[]
+        +saveBatch(scores): void
+    }
+
+    interface IAssessmentResultRepository {
+        +findByAssessmentId(id): AssessmentResult
+        +save(result): AssessmentResult
+        +claimNarrativeGeneration(id): boolean
     }
 
     interface IClaudeClient {
@@ -133,20 +195,29 @@ AuthService --> IUserRepository
 AuthService --> ITokenProvider
 ConversationService --> IConversationRepository
 ConversationService --> IClaudeClient
-AssessmentService --> IUserRepository
-QuestionnaireGenerationService --> IClaudeClient
+AssessmentService --> IAssessmentRepository
 ScoringService --> IClaudeClient
+ScoringService --> IAssessmentResultRepository
+ScoringService --> IDimensionScoreRepository
+QuestionnaireGenerationService --> IClaudeClient
 ExportService --> IPDFExporter
+OrphanCleanupService --> IResponseRepository
+TitleGenerationService --> IClaudeClient
 
 ' Services use DTOs
 AuthService ..> CreateUserDTO : uses
 AssessmentService ..> CreateAssessmentDTO : uses
 ConversationService ..> CreateConversationDTO : uses
 ConversationService ..> SendMessageDTO : uses
+ScoringService ..> ScoringResultDTO : produces
 
-' Service to service
+' Service to service dependencies
 ConversationService --> AssessmentService : uses
 QuestionnaireGenerationService --> AssessmentService : uses
+QuestionnaireReadyService --> AssessmentService : uses
+QuestionnaireReadyService --> VendorService : uses
 ScoringService --> AssessmentService : uses
+ScoringExportService --> ScoringService : uses
+ConversationService --> TitleGenerationService : uses
 
 @enduml
