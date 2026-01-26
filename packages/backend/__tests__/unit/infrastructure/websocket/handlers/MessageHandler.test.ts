@@ -140,6 +140,7 @@ const createMockRateLimiter = (): jest.Mocked<RateLimiter> => ({
  */
 const createMockFileContextBuilder = (): jest.Mocked<FileContextBuilder> => ({
   build: jest.fn(),
+  buildWithImages: jest.fn().mockResolvedValue({ textContext: '', imageBlocks: [] }),
   formatIntakeContextFile: jest.fn(),
   formatTextExcerptFile: jest.fn(),
 } as unknown as jest.Mocked<FileContextBuilder>);
@@ -933,53 +934,65 @@ describe('MessageHandler', () => {
       );
     });
 
-    it('should return empty string when FileContextBuilder not configured', async () => {
+    it('should return empty result when FileContextBuilder not configured', async () => {
       // Use handler without FileContextBuilder (from parent describe)
       const result = await handler.buildFileContext('conv-1');
 
-      expect(result).toBe('');
+      expect(result).toEqual({ textContext: '', imageBlocks: [] });
     });
 
-    it('should return empty string when FileContextBuilder not configured (with attachments)', async () => {
+    it('should return empty result when FileContextBuilder not configured (with attachments)', async () => {
       const enrichedAttachments: MessageAttachment[] = [
         { fileId: 'file-1', filename: 'doc.pdf', mimeType: 'application/pdf', size: 1024 },
       ];
 
       const result = await handler.buildFileContext('conv-1', enrichedAttachments);
 
-      expect(result).toBe('');
+      expect(result).toEqual({ textContext: '', imageBlocks: [] });
     });
 
     it('should build context for all files when no attachments provided', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('\n\n--- Attached Documents ---\nDocument context here');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: '\n\n--- Attached Documents ---\nDocument context here',
+        imageBlocks: [],
+      });
 
       const result = await handlerWithBuilder.buildFileContext('conv-1');
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1');
-      expect(mockFileContextBuilder.build).toHaveBeenCalledTimes(1);
-      expect(result).toContain('Attached Documents');
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith('conv-1', undefined, undefined);
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledTimes(1);
+      expect(result.textContext).toContain('Attached Documents');
     });
 
     it('should build context for all files when empty attachments array', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('\n\n--- Attached Documents ---\nDocument context here');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: '\n\n--- Attached Documents ---\nDocument context here',
+        imageBlocks: [],
+      });
 
       const result = await handlerWithBuilder.buildFileContext('conv-1', []);
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1');
-      expect(mockFileContextBuilder.build).toHaveBeenCalledTimes(1);
-      expect(result).toContain('Attached Documents');
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith('conv-1', undefined, undefined);
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledTimes(1);
+      expect(result.textContext).toContain('Attached Documents');
     });
 
     it('should build context for all files when undefined attachments', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('\n\n--- Attached Documents ---\nDocument context here');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: '\n\n--- Attached Documents ---\nDocument context here',
+        imageBlocks: [],
+      });
 
       const result = await handlerWithBuilder.buildFileContext('conv-1', undefined);
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1');
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith('conv-1', undefined, undefined);
     });
 
     it('should scope to specific files when enrichedAttachments provided', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('Scoped context for specific files');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: 'Scoped context for specific files',
+        imageBlocks: [],
+      });
 
       const enrichedAttachments: MessageAttachment[] = [
         { fileId: 'file-1', filename: 'doc.pdf', mimeType: 'application/pdf', size: 1024 },
@@ -988,12 +1001,15 @@ describe('MessageHandler', () => {
 
       const result = await handlerWithBuilder.buildFileContext('conv-1', enrichedAttachments);
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1', ['file-1', 'file-2']);
-      expect(result).toBe('Scoped context for specific files');
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith('conv-1', ['file-1', 'file-2'], undefined);
+      expect(result.textContext).toBe('Scoped context for specific files');
     });
 
     it('should extract fileIds from enrichedAttachments correctly', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('Context');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: 'Context',
+        imageBlocks: [],
+      });
 
       const enrichedAttachments: MessageAttachment[] = [
         { fileId: 'uuid-aaa', filename: 'report.pdf', mimeType: 'application/pdf', size: 5000 },
@@ -1003,14 +1019,18 @@ describe('MessageHandler', () => {
 
       await handlerWithBuilder.buildFileContext('my-conv-id', enrichedAttachments);
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith(
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
         'my-conv-id',
-        ['uuid-aaa', 'uuid-bbb', 'uuid-ccc']
+        ['uuid-aaa', 'uuid-bbb', 'uuid-ccc'],
+        undefined
       );
     });
 
     it('should handle single enriched attachment', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('Single file context');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: 'Single file context',
+        imageBlocks: [],
+      });
 
       const enrichedAttachments: MessageAttachment[] = [
         { fileId: 'single-file', filename: 'only-one.pdf', mimeType: 'application/pdf', size: 1024 },
@@ -1018,20 +1038,24 @@ describe('MessageHandler', () => {
 
       const result = await handlerWithBuilder.buildFileContext('conv-1', enrichedAttachments);
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith('conv-1', ['single-file']);
-      expect(result).toBe('Single file context');
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith('conv-1', ['single-file'], undefined);
+      expect(result.textContext).toBe('Single file context');
     });
 
-    it('should return empty string when FileContextBuilder returns empty', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('');
+    it('should return empty result when FileContextBuilder returns empty', async () => {
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: '',
+        imageBlocks: [],
+      });
 
       const result = await handlerWithBuilder.buildFileContext('conv-no-files');
 
-      expect(result).toBe('');
+      expect(result.textContext).toBe('');
+      expect(result.imageBlocks).toEqual([]);
     });
 
     it('should propagate errors from FileContextBuilder', async () => {
-      mockFileContextBuilder.build.mockRejectedValue(new Error('S3 connection failed'));
+      mockFileContextBuilder.buildWithImages.mockRejectedValue(new Error('S3 connection failed'));
 
       await expect(
         handlerWithBuilder.buildFileContext('conv-1')
@@ -1039,11 +1063,150 @@ describe('MessageHandler', () => {
     });
 
     it('should pass conversationId correctly to FileContextBuilder', async () => {
-      mockFileContextBuilder.build.mockResolvedValue('Context');
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: 'Context',
+        imageBlocks: [],
+      });
 
       await handlerWithBuilder.buildFileContext('specific-conversation-uuid');
 
-      expect(mockFileContextBuilder.build).toHaveBeenCalledWith('specific-conversation-uuid');
+      expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith('specific-conversation-uuid', undefined, undefined);
+    });
+
+    // Epic 30 Sprint 3: New test for imageBlocks
+    it('should return imageBlocks when VisionContentBuilder produces them', async () => {
+      const mockImageBlock = {
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: 'image/png' as const,
+          data: 'test-base64-data',
+        },
+      };
+      mockFileContextBuilder.buildWithImages.mockResolvedValue({
+        textContext: '',
+        imageBlocks: [mockImageBlock],
+      });
+
+      const result = await handlerWithBuilder.buildFileContext('conv-1');
+
+      expect(result.imageBlocks).toHaveLength(1);
+      expect(result.imageBlocks[0]).toEqual(mockImageBlock);
+    });
+
+    // Epic 30 Sprint 4 Story 30.4.3: Mode-specific Vision API behavior
+    describe('mode-specific Vision API gating', () => {
+      it('should pass mode to FileContextBuilder.buildWithImages', async () => {
+        mockFileContextBuilder.buildWithImages.mockResolvedValue({
+          textContext: 'Context',
+          imageBlocks: [],
+        });
+
+        await handlerWithBuilder.buildFileContext('conv-1', undefined, 'assessment');
+
+        expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
+          'conv-1',
+          undefined,
+          { mode: 'assessment' }
+        );
+      });
+
+      it('should pass consult mode to FileContextBuilder.buildWithImages', async () => {
+        mockFileContextBuilder.buildWithImages.mockResolvedValue({
+          textContext: 'Context',
+          imageBlocks: [],
+        });
+
+        await handlerWithBuilder.buildFileContext('conv-1', undefined, 'consult');
+
+        expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
+          'conv-1',
+          undefined,
+          { mode: 'consult' }
+        );
+      });
+
+      it('should NOT pass mode options when mode is undefined (backwards compatibility)', async () => {
+        mockFileContextBuilder.buildWithImages.mockResolvedValue({
+          textContext: 'Context',
+          imageBlocks: [],
+        });
+
+        await handlerWithBuilder.buildFileContext('conv-1');
+
+        expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
+          'conv-1',
+          undefined,
+          undefined
+        );
+      });
+
+      it('should pass mode with specific fileIds when enrichedAttachments provided', async () => {
+        mockFileContextBuilder.buildWithImages.mockResolvedValue({
+          textContext: 'Scoped context',
+          imageBlocks: [],
+        });
+
+        const enrichedAttachments: MessageAttachment[] = [
+          { fileId: 'file-1', filename: 'doc.pdf', mimeType: 'application/pdf', size: 1024 },
+        ];
+
+        await handlerWithBuilder.buildFileContext('conv-1', enrichedAttachments, 'assessment');
+
+        expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
+          'conv-1',
+          ['file-1'],
+          { mode: 'assessment' }
+        );
+      });
+
+      it('should return empty imageBlocks for assessment mode (Vision API disabled)', async () => {
+        // This test verifies the integration: when assessment mode is passed,
+        // FileContextBuilder returns empty imageBlocks (Vision API disabled)
+        mockFileContextBuilder.buildWithImages.mockResolvedValue({
+          textContext: 'Document context',
+          imageBlocks: [], // Empty because assessment mode disables Vision
+        });
+
+        const result = await handlerWithBuilder.buildFileContext('conv-1', undefined, 'assessment');
+
+        // Verify mode was passed
+        expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
+          'conv-1',
+          undefined,
+          { mode: 'assessment' }
+        );
+        // Verify result has empty imageBlocks
+        expect(result.imageBlocks).toHaveLength(0);
+        expect(result.textContext).toBe('Document context');
+      });
+
+      it('should return imageBlocks for consult mode (Vision API enabled)', async () => {
+        const mockImageBlock = {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: 'image/png' as const,
+            data: 'test-base64-data',
+          },
+        };
+        mockFileContextBuilder.buildWithImages.mockResolvedValue({
+          textContext: '',
+          imageBlocks: [mockImageBlock],
+        });
+
+        const result = await handlerWithBuilder.buildFileContext('conv-1', undefined, 'consult');
+
+        // Verify mode was passed
+        expect(mockFileContextBuilder.buildWithImages).toHaveBeenCalledWith(
+          'conv-1',
+          undefined,
+          { mode: 'consult' }
+        );
+        // Verify result has imageBlocks
+        expect(result.imageBlocks).toHaveLength(1);
+        expect(result.imageBlocks[0]).toEqual(mockImageBlock);
+      });
     });
   });
 
@@ -1557,12 +1720,14 @@ describe('MessageHandler', () => {
         { enableTools: true, tools: mockTools }
       );
 
+      // Epic 30 Sprint 3: streamMessage now takes 3 args (messages, options, imageBlocks)
       expect(mockClaudeClient.streamMessage).toHaveBeenCalledWith(
         [{ role: 'user', content: 'Hi' }],
         expect.objectContaining({
           systemPrompt: 'System prompt',
           tools: mockTools,
-        })
+        }),
+        undefined  // No imageBlocks in this test
       );
     });
 
@@ -1604,12 +1769,14 @@ describe('MessageHandler', () => {
         }
       );
 
+      // Epic 30 Sprint 3: streamMessage now takes 3 args (messages, options, imageBlocks)
       expect(mockClaudeClient.streamMessage).toHaveBeenCalledWith(
         [],
         expect.objectContaining({
           usePromptCache: true,
           cachedPromptId: 'cached-123',
-        })
+        }),
+        undefined  // No imageBlocks in this test
       );
     });
 
@@ -1640,6 +1807,64 @@ describe('MessageHandler', () => {
         fullText: '',
         assessmentId: null,
       });
+    });
+
+    // Epic 30 Sprint 3: Test imageBlocks are passed to Claude
+    it('should pass imageBlocks to Claude when provided', async () => {
+      async function* mockStream(): AsyncGenerator<StreamChunk> {
+        yield { isComplete: false, content: 'I see the image.' };
+        yield { isComplete: true, content: '' };
+      }
+      mockClaudeClient.streamMessage.mockReturnValue(mockStream());
+      mockConversationService.sendMessage.mockResolvedValue(createMockMessage());
+
+      const mockImageBlocks = [
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: 'image/png' as const,
+            data: 'test-base64-data',
+          },
+        },
+      ];
+
+      await handlerWithClaude.streamClaudeResponse(
+        mockSocketForStreaming,
+        'conv-1',
+        [{ role: 'user', content: 'What do you see?' }],
+        'System prompt',
+        { enableTools: false, imageBlocks: mockImageBlocks }
+      );
+
+      expect(mockClaudeClient.streamMessage).toHaveBeenCalledWith(
+        [{ role: 'user', content: 'What do you see?' }],
+        expect.objectContaining({ systemPrompt: 'System prompt' }),
+        mockImageBlocks  // imageBlocks should be passed as 3rd argument
+      );
+    });
+
+    it('should pass undefined imageBlocks when empty array provided', async () => {
+      async function* mockStream(): AsyncGenerator<StreamChunk> {
+        yield { isComplete: false, content: 'Response' };
+        yield { isComplete: true, content: '' };
+      }
+      mockClaudeClient.streamMessage.mockReturnValue(mockStream());
+      mockConversationService.sendMessage.mockResolvedValue(createMockMessage());
+
+      await handlerWithClaude.streamClaudeResponse(
+        mockSocketForStreaming,
+        'conv-1',
+        [{ role: 'user', content: 'Hi' }],
+        'System prompt',
+        { enableTools: false, imageBlocks: [] }  // Empty array
+      );
+
+      expect(mockClaudeClient.streamMessage).toHaveBeenCalledWith(
+        [{ role: 'user', content: 'Hi' }],
+        expect.any(Object),
+        undefined  // Empty array should result in undefined (not passed to Claude)
+      );
     });
   });
 

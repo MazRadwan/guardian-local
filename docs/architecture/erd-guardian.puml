@@ -57,6 +57,8 @@ TABLE(conversations) {
     mode : text
     status : text
     context : jsonb
+    title : text
+    title_manually_edited : boolean
     started_at : timestamp
     last_activity_at : timestamp
     completed_at : timestamp
@@ -128,6 +130,10 @@ TABLE(assessment_results) {
     executive_summary : text
     key_findings : jsonb
     disqualifying_factors : jsonb
+    narrative_status : varchar
+    narrative_claimed_at : timestamp
+    narrative_completed_at : timestamp
+    narrative_error : text
     rubric_version : text
     model_id : text
     raw_tool_payload : jsonb

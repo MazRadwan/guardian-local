@@ -5,7 +5,9 @@ import type {
 } from '../../../../../src/application/interfaces/IFileRepository';
 import type { IFileStorage } from '../../../../../src/application/interfaces/IFileStorage';
 import type { ITextExtractionService } from '../../../../../src/application/interfaces/ITextExtractionService';
+import type { IVisionContentBuilder } from '../../../../../src/application/interfaces/IVisionContentBuilder';
 import type { IntakeDocumentContext } from '../../../../../src/domain/entities/Conversation';
+import type { ImageContentBlock } from '../../../../../src/infrastructure/ai/types/vision';
 
 /**
  * Helper to create a complete IntakeDocumentContext with defaults
@@ -297,7 +299,8 @@ describe('FileContextBuilder', () => {
       );
     });
 
-    it('should handle image MIME types correctly', async () => {
+    it('should skip image files in text path (Epic 30: images handled by VisionContentBuilder)', async () => {
+      // Epic 30 Sprint 3: Image files are now routed to VisionContentBuilder, not text extraction
       const mockFileStorage = {
         retrieve: jest.fn().mockResolvedValue(Buffer.from('test')),
       } as unknown as jest.Mocked<IFileStorage>;
@@ -310,6 +313,7 @@ describe('FileContextBuilder', () => {
         mockFileRepository,
         mockFileStorage,
         mockTextExtraction
+        // No visionContentBuilder - images will be skipped
       );
 
       mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
@@ -323,12 +327,12 @@ describe('FileContextBuilder', () => {
         }),
       ]);
 
-      await builderWithS3.build('conv-123');
+      const result = await builderWithS3.build('conv-123');
 
-      expect(mockTextExtraction.extract).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        'image'
-      );
+      // Image files should be skipped (not sent to text extraction)
+      expect(mockTextExtraction.extract).not.toHaveBeenCalled();
+      // Result should be empty since image was skipped and no text files
+      expect(result).toBe('');
     });
 
     it('should skip unknown MIME types', async () => {
@@ -760,6 +764,312 @@ describe('FileContextBuilder', () => {
       // Should contain the formatted file content
       expect(result).toContain('[Document: test.pdf]');
       expect(result).toContain('Vendor: Test');
+    });
+  });
+
+  /**
+   * Epic 30 Sprint 3: Vision API support tests
+   */
+  describe('buildWithImages() - Vision API support', () => {
+    it('should route image files to VisionContentBuilder', async () => {
+      const mockImageBlock: ImageContentBlock = {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/png',
+          data: 'test-base64-data',
+        },
+      };
+      const mockVisionContentBuilder: jest.Mocked<IVisionContentBuilder> = {
+        buildImageContent: jest.fn().mockResolvedValue(mockImageBlock),
+        isImageFile: jest.fn().mockReturnValue(true),
+        normalizeMediaType: jest.fn().mockReturnValue('image/png'),
+        clearConversationCache: jest.fn(),
+      };
+      const builderWithVision = new FileContextBuilder(
+        mockFileRepository,
+        undefined,
+        undefined,
+        mockVisionContentBuilder
+      );
+
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'image.png',
+          mimeType: 'image/png',
+          storagePath: 's3://bucket/image.png',
+          textExcerpt: null,
+          intakeContext: null,
+        }),
+      ]);
+
+      const result = await builderWithVision.buildWithImages('conv-123');
+
+      expect(mockVisionContentBuilder.buildImageContent).toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(1);
+      expect(result.imageBlocks[0]).toEqual(mockImageBlock);
+      expect(result.textContext).toBe('');
+    });
+
+    it('should return PDF files as text context only', async () => {
+      const mockVisionContentBuilder: jest.Mocked<IVisionContentBuilder> = {
+        buildImageContent: jest.fn(),
+        isImageFile: jest.fn().mockReturnValue(false),
+        normalizeMediaType: jest.fn(),
+        clearConversationCache: jest.fn(),
+      };
+      const builderWithVision = new FileContextBuilder(
+        mockFileRepository,
+        undefined,
+        undefined,
+        mockVisionContentBuilder
+      );
+
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'document.pdf',
+          mimeType: 'application/pdf',
+          storagePath: 's3://bucket/document.pdf',
+          textExcerpt: 'PDF content here',
+          intakeContext: null,
+        }),
+      ]);
+
+      const result = await builderWithVision.buildWithImages('conv-123');
+
+      // PDF should NOT be sent to VisionContentBuilder
+      expect(mockVisionContentBuilder.buildImageContent).not.toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(0);
+      expect(result.textContext).toContain('PDF content here');
+    });
+
+    it('should handle mixed files - images to imageBlocks, PDFs to textContext', async () => {
+      const mockImageBlock: ImageContentBlock = {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/jpeg',
+          data: 'jpeg-base64-data',
+        },
+      };
+      const mockVisionContentBuilder: jest.Mocked<IVisionContentBuilder> = {
+        buildImageContent: jest.fn().mockResolvedValue(mockImageBlock),
+        isImageFile: jest.fn().mockReturnValue(true),
+        normalizeMediaType: jest.fn(),
+        clearConversationCache: jest.fn(),
+      };
+      const builderWithVision = new FileContextBuilder(
+        mockFileRepository,
+        undefined,
+        undefined,
+        mockVisionContentBuilder
+      );
+
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'image.jpg',
+          mimeType: 'image/jpeg',
+          storagePath: 's3://bucket/image.jpg',
+          textExcerpt: null,
+          intakeContext: null,
+        }),
+        createFileWithExcerpt({
+          id: 'file-2',
+          filename: 'vendor.pdf',
+          mimeType: 'application/pdf',
+          storagePath: 's3://bucket/vendor.pdf',
+          textExcerpt: null,
+          intakeContext: createIntakeContext({ vendorName: 'Acme Corp' }),
+        }),
+      ]);
+
+      const result = await builderWithVision.buildWithImages('conv-123');
+
+      expect(result.imageBlocks).toHaveLength(1);
+      expect(result.textContext).toContain('Acme Corp');
+    });
+
+    it('should handle VisionContentBuilder failure gracefully', async () => {
+      const mockVisionContentBuilder: jest.Mocked<IVisionContentBuilder> = {
+        buildImageContent: jest.fn().mockResolvedValue(null), // Simulates failure
+        isImageFile: jest.fn().mockReturnValue(true),
+        normalizeMediaType: jest.fn(),
+        clearConversationCache: jest.fn(),
+      };
+      const builderWithVision = new FileContextBuilder(
+        mockFileRepository,
+        undefined,
+        undefined,
+        mockVisionContentBuilder
+      );
+
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'image.png',
+          mimeType: 'image/png',
+          storagePath: 's3://bucket/image.png',
+          textExcerpt: null,
+          intakeContext: null,
+        }),
+      ]);
+
+      const result = await builderWithVision.buildWithImages('conv-123');
+
+      // Should gracefully handle failure - empty imageBlocks
+      expect(result.imageBlocks).toHaveLength(0);
+      expect(result.textContext).toBe('');
+    });
+
+    it('should pass conversationId to VisionContentBuilder for caching', async () => {
+      const mockImageBlock: ImageContentBlock = {
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/png', data: 'data' },
+      };
+      const mockVisionContentBuilder: jest.Mocked<IVisionContentBuilder> = {
+        buildImageContent: jest.fn().mockResolvedValue(mockImageBlock),
+        isImageFile: jest.fn().mockReturnValue(true),
+        normalizeMediaType: jest.fn(),
+        clearConversationCache: jest.fn(),
+      };
+      const builderWithVision = new FileContextBuilder(
+        mockFileRepository,
+        undefined,
+        undefined,
+        mockVisionContentBuilder
+      );
+
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'image.png',
+          mimeType: 'image/png',
+          storagePath: 's3://bucket/image.png',
+        }),
+      ]);
+
+      await builderWithVision.buildWithImages('conv-123');
+
+      // Verify conversationId was passed for caching (Story 30.3.5)
+      expect(mockVisionContentBuilder.buildImageContent).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'file-1' }),
+        'conv-123'
+      );
+    });
+  });
+
+  /**
+   * Epic 30 Sprint 4 Story 30.4.3: Mode-specific Vision API behavior
+   */
+  describe('buildWithImages() - Mode-specific behavior (Story 30.4.3)', () => {
+    let mockVisionContentBuilder: jest.Mocked<IVisionContentBuilder>;
+    let builderWithVision: FileContextBuilder;
+
+    beforeEach(() => {
+      const mockImageBlock: ImageContentBlock = {
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/png', data: 'data' },
+      };
+      mockVisionContentBuilder = {
+        buildImageContent: jest.fn().mockResolvedValue(mockImageBlock),
+        isImageFile: jest.fn().mockReturnValue(true),
+        normalizeMediaType: jest.fn(),
+        clearConversationCache: jest.fn(),
+      };
+      builderWithVision = new FileContextBuilder(
+        mockFileRepository,
+        undefined,
+        undefined,
+        mockVisionContentBuilder
+      );
+
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'image.png',
+          mimeType: 'image/png',
+          storagePath: 's3://bucket/image.png',
+        }),
+      ]);
+    });
+
+    it('should process images via Vision API in Consult mode (default)', async () => {
+      const result = await builderWithVision.buildWithImages('conv-123');
+
+      expect(mockVisionContentBuilder.buildImageContent).toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(1);
+    });
+
+    it('should process images via Vision API when mode explicitly set to consult', async () => {
+      const result = await builderWithVision.buildWithImages('conv-123', undefined, {
+        mode: 'consult',
+      });
+
+      expect(mockVisionContentBuilder.buildImageContent).toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(1);
+    });
+
+    it('should NOT process images via Vision API in Assessment mode', async () => {
+      const result = await builderWithVision.buildWithImages('conv-123', undefined, {
+        mode: 'assessment',
+      });
+
+      // Vision API should NOT be called in Assessment mode
+      expect(mockVisionContentBuilder.buildImageContent).not.toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(0);
+    });
+
+    it('should NOT process images via Vision API in Scoring mode', async () => {
+      const result = await builderWithVision.buildWithImages('conv-123', undefined, {
+        mode: 'scoring',
+      });
+
+      // Vision API should NOT be called in Scoring mode (uses DocumentParser)
+      expect(mockVisionContentBuilder.buildImageContent).not.toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(0);
+    });
+
+    it('should still process text files in Assessment mode', async () => {
+      mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
+        createFileWithExcerpt({
+          id: 'file-1',
+          filename: 'image.png',
+          mimeType: 'image/png',
+          storagePath: 's3://bucket/image.png',
+        }),
+        createFileWithExcerpt({
+          id: 'file-2',
+          filename: 'vendor.pdf',
+          mimeType: 'application/pdf',
+          storagePath: 's3://bucket/vendor.pdf',
+          intakeContext: createIntakeContext({ vendorName: 'Acme' }),
+        }),
+      ]);
+
+      const result = await builderWithVision.buildWithImages('conv-123', undefined, {
+        mode: 'assessment',
+      });
+
+      // Images skipped, but PDFs still processed
+      expect(result.imageBlocks).toHaveLength(0);
+      expect(result.textContext).toContain('Acme');
+    });
+
+    it('should log when Vision is disabled for non-consult mode', async () => {
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+      await builderWithVision.buildWithImages('conv-123', undefined, {
+        mode: 'assessment',
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Vision API disabled for mode=assessment')
+      );
+
+      consoleSpy.mockRestore();
     });
   });
 });

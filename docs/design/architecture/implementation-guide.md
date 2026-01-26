@@ -1305,7 +1305,128 @@ describe('Assessment Creation Flow', () => {
 
 ---
 
+## Vision & Image Handling
 
+### Architecture Overview (Epic 30)
+
+Guardian has **two Vision API paths** that serve different purposes:
+
+1. **Document Intake/Scoring** - Extracts structured data from documents during upload
+2. **Chat Vision (Consult mode)** - Allows Claude to see images during conversation
+
+### Document Intake Vision (Existing - DocumentParserService)
+
+Used during document upload for extracting structured data:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| ClaudeClient | `infrastructure/ai/ClaudeClient.ts` | Implements IVisionClient, prepares documents for Vision API |
+| DocumentParserService | `infrastructure/ai/DocumentParserService.ts` | Parses documents for intake/scoring contexts |
+
+**Document Type Handling:**
+- **PDFs**: Text extraction via `pdf-parse`
+- **Images (PNG, JPEG, WebP)**: Base64 encoding → Vision API for structured extraction
+- **DOCX**: Text extraction via `mammoth`
+
+### Chat Vision Pipeline (Epic 30 - Consult Mode Only)
+
+**NEW in Epic 30:** Users can upload images and Claude can "see" them during chat:
+
+```
+Upload Image → Database (files table)
+                     ↓
+User Message → MessageHandler → FileContextBuilder.buildWithImages()
+                                         ↓
+                              VisionContentBuilder → S3 → Base64
+                                         ↓
+                              imageBlocks: ImageContentBlock[]
+                                         ↓
+                              ClaudeClient.streamMessage(..., imageBlocks)
+                                         ↓
+                              Claude Vision API (sees image + text)
+```
+
+**Key Components:**
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| VisionContentBuilder | `infrastructure/ai/VisionContentBuilder.ts` | Converts file → ImageContentBlock |
+| FileContextBuilder | `infrastructure/websocket/context/FileContextBuilder.ts` | Builds text + image context |
+| MessageHandler | `infrastructure/websocket/handlers/MessageHandler.ts` | Passes imageBlocks to Claude |
+
+### Mode-Specific Behavior (Story 30.4.3)
+
+Vision API support in chat is **Consult mode only**:
+
+| Mode | Vision in Chat | Document Parsing |
+|------|----------------|------------------|
+| **Consult** | YES - Images sent to Claude | N/A |
+| **Assessment** | NO - Images skipped | Uses DocumentParserService |
+| **Scoring** | NO - Uses existing flow | Uses DocumentParserService |
+
+```typescript
+// FileContextBuilder.buildWithImages(conversationId, scopeToFileIds, options)
+const result = await fileContextBuilder.buildWithImages('conv-123', undefined, {
+  mode: 'consult', // Vision enabled (default)
+});
+
+const result = await fileContextBuilder.buildWithImages('conv-123', undefined, {
+  mode: 'assessment', // Vision disabled
+});
+```
+
+### Image Format Support & Limits
+
+**Supported Formats:**
+- PNG (`image/png`)
+- JPEG (`image/jpeg`, `image/jpg` - normalized to `image/jpeg`)
+- GIF (`image/gif`) - first frame analyzed
+- WebP (`image/webp`)
+
+**Size Limits:**
+- Maximum: 5MB per image (Anthropic API limit)
+- Warning threshold: 4MB (logged for monitoring)
+- Oversized images: Gracefully rejected (not sent to Claude)
+
+### Caching Strategy (Story 30.3.5)
+
+Vision content is cached to avoid redundant S3 fetches:
+
+**Cache Key Format:** `conversationId:fileId`
+
+**Cache Lifecycle:**
+1. First message with image → Fetch from S3, encode base64, cache
+2. Subsequent messages → Use cached ImageContentBlock
+3. Conversation ends → Clear cache via `visionContentBuilder.clearConversationCache(conversationId)`
+
+**Why conversation-scoped:** Prevents cross-conversation data leakage and memory bloat.
+
+### Security Considerations (Story 30.4.2)
+
+**HIPAA-Compliant Logging:**
+- NEVER log filename (may contain PHI like patient names)
+- NEVER log base64 data or buffer contents
+- Only log: fileId (UUID), mimeType, size
+
+**Example of safe logging:**
+```typescript
+// CORRECT: Log fileId only
+console.error(`[VisionContentBuilder] Failed to retrieve file: fileId=${file.id}`);
+
+// WRONG: Never log filename
+console.error(`Failed to process ${file.filename}`); // May contain PHI!
+```
+
+### Error Handling
+
+**Graceful Degradation:**
+- S3 retrieval failure → Log error, skip image, continue with other files
+- Base64 encoding failure → Log error, skip image, continue
+- Oversized image (>5MB) → Log warning, reject before S3 fetch
+- Unsupported format → Log warning, skip image
+
+**User Fallback:**
+When an image cannot be processed, the conversation continues without it. Claude will only see text context from other files.
 
 ---
 

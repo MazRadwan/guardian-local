@@ -7,4 +7,5 @@
 export * from './ClaudeClient.js';
 export * from './DocumentParserService.js';
 export * from './PromptCacheManager.js';
+export * from './VisionContentBuilder.js';
 export * from './prompts/index.js';

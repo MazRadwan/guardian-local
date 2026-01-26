@@ -45,8 +45,9 @@ import { isPlaceholderTitle } from '../../../application/services/TitleGeneratio
 import type { IAuthenticatedSocket } from '../ChatContext.js';
 import type { RateLimiter } from '../RateLimiter.js';
 import type { MessageAttachment, MessageComponent } from '../../../domain/entities/Message.js';
-import type { FileContextBuilder } from '../context/FileContextBuilder.js';
+import type { FileContextBuilder, FileContextResult } from '../context/FileContextBuilder.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock, ClaudeTool } from '../../../application/interfaces/IClaudeClient.js';
+import type { ImageContentBlock } from '../../ai/types/vision.js';
 
 /**
  * Story 28.11.2: MIME type to validated document type mapping
@@ -160,6 +161,7 @@ export interface StreamingResult {
 
 /**
  * Story 28.9.5: Options for streamClaudeResponse
+ * Epic 30 Sprint 3: Added imageBlocks for Vision API support
  */
 export interface StreamingOptions {
   /** Whether to enable Claude tools */
@@ -170,6 +172,8 @@ export interface StreamingOptions {
   usePromptCache?: boolean;
   /** Cached prompt ID (if using prompt caching) */
   cachedPromptId?: string;
+  /** Epic 30: Image content blocks for Vision API */
+  imageBlocks?: ImageContentBlock[];
 }
 
 /**
@@ -420,6 +424,8 @@ export class MessageHandler {
    * Build file context for Claude prompt
    *
    * Story 28.9.2: File context building for Claude prompts
+   * Epic 30 Sprint 3: Now returns FileContextResult with both text and image blocks
+   * Epic 30 Sprint 4 Story 30.4.3: Mode parameter for Vision API gating
    *
    * NOTE: This method receives enrichedAttachments that have ALREADY been
    * validated by validateSendMessage(). It does NOT re-validate.
@@ -428,32 +434,42 @@ export class MessageHandler {
    * handled in Story 28.9.1 via `findByIdAndConversation` in validateSendMessage().
    *
    * Context building scenarios:
-   * 1. No FileContextBuilder configured - returns empty string
+   * 1. No FileContextBuilder configured - returns empty result
    * 2. No attachments provided - uses all conversation files
    * 3. Empty attachments array - uses all conversation files
    * 4. Specific attachments - scopes to those validated file IDs
    *
+   * Mode-specific behavior (Epic 30 Sprint 4 Story 30.4.3):
+   * - Consult mode: Images processed via Vision API (returns imageBlocks)
+   * - Assessment mode: Images NOT processed via Vision API (returns empty imageBlocks)
+   * - Scoring mode: Uses DocumentParser flow, not this method
+   *
    * @param conversationId - The conversation ID
    * @param enrichedAttachments - Pre-validated attachments from validation step (optional)
-   * @returns Context string for Claude prompt (empty if no builder or no files)
+   * @param mode - Conversation mode for Vision API gating (default: consult)
+   * @returns FileContextResult with textContext and imageBlocks
    */
   async buildFileContext(
     conversationId: string,
-    enrichedAttachments?: MessageAttachment[]
-  ): Promise<string> {
-    // No FileContextBuilder configured - return empty
+    enrichedAttachments?: MessageAttachment[],
+    mode?: 'consult' | 'assessment' | 'scoring'
+  ): Promise<FileContextResult> {
+    // No FileContextBuilder configured - return empty result
     if (!this.fileContextBuilder) {
-      return '';
+      return { textContext: '', imageBlocks: [] };
     }
+
+    // Build options with mode for Vision API gating
+    const options = mode ? { mode } : undefined;
 
     // No specific files - use all conversation files
     if (!enrichedAttachments || enrichedAttachments.length === 0) {
-      return await this.fileContextBuilder.build(conversationId);
+      return await this.fileContextBuilder.buildWithImages(conversationId, undefined, options);
     }
 
     // Scope to specific validated files
     const fileIds = enrichedAttachments.map((a) => a.fileId);
-    return await this.fileContextBuilder.build(conversationId, fileIds);
+    return await this.fileContextBuilder.buildWithImages(conversationId, fileIds, options);
   }
 
   /**
@@ -565,7 +581,7 @@ export class MessageHandler {
    * @param conversationId - Conversation ID for the message
    * @param messages - Message history for Claude context
    * @param systemPrompt - System prompt for Claude
-   * @param options - Streaming options (tools, caching)
+   * @param options - Streaming options (tools, caching, imageBlocks)
    * @returns StreamingResult with response, tool uses, and abort status
    */
   async streamClaudeResponse(
@@ -602,8 +618,11 @@ export class MessageHandler {
         ...(options.enableTools && options.tools && { tools: options.tools }),
       };
 
+      // Epic 30 Sprint 3: Pass imageBlocks to Claude for Vision API support
+      const imageBlocks = options.imageBlocks && options.imageBlocks.length > 0 ? options.imageBlocks : undefined;
+
       // Stream response chunks from Claude using async iterator
-      for await (const chunk of this.claudeClient.streamMessage(messages, claudeOptions)) {
+      for await (const chunk of this.claudeClient.streamMessage(messages, claudeOptions, imageBlocks)) {
         // CRITICAL: Check if stream was aborted by user
         if (socket.data.abortRequested) {
           console.log(`[MessageHandler] Stream aborted by user, breaking loop`);

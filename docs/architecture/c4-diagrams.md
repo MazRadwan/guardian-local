@@ -1,6 +1,6 @@
 # Guardian C4 Architecture Diagrams
 
-> **Last Updated:** 2026-01-07
+> **Last Updated:** 2026-01-20
 > **Mermaid Version:** 11.4.1+
 
 This document contains the C4 model diagrams for Guardian at four zoom levels.
@@ -264,9 +264,34 @@ flowchart TB
             documentController["DocumentUploadController<br><i>Upload, download, parse</i>"]
         end
 
-        subgraph websocket["WebSocket Layer (/chat)"]
-            chatServer["ChatServer<br><i>Real-time chat namespace<br>+ formatMultiDocContextForClaude<br>+ sanitizeForPrompt</i>"]
-            rateLimiter["RateLimiter<br><i>Per-user rate limits</i>"]
+        subgraph websocket["WebSocket Layer (/chat) - Epic 28 Modular"]
+            chatServer["ChatServer<br><i>Orchestrator</i>"]
+
+            subgraph handlers["Handlers"]
+                connectionHandler["ConnectionHandler"]
+                messageHandler["MessageHandler"]
+                conversationHandler["ConversationHandler"]
+                modeSwitchHandler["ModeSwitchHandler"]
+                questionnaireHandler["QuestionnaireHandler"]
+                scoringHandler["ScoringHandler"]
+            end
+
+            subgraph modeStrategies["Mode Strategies"]
+                consultStrategy["ConsultModeStrategy"]
+                assessmentStrategy["AssessmentModeStrategy"]
+                scoringStrategy["ScoringModeStrategy"]
+            end
+
+            subgraph contextBuilders["Context Builders"]
+                convContextBuilder["ConversationContextBuilder"]
+                fileContextBuilder["FileContextBuilder"]
+            end
+
+            subgraph wsUtils["Utilities"]
+                streamingHandler["StreamingHandler"]
+                toolUseRegistry["ToolUseRegistry"]
+                rateLimiter["RateLimiter"]
+            end
         end
 
         subgraph services["Application Services"]
@@ -342,13 +367,28 @@ flowchart TB
     documentController --> documentParser
     documentController --> scoringService
 
-    %% WebSocket relationships
+    %% WebSocket relationships (Epic 28 modular)
+    chatServer --> connectionHandler
+    chatServer --> messageHandler
+    chatServer --> conversationHandler
+    chatServer --> modeSwitchHandler
+    chatServer --> questionnaireHandler
+    chatServer --> scoringHandler
     chatServer --> rateLimiter
-    chatServer --> conversationService
-    chatServer --> questionnaireReadyService
-    chatServer --> questionnaireGenService
-    chatServer --> promptCacheManager
-    chatServer --> fileRepo
+
+    messageHandler --> consultStrategy
+    messageHandler --> assessmentStrategy
+    messageHandler --> scoringStrategy
+    messageHandler --> convContextBuilder
+    messageHandler --> fileContextBuilder
+    messageHandler --> streamingHandler
+    messageHandler --> toolUseRegistry
+    messageHandler --> promptCacheManager
+
+    conversationHandler --> conversationService
+    questionnaireHandler --> questionnaireReadyService
+    questionnaireHandler --> questionnaireGenService
+    scoringHandler --> scoringService
 
     %% Service to AI relationships
     promptCacheManager --> claudeClient
@@ -412,7 +452,7 @@ flowchart TB
 | Layer | Components | Responsibility |
 |-------|------------|----------------|
 | HTTP Controllers | Auth, Vendor, Assessment, Question, Export, ScoringExport, DocumentUpload | REST endpoint handlers |
-| WebSocket | ChatServer, RateLimiter | Real-time chat, streaming, rate limiting |
+| WebSocket (Epic 28) | ChatServer → Handlers (6) + Mode Strategies (3) + Context Builders (2) + Utilities | Real-time chat, streaming, rate limiting |
 | Services | Auth, Conversation, Assessment, Vendor, Question, QuestionnaireGen, Export, Scoring, ScoringExport, FileValidation | Business logic orchestration |
 | AI & Parsing | ClaudeClient, PromptCacheManager, DocumentParser, ScoringPromptBuilder | LLM integration, document extraction |
 | Data Layer | 10 Repositories + JWTProvider | Database access via Drizzle ORM |
@@ -421,7 +461,10 @@ flowchart TB
 
 ### Key Patterns
 
-- `ChatServer` is the **WebSocket orchestrator** - handles all real-time events
+- `ChatServer` is the **WebSocket orchestrator** - delegates to specialized handlers (Epic 28)
+- **Handlers** separate concerns: Connection, Message, Conversation, ModeSwitch, Questionnaire, Scoring
+- **Mode Strategies** encapsulate mode-specific behavior: Consult, Assessment, Scoring
+- **Context Builders** construct Claude API context: Conversation history, File attachments
 - `PromptCacheManager` optimizes Claude API calls with caching
 - `DocumentParserService` uses ClaudeClient for both text and vision parsing (intake + scoring)
 - `ScoringService` orchestrates parse -> LLM scoring -> persistence, triggered from uploads
@@ -500,3 +543,73 @@ WebSocket Events:
 Database:
 - `files` table with `intake_context`, `intake_gap_categories`, `intake_parsed_at`
 - `messages.attachments` JSONB for file references
+
+### Epic 20 - Scoring Optimization & Narrative Generation
+
+Backend:
+- `narrativeStatus`, `narrativeClaimedAt`, `narrativeCompletedAt`, `narrativeError` fields in `assessment_results`
+- Concurrency-safe claim pattern for narrative generation
+- `ExportNarrativeGenerator` - Generates narrative reports with claim/release pattern
+- Orphan cleanup for abandoned responses
+
+Database:
+- `assessment_results` table extended with narrative generation status tracking
+- Indexes for efficient narrative status queries
+
+### Epic 25 - Chat Title Intelligence
+
+Frontend:
+- Auto-generated conversation titles displayed in Sidebar
+- Title updates after meaningful exchanges
+- Manual title edit protection
+
+Backend:
+- `TitleGenerationService` - Generates conversation titles from message content
+- `ConversationService.updateTitle()` - Updates title with manual edit flag
+
+Database:
+- `conversations.title` - Generated or user-edited title
+- `conversations.title_manually_edited` - Prevents auto-updates from overwriting manual edits
+
+WebSocket Events:
+- `conversation_title_updated` - Title change notification
+
+### Epic 28 - ChatServer Modular Refactoring
+
+**Major architectural refactor** decomposing monolithic ChatServer into modular components.
+
+Handlers (6):
+| Handler | Responsibility |
+|---------|----------------|
+| `ConnectionHandler` | Socket connection, authentication, connection_ready events |
+| `MessageHandler` | Core message processing, streaming, tool use orchestration |
+| `ConversationHandler` | Conversation CRUD: create, list, delete, title generation |
+| `ModeSwitchHandler` | Mode switching between consult, assessment, scoring |
+| `QuestionnaireHandler` | Questionnaire generation, export status, export_ready events |
+| `ScoringHandler` | Scoring workflow, vendor clarifications, scoring progress |
+
+Mode Strategies (3):
+| Strategy | Responsibility |
+|----------|----------------|
+| `ConsultModeStrategy` | Builds context for general Q&A mode |
+| `AssessmentModeStrategy` | Builds context for questionnaire generation mode |
+| `ScoringModeStrategy` | Builds context for response scoring mode |
+
+Context Builders (2):
+| Builder | Responsibility |
+|---------|----------------|
+| `ConversationContextBuilder` | Builds conversation context for Claude API calls |
+| `FileContextBuilder` | Builds file/attachment context for Claude API calls |
+
+Utilities:
+| Utility | Responsibility |
+|---------|----------------|
+| `StreamingHandler` | Handles streaming responses from Claude to client |
+| `ToolUseRegistry` | Tracks tool use blocks during Claude streaming responses |
+| `ChatContext` | Shared context object for handler communication |
+
+Benefits:
+- Single Responsibility Principle - each handler has one job
+- Testability - handlers can be unit tested in isolation
+- Maintainability - changes to one concern don't affect others
+- Extensibility - easy to add new handlers or strategies

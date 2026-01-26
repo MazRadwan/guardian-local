@@ -110,11 +110,14 @@ export const REJECTED_EXTENSIONS: Record<string, string> = {
 
 /**
  * Maximum file sizes by type (in bytes)
+ *
+ * Epic 30: Image limit reduced to 5MB to match Anthropic Vision API limit.
+ * Images 5-10MB would upload successfully but fail at API call time.
  */
 export const MAX_FILE_SIZES: Record<DocumentType, number> = {
   pdf: 20 * 1024 * 1024,    // 20MB
   docx: 20 * 1024 * 1024,   // 20MB
-  image: 10 * 1024 * 1024,  // 10MB
+  image: 5 * 1024 * 1024,   // 5MB - Anthropic Vision API limit
 };
 
 /**

@@ -21,6 +21,7 @@ import jwt from 'jsonwebtoken';
 import type { IAuthenticatedSocket } from '../ChatContext.js';
 import type { ConversationService } from '../../../application/services/ConversationService.js';
 import type { Conversation } from '../../../domain/entities/Conversation.js';
+import type { IVisionContentBuilder } from '../../../application/interfaces/IVisionContentBuilder.js';
 
 /**
  * JWT payload structure from authentication tokens
@@ -87,7 +88,8 @@ export interface ConnectionReadyPayload {
 export class ConnectionHandler {
   constructor(
     private readonly conversationService: ConversationService,
-    private readonly jwtSecret: string
+    private readonly jwtSecret: string,
+    private readonly visionContentBuilder?: IVisionContentBuilder
   ) {}
 
   /**
@@ -142,10 +144,10 @@ export class ConnectionHandler {
    * Handle socket disconnection
    *
    * Story 28.4.3: Extracted disconnect handler
+   * Epic 30: Added Vision cache cleanup on disconnect
    *
    * Logs disconnection with socket ID and reason for debugging.
-   * Future enhancement: Add cleanup logic for pending operations
-   * or active streams if needed.
+   * Clears Vision API image cache for the conversation to prevent memory leaks.
    *
    * @param socket - Disconnecting socket
    * @param reason - Disconnect reason from Socket.IO (e.g., 'transport close', 'client namespace disconnect')
@@ -153,10 +155,12 @@ export class ConnectionHandler {
   handleDisconnect(socket: IAuthenticatedSocket, reason: string): void {
     console.log(`[ConnectionHandler] Client disconnected: ${socket.id} (User: ${socket.userId}, Reason: ${reason})`);
 
-    // Future: Add cleanup logic if needed
-    // - Clear pending operations
-    // - Abort active streams
-    // - Remove from active sessions tracking
+    // Epic 30: Clear Vision content cache on disconnect to prevent memory leaks
+    // Cache is conversation-scoped, so only clear if there's an active conversation
+    if (socket.conversationId && this.visionContentBuilder) {
+      this.visionContentBuilder.clearConversationCache(socket.conversationId);
+      console.log(`[ConnectionHandler] Cleared vision cache for conversation ${socket.conversationId}`);
+    }
   }
 
   /**

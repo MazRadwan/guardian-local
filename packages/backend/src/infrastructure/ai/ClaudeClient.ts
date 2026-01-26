@@ -5,6 +5,7 @@
  * Model: claude-sonnet-4-5-20250929 (latest Sonnet 4.5)
  *
  * Epic 16: Extended with Vision API support for document parsing
+ * Epic 30: Extended with ContentBlock array support for multimodal messages
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -29,6 +30,11 @@ import type {
   StreamWithToolOptions,
   ToolDefinition,
 } from '../../application/interfaces/ILLMClient.js';
+import type {
+  ImageContentBlock,
+  ClaudeApiMessage,
+  ContentBlock,
+} from './types/index.js';
 
 export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
   private client: Anthropic;
@@ -140,16 +146,28 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
   /**
    * Stream message from Claude with real-time chunks
    * Includes retry logic for overloaded errors
+   *
+   * Epic 30: Added optional imageBlocks parameter for multimodal messages.
+   * When imageBlocks are provided, they are merged into the last user message
+   * using ContentBlock array format.
+   *
+   * @param messages - Conversation history (domain format, string content)
+   * @param options - Optional request settings (system prompt, cached prompt id)
+   * @param imageBlocks - Optional image content blocks to include in last user message
    */
   async *streamMessage(
     messages: ClaudeMessage[],
-    options: ClaudeRequestOptions = {}
+    options: ClaudeRequestOptions = {},
+    imageBlocks?: ImageContentBlock[]
   ): AsyncGenerator<StreamChunk> {
     const { systemPrompt, usePromptCache, tools } = options;
     const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
     const requestOptions = usePromptCache
       ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
       : undefined;
+
+    // Convert domain messages to API format, merging imageBlocks if provided
+    const apiMessages = this.toApiMessages(messages, imageBlocks);
 
     let lastError: Error | null = null;
 
@@ -160,10 +178,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
             model: this.model,
             max_tokens: this.maxTokens,
             system,
-            messages: messages.map((msg) => ({
-              role: msg.role,
-              content: msg.content,
-            })),
+            messages: apiMessages,
             // Add tools if provided
             ...(tools && tools.length > 0 && { tools }),
           },
@@ -291,6 +306,78 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
     }
 
     return systemPrompt;
+  }
+
+  /**
+   * Convert domain messages to API format, optionally merging image blocks
+   *
+   * Epic 30: This method handles the conversion from domain ClaudeMessage (string content)
+   * to ClaudeApiMessage (string | ContentBlock[]) for the Anthropic API.
+   *
+   * When imageBlocks are provided:
+   * - Finds the last user message
+   * - Converts it to ContentBlock[] format with text + images
+   * - Other messages remain as simple strings
+   *
+   * @param messages - Domain messages with string content
+   * @param imageBlocks - Optional image content blocks to merge into last user message
+   * @returns API-formatted messages ready for Anthropic API
+   */
+  private toApiMessages(
+    messages: ClaudeMessage[],
+    imageBlocks?: ImageContentBlock[]
+  ): ClaudeApiMessage[] {
+    // If no imageBlocks, return messages as-is (backward compatible)
+    if (!imageBlocks || imageBlocks.length === 0) {
+      return messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+    }
+
+    // Find the index of the last user message
+    let lastUserIndex = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        lastUserIndex = i;
+        break;
+      }
+    }
+
+    // If no user message found, add images as new user message
+    if (lastUserIndex === -1) {
+      const newUserContent: ContentBlock[] = [
+        ...imageBlocks,
+        { type: 'text', text: '' },
+      ];
+      return [
+        ...messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        { role: 'user', content: newUserContent },
+      ];
+    }
+
+    // Merge imageBlocks into the last user message
+    return messages.map((msg, index) => {
+      if (index === lastUserIndex) {
+        // Convert to ContentBlock array: images first, then text
+        const contentBlocks: ContentBlock[] = [
+          ...imageBlocks,
+          { type: 'text', text: msg.content },
+        ];
+        return {
+          role: msg.role,
+          content: contentBlocks,
+        };
+      }
+      // Other messages remain as simple strings
+      return {
+        role: msg.role,
+        content: msg.content,
+      };
+    });
   }
 
   // =========================================================================

@@ -2,9 +2,24 @@
  * FileContextBuilder - Builds document context for Claude from uploaded files
  *
  * Epic 28 Story 28.2.2: Extracted from ChatServer.ts
+ * Epic 30 Sprint 3: Extended with Vision API support for image files
+ * Epic 30 Sprint 4 Story 30.4.2: Enhanced error handling & security logging
  *
  * This builder handles file context injection into Claude prompts for consult/assessment modes.
  * Uses fallback hierarchy: intakeContext -> textExcerpt -> S3 re-read (with lazy backfill).
+ *
+ * For image files (PNG, JPEG, GIF, WebP), delegates to VisionContentBuilder to create
+ * ImageContentBlock for Claude's Vision API instead of text extraction.
+ *
+ * ## Error Handling
+ * - VisionContentBuilder failures: logged, image skipped, continues with other files
+ * - S3 retrieval failures: logged, file skipped, continues with other files
+ * - Text extraction failures: logged, file skipped, continues with other files
+ *
+ * ## Security (HIPAA Considerations)
+ * - NEVER logs filename in error messages (may contain PHI)
+ * - Only logs fileId (UUID) which is safe metadata
+ * - All errors use fileId for traceability without PHI exposure
  *
  * NOTE: Legacy intake context injection is handled by ConversationContextBuilder (Story 28.2.1),
  * NOT this builder.
@@ -19,6 +34,8 @@ import type {
   ITextExtractionService,
   ValidatedDocumentType,
 } from '../../../application/interfaces/ITextExtractionService.js';
+import type { IVisionContentBuilder } from '../../../application/interfaces/IVisionContentBuilder.js';
+import type { ImageContentBlock } from '../../ai/types/vision.js';
 import {
   sanitizeForPrompt,
   CHAT_CONTEXT_PROFILE,
@@ -39,6 +56,32 @@ const MIME_TYPE_MAP: Record<string, ValidatedDocumentType> = {
 };
 
 /**
+ * Epic 30 Sprint 3: Result of building file context
+ *
+ * Returns both text context (for non-image files) and image blocks (for Vision API).
+ * ImageBlocks are passed separately to ClaudeClient, not embedded in domain messages.
+ */
+export interface FileContextResult {
+  /** Formatted text context for text-based files */
+  textContext: string;
+  /** Vision API image blocks for image files */
+  imageBlocks: ImageContentBlock[];
+}
+
+/**
+ * Epic 30 Sprint 4 Story 30.4.3: Mode-specific options for file context building
+ *
+ * Vision API support is mode-specific:
+ * - Consult mode: Images analyzed via Vision API
+ * - Assessment mode: Images NOT processed via Vision (out of scope for Epic 30)
+ * - Scoring mode: Uses existing DocumentParser flow, not this builder
+ */
+export interface FileContextOptions {
+  /** Conversation mode - determines if Vision API is used */
+  mode?: 'consult' | 'assessment' | 'scoring';
+}
+
+/**
  * FileContextBuilder - Builds document context for Claude from uploaded files
  *
  * IMPORTANT: Sanitization profiles:
@@ -54,25 +97,39 @@ export class FileContextBuilder {
   constructor(
     private readonly fileRepository: IFileRepository,
     private readonly fileStorage?: IFileStorage,
-    private readonly textExtractionService?: ITextExtractionService
+    private readonly textExtractionService?: ITextExtractionService,
+    private readonly visionContentBuilder?: IVisionContentBuilder
   ) {}
 
   /**
    * Epic 18: Build context for Claude from attached files using fallback hierarchy
+   * Epic 30 Sprint 3: Now returns FileContextResult with both text and image blocks
+   * Epic 30 Sprint 4 Story 30.4.3: Mode-specific Vision API behavior
    *
-   * Fallback hierarchy:
+   * Fallback hierarchy for text files:
    * 1. intakeContext (structured, from Claude enrichment) - best
    * 2. textExcerpt (raw text, from upload extraction) - good
    * 3. Re-read from S3 (slow fallback for missing excerpt)
    *
+   * For image files (PNG, JPEG, GIF, WebP):
+   * - In Consult mode: Delegates to VisionContentBuilder to create ImageContentBlock
+   * - In Assessment mode: Images skipped (Vision not supported, out of scope for Epic 30)
+   * - In Scoring mode: Uses DocumentParser flow, not this method
+   *
    * @param conversationId - Conversation to get files for
    * @param scopeToFileIds - Optional array of file IDs to limit context to (for auto-summarize)
-   * @returns Formatted context string for Claude (empty if no files)
+   * @param options - Optional mode-specific options
+   * @returns FileContextResult with textContext string and imageBlocks array
    */
-  async build(
+  async buildWithImages(
     conversationId: string,
-    scopeToFileIds?: string[]
-  ): Promise<string> {
+    scopeToFileIds?: string[],
+    options?: FileContextOptions
+  ): Promise<FileContextResult> {
+    // Story 30.4.3: Check if Vision API is enabled for this mode
+    // Vision is only enabled in Consult mode (default if not specified)
+    const mode = options?.mode || 'consult';
+    const visionEnabled = mode === 'consult';
     // Use method that returns ALL files with excerpt data (not just those with intakeContext)
     let files =
       await this.fileRepository.findByConversationWithExcerpt(conversationId);
@@ -84,12 +141,50 @@ export class FileContextBuilder {
     }
 
     if (files.length === 0) {
-      return '';
+      return { textContext: '', imageBlocks: [] };
     }
 
     const contextParts: string[] = [];
+    const imageBlocks: ImageContentBlock[] = [];
 
     for (const file of files) {
+      // Epic 30: Check if file is an image - delegate to VisionContentBuilder
+      if (this.isImageFile(file.mimeType)) {
+        // Story 30.4.3: Only process images for Vision API in Consult mode
+        if (!visionEnabled) {
+          console.log(`[FileContextBuilder] Vision API disabled for mode=${mode}, skipping image file ${file.id}`);
+          continue; // Skip images in non-consult modes
+        }
+
+        if (this.visionContentBuilder) {
+          try {
+            // Story 30.3.5: Pass conversationId for caching
+            const block = await this.visionContentBuilder.buildImageContent(
+              {
+                id: file.id,
+                mimeType: file.mimeType,
+                size: this.getFileSize(file),
+                storagePath: file.storagePath,
+              },
+              conversationId
+            );
+            if (block) {
+              imageBlocks.push(block);
+              console.log(`[FileContextBuilder] Image file ${file.id} converted to ImageContentBlock`);
+            } else {
+              console.warn(`[FileContextBuilder] Failed to build image content for ${file.id}`);
+            }
+          } catch (err) {
+            // Story 30.4.2: SECURITY - only log fileId, not filename (may contain PHI)
+            console.error(`[FileContextBuilder] Error building image content for fileId=${file.id}:`, err);
+            // Graceful fallback: continue without this image
+          }
+        } else {
+          console.warn(`[FileContextBuilder] VisionContentBuilder not configured, skipping image file ${file.id}`);
+        }
+        continue; // Don't process images as text
+      }
+
       // Priority 1: Structured intake context (best)
       if (file.intakeContext) {
         contextParts.push(this.formatIntakeContextFile(file));
@@ -130,12 +225,51 @@ export class FileContextBuilder {
       }
     }
 
-    if (contextParts.length === 0) {
-      return '';
+    // Build text context (MUST match ChatServer output format exactly)
+    let textContext = '';
+    if (contextParts.length > 0) {
+      textContext = `\n\n--- Attached Documents ---\n${contextParts.join('\n\n')}`;
     }
 
-    // MUST match ChatServer output format exactly
-    return `\n\n--- Attached Documents ---\n${contextParts.join('\n\n')}`;
+    return { textContext, imageBlocks };
+  }
+
+  /**
+   * Epic 18: Build context for Claude (backwards compatible, text-only)
+   *
+   * @deprecated Use buildWithImages() for Vision API support
+   * @param conversationId - Conversation to get files for
+   * @param scopeToFileIds - Optional array of file IDs to limit context to (for auto-summarize)
+   * @returns Formatted context string for Claude (empty if no files)
+   */
+  async build(
+    conversationId: string,
+    scopeToFileIds?: string[]
+  ): Promise<string> {
+    const result = await this.buildWithImages(conversationId, scopeToFileIds);
+    // Backwards compatible: return only text context, ignore image blocks
+    return result.textContext;
+  }
+
+  /**
+   * Check if a MIME type is a supported image format for Vision API
+   */
+  private isImageFile(mimeType: string): boolean {
+    return (
+      mimeType === 'image/png' ||
+      mimeType === 'image/jpeg' ||
+      mimeType === 'image/jpg' ||
+      mimeType === 'image/gif' ||
+      mimeType === 'image/webp'
+    );
+  }
+
+  /**
+   * Get file size from FileWithExcerpt (may not always have size field)
+   */
+  private getFileSize(file: FileWithExcerpt): number {
+    // FileWithExcerpt may include size from the files table
+    return (file as FileWithExcerpt & { size?: number }).size || 0;
   }
 
   /**

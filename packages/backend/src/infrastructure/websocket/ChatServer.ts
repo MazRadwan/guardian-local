@@ -43,6 +43,7 @@ import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/
 import { assessmentModeTools } from '../ai/tools/index.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
 import type { ITitleGenerationService } from '../../application/interfaces/ITitleGenerationService.js';
+import type { IVisionContentBuilder } from '../../application/interfaces/IVisionContentBuilder.js';
 import { ConversationContextBuilder } from './context/ConversationContextBuilder.js';
 import { FileContextBuilder } from './context/FileContextBuilder.js';
 import { StreamingHandler } from './StreamingHandler.js';
@@ -86,18 +87,21 @@ export class ChatServer {
     textExtractionService?: ITextExtractionService,
     intakeParser?: IIntakeDocumentParser,
     vendorValidationService?: VendorValidationService,
-    titleGenerationService?: ITitleGenerationService  // Optional - MessageHandler handles absence gracefully
+    titleGenerationService?: ITitleGenerationService,  // Optional - MessageHandler handles absence gracefully
+    visionContentBuilder?: IVisionContentBuilder       // Epic 30 Sprint 3: Vision API for image files
   ) {
     // Initialize shared state
     this.chatContext = createChatContext(rateLimiter, promptCacheManager);
 
     // Initialize context builders
     this.contextBuilder = new ConversationContextBuilder(conversationService, promptCacheManager, fileRepository);
-    const fileContextBuilder = new FileContextBuilder(fileRepository, fileStorage, textExtractionService);
+    // Epic 30 Sprint 3: Pass visionContentBuilder to FileContextBuilder for image file support
+    const fileContextBuilder = new FileContextBuilder(fileRepository, fileStorage, textExtractionService, visionContentBuilder);
     const streamingHandler = new StreamingHandler();
 
     // Initialize handlers
-    this.connectionHandler = new ConnectionHandler(conversationService, jwtSecret);
+    // Epic 30: Pass visionContentBuilder to ConnectionHandler for cache cleanup on disconnect
+    this.connectionHandler = new ConnectionHandler(conversationService, jwtSecret, visionContentBuilder);
     this.conversationHandler = new ConversationHandler(conversationService);
     this.modeSwitchHandler = new ModeSwitchHandler(conversationService);
     this.scoringHandler = new ScoringHandler(scoringService, fileRepository, fileStorage, conversationService, claudeClient, vendorValidationService, this.contextBuilder);
@@ -208,19 +212,25 @@ export class ChatServer {
       return;
     }
 
-    // Step 6: Build enhanced prompt with file context
+    // Step 6: Build enhanced prompt with file context (Epic 30 Sprint 3: now includes imageBlocks)
+    // Epic 30 Sprint 4 Story 30.4.3: Pass mode for Vision API gating (only consult gets imageBlocks)
     let enhancedPrompt = systemPrompt;
+    let imageBlocks: import('../ai/types/vision.js').ImageContentBlock[] = [];
     if (mode === 'consult' || mode === 'assessment') {
-      const fileContext = await this.messageHandler.buildFileContext(conversationId!);
-      if (fileContext) enhancedPrompt = `${systemPrompt}${fileContext}`;
+      const fileContextResult = await this.messageHandler.buildFileContext(conversationId!, undefined, mode);
+      if (fileContextResult.textContext) {
+        enhancedPrompt = `${systemPrompt}${fileContextResult.textContext}`;
+      }
+      imageBlocks = fileContextResult.imageBlocks;
     }
 
-    // Step 7: Stream Claude response
+    // Step 7: Stream Claude response (Epic 30 Sprint 3: pass imageBlocks for Vision API)
     const result = await this.messageHandler.streamClaudeResponse(socket as IAuthenticatedSocket, conversationId!, messages, enhancedPrompt, {
       enableTools: modeConfig.enableTools,
       tools: modeConfig.enableTools ? assessmentModeTools : undefined,
       usePromptCache: promptCache?.usePromptCache || false,
       cachedPromptId: promptCache?.cachedPromptId,
+      imageBlocks,
     });
 
     // Step 8: Post-streaming (tool use, enrichment, title generation)

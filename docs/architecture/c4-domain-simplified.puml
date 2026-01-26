@@ -37,6 +37,8 @@ package "Entities" {
         +assessmentId: string
         +mode: ConversationMode
         +status: ConversationStatus
+        +title: string
+        +titleManuallyEdited: boolean
     }
 
     class Message {
@@ -44,6 +46,7 @@ package "Entities" {
         +conversationId: string
         +role: MessageRole
         +content: MessageContent
+        +attachments: MessageAttachment[]
     }
 
     class Question {
@@ -52,6 +55,14 @@ package "Entities" {
         +sectionName: string
         +questionText: string
         +questionType: QuestionType
+    }
+
+    class File {
+        +id: string
+        +conversationId: string
+        +filename: string
+        +mimeType: string
+        +intakeContext: IntakeDocumentContext
     }
 }
 
@@ -69,16 +80,56 @@ package "Value Objects" {
     class AssessmentStatus {
         -value: AssessmentStatusValue
         +canTransitionTo(): boolean
+        +isScored(): boolean
     }
 
     class AssessmentType {
         -value: AssessmentTypeValue
         +isQuick(): boolean
         +isComprehensive(): boolean
+        +isCategoryFocused(): boolean
+    }
+
+    class ConversationMode {
+        <<enumeration>>
+        consult
+        assessment
+        scoring
     }
 }
 
-package "Scoring" {
+package "Scoring Domain" {
+    class Response {
+        +id: string
+        +assessmentId: string
+        +batchId: string
+        +sectionNumber: number
+        +questionNumber: number
+        +responseText: string
+        +confidence: number
+    }
+
+    class DimensionScore {
+        +id: string
+        +assessmentId: string
+        +batchId: string
+        +dimension: RiskDimension
+        +score: number
+        +riskRating: RiskRating
+        +findings: DimensionFindings
+    }
+
+    class AssessmentResult {
+        +id: string
+        +assessmentId: string
+        +batchId: string
+        +compositeScore: number
+        +recommendation: Recommendation
+        +overallRiskRating: RiskRating
+        +narrativeReport: string
+        +narrativeStatus: NarrativeStatus
+    }
+
     interface ScoringCompletePayload {
         +compositeScore: number
         +recommendation: Recommendation
@@ -95,19 +146,46 @@ package "Scoring" {
     class ScoringPayloadValidator {
         +validate(): ValidationResult
     }
+
+    enum RiskDimension {
+        clinical_risk
+        privacy_risk
+        security_risk
+        operational_risk
+        integration_risk
+        vendor_risk
+        regulatory_risk
+        financial_risk
+        change_management_risk
+        data_governance_risk
+    }
+
+    enum Recommendation {
+        approve
+        conditional
+        decline
+        more_info
+    }
 }
 
 ' Relationships
 User "1" --> "*" Conversation : creates
 Vendor "1" --> "*" Assessment : has
 Assessment "1" --> "*" Question : contains
+Assessment "1" --> "*" Response : has
+Assessment "1" --> "*" DimensionScore : has
+Assessment "1" --> "0..1" AssessmentResult : has
 Assessment "1" --> "1" Vendor
 Conversation "1" --> "*" Message : contains
-Conversation "*" --> "1" Assessment : linked to
+Conversation "1" --> "*" File : has
+Conversation "*" --> "0..1" Assessment : linked to
 Assessment --> AssessmentStatus : has
 Assessment --> AssessmentType : has
+Conversation --> ConversationMode : has
 Vendor --> VendorName : has
 User --> Email : has
 ScoringCompletePayload --> "*" DimensionScoreData : contains
+DimensionScore --> RiskDimension : has
+AssessmentResult --> Recommendation : has
 
 @enduml

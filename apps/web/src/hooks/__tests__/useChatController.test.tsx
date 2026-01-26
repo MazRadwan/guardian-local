@@ -182,8 +182,9 @@ describe('useChatController', () => {
       appendComponentToLastAssistantMessage: jest.fn(),
     });
 
-    // Mock getState for useChatStore (for questionnaire methods and title updates)
+    // Mock getState for useChatStore (for questionnaire methods, title updates, and messages)
     (useChatStore as any).getState = jest.fn().mockReturnValue({
+      messages: [], // Required by handleMessageStream to check if streaming should start
       setQuestionnaireUIState: jest.fn(),
       setPendingQuestionnaire: jest.fn(),
       setQuestionnaireError: jest.fn(),
@@ -1096,11 +1097,13 @@ describe('useChatController', () => {
         };
       });
 
+      const messagesWithAssistant = [
+        { role: 'user', content: 'Question', timestamp: new Date() },
+        { role: 'assistant', content: 'Already streaming...', timestamp: new Date() },
+      ];
+
       (useChatStore as unknown as jest.Mock).mockReturnValue({
-        messages: [
-          { role: 'user', content: 'Question', timestamp: new Date() },
-          { role: 'assistant', content: 'Already streaming...', timestamp: new Date() },
-        ],
+        messages: messagesWithAssistant,
         isLoading: false,
         error: null,
         isStreaming: false,
@@ -1128,6 +1131,19 @@ describe('useChatController', () => {
         clearExportReady: jest.fn(),
         getExportReady: jest.fn(() => null),
         appendComponentToLastAssistantMessage: jest.fn(),
+      });
+
+      // Also mock getState to return the same messages (handleMessageStream uses getState().messages)
+      (useChatStore as any).getState = jest.fn().mockReturnValue({
+        messages: messagesWithAssistant,
+        setQuestionnaireUIState: jest.fn(),
+        setPendingQuestionnaire: jest.fn(),
+        setQuestionnaireError: jest.fn(),
+        setGenerating: jest.fn(),
+        resetGenerationStep: jest.fn(),
+        setConversationTitleLoading: jest.fn(),
+        setConversationTitleManuallyEdited: jest.fn(),
+        setEditingConversationId: jest.fn(),
       });
 
       renderHook(() => useChatController());

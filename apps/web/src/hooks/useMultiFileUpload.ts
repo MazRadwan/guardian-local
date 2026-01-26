@@ -66,9 +66,25 @@ const VALID_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'image/png',
   'image/jpeg',
+  'image/gif',
+  'image/webp',
 ];
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB per file
+
+/**
+ * Epic 30: Image MIME types subject to 5MB limit (Anthropic Vision API)
+ * All image types must respect the 5MB API limit, not the generic 20MB limit
+ */
+const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB - Anthropic Vision API limit
+
+/**
+ * Epic 30 Sprint 2: Warning threshold for large images
+ * Images between 4-5MB proceed but trigger a warning callback.
+ * Provides user feedback about file size while still allowing the upload.
+ */
+const WARN_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB - warning threshold
 
 /**
  * Epic 18: Stage precedence for monotonic transitions
@@ -161,6 +177,8 @@ export interface UseMultiFileUploadOptions {
   };
   /** Called on validation/upload errors */
   onError?: (message: string) => void;
+  /** Epic 30 Sprint 2: Warning callback for large images (4-5MB) */
+  onWarning?: (message: string) => void;
   /** Called when intake context ready */
   onContextReady?: (data: IntakeContextResult, localIndex: number) => void;
   /** Called when scoring parse ready */
@@ -217,6 +235,7 @@ export function useMultiFileUpload(
     maxFiles = 10,
     wsAdapter,
     onError,
+    onWarning,
     onContextReady,
     onScoringReady,
   } = options;
@@ -236,9 +255,11 @@ export function useMultiFileUpload(
 
   // Refs for callback stability (prevents subscription thrashing)
   const onErrorRef = useRef(onError);
+  const onWarningRef = useRef(onWarning);
   const onContextReadyRef = useRef(onContextReady);
   const onScoringReadyRef = useRef(onScoringReady);
   onErrorRef.current = onError;
+  onWarningRef.current = onWarning;
   onContextReadyRef.current = onContextReady;
   onScoringReadyRef.current = onScoringReady;
 
@@ -371,10 +392,23 @@ export function useMultiFileUpload(
           continue;
         }
 
-        // Validate individual file size (20MB per file)
+        // Epic 30: Validate image-specific size limit (5MB per Anthropic Vision API)
+        if (IMAGE_MIME_TYPES.includes(file.type) && file.size > MAX_IMAGE_SIZE) {
+          onErrorRef.current?.(`${file.name}: Image too large (max 5MB)`);
+          continue;
+        }
+
+        // Validate individual file size (20MB per file for non-images)
         if (file.size > MAX_FILE_SIZE) {
           onErrorRef.current?.(`${file.name}: File too large (max 20MB)`);
           continue;
+        }
+
+        // Epic 30 Sprint 2: Check for large image warning (non-blocking)
+        // Images between 4-5MB are allowed but trigger a warning
+        if (IMAGE_MIME_TYPES.includes(file.type) && file.size >= WARN_IMAGE_SIZE) {
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+          onWarningRef.current?.(`${file.name}: Large image (${sizeMB}MB). Consider compressing for faster upload.`);
         }
 
         const localIndex = nextIndexRef.current++;
