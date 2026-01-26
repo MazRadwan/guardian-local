@@ -1305,7 +1305,41 @@ describe('Assessment Creation Flow', () => {
 
 ---
 
+## Vision & Image Handling
 
+### Current State: Document Intake with Vision API
+
+Vision API is used **only during document upload** for extracting structured data:
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| ClaudeClient | `infrastructure/ai/ClaudeClient.ts` | Implements IVisionClient, prepares documents for Vision API |
+| DocumentParserService | `infrastructure/ai/DocumentParserService.ts` | Parses documents for intake/scoring contexts |
+
+**Document Type Handling:**
+- **PDFs**: Text extraction via `pdf-parse`
+- **Images (PNG, JPEG, WebP)**: Base64 encoding → Vision API
+- **DOCX**: Text extraction via `mammoth`
+
+### Chat Pipeline: Text Only
+
+The chat pipeline does **NOT** pass images to Claude:
+
+```
+Upload → DocumentParserService → Extract text/metadata → Database
+                                                          ↓
+Chat ← Claude API ← Text prompt ← FileContextBuilder ← Database
+```
+
+**Why:** Extracted data is cached in database. Re-analyzing images in every chat turn would be expensive and redundant.
+
+**Key Files:**
+- `FileContextBuilder.ts` - Builds file context (text only)
+- `ConversationContextBuilder.ts` - Builds Claude messages (text only)
+
+### Limitation: Images Not Visible in Chat
+
+Currently, if a user uploads an image in Consult mode and asks Claude about it, Claude only sees the filename as text - not the image content. The Vision API is only used during the document parsing phase, not in the conversational chat flow.
 
 ---
 

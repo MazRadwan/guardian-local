@@ -220,7 +220,7 @@ export function calculateSecurityScore(factors: SecurityFactors): number {
 - ❌ Implement business logic (that's domain layer)
 - ❌ Make business decisions (that's application layer)
 
-**Technology:** Express, Drizzle ORM, Anthropic SDK, WebSocket libraries
+**Technology:** Express, Drizzle ORM, Anthropic SDK (including Vision API), WebSocket libraries
 
 **Example Repository Implementation:**
 ```typescript
