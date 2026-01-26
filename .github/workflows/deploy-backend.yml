@@ -20,6 +20,7 @@ jobs:
           host: 16.54.72.26
           username: ec2-user
           key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 2m
           script: |
             cd ~/guardian-app
 
