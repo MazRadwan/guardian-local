@@ -58,28 +58,44 @@ export interface UseFileUploadOptions {
   onContextReady?: (context: IntakeContextResult) => void;
   onScoringReady?: (result: ScoringParseResult) => void;
   onError?: (error: string) => void;
+  /** Epic 30 Sprint 2: Warning callback for large images (4-5MB) */
+  onWarning?: (warning: string) => void;
 }
 
-/** MVP file types: PDF, DOCX, PNG, JPEG (no .doc) */
+/** MVP file types: PDF, DOCX, PNG, JPEG, GIF, WebP (no .doc) */
 const ACCEPTED_TYPES: Record<string, string[]> = {
   'application/pdf': ['.pdf'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
   'image/png': ['.png'],
   'image/jpeg': ['.jpg', '.jpeg'],
+  'image/gif': ['.gif'],
+  'image/webp': ['.webp'],
 };
 
 /** Size limits aligned with backend (packages/backend/src/application/interfaces/IDocumentParser.ts) */
 const MAX_FILE_SIZES: Record<string, number> = {
   'application/pdf': 20 * 1024 * 1024,           // 20MB
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 20 * 1024 * 1024, // 20MB
-  'image/png': 10 * 1024 * 1024,                 // 10MB
-  'image/jpeg': 10 * 1024 * 1024,                // 10MB
+  'image/png': 5 * 1024 * 1024,                  // 5MB - Anthropic Vision API limit
+  'image/jpeg': 5 * 1024 * 1024,                 // 5MB - Anthropic Vision API limit
+  'image/gif': 5 * 1024 * 1024,                  // 5MB - Anthropic Vision API limit
+  'image/webp': 5 * 1024 * 1024,                 // 5MB - Anthropic Vision API limit
 };
 
 const DEFAULT_MAX_SIZE = 20 * 1024 * 1024; // 20MB fallback
 
+/**
+ * Epic 30 Sprint 2: Warning threshold for large images
+ * Images between 4-5MB proceed but show a warning toast.
+ * Provides user feedback about file size while still allowing the upload.
+ */
+const WARN_IMAGE_SIZE = 4 * 1024 * 1024; // 4MB - warning threshold
+
+/** Image MIME types subject to warning threshold */
+const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
 export function useFileUpload(options: UseFileUploadOptions) {
-  const { conversationId, mode, wsAdapter, onContextReady, onScoringReady, onError } = options;
+  const { conversationId, mode, wsAdapter, onContextReady, onScoringReady, onError, onWarning } = options;
   const { token } = useAuth();
 
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({
@@ -106,11 +122,13 @@ export function useFileUpload(options: UseFileUploadOptions) {
   const onContextReadyRef = useRef(onContextReady);
   const onScoringReadyRef = useRef(onScoringReady);
   const onErrorRef = useRef(onError);
+  const onWarningRef = useRef(onWarning);
 
   // Keep refs updated with latest callbacks
   onContextReadyRef.current = onContextReady;
   onScoringReadyRef.current = onScoringReady;
   onErrorRef.current = onError;
+  onWarningRef.current = onWarning;
 
   // Register WebSocket event listeners (filter by uploadId)
   // IMPORTANT: Gate on isConnected to avoid no-op subscriptions before WS ready
@@ -250,6 +268,18 @@ export function useFileUpload(options: UseFileUploadOptions) {
     return null;
   }, []);
 
+  /**
+   * Epic 30 Sprint 2: Check if file should trigger a warning (non-blocking)
+   * Returns warning message for images between 4-5MB, null otherwise.
+   */
+  const checkFileSizeWarning = useCallback((file: File): string | null => {
+    if (IMAGE_MIME_TYPES.includes(file.type) && file.size >= WARN_IMAGE_SIZE) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+      return `Large image (${sizeMB}MB). Consider compressing for faster upload.`;
+    }
+    return null;
+  }, []);
+
   // Upload file via HTTP POST multipart
   // Epic 16.6.1: Uses AbortController for cancellation + race condition protection
   const uploadFile = useCallback(async (file: File) => {
@@ -267,6 +297,12 @@ export function useFileUpload(options: UseFileUploadOptions) {
       });
       onErrorRef.current?.(validationError);
       return;
+    }
+
+    // Epic 30 Sprint 2: Check for warning (non-blocking) after validation passes
+    const warning = checkFileSizeWarning(file);
+    if (warning) {
+      onWarningRef.current?.(warning);
     }
 
     if (!token) {
@@ -361,7 +397,7 @@ export function useFileUpload(options: UseFileUploadOptions) {
       });
       onErrorRef.current?.(error instanceof Error ? error.message : 'Upload failed');
     }
-  }, [token, conversationId, mode, validateFile]);
+  }, [token, conversationId, mode, validateFile, checkFileSizeWarning]);
 
   // Open file picker
   const openFilePicker = useCallback(() => {

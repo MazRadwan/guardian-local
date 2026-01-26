@@ -719,4 +719,368 @@ describe('useFileUpload', () => {
       expect(result.current.uploadProgress.stage).toBe('idle');
     });
   });
+
+  /**
+   * Epic 30 Story 30.2.4: Align upload limits with Anthropic API
+   *
+   * Images have 5MB limit (Anthropic Vision API) instead of generic 10MB.
+   * GIF and WebP formats now supported.
+   */
+  describe('File size validation (Epic 30.2.4)', () => {
+    it('rejects images over 5MB with clear error message', async () => {
+      const adapter = createMockAdapter(true);
+      const onError = jest.fn();
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      // 6MB PNG should be rejected (5MB limit for images)
+      const largeImage = new File(
+        [new ArrayBuffer(6 * 1024 * 1024)],
+        'large-image.png',
+        { type: 'image/png' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(largeImage);
+      });
+
+      expect(result.current.uploadProgress.stage).toBe('error');
+      expect(onError).toHaveBeenCalledWith(
+        'File too large. Maximum size for this file type is 5MB.'
+      );
+    });
+
+    it('rejects JPEG images over 5MB', async () => {
+      const adapter = createMockAdapter(true);
+      const onError = jest.fn();
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      const largeJpeg = new File(
+        [new ArrayBuffer(6 * 1024 * 1024)],
+        'large.jpg',
+        { type: 'image/jpeg' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(largeJpeg);
+      });
+
+      expect(result.current.uploadProgress.stage).toBe('error');
+      expect(onError).toHaveBeenCalled();
+    });
+
+    it('accepts images under 5MB', async () => {
+      const adapter = createMockAdapter(true);
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+        })
+      );
+
+      // 4MB PNG should be accepted
+      const okImage = new File(
+        [new ArrayBuffer(4 * 1024 * 1024)],
+        'ok-image.png',
+        { type: 'image/png' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(okImage);
+      });
+
+      // Should proceed to upload (storing stage after HTTP response)
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+
+    it('allows 6MB PDF (different limit than images)', async () => {
+      const adapter = createMockAdapter(true);
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+        })
+      );
+
+      // 6MB PDF should be allowed (20MB limit for PDFs)
+      const mediumPdf = new File(
+        [new ArrayBuffer(6 * 1024 * 1024)],
+        'medium.pdf',
+        { type: 'application/pdf' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(mediumPdf);
+      });
+
+      // Should proceed to upload
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+
+    it('accepts GIF files under 5MB', async () => {
+      const adapter = createMockAdapter(true);
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+        })
+      );
+
+      const gifFile = new File(
+        [new ArrayBuffer(2 * 1024 * 1024)],
+        'animation.gif',
+        { type: 'image/gif' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(gifFile);
+      });
+
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+
+    it('accepts WebP files under 5MB', async () => {
+      const adapter = createMockAdapter(true);
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+        })
+      );
+
+      const webpFile = new File(
+        [new ArrayBuffer(3 * 1024 * 1024)],
+        'photo.webp',
+        { type: 'image/webp' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(webpFile);
+      });
+
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+
+    it('rejects GIF files over 5MB', async () => {
+      const adapter = createMockAdapter(true);
+      const onError = jest.fn();
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      const largeGif = new File(
+        [new ArrayBuffer(6 * 1024 * 1024)],
+        'large.gif',
+        { type: 'image/gif' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(largeGif);
+      });
+
+      expect(result.current.uploadProgress.stage).toBe('error');
+      expect(onError).toHaveBeenCalled();
+    });
+
+    it('rejects WebP files over 5MB', async () => {
+      const adapter = createMockAdapter(true);
+      const onError = jest.fn();
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      const largeWebp = new File(
+        [new ArrayBuffer(6 * 1024 * 1024)],
+        'large.webp',
+        { type: 'image/webp' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(largeWebp);
+      });
+
+      expect(result.current.uploadProgress.stage).toBe('error');
+      expect(onError).toHaveBeenCalled();
+    });
+
+    /**
+     * Epic 30 Sprint 2: Large image warning (4-5MB)
+     * Images between 4-5MB should proceed but trigger a warning.
+     */
+    it('4.5MB image shows warning, upload proceeds', async () => {
+      const adapter = createMockAdapter(true);
+      const onWarning = jest.fn();
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // 4.5MB PNG should show warning but proceed
+      const largeImage = new File(
+        [new ArrayBuffer(4.5 * 1024 * 1024)],
+        'large-image.png',
+        { type: 'image/png' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(largeImage);
+      });
+
+      // Warning should have been called
+      expect(onWarning).toHaveBeenCalledTimes(1);
+      expect(onWarning).toHaveBeenCalledWith(
+        expect.stringContaining('Large image')
+      );
+      expect(onWarning).toHaveBeenCalledWith(
+        expect.stringContaining('4.5MB')
+      );
+
+      // Upload should proceed (not error)
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+
+    it('does not show warning for images under 4MB', async () => {
+      const adapter = createMockAdapter(true);
+      const onWarning = jest.fn();
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // 3.5MB PNG should not trigger warning
+      const smallImage = new File(
+        [new ArrayBuffer(3.5 * 1024 * 1024)],
+        'small-image.png',
+        { type: 'image/png' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(smallImage);
+      });
+
+      // No warning should be called
+      expect(onWarning).not.toHaveBeenCalled();
+
+      // Upload should proceed
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+
+    it('does not show warning for PDFs (regardless of size)', async () => {
+      const adapter = createMockAdapter(true);
+      const onWarning = jest.fn();
+
+      // Mock successful upload
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ uploadId: 'upload-123' }),
+      });
+
+      const { result } = renderHook(() =>
+        useFileUpload({
+          conversationId: 'conv-123',
+          mode: 'intake',
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // 4.5MB PDF should not trigger warning (PDFs have different limits)
+      const largePdf = new File(
+        [new ArrayBuffer(4.5 * 1024 * 1024)],
+        'large.pdf',
+        { type: 'application/pdf' }
+      );
+
+      await act(async () => {
+        await result.current.uploadFile(largePdf);
+      });
+
+      // No warning should be called for PDFs
+      expect(onWarning).not.toHaveBeenCalled();
+
+      // Upload should proceed
+      expect(result.current.uploadProgress.stage).toBe('storing');
+    });
+  });
 });

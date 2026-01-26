@@ -61,6 +61,7 @@ import { ConversationController } from './infrastructure/http/controllers/Conver
 import { ScoringRehydrationController } from './infrastructure/http/controllers/ScoringRehydrationController.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
+import { VisionContentBuilder } from './infrastructure/ai/VisionContentBuilder.js';
 import { createFileStorage } from './infrastructure/storage/index.js';
 import { FileValidationService } from './application/services/FileValidationService.js';
 import { ScoringService } from './application/services/ScoringService.js';
@@ -183,6 +184,9 @@ const documentParserService = new DocumentParserService(
   claudeClient   // IVisionClient - ClaudeClient implements both
 );
 
+// Epic 30: Initialize VisionContentBuilder for Vision API image processing
+const visionContentBuilder = new VisionContentBuilder(fileStorage);
+
 // Epic 18: Initialize text extraction service for fast context injection
 const textExtractionService = new TextExtractionService();
 
@@ -265,7 +269,8 @@ const chatServer = new ChatServer(
   textExtractionService,    // Epic 18: Context injection fallback
   documentParserService,    // Epic 18: Background enrichment (implements IIntakeDocumentParser)
   vendorValidationService,  // Epic 18.4: Vendor validation for multi-vendor clarification
-  titleGenerationService    // Story 28.11.1: LLM-based title generation
+  titleGenerationService,   // Story 28.11.1: LLM-based title generation
+  visionContentBuilder      // Epic 30 Sprint 3: Vision API for image files
 );
 
 console.log('[App] ChatServer initialized');

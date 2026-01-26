@@ -4,6 +4,7 @@
  * Story 28.4.1: Extract auth middleware from ChatServer.ts
  * Story 28.4.2: Extract handleConnection with room join and resume logic
  * Story 28.4.3: Extract handleDisconnect with logging
+ * Epic 30: Vision cache cleanup on disconnect
  *
  * Tests cover:
  * createAuthMiddleware:
@@ -27,6 +28,7 @@
  * 1. Log disconnect with socket id and reason
  * 2. Log disconnect with user id
  * 3. Handle various disconnect reasons
+ * 4. Clear Vision cache on disconnect (Epic 30)
  */
 
 import jwt from 'jsonwebtoken';
@@ -37,6 +39,7 @@ import {
 import type { IAuthenticatedSocket } from '../../../../../src/infrastructure/websocket/ChatContext.js';
 import type { ConversationService } from '../../../../../src/application/services/ConversationService.js';
 import type { Conversation } from '../../../../../src/domain/entities/Conversation.js';
+import type { IVisionContentBuilder } from '../../../../../src/application/interfaces/IVisionContentBuilder.js';
 
 /**
  * Create a mock ConversationService
@@ -59,6 +62,16 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
   updateTitle: jest.fn(),
   updateTitleIfNotManuallyEdited: jest.fn(),
 } as unknown as jest.Mocked<ConversationService>);
+
+/**
+ * Create a mock VisionContentBuilder for cache cleanup tests
+ */
+const createMockVisionContentBuilder = (): jest.Mocked<IVisionContentBuilder> => ({
+  buildImageContent: jest.fn().mockResolvedValue(null),
+  isImageFile: jest.fn().mockReturnValue(false),
+  normalizeMediaType: jest.fn().mockImplementation((t) => t),
+  clearConversationCache: jest.fn(),
+});
 
 describe('ConnectionHandler', () => {
   const TEST_SECRET = 'test-jwt-secret-key-for-testing';
@@ -735,6 +748,83 @@ describe('ConnectionHandler', () => {
       expect(consoleSpy).toHaveBeenCalledWith(
         expect.stringContaining('disconnected')
       );
+    });
+
+    /**
+     * Epic 30: Vision cache cleanup tests
+     */
+    describe('Vision cache cleanup', () => {
+      it('should clear vision cache on disconnect when socket has conversationId', () => {
+        const mockVisionBuilder = createMockVisionContentBuilder();
+        const handlerWithVision = new ConnectionHandler(
+          mockConversationService,
+          TEST_SECRET,
+          mockVisionBuilder
+        );
+
+        const socket = createAuthenticatedMockSocket('user-123');
+        socket.conversationId = 'conv-123';
+
+        handlerWithVision.handleDisconnect(socket, 'transport close');
+
+        expect(mockVisionBuilder.clearConversationCache).toHaveBeenCalledWith('conv-123');
+        expect(mockVisionBuilder.clearConversationCache).toHaveBeenCalledTimes(1);
+      });
+
+      it('should NOT clear vision cache when socket has no conversationId', () => {
+        const mockVisionBuilder = createMockVisionContentBuilder();
+        const handlerWithVision = new ConnectionHandler(
+          mockConversationService,
+          TEST_SECRET,
+          mockVisionBuilder
+        );
+
+        const socket = createAuthenticatedMockSocket('user-123');
+        // No conversationId set (socket.conversationId is undefined)
+
+        handlerWithVision.handleDisconnect(socket, 'transport close');
+
+        expect(mockVisionBuilder.clearConversationCache).not.toHaveBeenCalled();
+      });
+
+      it('should NOT throw when visionContentBuilder is not provided', () => {
+        // Handler without visionContentBuilder (default case)
+        const handlerWithoutVision = new ConnectionHandler(
+          mockConversationService,
+          TEST_SECRET
+          // No visionContentBuilder provided
+        );
+
+        const socket = createAuthenticatedMockSocket('user-123');
+        socket.conversationId = 'conv-123';
+
+        // Should not throw even with conversationId
+        expect(() => {
+          handlerWithoutVision.handleDisconnect(socket, 'transport close');
+        }).not.toThrow();
+      });
+
+      it('should log cache clear message on disconnect with conversation', () => {
+        const consoleSpy = jest.spyOn(console, 'log');
+        const mockVisionBuilder = createMockVisionContentBuilder();
+        const handlerWithVision = new ConnectionHandler(
+          mockConversationService,
+          TEST_SECRET,
+          mockVisionBuilder
+        );
+
+        const socket = createAuthenticatedMockSocket('user-123');
+        socket.conversationId = 'conv-abc';
+
+        handlerWithVision.handleDisconnect(socket, 'client namespace disconnect');
+
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Cleared vision cache')
+        );
+        expect(consoleSpy).toHaveBeenCalledWith(
+          expect.stringContaining('conv-abc')
+        );
+      });
     });
   });
 });

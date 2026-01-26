@@ -21,6 +21,9 @@ export * from './IScoringDocumentParser.js';
 export * from './IFileStorage.js';
 export * from './IVisionClient.js';
 
+// Epic 30: Vision API Support
+export * from './IVisionContentBuilder.js';
+
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)
 export type { QuestionnaireData } from './IExcelExporter.js';

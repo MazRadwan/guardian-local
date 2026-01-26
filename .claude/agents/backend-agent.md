@@ -103,6 +103,23 @@ export class DrizzleConversationRepository implements IConversationRepository {
 }
 ```
 
+## Pre-flight Checks
+
+Before running tests, verify infrastructure:
+
+```bash
+# Check Docker is running (required for integration tests)
+docker ps | grep postgres
+```
+
+**If Docker/Postgres not running:**
+- Report: "Docker not running - running unit tests only, skipping integration tests"
+- Run `pnpm test:unit` only
+- Do NOT hang waiting for database connection
+
+**If Docker is running:**
+- Proceed with both unit and integration tests
+
 ## Implementation Workflow
 
 ### Step 1: Understand the Task

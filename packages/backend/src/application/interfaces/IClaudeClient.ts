@@ -110,6 +110,12 @@ export interface ClaudeRequestOptions {
   abortSignal?: AbortSignal;
 }
 
+/**
+ * Import type for ImageContentBlock (Epic 30 Sprint 3)
+ * Note: Using import type to avoid circular dependencies
+ */
+import type { ImageContentBlock } from '../../infrastructure/ai/types/vision.js';
+
 export interface IClaudeClient {
   /**
    * Send a message to Claude and get a complete response
@@ -124,12 +130,19 @@ export interface IClaudeClient {
 
   /**
    * Stream a message from Claude (for real-time responses)
-   * @param messages - Conversation history
+   *
+   * Epic 30 Sprint 3: Added optional imageBlocks parameter for Vision API support.
+   * When imageBlocks are provided, they are merged into the last user message
+   * as ContentBlock arrays for Claude's Vision API.
+   *
+   * @param messages - Conversation history (domain format, string content)
    * @param options - Optional request settings (system prompt, cached prompt id)
+   * @param imageBlocks - Optional image content blocks to include in last user message
    * @yields Chunks of the response as they arrive
    */
   streamMessage(
     messages: ClaudeMessage[],
-    options?: ClaudeRequestOptions
+    options?: ClaudeRequestOptions,
+    imageBlocks?: ImageContentBlock[]
   ): AsyncGenerator<StreamChunk>;
 }

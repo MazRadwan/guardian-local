@@ -276,6 +276,127 @@ describe('useMultiFileUpload', () => {
       expect(onError).toHaveBeenCalledWith('huge.pdf: File too large (max 20MB)');
     });
 
+    /**
+     * Epic 30 Story 30.2.4: Image-specific size limits
+     * Images have 5MB limit (Anthropic Vision API) instead of generic 20MB
+     */
+    it('should reject images over 5MB (Anthropic Vision API limit)', () => {
+      const adapter = createMockAdapter(false);
+      const onError = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      // 6MB PNG should be rejected (5MB image limit)
+      const fileList = createMockFileList([
+        { name: 'large-image.png', type: 'image/png', size: 6 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      expect(result.current.files).toHaveLength(0);
+      expect(onError).toHaveBeenCalledWith('large-image.png: Image too large (max 5MB)');
+    });
+
+    it('should reject all image types over 5MB', () => {
+      const adapter = createMockAdapter(false);
+      const onError = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      // All image types should respect 5MB limit
+      const fileList = createMockFileList([
+        { name: 'large.jpeg', type: 'image/jpeg', size: 6 * 1024 * 1024 },
+        { name: 'large.gif', type: 'image/gif', size: 6 * 1024 * 1024 },
+        { name: 'large.webp', type: 'image/webp', size: 6 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      expect(result.current.files).toHaveLength(0);
+      expect(onError).toHaveBeenCalledWith('large.jpeg: Image too large (max 5MB)');
+      expect(onError).toHaveBeenCalledWith('large.gif: Image too large (max 5MB)');
+      expect(onError).toHaveBeenCalledWith('large.webp: Image too large (max 5MB)');
+    });
+
+    it('should allow 6MB PDF (different limit than images)', () => {
+      const adapter = createMockAdapter(false);
+      const onError = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onError,
+        })
+      );
+
+      // 6MB PDF should be allowed (20MB limit for PDFs)
+      const fileList = createMockFileList([
+        { name: 'medium.pdf', type: 'application/pdf', size: 6 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      expect(result.current.files).toHaveLength(1);
+      expect(result.current.files[0].filename).toBe('medium.pdf');
+      expect(onError).not.toHaveBeenCalled();
+    });
+
+    it('should accept images under 5MB', () => {
+      const adapter = createMockAdapter(false);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+        })
+      );
+
+      // 4.5MB image should be accepted
+      const fileList = createMockFileList([
+        { name: 'ok-image.png', type: 'image/png', size: 4.5 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      expect(result.current.files).toHaveLength(1);
+      expect(result.current.files[0].filename).toBe('ok-image.png');
+    });
+
+    it('should accept GIF and WebP files', () => {
+      const adapter = createMockAdapter(false);
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+        })
+      );
+
+      const fileList = createMockFileList([
+        { name: 'animation.gif', type: 'image/gif', size: 2 * 1024 * 1024 },
+        { name: 'photo.webp', type: 'image/webp', size: 3 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      expect(result.current.files).toHaveLength(2);
+      expect(result.current.files[0].filename).toBe('animation.gif');
+      expect(result.current.files[1].filename).toBe('photo.webp');
+    });
+
     it('should accept valid DOCX files', () => {
       const adapter = createMockAdapter(false);
       const { result } = renderHook(() =>
@@ -318,6 +439,125 @@ describe('useMultiFileUpload', () => {
       });
 
       expect(result.current.files).toHaveLength(2);
+    });
+
+    /**
+     * Epic 30 Sprint 2: Large image warning (4-5MB)
+     * Images between 4-5MB should proceed but trigger a warning.
+     */
+    it('4.5MB image shows warning, upload proceeds', () => {
+      const adapter = createMockAdapter(false);
+      const onWarning = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // 4.5MB PNG should show warning but proceed
+      const fileList = createMockFileList([
+        { name: 'large-image.png', type: 'image/png', size: 4.5 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      // Warning should have been called
+      expect(onWarning).toHaveBeenCalledTimes(1);
+      expect(onWarning).toHaveBeenCalledWith(
+        expect.stringContaining('Large image')
+      );
+      expect(onWarning).toHaveBeenCalledWith(
+        expect.stringContaining('4.5MB')
+      );
+
+      // File should still be added (upload proceeds)
+      expect(result.current.files).toHaveLength(1);
+      expect(result.current.files[0].filename).toBe('large-image.png');
+    });
+
+    it('does not show warning for images under 4MB', () => {
+      const adapter = createMockAdapter(false);
+      const onWarning = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // 3.5MB PNG should not trigger warning
+      const fileList = createMockFileList([
+        { name: 'small-image.png', type: 'image/png', size: 3.5 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      // No warning should be called
+      expect(onWarning).not.toHaveBeenCalled();
+
+      // File should be added
+      expect(result.current.files).toHaveLength(1);
+    });
+
+    it('does not show warning for PDFs (regardless of size)', () => {
+      const adapter = createMockAdapter(false);
+      const onWarning = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // 4.5MB PDF should not trigger warning (PDFs have different limits)
+      const fileList = createMockFileList([
+        { name: 'large.pdf', type: 'application/pdf', size: 4.5 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      // No warning should be called for PDFs
+      expect(onWarning).not.toHaveBeenCalled();
+
+      // File should be added
+      expect(result.current.files).toHaveLength(1);
+    });
+
+    it('shows warning for each large image when multiple files added', () => {
+      const adapter = createMockAdapter(false);
+      const onWarning = jest.fn();
+      const { result } = renderHook(() =>
+        useMultiFileUpload({
+          wsAdapter: adapter,
+          onWarning,
+        })
+      );
+
+      // Add multiple large images
+      const fileList = createMockFileList([
+        { name: 'large1.png', type: 'image/png', size: 4.2 * 1024 * 1024 },
+        { name: 'small.png', type: 'image/png', size: 2 * 1024 * 1024 },
+        { name: 'large2.jpeg', type: 'image/jpeg', size: 4.8 * 1024 * 1024 },
+      ]);
+
+      act(() => {
+        result.current.addFiles(fileList);
+      });
+
+      // Warning should be called twice (for the two large images)
+      expect(onWarning).toHaveBeenCalledTimes(2);
+      expect(onWarning).toHaveBeenCalledWith(expect.stringContaining('large1.png'));
+      expect(onWarning).toHaveBeenCalledWith(expect.stringContaining('large2.jpeg'));
+
+      // All files should be added
+      expect(result.current.files).toHaveLength(3);
     });
   });
 
