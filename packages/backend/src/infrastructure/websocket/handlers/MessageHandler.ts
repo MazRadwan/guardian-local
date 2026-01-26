@@ -441,7 +441,7 @@ export class MessageHandler {
    *
    * Mode-specific behavior (Epic 30 Sprint 4 Story 30.4.3):
    * - Consult mode: Images processed via Vision API (returns imageBlocks)
-   * - Assessment mode: Images NOT processed via Vision API (returns empty imageBlocks)
+   * - Assessment mode: Images processed via Vision API (returns imageBlocks)
    * - Scoring mode: Uses DocumentParser flow, not this method
    *
    * @param conversationId - The conversation ID
