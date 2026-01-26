@@ -23,51 +23,44 @@ const FORMATTING_GUIDELINES = `
 
 ## Response Formatting - CRITICAL
 
-**Use proper Markdown structure for readable responses:**
+**⚠️ MANDATORY DOUBLE NEWLINES:**
+You MUST use TWO newline characters (press Enter twice) to create blank lines between sections.
+A single newline is NOT sufficient - it will not create visual spacing.
+This applies between: intro and questions, between each question block, between sections.
 
-### Headers
-- Use \`## Section Title\` for major sections (renders as large heading with spacing)
-- Use \`### Subsection\` for subsections
-- NEVER use **bold** as a substitute for headers
+**Structure:**
+- Intro paragraph
+- [BLANK LINE - two newlines]
+- First question block
+- [BLANK LINE - two newlines]
+- Second question block
+- [BLANK LINE - two newlines]
+- And so on...
 
-### Spacing
-- Put a BLANK LINE after every heading
-- Put a BLANK LINE between paragraphs
-- Put a BLANK LINE before and after lists
-
-### Format for questions:
+**Format for questions:**
 \`\`\`
-## Questions for You
-
-What clinical decisions does it inform?
-- Screening only, or treatment recommendations?
-
-Who reviews the AI output?
-- Radiologist sign-off required?
+**Question text?**
+↳ Follow-up detail or clarification
 \`\`\`
 
-### Example of CORRECT formatting:
+**Example of CORRECT formatting (notice the blank lines):**
 
-## Initial Assessment
+Great context on the diagnostic imaging AI.
 
-Great context on the diagnostic imaging AI. Let me ask a few clarifying questions.
+**What clinical decisions does it inform?**
+↳ Screening only, or treatment recommendations?
 
-## Questions for You
+**Who reviews the AI output?**
+↳ Radiologist sign-off required?
 
-What clinical decisions does it inform?
-- Screening only, or treatment recommendations?
+**What's the data flow?**
+↳ Does PHI leave your network?
 
-Who reviews the AI output?
-- Radiologist sign-off required?
+**Example of WRONG formatting (no blank lines between questions):**
 
-What's the data flow?
-- Does PHI leave your network?
+Great context. **What decisions?** ↳ Screening? **Who reviews?** ↳ Radiologist? **Data flow?** ↳ PHI?
 
-### Example of WRONG formatting:
-
-**What decisions?** ↳ Screening? **Who reviews?** ↳ Radiologist? **Data flow?** ↳ PHI?
-
-The wrong example uses bold instead of headers and lacks spacing between sections.
+The wrong example is unreadable because it lacks blank lines between question blocks.
 `;
 
 function loadCustomPrompt(): string | null {
@@ -275,11 +268,10 @@ MODE_LOCK: ACTIVE
 ═══════════════════════════════════════════════════════════════
 
 ⚠️ CRITICAL FORMATTING RULES - APPLY TO EVERY RESPONSE:
-- Use ## for section headers (NOT **bold** text)
-- Use ### for subsection headers
-- Put a BLANK LINE after every heading
-- Put a BLANK LINE between paragraphs and sections
-- Your responses must be scannable with proper heading hierarchy
+- Put a BLANK LINE after your intro paragraph
+- Put a BLANK LINE between sections, lists, or distinct points
+- NEVER run multiple points together without spacing
+- Your responses must be scannable with visual breathing room
 
 ⚠️ STRICT MODE ENFORCEMENT:
 - You are LOCKED in Consult Mode until the user switches via UI dropdown
@@ -396,12 +388,11 @@ MODE_LOCK: ACTIVE
 ═══════════════════════════════════════════════════════════════
 
 ⚠️ CRITICAL FORMATTING RULES - APPLY TO EVERY RESPONSE:
-- Use ## for section headers (NOT **bold** text)
-- Use ### for subsection headers
-- Put a BLANK LINE after every heading
-- Put a BLANK LINE between paragraphs, questions, and sections
-- Format questions as plain text with bullet point follow-ups
-- Your responses must be scannable with proper heading hierarchy
+- Put a BLANK LINE after your intro sentence(s)
+- Put a BLANK LINE between EACH question you ask
+- NEVER put multiple questions on the same line or run them together
+- Format: **Bold question?** then newline, then ↳ detail on its own line
+- Your responses must be scannable with visual breathing room
 
 ⚠️ STRICT MODE ENFORCEMENT:
 - You are LOCKED in Assessment Mode until the user switches via UI dropdown
@@ -457,11 +448,10 @@ MODE_LOCK: ACTIVE
 ═══════════════════════════════════════════════════════════════
 
 ⚠️ CRITICAL FORMATTING RULES - APPLY TO EVERY RESPONSE:
-- Use ## for section headers (NOT **bold** text)
-- Use ### for subsection headers
-- Put a BLANK LINE after every heading
-- Put a BLANK LINE between paragraphs and sections
-- Your responses must be scannable with proper heading hierarchy
+- Put a BLANK LINE after your intro paragraph
+- Put a BLANK LINE between sections, lists, or distinct points
+- NEVER run multiple points together without spacing
+- Your responses must be scannable with visual breathing room
 
 ⚠️ STRICT MODE ENFORCEMENT:
 - You are LOCKED in Scoring Mode until the user switches via UI dropdown
