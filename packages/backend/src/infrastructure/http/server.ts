@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, ErrorRequestHandler } from 'express';
 import cors from 'cors';
 import { Server as HTTPServer, createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
@@ -76,6 +76,11 @@ export class Server {
         path: req.path,
       });
     });
+  }
+
+  public registerErrorHandler(handler: ErrorRequestHandler): void {
+    // Error handler middleware - call this after finalize404Handler
+    this.app.use(handler);
   }
 
   public getApp(): Express {

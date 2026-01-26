@@ -72,6 +72,7 @@ import { TitleGenerationService } from './application/services/TitleGenerationSe
 import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativePromptBuilder.js';
 import { ExportNarrativeGenerator } from './infrastructure/ai/ExportNarrativeGenerator.js';
 import { DrizzleTransactionRunner } from './infrastructure/database/DrizzleTransactionRunner.js';
+import { errorHandler } from './infrastructure/http/middleware/error.middleware.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -293,6 +294,9 @@ server.registerRoutes('/api/conversations', createConversationRoutes(conversatio
 
 // Finalize 404 handler (MUST be after all routes are registered)
 server.finalize404Handler();
+
+// Register global error handler (MUST be after 404 handler)
+server.registerErrorHandler(errorHandler);
 
 console.log('[App] Vendor, Assessment, Question, and Document routes registered');
 
