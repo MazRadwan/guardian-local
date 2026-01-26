@@ -13,9 +13,27 @@ You are a specialist agent responsible for validating architecture diagrams agai
 
 **Manual trigger:** User invokes when they want diagrams validated/updated.
 
-**Primary diagram:** `docs/design/architecture/architecture-latest.mmd`
-**Mapping file:** `docs/design/architecture/architecture-latest.mapping.yaml`
-**Index file:** `docs/design/architecture/diagram-index.yaml`
+### Source of Truth Hierarchy
+
+**CRITICAL:** `docs/design/` is the SINGLE SOURCE OF TRUTH. C4 diagrams are secondary visualizations.
+
+**PRIMARY (Update First):**
+- `docs/design/architecture/architecture-layers.md` - Layer definitions
+- `docs/design/architecture/implementation-guide.md` - Data flows, patterns
+- `docs/design/architecture/architecture-latest.mmd` - Main architecture diagram
+- `docs/design/architecture/architecture-latest.mapping.yaml` - Node-to-file mappings
+- `docs/design/architecture/diagram-index.yaml` - Validation tracking
+- `docs/design/data/database-schema.md` - Database schema
+
+**SECONDARY (Derive from Primary):**
+- `docs/architecture/c4-architecture-overview.puml` - C4 context/container
+- `docs/architecture/c4-infrastructure-simplified.puml` - Infrastructure layer
+- `docs/architecture/c4-application-simplified.puml` - Application layer
+- `docs/architecture/c4-domain-simplified.puml` - Domain layer
+- `docs/architecture/c4-diagrams.md` - C4 diagram descriptions
+- `docs/architecture/erd-guardian.puml` - ERD diagram
+
+**Update Order:** Always update `docs/design/` first, then sync C4 diagrams to match.
 
 ## Workflow
 
@@ -87,10 +105,12 @@ Based on validation results:
 
 ## Architecture Context
 
-**MUST READ FIRST:**
-- `docs/design/architecture/architecture-layers.md` - Understand 4-layer structure
-- `docs/design/architecture/architecture-latest.mmd` - Current diagram to validate
-- `CLAUDE.md` - Project conventions
+**MUST READ FIRST (in order):**
+1. `CLAUDE.md` - Project conventions
+2. `docs/design/architecture/architecture-layers.md` - 4-layer structure (PRIMARY)
+3. `docs/design/architecture/implementation-guide.md` - Data flows, patterns (PRIMARY)
+4. `docs/design/architecture/architecture-latest.mmd` - Current diagram to validate
+5. `docs/architecture/c4-diagrams.md` - C4 diagram descriptions (SECONDARY)
 
 ## Directory to Layer Mapping
 
@@ -186,9 +206,14 @@ External:
 - Updated: <list of modified items>
 - Removed: <list of removed items>
 
-**Files Modified:**
+**Files Modified (Primary - docs/design/):**
 - docs/design/architecture/architecture-latest.mmd
+- docs/design/architecture/implementation-guide.md
 - docs/design/architecture/diagram-index.yaml
+
+**Files Modified (Secondary - docs/architecture/):**
+- docs/architecture/c4-infrastructure-simplified.puml
+- docs/architecture/c4-diagrams.md
 
 **Next validation:** Run after architecture-relevant commits
 ```

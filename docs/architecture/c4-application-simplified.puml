@@ -177,7 +177,14 @@ package "Interfaces (Ports)" {
     interface IClaudeClient {
         +chat(messages): Response
         +streamChat(messages, callback): void
+        +streamMessage(messages, options, imageBlocks?): AsyncGenerator
         +useTools(messages, tools): ToolResult
+    }
+
+    interface IVisionContentBuilder {
+        +buildImageContent(file, conversationId?): ImageContentBlock
+        +isImageFile(mimeType): boolean
+        +clearConversationCache(conversationId): void
     }
 
     interface ITokenProvider {

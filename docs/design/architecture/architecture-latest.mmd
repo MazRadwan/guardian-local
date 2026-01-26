@@ -52,9 +52,9 @@ flowchart TB
       ScoringModeStrategy["ScoringModeStrategy"]
     end
 
-    subgraph ContextBuilders["Context Builders"]
+    subgraph ContextBuilders["Context Builders (Epic 30 Vision)"]
       ConversationContextBuilder["ConversationContextBuilder"]
-      FileContextBuilder["FileContextBuilder"]
+      FileContextBuilder["FileContextBuilder\nbuildWithImages() → FileContextResult"]
     end
 
     StreamingHandler["StreamingHandler"]
@@ -86,9 +86,10 @@ flowchart TB
     Message
   end
 
-  subgraph AI["AI & Rendering"]
-    ClaudeClient["ClaudeClient (Sonnet 4.5)"]
+  subgraph AI["AI & Rendering (Epic 30 Vision)"]
+    ClaudeClient["ClaudeClient (Sonnet 4.5)\nstreamMessage(msgs, opts, imageBlocks?)"]
     PromptCacheManager["PromptCacheManager (tool-aware)"]
+    VisionContentBuilder["VisionContentBuilder\n(Epic 30: Image → ImageContentBlock)"]
     assessmentModeTools["assessmentModeTools\n(questionnaire_ready tool)"]
     questionnaireOutputTool["questionnaireOutputTool\n(structured JSON)"]
     questionGenPrompt["questionGeneration prompt"]
@@ -163,6 +164,10 @@ flowchart TB
   %% Handlers use Context Builders
   MessageHandler --> ConversationContextBuilder
   MessageHandler --> FileContextBuilder
+
+  %% Epic 30: Vision API Pipeline
+  FileContextBuilder --> VisionContentBuilder
+  ConnectionHandler --> VisionContentBuilder
 
   %% Handlers use Utilities
   MessageHandler --> StreamingHandler

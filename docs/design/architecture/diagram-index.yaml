@@ -1,8 +1,8 @@
 # Diagram Index - Auto-maintained by diagram-updater-agent
 # This file tracks all architecture diagrams and their validation status
 
-last_processed_commit: "0630abdebfa0c611b3dad994bf70bdf349793dab"
-last_updated: "2026-01-20"
+last_processed_commit: "638ad03"
+last_updated: "2026-01-26"
 
 diagrams:
   - id: architecture-latest
@@ -19,6 +19,7 @@ diagrams:
       - ai
       - data
       - overview
+      - vision
     description: |
       Comprehensive flowchart showing Guardian's layered architecture:
       Presentation (Next.js/React) → Hooks/State → WebSocket → Backend → Services → Domain → Data
@@ -26,3 +27,6 @@ diagrams:
       Epic 28 update: Backend layer now shows modular ChatServer architecture with
       Handlers (Connection, Conversation, Message, ModeSwitch, Questionnaire, Scoring),
       Mode Strategies (Assessment, Consult, Scoring), and Context Builders.
+      Epic 30 update: Added Vision API support - VisionContentBuilder converts images to
+      ImageContentBlock, FileContextBuilder.buildWithImages() returns FileContextResult with
+      imageBlocks, ClaudeClient.streamMessage() accepts imageBlocks parameter.

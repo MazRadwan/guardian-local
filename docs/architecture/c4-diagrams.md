@@ -1,6 +1,6 @@
 # Guardian C4 Architecture Diagrams
 
-> **Last Updated:** 2026-01-20
+> **Last Updated:** 2026-01-26
 > **Mermaid Version:** 11.4.1+
 
 This document contains the C4 model diagrams for Guardian at four zoom levels.
@@ -282,9 +282,9 @@ flowchart TB
                 scoringStrategy["ScoringModeStrategy"]
             end
 
-            subgraph contextBuilders["Context Builders"]
+            subgraph contextBuilders["Context Builders (Epic 30 Vision)"]
                 convContextBuilder["ConversationContextBuilder"]
-                fileContextBuilder["FileContextBuilder"]
+                fileContextBuilder["FileContextBuilder<br><i>buildWithImages() returns imageBlocks</i>"]
             end
 
             subgraph wsUtils["Utilities"]
@@ -308,9 +308,10 @@ flowchart TB
             fileValidationService["FileValidationService<br><i>Magic bytes, MIME, size</i>"]
         end
 
-        subgraph ai["AI & Parsing"]
+        subgraph ai["AI & Parsing (Epic 30 Vision)"]
             claudeClient["ClaudeClient<br><i>Anthropic SDK wrapper (LLM + Vision)</i>"]
             promptCacheManager["PromptCacheManager<br><i>Tool-aware caching</i>"]
+            visionContentBuilder["VisionContentBuilder<br><i>Epic 30: Image → ImageContentBlock</i>"]
             documentParser["DocumentParserService<br><i>Intake + scoring parsing</i>"]
             scoringPromptBuilder["ScoringPromptBuilder<br><i>Scoring prompt assembly</i>"]
             assessmentTools["assessmentModeTools<br><i>questionnaire_ready tool</i>"]
@@ -389,6 +390,11 @@ flowchart TB
     questionnaireHandler --> questionnaireReadyService
     questionnaireHandler --> questionnaireGenService
     scoringHandler --> scoringService
+
+    %% Epic 30: Vision API relationships
+    fileContextBuilder --> visionContentBuilder
+    connectionHandler --> visionContentBuilder
+    visionContentBuilder --> storageFactory
 
     %% Service to AI relationships
     promptCacheManager --> claudeClient
@@ -599,7 +605,7 @@ Context Builders (2):
 | Builder | Responsibility |
 |---------|----------------|
 | `ConversationContextBuilder` | Builds conversation context for Claude API calls |
-| `FileContextBuilder` | Builds file/attachment context for Claude API calls |
+| `FileContextBuilder` | Builds file/attachment context for Claude API calls; Epic 30 adds `buildWithImages()` returning `FileContextResult` with `imageBlocks` |
 
 Utilities:
 | Utility | Responsibility |
@@ -613,3 +619,72 @@ Benefits:
 - Testability - handlers can be unit tested in isolation
 - Maintainability - changes to one concern don't affect others
 - Extensibility - easy to add new handlers or strategies
+
+### Epic 30 - Vision API Support
+
+**Major feature** adding Claude Vision API integration for image analysis in chat.
+
+Architecture:
+
+| Component | Layer | Responsibility |
+|-----------|-------|----------------|
+| `VisionContentBuilder` | Infrastructure/AI | Converts image files to `ImageContentBlock` for Claude Vision API |
+| `IVisionContentBuilder` | Application/Interfaces | Interface for Vision content building (dependency inversion) |
+| `FileContextBuilder.buildWithImages()` | Infrastructure/WebSocket | Returns `FileContextResult` with both `textContext` and `imageBlocks` |
+| `ClaudeClient.streamMessage()` | Infrastructure/AI | Extended to accept optional `imageBlocks` parameter for multimodal messages |
+| `ConnectionHandler` | Infrastructure/WebSocket | Clears vision cache on disconnect to prevent memory leaks |
+
+New Types (infrastructure/ai/types/):
+| Type | Description |
+|------|-------------|
+| `ImageContentBlock` | Vision API image content structure (`type: 'image'`, `source: ImageSource`) |
+| `TextContentBlock` | Text content block for multimodal messages |
+| `ContentBlock` | Union type: `ImageContentBlock \| TextContentBlock` |
+| `ClaudeApiMessage` | API message format supporting `string \| ContentBlock[]` content |
+| `ImageMediaType` | Supported image types: `image/png`, `image/jpeg`, `image/gif`, `image/webp` |
+
+Data Flow:
+```
+User uploads image -> FileContextBuilder.buildWithImages()
+                          |
+                          v
+                   VisionContentBuilder.buildImageContent()
+                          |
+                          v (returns ImageContentBlock)
+                   FileContextResult { textContext, imageBlocks }
+                          |
+                          v
+                   MessageHandler passes imageBlocks to ClaudeClient
+                          |
+                          v
+                   ClaudeClient.streamMessage(messages, options, imageBlocks)
+                          |
+                          v
+                   toApiMessages() merges imageBlocks into last user message
+                          |
+                          v
+                   Anthropic API receives multimodal message
+```
+
+Vision Content Caching:
+- `VisionContentBuilder` maintains conversation-scoped cache (`Map<conversationId:fileId, ImageContentBlock>`)
+- Avoids repeated S3 fetches and base64 encoding for same image in a conversation
+- `ConnectionHandler.handleDisconnect()` clears cache to prevent memory leaks
+
+Mode-Specific Behavior:
+| Mode | Vision API | Notes |
+|------|------------|-------|
+| Consult | Enabled | Images analyzed via Vision API |
+| Assessment | Disabled | Images skipped (out of scope for Epic 30) |
+| Scoring | N/A | Uses DocumentParser flow, not FileContextBuilder |
+
+Size Limits:
+- Maximum: 5MB per image (Anthropic API limit)
+- Warning threshold: 4MB (logged for monitoring)
+- Frontend: 4MB warning, 5MB max enforcement
+
+Supported Image Formats:
+- PNG (`image/png`)
+- JPEG (`image/jpeg`, `image/jpg` normalized)
+- GIF (`image/gif`) - first frame analyzed
+- WebP (`image/webp`)
