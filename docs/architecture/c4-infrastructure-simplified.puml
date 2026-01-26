@@ -114,6 +114,7 @@ package "WebSocket (Epic 28 Modular)" {
 
         class FileContextBuilder {
             +buildFileContext(files)
+            +buildWithImages(conversationId): FileContextResult
             +includeIntakeContext()
         }
     }
@@ -142,6 +143,7 @@ package "AI / Claude Integration" {
         -promptCache: PromptCacheManager
         +chat(messages): Response
         +streamChat(messages, onChunk): void
+        +streamMessage(messages, options, imageBlocks?): AsyncGenerator
         +useTools(messages, tools): ToolResult
     }
 
@@ -149,6 +151,13 @@ package "AI / Claude Integration" {
         -cache: Map<string, CachedPrompt>
         +get(key): string
         +set(key, prompt): void
+    }
+
+    class VisionContentBuilder {
+        -imageCache: Map<string, ImageContentBlock>
+        +buildImageContent(file, conversationId?): ImageContentBlock
+        +isImageFile(mimeType): boolean
+        +clearConversationCache(conversationId): void
     }
 
     class DocumentParserService {
@@ -276,6 +285,12 @@ ScoringModeStrategy ..|> IModeStrategy
 MessageHandler --> ConversationContextBuilder
 MessageHandler --> FileContextBuilder
 
+' FileContextBuilder -> VisionContentBuilder (Epic 30)
+FileContextBuilder --> VisionContentBuilder
+
+' ConnectionHandler -> VisionContentBuilder (cache cleanup on disconnect)
+ConnectionHandler --> VisionContentBuilder
+
 ' Handlers -> Utilities
 MessageHandler --> StreamingHandler
 MessageHandler --> ToolUseRegistry
@@ -284,6 +299,7 @@ ChatServer --> RateLimiter
 ' AI components
 MessageHandler --> ClaudeClient
 ClaudeClient --> PromptCacheManager
+VisionContentBuilder --> LocalFileStorage
 ScoringHandler --> ScoringPromptBuilder
 ExportNarrativeGenerator --> ClaudeClient
 

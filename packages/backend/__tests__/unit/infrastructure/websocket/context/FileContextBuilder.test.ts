@@ -1012,14 +1012,14 @@ describe('FileContextBuilder', () => {
       expect(result.imageBlocks).toHaveLength(1);
     });
 
-    it('should NOT process images via Vision API in Assessment mode', async () => {
+    it('should process images via Vision API in Assessment mode', async () => {
       const result = await builderWithVision.buildWithImages('conv-123', undefined, {
         mode: 'assessment',
       });
 
-      // Vision API should NOT be called in Assessment mode
-      expect(mockVisionContentBuilder.buildImageContent).not.toHaveBeenCalled();
-      expect(result.imageBlocks).toHaveLength(0);
+      // Vision API should be called in Assessment mode (enabled for consult + assessment)
+      expect(mockVisionContentBuilder.buildImageContent).toHaveBeenCalled();
+      expect(result.imageBlocks).toHaveLength(1);
     });
 
     it('should NOT process images via Vision API in Scoring mode', async () => {
@@ -1032,7 +1032,7 @@ describe('FileContextBuilder', () => {
       expect(result.imageBlocks).toHaveLength(0);
     });
 
-    it('should still process text files in Assessment mode', async () => {
+    it('should process both images and text files in Assessment mode', async () => {
       mockFileRepository.findByConversationWithExcerpt.mockResolvedValue([
         createFileWithExcerpt({
           id: 'file-1',
@@ -1053,20 +1053,20 @@ describe('FileContextBuilder', () => {
         mode: 'assessment',
       });
 
-      // Images skipped, but PDFs still processed
-      expect(result.imageBlocks).toHaveLength(0);
+      // Both images and PDFs processed in Assessment mode
+      expect(result.imageBlocks).toHaveLength(1);
       expect(result.textContext).toContain('Acme');
     });
 
-    it('should log when Vision is disabled for non-consult mode', async () => {
+    it('should log when Vision is disabled for Scoring mode', async () => {
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       await builderWithVision.buildWithImages('conv-123', undefined, {
-        mode: 'assessment',
+        mode: 'scoring',
       });
 
       expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Vision API disabled for mode=assessment')
+        expect.stringContaining('Vision API disabled for mode=scoring')
       );
 
       consoleSpy.mockRestore();

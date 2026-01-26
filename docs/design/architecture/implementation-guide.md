@@ -1,7 +1,7 @@
 # Guardian Implementation Guide
 
-**Version:** 1.0 (Extracted from system-design.md v1.5)
-**Last Updated:** 2025-01-04
+**Version:** 1.1
+**Last Updated:** 2026-01-26
 **Status:** Active Development Reference
 
 ---
@@ -59,7 +59,8 @@ guardian-app/
 │   │       │   │   ├── IAssessmentRepository.ts
 │   │       │   │   ├── IQuestionGenerator.ts
 │   │       │   │   ├── IReportGenerator.ts
-│   │       │   │   └── IClaudeClient.ts
+│   │       │   │   ├── IClaudeClient.ts
+│   │       │   │   └── IVisionContentBuilder.ts  # Epic 30: Vision content interface
 │   │       │   └── dtos/            # Data Transfer Objects
 │   │       │       ├── CreateAssessmentDTO.ts
 │   │       │       ├── AnalysisResultDTO.ts
@@ -118,13 +119,25 @@ guardian-app/
 │   │       │   │   └── client.ts
 │   │       │   │
 │   │       │   ├── ai/
-│   │       │   │   ├── AnthropicClient.ts
+│   │       │   │   ├── ClaudeClient.ts           # Anthropic SDK wrapper (LLM + Vision)
+│   │       │   │   ├── VisionContentBuilder.ts   # Epic 30: Image → ImageContentBlock
 │   │       │   │   ├── ClaudeQuestionGenerator.ts
-│   │       │   │   └── ClaudeResponseInterpreter.ts
+│   │       │   │   ├── ClaudeResponseInterpreter.ts
+│   │       │   │   └── types/                    # Epic 30: Vision API types
+│   │       │   │       ├── index.ts
+│   │       │   │       ├── vision.ts             # ImageContentBlock, ContentBlock
+│   │       │   │       └── message.ts            # ClaudeApiMessage
 │   │       │   │
 │   │       │   ├── websocket/
 │   │       │   │   ├── ChatServer.ts
-│   │       │   │   └── StreamingHandler.ts
+│   │       │   │   ├── StreamingHandler.ts
+│   │       │   │   ├── handlers/                 # Epic 28: Modular handlers
+│   │       │   │   │   ├── ConnectionHandler.ts  # Epic 30: Clears vision cache on disconnect
+│   │       │   │   │   ├── MessageHandler.ts     # Epic 30: Passes imageBlocks to Claude
+│   │       │   │   │   └── ...
+│   │       │   │   └── context/                  # Epic 28: Context builders
+│   │       │   │       ├── FileContextBuilder.ts # Epic 30: buildWithImages() returns FileContextResult
+│   │       │   │       └── ConversationContextBuilder.ts
 │   │       │   │
 │   │       │   ├── export/
 │   │       │   │   ├── PDFExporter.ts        # Puppeteer/Playwright
@@ -1354,6 +1367,19 @@ User Message → MessageHandler → FileContextBuilder.buildWithImages()
 | FileContextBuilder | `infrastructure/websocket/context/FileContextBuilder.ts` | Builds text + image context |
 | MessageHandler | `infrastructure/websocket/handlers/MessageHandler.ts` | Passes imageBlocks to Claude |
 
+**New Types (infrastructure/ai/types/):**
+
+| Type | File | Description |
+|------|------|-------------|
+| `ImageContentBlock` | `vision.ts` | Vision API image content: `{ type: 'image', source: ImageSource }` |
+| `TextContentBlock` | `vision.ts` | Text content block: `{ type: 'text', text: string }` |
+| `ContentBlock` | `vision.ts` | Union: `ImageContentBlock \| TextContentBlock` |
+| `ClaudeApiMessage` | `message.ts` | API message: `{ role, content: string \| ContentBlock[] }` |
+| `ImageMediaType` | `vision.ts` | `'image/png' \| 'image/jpeg' \| 'image/gif' \| 'image/webp'` |
+
+**Interface (application/interfaces/):**
+- `IVisionContentBuilder` - Dependency inversion interface for VisionContentBuilder
+
 ### Mode-Specific Behavior (Story 30.4.3)
 
 Vision API support in chat is **Consult mode only**:
@@ -1383,10 +1409,15 @@ const result = await fileContextBuilder.buildWithImages('conv-123', undefined, {
 - GIF (`image/gif`) - first frame analyzed
 - WebP (`image/webp`)
 
-**Size Limits:**
+**Size Limits (Backend):**
 - Maximum: 5MB per image (Anthropic API limit)
 - Warning threshold: 4MB (logged for monitoring)
 - Oversized images: Gracefully rejected (not sent to Claude)
+
+**Size Limits (Frontend - useFileUpload/useMultiFileUpload hooks):**
+- Warning threshold: 4MB (shows user warning but allows upload)
+- Hard limit: 5MB (blocks upload, shows error)
+- Hooks: `useFileUpload.ts`, `useMultiFileUpload.ts` in `apps/web/src/hooks/`
 
 ### Caching Strategy (Story 30.3.5)
 
@@ -1428,6 +1459,41 @@ console.error(`Failed to process ${file.filename}`); // May contain PHI!
 **User Fallback:**
 When an image cannot be processed, the conversation continues without it. Claude will only see text context from other files.
 
+### ClaudeClient Vision Integration
+
+**Method Signature (Epic 30):**
+```typescript
+async *streamMessage(
+  messages: ClaudeMessage[],
+  options: ClaudeRequestOptions = {},
+  imageBlocks?: ImageContentBlock[]  // NEW: Optional Vision content
+): AsyncGenerator<StreamChunk>
+```
+
+**Internal Conversion:**
+- `toApiMessages()` merges `imageBlocks` into the last user message
+- Images placed before text content in `ContentBlock[]`
+- Domain messages (`ClaudeMessage`) stay unchanged (string content)
+- Only infrastructure layer (`ClaudeApiMessage`) uses `ContentBlock[]`
+
+### Cache Cleanup on Disconnect
+
+**ConnectionHandler** clears vision cache when user disconnects:
+
+```typescript
+// infrastructure/websocket/handlers/ConnectionHandler.ts
+handleDisconnect(socket: AuthenticatedSocket): void {
+  // ... existing cleanup ...
+
+  // Epic 30: Clear vision cache to prevent memory leaks
+  if (this.visionContentBuilder && socket.data.conversationId) {
+    this.visionContentBuilder.clearConversationCache(socket.data.conversationId);
+  }
+}
+```
+
+This ensures no orphaned image data remains in memory after conversation ends.
+
 ---
 
 ## Document History
@@ -1435,6 +1501,7 @@ When an image cannot be processed, the conversation continues without it. Claude
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-04 | Extracted from system-design.md v1.5 - Contains folder structure, tech stack, data flows, sequence diagrams, state machines, transaction boundaries, caching, testing strategies, and report formats |
+| 1.1 | 2026-01-26 | Epic 30: Enhanced Vision & Image Handling section with new types, ClaudeClient integration, cache cleanup, and frontend size limits |
 
 ---
 

@@ -73,7 +73,7 @@ export interface FileContextResult {
  *
  * Vision API support is mode-specific:
  * - Consult mode: Images analyzed via Vision API
- * - Assessment mode: Images NOT processed via Vision (out of scope for Epic 30)
+ * - Assessment mode: Images analyzed via Vision API
  * - Scoring mode: Uses existing DocumentParser flow, not this builder
  */
 export interface FileContextOptions {
@@ -113,7 +113,7 @@ export class FileContextBuilder {
    *
    * For image files (PNG, JPEG, GIF, WebP):
    * - In Consult mode: Delegates to VisionContentBuilder to create ImageContentBlock
-   * - In Assessment mode: Images skipped (Vision not supported, out of scope for Epic 30)
+   * - In Assessment mode: Delegates to VisionContentBuilder to create ImageContentBlock
    * - In Scoring mode: Uses DocumentParser flow, not this method
    *
    * @param conversationId - Conversation to get files for
@@ -127,9 +127,9 @@ export class FileContextBuilder {
     options?: FileContextOptions
   ): Promise<FileContextResult> {
     // Story 30.4.3: Check if Vision API is enabled for this mode
-    // Vision is only enabled in Consult mode (default if not specified)
+    // Vision is enabled in Consult and Assessment modes (NOT in Scoring mode)
     const mode = options?.mode || 'consult';
-    const visionEnabled = mode === 'consult';
+    const visionEnabled = mode !== 'scoring';
     // Use method that returns ALL files with excerpt data (not just those with intakeContext)
     let files =
       await this.fileRepository.findByConversationWithExcerpt(conversationId);

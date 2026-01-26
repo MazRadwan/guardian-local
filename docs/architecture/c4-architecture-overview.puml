@@ -151,12 +151,19 @@ package "Infrastructure" <<infra>> {
     class ClaudeClient {
         +chat()
         +streamResponse()
+        +streamMessage(imageBlocks?)
         +useTools()
     }
 
     class PromptCacheManager {
         +getCachedPrompt()
         +invalidate()
+    }
+
+    class VisionContentBuilder {
+        +buildImageContent()
+        +isImageFile()
+        +clearConversationCache()
     }
 
     class StreamingHandler {
@@ -236,10 +243,12 @@ AuthService --> JWTProvider
 Handlers --> ClaudeClient
 Handlers --> StreamingHandler
 Handlers --> ToolUseRegistry
+Handlers --> VisionContentBuilder
 TitleGenerationService --> ClaudeClient
 QuestionnaireGenerationService --> ClaudeClient
 ScoringService --> ClaudeClient
 ClaudeClient --> PromptCacheManager
+VisionContentBuilder --> LocalFileStorage
 ExportService --> PDFExporter
 ExportService --> WordExporter
 ExportService --> LocalFileStorage

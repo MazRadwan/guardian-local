@@ -2,11 +2,11 @@
 # Maps diagram nodes to actual code paths for validation
 # Used by diagram-updater-agent
 #
-# VALIDATED: 2026-01-20 - Paths verified against actual codebase
-# UPDATED: 2026-01-20 - Added Epic 28 ChatServer modular architecture (handlers, mode strategies, context builders)
+# VALIDATED: 2026-01-26 - Paths verified against actual codebase
+# UPDATED: 2026-01-26 - Added Epic 30 Vision API support (VisionContentBuilder, updated FileContextBuilder)
 
 diagram: architecture-latest.mmd
-last_verified: "2026-01-20"
+last_verified: "2026-01-26"
 
 # Subgraph to directory mappings
 subgraphs:
@@ -235,10 +235,10 @@ nodes:
   # === Backend Layer - WebSocket Handlers (Epic 28) ===
   ConnectionHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ConnectionHandler.ts"]
-    exports: ["ConnectionHandler"]
+    exports: ["ConnectionHandler", "ConnectionResult", "ConnectionReadyPayload"]
     validation_strategy: export
     status: EXISTS
-    note: "Handles socket connection, authentication, and connection_ready events"
+    note: "Handles socket connection, authentication, and connection_ready events. Epic 30: Clears VisionContentBuilder cache on disconnect"
 
   ConversationHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ConversationHandler.ts"]
@@ -307,10 +307,10 @@ nodes:
 
   FileContextBuilder:
     paths: ["packages/backend/src/infrastructure/websocket/context/FileContextBuilder.ts"]
-    exports: ["FileContextBuilder"]
+    exports: ["FileContextBuilder", "FileContextResult", "FileContextOptions"]
     validation_strategy: export
     status: EXISTS
-    note: "Builds file/attachment context for Claude API calls"
+    note: "Epic 30: Now has buildWithImages() returning FileContextResult with imageBlocks for Vision API"
 
   # === Backend Layer - Utilities (Epic 28) ===
   StreamingHandler:
@@ -428,15 +428,24 @@ nodes:
   # === AI Layer ===
   ClaudeClient:
     paths: ["packages/backend/src/infrastructure/ai/ClaudeClient.ts"]
-    exports: ["ClaudeClient"]
+    exports: ["ClaudeClient", "ClaudeAPIError"]
     validation_strategy: export
     status: EXISTS
+    note: "Epic 30: streamMessage() now accepts optional imageBlocks parameter for Vision API"
 
   PromptCacheManager:
     paths: ["packages/backend/src/infrastructure/ai/PromptCacheManager.ts"]
     exports: ["PromptCacheManager"]
     validation_strategy: export
     status: EXISTS
+
+  # === AI Layer - Epic 30 Vision API ===
+  VisionContentBuilder:
+    paths: ["packages/backend/src/infrastructure/ai/VisionContentBuilder.ts"]
+    exports: ["VisionContentBuilder", "MAX_IMAGE_SIZE", "WARN_IMAGE_SIZE", "SUPPORTED_MIME_TYPES"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 30: Converts image files to ImageContentBlock for Claude Vision API, with conversation-scoped caching"
 
   assessmentModeTools:
     paths: ["packages/backend/src/infrastructure/ai/tools/questionnaireReadyTool.ts"]
@@ -578,6 +587,20 @@ not_in_diagram:
     - ScoringPromptBuilder: "packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts"
     - ExportNarrativeGenerator: "packages/backend/src/infrastructure/ai/ExportNarrativeGenerator.ts"
     - DocumentParserService: "packages/backend/src/infrastructure/ai/DocumentParserService.ts"
+
+  # Epic 30: Vision API types (infrastructure-level, not architecturally significant)
+  ai_types:
+    - ImageContentBlock: "packages/backend/src/infrastructure/ai/types/vision.ts"
+    - TextContentBlock: "packages/backend/src/infrastructure/ai/types/vision.ts"
+    - ContentBlock: "packages/backend/src/infrastructure/ai/types/vision.ts"
+    - ImageMediaType: "packages/backend/src/infrastructure/ai/types/vision.ts"
+    - ImageSource: "packages/backend/src/infrastructure/ai/types/vision.ts"
+    - ClaudeApiMessage: "packages/backend/src/infrastructure/ai/types/message.ts"
+
+  # Epic 30: Vision interface (application layer)
+  interfaces:
+    - IVisionContentBuilder: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
+    - VisionFileDTO: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
 
 # Edge rules for relational validation
 edge_rules:

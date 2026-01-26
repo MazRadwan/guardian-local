@@ -1,7 +1,7 @@
 # Guardian Architecture - Layers & Modules
 
-**Version:** 1.1
-**Last Updated:** 2025-12-22
+**Version:** 1.2
+**Last Updated:** 2026-01-26
 **Architecture Pattern:** Lightweight Clean Architecture
 **Status:** Stable (foundational patterns); Module inventory updated to reflect implementation status
 
@@ -221,6 +221,12 @@ export function calculateSecurityScore(factors: SecurityFactors): number {
 - ❌ Make business decisions (that's application layer)
 
 **Technology:** Express, Drizzle ORM, Anthropic SDK (including Vision API), WebSocket libraries
+
+**Key Components:**
+- **ClaudeClient** - Wraps Anthropic SDK with retry logic, streaming, Vision API support
+- **VisionContentBuilder** (Epic 30) - Converts image files to `ImageContentBlock` for Vision API
+- **FileContextBuilder** (Epic 30) - Builds text + image context for Claude via `buildWithImages()`
+- **DocumentParserService** - Extracts text from PDF/DOCX, uses Vision for images
 
 **Example Repository Implementation:**
 ```typescript
@@ -694,6 +700,7 @@ useEffect(() => {
 |---------|------|---------|
 | 1.0 | 2025-01-04 | Extracted from system-design.md v1.5 - Contains architecture overview, layer responsibilities, 7 module boundaries, dependency rules, and key design patterns |
 | 1.1 | 2025-12-22 | Added implementation status to modules (Assessment, Conversation, Auth, Export = implemented; Analysis = Epic 15; Reporting, Portfolio = future). Clarified this doc describes patterns/principles, C4 diagrams show actual implementation. |
+| 1.2 | 2026-01-26 | Epic 30: Added Vision API key components to Infrastructure Layer (VisionContentBuilder, FileContextBuilder, ClaudeClient Vision support). |
 
 ---
 
