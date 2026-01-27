@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
@@ -39,6 +39,8 @@ export interface WebSocketEventHandlers {
   onScoringError?: (data: ScoringErrorPayload) => void;
   // Epic 18.4.2b: Vendor clarification callback
   onVendorClarificationNeeded?: (data: VendorClarificationNeededPayload) => void;
+  // Epic 31.2.2: File processing error callback
+  onFileProcessingError?: (data: FileProcessingErrorPayload) => void;
 }
 
 /**
@@ -169,6 +171,7 @@ export function useWebSocketAdapter({
     onScoringComplete: handlers.onScoringComplete,
     onScoringError: handlers.onScoringError,
     onVendorClarificationNeeded: handlers.onVendorClarificationNeeded,
+    onFileProcessingError: handlers.onFileProcessingError,
     autoConnect,
   });
 

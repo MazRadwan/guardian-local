@@ -60,6 +60,7 @@ describe('FileContextBuilder', () => {
       findByIdAndConversation: jest.fn(),
       updateIntakeContext: jest.fn(),
       findByConversationWithContext: jest.fn(),
+      updateExcerptAndClassification: jest.fn(),
       updateParseStatus: jest.fn(),
       tryStartParsing: jest.fn(),
       deleteByConversationId: jest.fn(),

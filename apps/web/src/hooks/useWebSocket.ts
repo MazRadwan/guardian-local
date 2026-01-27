@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import { useChatStore } from '@/stores/chatStore';
 
@@ -36,6 +36,8 @@ export interface UseWebSocketOptions {
   onScoringError?: (data: ScoringErrorPayload) => void;
   // Epic 18.4.2b: Vendor clarification callback
   onVendorClarificationNeeded?: (data: VendorClarificationNeededPayload) => void;
+  // Epic 31.2.2: File processing error callback
+  onFileProcessingError?: (data: FileProcessingErrorPayload) => void;
   autoConnect?: boolean;
 }
 
@@ -67,6 +69,7 @@ export function useWebSocket({
   onScoringComplete,
   onScoringError,
   onVendorClarificationNeeded,
+  onFileProcessingError,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -376,11 +379,19 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // Epic 31.2.2: File processing error subscription
+    if (onFileProcessingError) {
+      const unsub = client.onFileProcessingError((data) => {
+        onFileProcessingError(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
   // NOTE: onConnectionReady is NOT in deps - it's registered in connect() before the socket connects
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError, onVendorClarificationNeeded]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError, onVendorClarificationNeeded, onFileProcessingError]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {

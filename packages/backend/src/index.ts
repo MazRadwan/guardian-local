@@ -68,6 +68,7 @@ import { ScoringService } from './application/services/ScoringService.js';
 import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidator.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 import { TextExtractionService } from './infrastructure/extraction/TextExtractionService.js';
+import { BackgroundExtractor } from './infrastructure/extraction/BackgroundExtractor.js';
 import { VendorValidationService } from './application/services/VendorValidationService.js';
 import { TitleGenerationService } from './application/services/TitleGenerationService.js';
 import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativePromptBuilder.js';
@@ -190,6 +191,9 @@ const visionContentBuilder = new VisionContentBuilder(fileStorage);
 // Epic 18: Initialize text extraction service for fast context injection
 const textExtractionService = new TextExtractionService();
 
+// Epic 31: Initialize background extractor for async text extraction
+const backgroundExtractor = new BackgroundExtractor(textExtractionService, fileRepo);
+
 // Epic 18.4: Initialize vendor validation service
 const vendorValidationService = new VendorValidationService(fileRepo);
 
@@ -287,7 +291,8 @@ const documentUploadController = new DocumentUploadController(
   chatNamespace,
   fileRepo,               // Epic 16.6.9: File registration in database
   scoringService,         // Epic 15 Sprint 5a: Auto-trigger scoring after parse
-  textExtractionService   // Epic 18: Fast text extraction during upload
+  textExtractionService,  // Epic 18: Fast text extraction during upload
+  backgroundExtractor     // Epic 31: Async text extraction
 );
 
 // Register document routes (Epic 16)

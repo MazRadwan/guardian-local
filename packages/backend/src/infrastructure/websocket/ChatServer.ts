@@ -183,7 +183,19 @@ export class ChatServer {
   private async handleSendMessage(socket: AuthenticatedSocket, payload: SendMessagePayload): Promise<void> {
     // Step 1: Validate
     const validation = await this.messageHandler.validateSendMessage(socket as IAuthenticatedSocket, payload);
-    if (!validation.valid) { socket.emit('error', validation.error); return; }
+    if (!validation.valid) {
+      // Story 31.2: Emit file_processing_error when files are missing after retry
+      if (validation.emitFileProcessingError && validation.conversationId) {
+        socket.emit('file_processing_error', {
+          conversationId: validation.conversationId,
+          missingFileIds: validation.missingFileIds || [],
+          message: validation.error?.message || 'Some files are still processing. Please wait a moment and try again.',
+        });
+        return;
+      }
+      socket.emit('error', validation.error);
+      return;
+    }
 
     const { conversationId, messageText, enrichedAttachments } = validation;
     const hasAttachments = !!(enrichedAttachments && enrichedAttachments.length > 0);

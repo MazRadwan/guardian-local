@@ -118,6 +118,7 @@ const createMockFileRepository = (): jest.Mocked<IFileRepository> => ({
   updateIntakeContext: jest.fn(),
   findByConversationWithContext: jest.fn(),
   updateTextExcerpt: jest.fn(),
+  updateExcerptAndClassification: jest.fn(),
   updateParseStatus: jest.fn(),
   tryStartParsing: jest.fn(),
   findByConversationWithExcerpt: jest.fn(),
@@ -299,8 +300,12 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Must mock findByIds for waitForFileRecords
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({ id: 'file-1', userId: 'user-123' })
+        ]);
         mockFileRepository.findByIdAndConversation.mockResolvedValue(
-          createMockFileRecord({ userId: 'user-123' })
+          createMockFileRecord({ id: 'file-1', userId: 'user-123' })
         );
 
         const result = await handler.validateSendMessage(mockSocket, {
@@ -430,6 +435,16 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Must mock findByIds for waitForFileRecords
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({
+            id: 'file-1',
+            userId: 'user-123',
+            filename: 'test.pdf',
+            mimeType: 'application/pdf',
+            size: 1024,
+          })
+        ]);
         mockFileRepository.findByIdAndConversation.mockResolvedValue(
           createMockFileRecord({
             id: 'file-1',
@@ -566,7 +581,11 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
-        mockFileRepository.findByIdAndConversation.mockResolvedValue(null); // Not found
+        // Story 31.2: File exists in DB (passes waitForFileRecords) but not in this conversation
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({ id: 'wrong-file', userId: 'user-123', conversationId: 'other-conv' })
+        ]);
+        mockFileRepository.findByIdAndConversation.mockResolvedValue(null); // Not in this conversation
 
         const result = await handler.validateSendMessage(mockSocket, {
           conversationId: 'conv-1',
@@ -582,6 +601,14 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Must mock findByIds for waitForFileRecords
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({
+            id: 'file-1',
+            userId: 'other-user',
+            filename: 'test.pdf',
+          })
+        ]);
         mockFileRepository.findByIdAndConversation.mockResolvedValue(
           createMockFileRecord({
             id: 'file-1',
@@ -603,6 +630,16 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Must mock findByIds for waitForFileRecords
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({
+            id: 'file-1',
+            userId: 'user-123',
+            filename: 'document.pdf',
+            mimeType: 'application/pdf',
+            size: 2048,
+          })
+        ]);
         mockFileRepository.findByIdAndConversation.mockResolvedValue(
           createMockFileRecord({
             id: 'file-1',
@@ -633,6 +670,11 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Must mock findByIds for waitForFileRecords
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({ id: 'file-1', filename: 'doc1.pdf', userId: 'user-123' }),
+          createMockFileRecord({ id: 'file-2', filename: 'doc2.pdf', userId: 'user-123' }),
+        ]);
         mockFileRepository.findByIdAndConversation
           .mockResolvedValueOnce(
             createMockFileRecord({ id: 'file-1', filename: 'doc1.pdf', userId: 'user-123' })
@@ -654,8 +696,13 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Files exist in DB (pass waitForFileRecords) but one is not in this conversation
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({ id: 'bad-file', filename: 'doc1.pdf', userId: 'user-123', conversationId: 'other-conv' }),
+          createMockFileRecord({ id: 'file-2', filename: 'doc2.pdf', userId: 'user-123' }),
+        ]);
         mockFileRepository.findByIdAndConversation
-          .mockResolvedValueOnce(null) // First file not found
+          .mockResolvedValueOnce(null) // First file not found in this conversation
           .mockResolvedValueOnce(
             createMockFileRecord({ id: 'file-2', filename: 'doc2.pdf', userId: 'user-123' })
           );
@@ -675,6 +722,14 @@ describe('MessageHandler', () => {
         mockConversationService.getConversation.mockResolvedValue(
           createMockConversation({ userId: 'user-123' })
         );
+        // Story 31.2: Must mock findByIds for waitForFileRecords
+        mockFileRepository.findByIds.mockResolvedValue([
+          createMockFileRecord({
+            id: 'file-1',
+            userId: 'user-123',
+            storagePath: '/uploads/secret/file.pdf',
+          })
+        ]);
         mockFileRepository.findByIdAndConversation.mockResolvedValue(
           createMockFileRecord({
             id: 'file-1',
@@ -759,6 +814,8 @@ describe('MessageHandler', () => {
         });
 
         expect(result.error?.code).toBe('RATE_LIMIT_EXCEEDED');
+        // Story 31.2: Both findByIds (waitForFileRecords) and findByIdAndConversation should not be called
+        expect(mockFileRepository.findByIds).not.toHaveBeenCalled();
         expect(mockFileRepository.findByIdAndConversation).not.toHaveBeenCalled();
       });
     });
@@ -832,6 +889,10 @@ describe('MessageHandler', () => {
       mockConversationService.getConversation.mockResolvedValue(
         createMockConversation({ userId: 'user-123' })
       );
+      // Story 31.2: Files pass waitForFileRecords but findByIdAndConversation throws
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-1', userId: 'user-123' })
+      ]);
       mockFileRepository.findByIdAndConversation.mockRejectedValue(new Error('File lookup failed'));
 
       // The error propagates through the validation chain
@@ -910,6 +971,290 @@ describe('MessageHandler', () => {
 
       expect(result.valid).toBe(true);
       expect(result.messageText).toBe(longText);
+    });
+  });
+
+  /**
+   * Story 31.2.1: waitForFileRecords tests
+   *
+   * Tests file record waiting with retry logic for race condition handling.
+   * Handles case where user sends message before file_attached completes.
+   */
+  describe('waitForFileRecords (Epic 31)', () => {
+    it('should return immediately when all files exist', async () => {
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-1' }),
+        createMockFileRecord({ id: 'file-2' }),
+      ]);
+
+      const result = await handler.waitForFileRecords(['file-1', 'file-2']);
+
+      expect(result.found).toEqual(['file-1', 'file-2']);
+      expect(result.missing).toEqual([]);
+      expect(mockFileRepository.findByIds).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return empty arrays for empty fileIds input', async () => {
+      const result = await handler.waitForFileRecords([]);
+
+      expect(result.found).toEqual([]);
+      expect(result.missing).toEqual([]);
+      expect(mockFileRepository.findByIds).not.toHaveBeenCalled();
+    });
+
+    it('should retry until files are found', async () => {
+      // First call: no files found
+      // Second call: file-1 found
+      // Third call: file-2 found
+      mockFileRepository.findByIds
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([createMockFileRecord({ id: 'file-1' })])
+        .mockResolvedValueOnce([
+          createMockFileRecord({ id: 'file-1' }),
+          createMockFileRecord({ id: 'file-2' }),
+        ]);
+
+      const result = await handler.waitForFileRecords(['file-1', 'file-2'], 2000, 10);
+
+      expect(result.found).toContain('file-1');
+      expect(result.found).toContain('file-2');
+      expect(result.missing).toEqual([]);
+      expect(mockFileRepository.findByIds.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('should return missing files after timeout', async () => {
+      // Always return empty - files never found
+      mockFileRepository.findByIds.mockResolvedValue([]);
+
+      const startTime = Date.now();
+      const result = await handler.waitForFileRecords(['file-1', 'file-2'], 200, 50);
+      const elapsed = Date.now() - startTime;
+
+      expect(result.found).toEqual([]);
+      expect(result.missing).toEqual(['file-1', 'file-2']);
+      // Should have waited approximately the timeout duration
+      expect(elapsed).toBeGreaterThanOrEqual(150);
+      expect(elapsed).toBeLessThan(500);
+    });
+
+    it('should handle partial file existence', async () => {
+      // file-1 exists, file-2 never exists
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-1' }),
+      ]);
+
+      const result = await handler.waitForFileRecords(['file-1', 'file-2'], 200, 50);
+
+      expect(result.found).toEqual(['file-1']);
+      expect(result.missing).toEqual(['file-2']);
+    });
+
+    it('should use default timeout and interval when not provided', async () => {
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-1' }),
+      ]);
+
+      const result = await handler.waitForFileRecords(['file-1']);
+
+      expect(result.found).toEqual(['file-1']);
+      expect(result.missing).toEqual([]);
+    });
+
+    it('should log progress during retry', async () => {
+      const consoleSpy = jest.spyOn(console, 'log');
+      mockFileRepository.findByIds
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([createMockFileRecord({ id: 'file-1' })]);
+
+      await handler.waitForFileRecords(['file-1'], 2000, 10);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[MessageHandler] Waiting for file records')
+      );
+    });
+
+    it('should log warning when files missing after timeout', async () => {
+      const consoleWarnSpy = jest.spyOn(console, 'warn');
+      mockFileRepository.findByIds.mockResolvedValue([]);
+
+      await handler.waitForFileRecords(['file-missing'], 50, 10);
+
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Files still missing after')
+      );
+    });
+
+    it('should handle single file that becomes available', async () => {
+      mockFileRepository.findByIds
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([createMockFileRecord({ id: 'single-file' })]);
+
+      const result = await handler.waitForFileRecords(['single-file'], 2000, 10);
+
+      expect(result.found).toEqual(['single-file']);
+      expect(result.missing).toEqual([]);
+    });
+
+    it('should preserve found files across retries', async () => {
+      // First: file-1 found
+      // Second: file-1 still there, file-2 now found
+      mockFileRepository.findByIds
+        .mockResolvedValueOnce([createMockFileRecord({ id: 'file-1' })])
+        .mockResolvedValueOnce([
+          createMockFileRecord({ id: 'file-1' }),
+          createMockFileRecord({ id: 'file-2' }),
+        ]);
+
+      const result = await handler.waitForFileRecords(['file-1', 'file-2'], 2000, 10);
+
+      expect(result.found).toEqual(['file-1', 'file-2']);
+      expect(result.missing).toEqual([]);
+    });
+  });
+
+  /**
+   * Story 31.2: file_processing_error integration tests
+   *
+   * Tests that validateSendMessage correctly returns file_processing_error
+   * when file records are missing after the retry period.
+   */
+  describe('file_processing_error integration (Epic 31.2)', () => {
+    beforeEach(() => {
+      mockConversationService.getConversation.mockResolvedValue(
+        createMockConversation({ userId: 'user-123' })
+      );
+    });
+
+    it('should return emitFileProcessingError when files not found after retry', async () => {
+      // Setup: mock findByIds to always return empty (files never exist)
+      mockFileRepository.findByIds.mockResolvedValue([]);
+
+      const result = await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [{ fileId: 'non-existent-file' }],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.emitFileProcessingError).toBe(true);
+      expect(result.missingFileIds).toEqual(['non-existent-file']);
+      expect(result.conversationId).toBe('conv-1');
+      expect(result.error?.event).toBe('file_processing_error');
+      expect(result.error?.message).toContain('still processing');
+    });
+
+    it('should return multiple missing file IDs', async () => {
+      mockFileRepository.findByIds.mockResolvedValue([]);
+
+      const result = await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [
+          { fileId: 'missing-file-1' },
+          { fileId: 'missing-file-2' },
+          { fileId: 'missing-file-3' },
+        ],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.emitFileProcessingError).toBe(true);
+      expect(result.missingFileIds).toHaveLength(3);
+      expect(result.missingFileIds).toContain('missing-file-1');
+      expect(result.missingFileIds).toContain('missing-file-2');
+      expect(result.missingFileIds).toContain('missing-file-3');
+    });
+
+    it('should proceed with message when files found after retry', async () => {
+      // First call: no files found
+      // Second call: file found
+      mockFileRepository.findByIds
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([createMockFileRecord({ id: 'file-123', conversationId: 'conv-1', userId: 'user-123' })]);
+
+      mockFileRepository.findByIdAndConversation.mockResolvedValue(
+        createMockFileRecord({ id: 'file-123', conversationId: 'conv-1', userId: 'user-123' })
+      );
+
+      const result = await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [{ fileId: 'file-123' }],
+      });
+
+      expect(result.valid).toBe(true);
+      expect(result.emitFileProcessingError).toBeUndefined();
+      expect(result.missingFileIds).toBeUndefined();
+      expect(result.enrichedAttachments).toHaveLength(1);
+    });
+
+    it('should return regular error when file exists but not in conversation', async () => {
+      // File exists in DB (findByIds returns it)
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-wrong-conv', conversationId: 'other-conv', userId: 'user-123' }),
+      ]);
+
+      // But findByIdAndConversation returns null (file not in this conversation)
+      mockFileRepository.findByIdAndConversation.mockResolvedValue(null);
+
+      const result = await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [{ fileId: 'file-wrong-conv' }],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.emitFileProcessingError).toBeFalsy();
+      expect(result.error?.event).toBe('send_message');
+      expect(result.error?.message).toContain('not found or not authorized');
+    });
+
+    it('should return regular error when file exists but owned by different user', async () => {
+      // File exists in DB
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-other-user', conversationId: 'conv-1', userId: 'other-user' }),
+      ]);
+
+      // findByIdAndConversation returns it (file is in conversation)
+      mockFileRepository.findByIdAndConversation.mockResolvedValue(
+        createMockFileRecord({ id: 'file-other-user', conversationId: 'conv-1', userId: 'other-user' })
+      );
+
+      const result = await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [{ fileId: 'file-other-user' }],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.emitFileProcessingError).toBeFalsy();
+      expect(result.error?.event).toBe('send_message');
+      expect(result.error?.message).toContain('not authorized');
+    });
+
+    it('should return emitFileProcessingError when some files missing', async () => {
+      // Only file-1 exists, file-2 does not
+      mockFileRepository.findByIds.mockResolvedValue([
+        createMockFileRecord({ id: 'file-1', conversationId: 'conv-1', userId: 'user-123' }),
+      ]);
+
+      const result = await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [
+          { fileId: 'file-1' },
+          { fileId: 'missing-file' },
+        ],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.emitFileProcessingError).toBe(true);
+      expect(result.missingFileIds).toEqual(['missing-file']);
+    });
+
+    it('should not call findByIdAndConversation when files are missing', async () => {
+      mockFileRepository.findByIds.mockResolvedValue([]);
+
+      await handler.validateSendMessage(mockSocket, {
+        conversationId: 'conv-1',
+        attachments: [{ fileId: 'non-existent' }],
+      });
+
+      // findByIdAndConversation should not be called because waitForFileRecords returned missing
+      expect(mockFileRepository.findByIdAndConversation).not.toHaveBeenCalled();
     });
   });
 

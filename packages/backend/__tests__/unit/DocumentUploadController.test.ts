@@ -1,6 +1,9 @@
 import { DocumentUploadController, buildContentDisposition } from '../../src/infrastructure/http/controllers/DocumentUploadController';
 import { Request, Response } from 'express';
 
+// Helper for deterministic async testing (from story spec)
+const flushPromises = () => new Promise(resolve => setImmediate(resolve));
+
 describe('DocumentUploadController', () => {
   let controller: DocumentUploadController;
   let mockFileStorage: jest.Mocked<any>;
@@ -12,10 +15,17 @@ describe('DocumentUploadController', () => {
   let mockFileRepository: jest.Mocked<any>;
   let mockScoringService: jest.Mocked<any>;
   let mockTextExtractionService: jest.Mocked<any>;
+  let mockBackgroundExtractor: jest.Mocked<any>;
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
 
+  // Store original env
+  const originalEnv = process.env;
+
   beforeEach(() => {
+    // Reset env to original
+    process.env = { ...originalEnv };
+
     mockFileStorage = {
       store: jest.fn().mockResolvedValue('/uploads/test.pdf'),
       retrieve: jest.fn().mockResolvedValue(Buffer.from('test')),
@@ -71,7 +81,7 @@ describe('DocumentUploadController', () => {
         size: 1024,
         storagePath: '/uploads/test.pdf',
         createdAt: new Date(),
-        textExcerpt: 'Test document content', // Epic 18
+        textExcerpt: null, // Epic 31: Initially null with async extraction
         parseStatus: 'pending', // Epic 18
       }),
       findByIdAndUser: jest.fn().mockResolvedValue({
@@ -93,6 +103,7 @@ describe('DocumentUploadController', () => {
       findById: jest.fn(),
       findByIdAndConversation: jest.fn(),
       updateTextExcerpt: jest.fn().mockResolvedValue(undefined),
+      updateExcerptAndClassification: jest.fn().mockResolvedValue(undefined),
       updateParseStatus: jest.fn().mockResolvedValue(undefined),
       tryStartParsing: jest.fn().mockResolvedValue(true),
     };
@@ -110,6 +121,12 @@ describe('DocumentUploadController', () => {
       }),
     };
 
+    // Epic 31: Mock BackgroundExtractor for async text extraction
+    mockBackgroundExtractor = {
+      queueExtraction: jest.fn(),
+    };
+
+    // Default controller with BackgroundExtractor (async extraction enabled)
     controller = new DocumentUploadController(
       mockFileStorage,
       mockFileValidator,
@@ -119,7 +136,8 @@ describe('DocumentUploadController', () => {
       mockChatNamespace,       // /chat namespace
       mockFileRepository,      // Epic 16.6.9: File registration
       mockScoringService,      // Scoring service (not used in upload phase)
-      mockTextExtractionService // Epic 18: Text extraction service
+      mockTextExtractionService, // Epic 18: Text extraction service
+      mockBackgroundExtractor    // Epic 31: Background extraction
     );
 
     // Auth middleware sets req.user (full User object), not req.userId
@@ -151,6 +169,11 @@ describe('DocumentUploadController', () => {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
     };
+  });
+
+  afterEach(() => {
+    // Restore original env
+    process.env = originalEnv;
   });
 
   describe('upload', () => {
@@ -272,7 +295,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing (setImmediate is more stable than nextTick)
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       // Verify progress events emitted
       expect(mockChatNamespace.to).toHaveBeenCalledWith('user:user-123');
@@ -285,13 +308,13 @@ describe('DocumentUploadController', () => {
       );
     });
 
-    // Epic 18: Upload phase now emits file_attached, NOT intake_context_ready
-    // Parsing happens on Send (Sprint 2)
-    it('should emit file_attached on successful upload (Epic 18)', async () => {
+    // Epic 31: Upload phase emits file_attached immediately with hasExcerpt: false
+    // Extraction happens in background via BackgroundExtractor
+    it('should emit file_attached with hasExcerpt: false when async extraction enabled (Epic 31)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
-      // Wait for async processing (setImmediate is more stable than nextTick)
-      await new Promise((resolve) => setImmediate(resolve));
+      // Wait for async processing
+      await flushPromises();
 
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'file_attached',
@@ -302,37 +325,52 @@ describe('DocumentUploadController', () => {
           filename: 'test.pdf',
           mimeType: 'application/pdf',
           size: 1024,
-          hasExcerpt: true,
+          hasExcerpt: false, // Epic 31: false initially, BackgroundExtractor updates later
         })
       );
     });
 
-    // Epic 18: Text extraction happens during upload
-    it('should call textExtractionService.extract during upload (Epic 18)', async () => {
+    // Epic 31: With async extraction, TextExtractionService is NOT called directly
+    // BackgroundExtractor calls it instead
+    it('should NOT call textExtractionService.extract directly when async extraction enabled (Epic 31)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
-      expect(mockTextExtractionService.extract).toHaveBeenCalledWith(
-        expect.any(Buffer),
-        'pdf' // documentType from validation
+      // With BackgroundExtractor provided, extraction is delegated
+      expect(mockTextExtractionService.extract).not.toHaveBeenCalled();
+    });
+
+    // Epic 31: BackgroundExtractor.queueExtraction should be called
+    // Sprint 1 Fix: Now also includes mimeType for classification after extraction
+    it('should call BackgroundExtractor.queueExtraction with correct params (Epic 31)', async () => {
+      await controller.upload(mockReq as any, mockRes as any);
+
+      // Wait for async processing
+      await flushPromises();
+
+      expect(mockBackgroundExtractor.queueExtraction).toHaveBeenCalledWith(
+        'file-uuid-123', // fileId from repository
+        expect.any(Buffer), // file buffer
+        'pdf', // documentType
+        'application/pdf' // mimeType for classification (Sprint 1 Fix)
       );
     });
 
-    // Epic 18: File record includes textExcerpt on create
-    it('should pass textExcerpt to fileRepository.create (Epic 18)', async () => {
+    // Epic 31: File record created with textExcerpt=null when async extraction enabled
+    it('should create file record with textExcerpt=null when async extraction enabled (Epic 31)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       expect(mockFileRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
           conversationId: 'conv-123',
           filename: 'test.pdf',
-          textExcerpt: 'Test document content', // From mockTextExtractionService
+          textExcerpt: null, // Epic 31: null initially, BackgroundExtractor updates later
         })
       );
     });
@@ -342,7 +380,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       // Parser should NOT be called during upload phase
       expect(mockIntakeParser.parseForContext).not.toHaveBeenCalled();
@@ -353,7 +391,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       // Should emit storing stage
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
@@ -375,25 +413,18 @@ describe('DocumentUploadController', () => {
       expect(completeCall).toBeUndefined();
     });
 
-    // Epic 18: hasExcerpt is false when extraction fails
-    it('should emit hasExcerpt: false when text extraction fails (Epic 18)', async () => {
-      mockTextExtractionService.extract.mockResolvedValue({
-        success: false,
-        excerpt: '',
-        fullLength: 0,
-        extractionMs: 100,
-        error: 'Unsupported format',
-      });
-
+    // Epic 31: With async extraction, hasExcerpt is always false initially
+    // (extraction happens in background)
+    it('should emit hasExcerpt: false initially with async extraction (Epic 31)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'file_attached',
         expect.objectContaining({
-          hasExcerpt: false,
+          hasExcerpt: false, // Always false with async extraction
         })
       );
     });
@@ -405,7 +436,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
         'upload_progress',
@@ -418,14 +449,14 @@ describe('DocumentUploadController', () => {
     });
 
     // Epic 16.6.9: File registration tests
-    // Epic 18: Updated to include textExcerpt
-    it('should register file in database after storage', async () => {
+    // Epic 31: Updated for async extraction (textExcerpt=null initially)
+    it('should register file in database after storage with textExcerpt=null (Epic 31)', async () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
-      // Verify file was registered in database with textExcerpt
+      // Verify file was registered in database with textExcerpt=null
       expect(mockFileRepository.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 'user-123',
@@ -434,7 +465,7 @@ describe('DocumentUploadController', () => {
           mimeType: 'application/pdf',
           size: 1024,
           storagePath: '/uploads/test.pdf',
-          textExcerpt: 'Test document content', // Epic 18
+          textExcerpt: null, // Epic 31: null initially with async extraction
         })
       );
     });
@@ -444,7 +475,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       // Verify file_attached includes fileId from database
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
@@ -463,7 +494,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       // Verify storagePath is NOT in file_attached event
       const fileAttachedCall = mockChatNamespace.emit.mock.calls.find(
@@ -495,7 +526,7 @@ describe('DocumentUploadController', () => {
       await controller.upload(mockReq as any, mockRes as any);
 
       // Wait for async processing
-      await new Promise((resolve) => setImmediate(resolve));
+      await flushPromises();
 
       // Epic 18: Both modes emit file_attached; scoring_parse_ready comes on Send
       expect(mockChatNamespace.emit).toHaveBeenCalledWith(
@@ -691,6 +722,122 @@ describe('DocumentUploadController', () => {
 
         expect(mockRes.status).toHaveBeenCalledWith(202);
         // The async processing happens after this point (fire-and-forget)
+      });
+    });
+
+    // Epic 31: Feature flag and sync fallback tests
+    describe('Async extraction feature flag (Epic 31)', () => {
+      it('should use sync extraction when UPLOAD_EXTRACT_ASYNC=false', async () => {
+        // Set feature flag to disable async extraction
+        process.env.UPLOAD_EXTRACT_ASYNC = 'false';
+
+        // Mock file repository to return excerpt (sync behavior)
+        mockFileRepository.create.mockResolvedValue({
+          id: 'file-uuid-123',
+          userId: 'user-123',
+          conversationId: 'conv-123',
+          filename: 'test.pdf',
+          mimeType: 'application/pdf',
+          size: 1024,
+          storagePath: '/uploads/test.pdf',
+          createdAt: new Date(),
+          textExcerpt: 'Test document content',
+          parseStatus: 'pending',
+        });
+
+        await controller.upload(mockReq as any, mockRes as any);
+        await flushPromises();
+
+        // With flag disabled, sync extraction should be used
+        expect(mockTextExtractionService.extract).toHaveBeenCalled();
+        expect(mockBackgroundExtractor.queueExtraction).not.toHaveBeenCalled();
+      });
+
+      it('should create file with textExcerpt when sync extraction used', async () => {
+        // Set feature flag to disable async extraction
+        process.env.UPLOAD_EXTRACT_ASYNC = 'false';
+
+        await controller.upload(mockReq as any, mockRes as any);
+        await flushPromises();
+
+        expect(mockFileRepository.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            textExcerpt: 'Test document content', // From sync extraction
+          })
+        );
+      });
+
+      it('should emit hasExcerpt: true when sync extraction succeeds', async () => {
+        // Set feature flag to disable async extraction
+        process.env.UPLOAD_EXTRACT_ASYNC = 'false';
+
+        await controller.upload(mockReq as any, mockRes as any);
+        await flushPromises();
+
+        expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+          'file_attached',
+          expect.objectContaining({
+            hasExcerpt: true, // Sync extraction sets this to true
+          })
+        );
+      });
+
+      it('should use sync extraction when no BackgroundExtractor provided', async () => {
+        // Create controller WITHOUT BackgroundExtractor
+        const syncController = new DocumentUploadController(
+          mockFileStorage,
+          mockFileValidator,
+          mockIntakeParser,
+          mockScoringParser,
+          mockConversationService,
+          mockChatNamespace,
+          mockFileRepository,
+          mockScoringService,
+          mockTextExtractionService
+          // No BackgroundExtractor
+        );
+
+        await syncController.upload(mockReq as any, mockRes as any);
+        await flushPromises();
+
+        // Without BackgroundExtractor, sync extraction should be used
+        expect(mockTextExtractionService.extract).toHaveBeenCalled();
+      });
+
+      it('should use async extraction by default when BackgroundExtractor provided', async () => {
+        // Ensure no env flag is set (default behavior)
+        delete process.env.UPLOAD_EXTRACT_ASYNC;
+
+        await controller.upload(mockReq as any, mockRes as any);
+        await flushPromises();
+
+        // Default behavior: async extraction
+        expect(mockBackgroundExtractor.queueExtraction).toHaveBeenCalled();
+        expect(mockTextExtractionService.extract).not.toHaveBeenCalled();
+      });
+
+      it('should emit hasExcerpt: false when sync extraction fails', async () => {
+        // Set feature flag to disable async extraction
+        process.env.UPLOAD_EXTRACT_ASYNC = 'false';
+
+        // Mock extraction failure
+        mockTextExtractionService.extract.mockResolvedValue({
+          success: false,
+          excerpt: '',
+          fullLength: 0,
+          extractionMs: 100,
+          error: 'Unsupported format',
+        });
+
+        await controller.upload(mockReq as any, mockRes as any);
+        await flushPromises();
+
+        expect(mockChatNamespace.emit).toHaveBeenCalledWith(
+          'file_attached',
+          expect.objectContaining({
+            hasExcerpt: false,
+          })
+        );
       });
     });
   });

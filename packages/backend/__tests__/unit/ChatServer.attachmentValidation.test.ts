@@ -128,6 +128,17 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
       create: jest.fn(),
       findById: jest.fn(),
       findByIdAndUser: jest.fn(),
+      // Story 31.2: findByIds is called by waitForFileRecords before findByIdAndConversation
+      findByIds: jest.fn().mockResolvedValue([{
+        id: 'file-123',
+        userId: 'user-123',
+        conversationId: 'conv-123',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }]),
       findByIdAndConversation: jest.fn().mockResolvedValue({
         id: 'file-123',
         userId: 'user-123',
@@ -263,7 +274,17 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
     });
 
     it('should reject attachment with non-existent fileId', async () => {
-      // Setup empty repository (file not found)
+      // Story 31.2: File exists in DB (passes waitForFileRecords) but not in this conversation
+      mockFileRepository.findByIds.mockResolvedValue([{
+        id: 'invalid-file-id',
+        userId: 'user-123',
+        conversationId: 'other-conv', // Different conversation
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }]);
       mockFileRepository.findByIdAndConversation.mockResolvedValue(null);
 
       // Send message with invalid fileId
@@ -283,7 +304,17 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
     });
 
     it('should reject attachment from wrong conversation', async () => {
-      // Setup file from different conversation
+      // Story 31.2: File exists in DB (passes waitForFileRecords) but not in this conversation
+      mockFileRepository.findByIds.mockResolvedValue([{
+        id: 'file-from-other-conv',
+        userId: 'user-123',
+        conversationId: 'other-conv',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }]);
       mockFileRepository.findByIdAndConversation.mockResolvedValue(null);
 
       // Send message with fileId from wrong conversation
@@ -303,6 +334,17 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
     });
 
     it('should reject attachment from wrong user', async () => {
+      // Story 31.2: Must mock findByIds for waitForFileRecords
+      mockFileRepository.findByIds.mockResolvedValue([{
+        id: 'file-123',
+        userId: 'other-user-456',
+        conversationId: 'conv-123',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }]);
       // Setup file belonging to different user
       mockFileRepository.findByIdAndConversation.mockResolvedValue({
         id: 'file-123',
@@ -332,6 +374,17 @@ describe('ChatServer Attachment Validation (Story 6.9.7)', () => {
     });
 
     it('should strip storagePath from message_sent broadcast', async () => {
+      // Story 31.2: Must mock findByIds for waitForFileRecords
+      mockFileRepository.findByIds.mockResolvedValue([{
+        id: 'file-123',
+        userId: 'user-123',
+        conversationId: 'conv-123',
+        filename: 'test.pdf',
+        mimeType: 'application/pdf',
+        size: 1024,
+        storagePath: '/uploads/test.pdf',
+        createdAt: new Date(),
+      }]);
       // Setup valid file
       mockFileRepository.findByIdAndConversation.mockResolvedValue({
         id: 'file-123',

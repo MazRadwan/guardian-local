@@ -125,6 +125,19 @@ export interface IFileRepository {
   updateTextExcerpt(fileId: string, excerpt: string): Promise<void>
 
   /**
+   * Epic 31: Update text excerpt AND classification fields after background extraction
+   * Used by BackgroundExtractor to backfill classification after async text extraction.
+   */
+  updateExcerptAndClassification(
+    fileId: string,
+    data: {
+      textExcerpt: string
+      detectedDocType: DetectedDocType | null
+      detectedVendorName: string | null
+    }
+  ): Promise<void>
+
+  /**
    * Update parse status for a file
    */
   updateParseStatus(fileId: string, status: ParseStatus): Promise<void>

@@ -160,6 +160,12 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
     options: ClaudeRequestOptions = {},
     imageBlocks?: ImageContentBlock[]
   ): AsyncGenerator<StreamChunk> {
+    const streamStartTime = Date.now();
+    const systemPromptLength = options.systemPrompt?.length || 0;
+    const hasFileContext = options.systemPrompt?.includes('--- Attached Documents ---') || false;
+    const imageBlockCount = imageBlocks?.length || 0;
+    console.log(`[TIMING] ClaudeClient streamMessage START: ${streamStartTime} (systemPromptLength: ${systemPromptLength}, hasFileContext: ${hasFileContext}, imageBlockCount: ${imageBlockCount}, messageCount: ${messages.length})`);
+
     const { systemPrompt, usePromptCache, tools } = options;
     const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
     const requestOptions = usePromptCache
@@ -224,6 +230,8 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
               toolInputJson = '';
             }
           } else if (event.type === 'message_stop') {
+            const streamEndTime = Date.now();
+            console.log(`[TIMING] ClaudeClient streamMessage END: ${streamEndTime} (duration: ${streamEndTime - streamStartTime}ms, stopReason: ${stream.currentMessage?.stop_reason || 'end_turn'})`);
             // Final chunk with any tool uses
             yield {
               content: '',
