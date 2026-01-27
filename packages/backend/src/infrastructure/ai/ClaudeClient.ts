@@ -542,6 +542,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       tool_choice,
       usePromptCache,
       maxTokens = 8192,  // Default for backward compatibility
+      temperature,
       abortSignal,
       onTextDelta,
       onToolUse,
@@ -588,6 +589,8 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
           tools: claudeTools.length > 0 ? claudeTools : undefined,
           // tool_choice forces Claude to use the tool - essential for structured output
           ...(tool_choice && { tool_choice }),
+          // temperature: 0 for deterministic output (scoring), undefined for default sampling
+          ...(temperature !== undefined && { temperature }),
         },
         requestOptions
       );

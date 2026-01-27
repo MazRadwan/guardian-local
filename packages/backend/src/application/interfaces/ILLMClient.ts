@@ -36,6 +36,8 @@ export interface StreamWithToolOptions {
   /** Maximum output tokens for the LLM response. Defaults to 8192 for backward compatibility.
    *  For scoring, 2500 is recommended as tool payload only needs ~1200 tokens. */
   maxTokens?: number;
+  /** Temperature for sampling (0-1). Use 0 for deterministic output (e.g., scoring). */
+  temperature?: number;
   abortSignal?: AbortSignal;
   onTextDelta?: (delta: string) => void;
   onToolUse?: (toolName: string, input: unknown) => void;

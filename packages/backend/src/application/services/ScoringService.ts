@@ -380,6 +380,8 @@ export class ScoringService implements IScoringService {
       // Scoring output includes 10 dimensions with findings, executive summary,
       // and key findings. 8K tokens provides headroom for comprehensive analysis.
       maxTokens: 8000,
+      // Use temperature 0 for deterministic, reproducible scoring output
+      temperature: 0,
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;
