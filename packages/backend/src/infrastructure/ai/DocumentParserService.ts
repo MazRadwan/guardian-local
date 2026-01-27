@@ -267,7 +267,7 @@ export class DocumentParserService
               content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}`,
             },
           ],
-          { systemPrompt: INTAKE_EXTRACTION_SYSTEM_PROMPT, maxTokens: 4096 }
+          { systemPrompt: INTAKE_EXTRACTION_SYSTEM_PROMPT, maxTokens: 4096, usePromptCache: true }
         );
         responseContent = response.content;
       }
@@ -399,7 +399,7 @@ export class DocumentParserService
               content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}`,
             },
           ],
-          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384, abortSignal: options?.abortSignal }
+          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384, abortSignal: options?.abortSignal, usePromptCache: true }
         );
         responseContent = response.content;
       }

@@ -9,6 +9,13 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 
 ## 🚨 Critical Rules
 
+### Hard Rule: Agent Delegation
+**You are the ORCHESTRATOR. Keep your context clean and sharp.**
+- Dispatch agents for ALL exploration, research, and implementation tasks
+- Use `run_in_background: true` for parallel work whenever possible
+- Do NOT do the work yourself - delegate to specialist agents
+- Only do: planning, delegation, reviewing summaries, responding to user
+
 ### Single Source of Truth for Tasks
 **IMPORTANT:** Tasks live ONLY in `/tasks/` directory.
 - When starting work → Check `tasks/task-overview.md` first (high-level status)

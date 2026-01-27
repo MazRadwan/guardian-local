@@ -1007,9 +1007,9 @@ describe('ScoringHandler', () => {
       const result = handler.buildScoringFollowUpContext(report);
 
       expect(result).toContain('### Dimension Scores:');
-      expect(result).toContain('- security_risk: 8/10 (low)');
-      expect(result).toContain('- privacy_risk: 6/10 (medium)');
-      expect(result).toContain('- compliance_risk: 4/10 (high)');
+      expect(result).toContain('- security_risk: 8/100 (low)');
+      expect(result).toContain('- privacy_risk: 6/100 (medium)');
+      expect(result).toContain('- compliance_risk: 4/100 (high)');
     });
 
     it('should format key findings as bullet points', () => {

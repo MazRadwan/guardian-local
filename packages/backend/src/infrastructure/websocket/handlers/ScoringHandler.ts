@@ -435,7 +435,7 @@ If they asked about a specific dimension or topic, focus your answer on that are
 
     // Format dimension scores for context
     const dimensionSummary = payload.dimensionScores
-      .map(ds => `- ${ds.dimension}: ${ds.score}/10 (${ds.riskRating})`)
+      .map(ds => `- ${ds.dimension}: ${ds.score}/100 (${ds.riskRating})`)
       .join('\n');
 
     return `
