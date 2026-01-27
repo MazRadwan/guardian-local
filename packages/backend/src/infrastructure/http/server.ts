@@ -29,6 +29,8 @@ export class Server {
         methods: ['GET', 'POST'],
         credentials: true,
       },
+      pingTimeout: 60000,   // 60 seconds (default: 20000)
+      pingInterval: 30000,  // 30 seconds (default: 25000)
     });
 
     this.setupMiddleware();
