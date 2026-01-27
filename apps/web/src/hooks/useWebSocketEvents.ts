@@ -2,7 +2,8 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload } from '@/lib/websocket';
+import { toast } from 'sonner';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
@@ -85,6 +86,8 @@ export interface UseWebSocketEventsReturn {
   handleScoringError: (data: ScoringErrorPayload) => void;
   // Epic 18.4.2b: Vendor clarification handler
   handleVendorClarificationNeeded: (data: VendorClarificationNeededPayload) => void;
+  // Epic 31.2.2: File processing error handler
+  handleFileProcessingError: (data: FileProcessingErrorPayload) => void;
 }
 
 /**
@@ -751,6 +754,29 @@ export function useWebSocketEvents({
     [activeConversationId, finishStreaming, setLoading]
   );
 
+  // Epic 31.2.2: File processing error handler
+  const handleFileProcessingError = useCallback(
+    (data: FileProcessingErrorPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring file_processing_error for inactive conversation');
+        return;
+      }
+
+      console.warn('[useWebSocketEvents] File processing error:', data.missingFileIds.length, 'files still processing');
+
+      // Show toast notification to user
+      toast.warning(data.message || 'Some files are still processing. Please wait a moment and try again.', {
+        duration: 5000,
+      });
+
+      // Clear loading state so user can try again
+      finishStreaming();
+      setLoading(false);
+    },
+    [activeConversationId, finishStreaming, setLoading]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -772,5 +798,6 @@ export function useWebSocketEvents({
     handleScoringComplete,
     handleScoringError,
     handleVendorClarificationNeeded,
+    handleFileProcessingError,
   };
 }

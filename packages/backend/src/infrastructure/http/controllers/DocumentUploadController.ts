@@ -22,6 +22,7 @@ import { User } from '../../../domain/entities/User.js';
 import { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
 import { ScoringProgressEvent } from '../../../domain/scoring/types.js';
 import { ITextExtractionService, ValidatedDocumentType } from '../../../application/interfaces/ITextExtractionService.js';
+import { IBackgroundExtractor } from '../../../application/interfaces/IBackgroundExtractor.js';
 import { detectDocumentType, extractVendorName, DetectedDocType } from '../../extraction/DocumentClassifier.js';
 
 /**
@@ -139,7 +140,9 @@ export class DocumentUploadController {
     /** ScoringService for auto-triggering scoring after parse (Epic 15 Sprint 5a) */
     private readonly scoringService: IScoringService | undefined,
     /** Epic 18: Text extraction service for fast context injection */
-    private readonly textExtractionService: ITextExtractionService
+    private readonly textExtractionService: ITextExtractionService,
+    /** Epic 31: Background extractor for async text extraction */
+    private readonly backgroundExtractor?: IBackgroundExtractor
   ) {}
 
   /**
@@ -299,7 +302,8 @@ export class DocumentUploadController {
     for (const { file, uploadId, documentType } of validFiles) {
       this.processUpload(uploadId, userId, conversationId, mode, file, documentType)
         .catch((err) => {
-          console.error(`[Upload] Async processing failed for ${file.originalname}:`, err);
+          // SECURITY: Use uploadId, not filename (may contain PHI)
+          console.error(`[Upload] Async processing failed for uploadId=${uploadId}:`, err);
           // Error already emitted via WS in processUpload
         });
     }
@@ -308,19 +312,27 @@ export class DocumentUploadController {
   /**
    * Process upload asynchronously with WebSocket progress updates
    *
-   * Epic 18: Two-phase upload processing (Trigger-on-Send)
+   * Epic 31: Decoupled upload processing with background extraction
    *
-   * UPLOAD PHASE (this method - target: <3s):
+   * UPLOAD PHASE (this method - target: <1s):
    * 1. Store file to S3
-   * 2. Extract text excerpt (for immediate context injection)
-   * 3. Create file record with excerpt (parseStatus: 'pending')
-   * 4. Emit file_attached - UPLOAD COMPLETE
+   * 2. Create file record with textExcerpt=null (parseStatus: 'pending')
+   * 3. Emit file_attached immediately (hasExcerpt: false)
+   * 4. Queue background extraction (fire-and-forget)
+   *
+   * EXTRACTION PHASE (BackgroundExtractor - async):
+   * - Text extraction happens in background
+   * - Updates file.textExcerpt when complete
+   * - FileContextBuilder falls back to S3 if needed
    *
    * PARSING PHASE (Sprint 2 - triggers on user Send):
    * - Parsing/scoring happens when user clicks Send
    * - This handler does NOT do parsing
    *
    * Epic 16.6.9: Creates file record in database after storage, uses UUID as fileId
+   *
+   * Feature flag: UPLOAD_EXTRACT_ASYNC (default: true)
+   * - Set to 'false' to use synchronous extraction (original behavior)
    */
   private async processUpload(
     uploadId: string,
@@ -331,14 +343,21 @@ export class DocumentUploadController {
     documentType: string
   ): Promise<void> {
     const socketRoom = `user:${userId}`;
+    const uploadStartTime = Date.now();
+    // SECURITY: Use uploadId, not filename (may contain PHI)
+    console.log(`[TIMING] DocumentUploadController processUpload START: ${uploadStartTime} (uploadId: ${uploadId}, size: ${file.size})`);
+
+    // Feature flag: Control async extraction (default: enabled)
+    const useAsyncExtraction = this.backgroundExtractor && process.env.UPLOAD_EXTRACT_ASYNC !== 'false';
 
     try {
       // =========================================
-      // UPLOAD PHASE: Fast Attach (target: <3s)
+      // UPLOAD PHASE: Fast Attach (target: <1s with async extraction)
       // =========================================
-      // This is ALL the upload handler does. Parsing triggers on Send.
 
       // 1. Store file to S3
+      const storeStartTime = Date.now();
+      console.log(`[TIMING] DocumentUploadController S3_STORE_START: ${storeStartTime}`);
       this.emitProgress(socketRoom, conversationId, uploadId, 30, 'storing', 'Storing file...');
       const storagePath = await this.fileStorage.store(file.buffer, {
         filename: file.originalname,
@@ -346,72 +365,128 @@ export class DocumentUploadController {
         userId,
         conversationId,
       });
+      const storeEndTime = Date.now();
+      console.log(`[TIMING] DocumentUploadController S3_STORE_END: ${storeEndTime} (duration: ${storeEndTime - storeStartTime}ms)`);
 
-      // 2. Extract text excerpt (with timeout, for context injection)
-      this.emitProgress(socketRoom, conversationId, uploadId, 60, 'storing', 'Extracting text...');
-      const extraction = await this.textExtractionService.extract(
-        file.buffer,
-        documentType as ValidatedDocumentType
-      );
+      // Epic 31: Branching based on async extraction feature flag
+      if (useAsyncExtraction) {
+        // =========================================
+        // ASYNC EXTRACTION PATH (Epic 31 - new)
+        // =========================================
+        // 2. Create file record with textExcerpt=null (before extraction)
+        const fileRecord = await this.fileRepository.create({
+          userId,
+          conversationId,
+          filename: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          storagePath,
+          textExcerpt: null, // Will be backfilled by BackgroundExtractor
+          detectedDocType: null, // Will be set after extraction
+          detectedVendorName: null,
+          // parseStatus defaults to 'pending' in schema
+        });
 
-      // 3. Epic 18.4: Classify document type using heuristics (<100ms, regex only)
-      // This runs synchronously on the excerpt, no external API calls
-      let detectedDocType: DetectedDocType | null = null;
-      let detectedVendorName: string | null = null;
+        const fileId = fileRecord.id;
 
-      if (extraction.success && extraction.excerpt.length > 0) {
-        const classifyStart = Date.now();
-        detectedDocType = detectDocumentType(extraction.excerpt, file.mimetype);
-        detectedVendorName = extractVendorName(extraction.excerpt);
-        const classifyMs = Date.now() - classifyStart;
-        console.log(`[DocumentUpload] Document classified: type=${detectedDocType}, vendor=${detectedVendorName || 'none'}, ms=${classifyMs}`);
+        // 3. Emit file_attached immediately (hasExcerpt: false)
+        const fileAttachedTime = Date.now();
+        console.log(`[TIMING] DocumentUploadController FILE_ATTACHED_EMIT (async): ${fileAttachedTime} (total upload duration: ${fileAttachedTime - uploadStartTime}ms, fileId: ${fileId}, hasExcerpt: false)`);
+        this.emitFileAttached(
+          socketRoom,
+          conversationId,
+          uploadId,
+          fileId,
+          file.originalname,
+          file.mimetype,
+          file.size,
+          false, // hasExcerpt = false (extraction pending)
+          null,  // detectedDocType (not yet classified)
+          null   // detectedVendorName (not yet extracted)
+        );
+
+        // 4. Queue background extraction (fire-and-forget)
+        // Sprint 1 Fix: Pass mimeType for classification after extraction
+        console.log(`[DocumentUpload] Queueing background extraction for fileId=${fileId}`);
+        this.backgroundExtractor!.queueExtraction(
+          fileId,
+          file.buffer,
+          documentType as ValidatedDocumentType,
+          file.mimetype
+        );
+
+      } else {
+        // =========================================
+        // SYNC EXTRACTION PATH (Original Epic 18 behavior)
+        // =========================================
+        // 2. Extract text excerpt (with timeout, for context injection)
+        const extractStartTime = Date.now();
+        console.log(`[TIMING] DocumentUploadController TEXT_EXTRACT_START: ${extractStartTime}`);
+        this.emitProgress(socketRoom, conversationId, uploadId, 60, 'storing', 'Extracting text...');
+        const extraction = await this.textExtractionService.extract(
+          file.buffer,
+          documentType as ValidatedDocumentType
+        );
+        const extractEndTime = Date.now();
+        console.log(`[TIMING] DocumentUploadController TEXT_EXTRACT_END: ${extractEndTime} (duration: ${extractEndTime - extractStartTime}ms, success: ${extraction.success}, excerptLength: ${extraction.excerpt?.length || 0})`);
+
+        // 3. Epic 18.4: Classify document type using heuristics (<100ms, regex only)
+        let detectedDocType: DetectedDocType | null = null;
+        let detectedVendorName: string | null = null;
+
+        if (extraction.success && extraction.excerpt.length > 0) {
+          const classifyStart = Date.now();
+          detectedDocType = detectDocumentType(extraction.excerpt, file.mimetype);
+          detectedVendorName = extractVendorName(extraction.excerpt);
+          const classifyMs = Date.now() - classifyStart;
+          console.log(`[DocumentUpload] Document classified: type=${detectedDocType}, vendor=${detectedVendorName || 'none'}, ms=${classifyMs}`);
+        }
+
+        // 4. Create file record with excerpt and classification (parseStatus: 'pending')
+        const fileRecord = await this.fileRepository.create({
+          userId,
+          conversationId,
+          filename: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          storagePath,
+          textExcerpt: extraction.excerpt || null,
+          detectedDocType,
+          detectedVendorName,
+          // parseStatus defaults to 'pending' in schema
+        });
+
+        const fileId = fileRecord.id;
+
+        // 5. Emit file_attached - UPLOAD COMPLETE
+        const fileAttachedTime = Date.now();
+        console.log(`[TIMING] DocumentUploadController FILE_ATTACHED_EMIT (sync): ${fileAttachedTime} (total upload duration: ${fileAttachedTime - uploadStartTime}ms, fileId: ${fileId}, hasExcerpt: ${extraction.success && extraction.excerpt.length > 0})`);
+        this.emitFileAttached(
+          socketRoom,
+          conversationId,
+          uploadId,
+          fileId,
+          file.originalname,
+          file.mimetype,
+          file.size,
+          extraction.success && extraction.excerpt.length > 0,
+          detectedDocType,
+          detectedVendorName
+        );
+
+        // Log extraction result for debugging
+        if (extraction.success) {
+          console.log(`[DocumentUpload] Text extracted: ${extraction.excerpt.length} chars in ${extraction.extractionMs}ms`);
+        } else {
+          console.warn(`[DocumentUpload] Text extraction failed: ${extraction.error}`);
+        }
       }
-
-      // 4. Create file record with excerpt and classification (parseStatus: 'pending')
-      const fileRecord = await this.fileRepository.create({
-        userId,
-        conversationId,
-        filename: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-        storagePath,
-        textExcerpt: extraction.excerpt || null,
-        // Epic 18.4: Document classification
-        detectedDocType,
-        detectedVendorName,
-        // parseStatus defaults to 'pending' in schema
-      });
-
-      const fileId = fileRecord.id;
-
-      // 5. Emit file_attached - UPLOAD COMPLETE
-      // Frontend shows "Attached", Send button enabled
-      // NO parsing/scoring here - that happens on Send (Sprint 2)
-      this.emitFileAttached(
-        socketRoom,
-        conversationId,
-        uploadId,
-        fileId,
-        file.originalname,
-        file.mimetype,
-        file.size,
-        extraction.success && extraction.excerpt.length > 0,
-        detectedDocType,
-        detectedVendorName
-      );
 
       // =========================================
       // END OF UPLOAD HANDLER
       // =========================================
       // Parsing/scoring triggers in ChatServer.handleMessage()
       // when user clicks Send (see Sprint 2)
-
-      // Log extraction result for debugging
-      if (extraction.success) {
-        console.log(`[DocumentUpload] Text extracted: ${extraction.excerpt.length} chars in ${extraction.extractionMs}ms`);
-      } else {
-        console.warn(`[DocumentUpload] Text extraction failed: ${extraction.error}`);
-      }
 
     } catch (error) {
       console.error('[DocumentUpload] Processing error:', error);

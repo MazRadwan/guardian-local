@@ -84,7 +84,7 @@ describe('useWebSocketEvents', () => {
   });
 
   describe('Initialization', () => {
-    it('should return all 15 event handlers', () => {
+    it('should return all 21 event handlers', () => {
       const { result } = renderHook(() => useWebSocketEvents(defaultParams));
 
       expect(result.current.handleMessage).toBeInstanceOf(Function);
@@ -102,6 +102,12 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleExtractionFailed).toBeInstanceOf(Function);
       expect(result.current.handleQuestionnaireReady).toBeInstanceOf(Function);
       expect(result.current.handleGenerationPhase).toBeInstanceOf(Function);
+      expect(result.current.handleScoringStarted).toBeInstanceOf(Function);
+      expect(result.current.handleScoringProgress).toBeInstanceOf(Function);
+      expect(result.current.handleScoringComplete).toBeInstanceOf(Function);
+      expect(result.current.handleScoringError).toBeInstanceOf(Function);
+      expect(result.current.handleVendorClarificationNeeded).toBeInstanceOf(Function);
+      expect(result.current.handleFileProcessingError).toBeInstanceOf(Function);
     });
 
     it('should return stable handler references across re-renders', () => {
@@ -125,6 +131,12 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleExtractionFailed).toBe(handlers.handleExtractionFailed);
       expect(result.current.handleQuestionnaireReady).toBe(handlers.handleQuestionnaireReady);
       expect(result.current.handleGenerationPhase).toBe(handlers.handleGenerationPhase);
+      expect(result.current.handleScoringStarted).toBe(handlers.handleScoringStarted);
+      expect(result.current.handleScoringProgress).toBe(handlers.handleScoringProgress);
+      expect(result.current.handleScoringComplete).toBe(handlers.handleScoringComplete);
+      expect(result.current.handleScoringError).toBe(handlers.handleScoringError);
+      expect(result.current.handleVendorClarificationNeeded).toBe(handlers.handleVendorClarificationNeeded);
+      expect(result.current.handleFileProcessingError).toBe(handlers.handleFileProcessingError);
     });
   });
 
@@ -927,6 +939,68 @@ describe('useWebSocketEvents', () => {
     });
   });
 
+  describe('handleFileProcessingError (Epic 31.2.2)', () => {
+    beforeEach(() => {
+      // Mock toast
+      jest.mock('sonner', () => ({
+        toast: {
+          warning: jest.fn(),
+        },
+      }));
+    });
+
+    it('should show toast notification for active conversation', () => {
+      const { result } = renderHook(() => useWebSocketEvents({
+        ...defaultParams,
+        activeConversationId: 'conv-1',
+      }));
+
+      result.current.handleFileProcessingError({
+        conversationId: 'conv-1',
+        missingFileIds: ['file-1', 'file-2'],
+        message: 'Some files are still processing. Please wait a moment and try again.',
+      });
+
+      // Should clear loading/streaming state
+      expect(mockFinishStreaming).toHaveBeenCalled();
+      expect(mockSetLoading).toHaveBeenCalledWith(false);
+    });
+
+    it('should ignore events for inactive conversations', () => {
+      const { result } = renderHook(() => useWebSocketEvents({
+        ...defaultParams,
+        activeConversationId: 'conv-1',
+      }));
+
+      result.current.handleFileProcessingError({
+        conversationId: 'conv-2', // Different conversation
+        missingFileIds: ['file-1'],
+        message: 'Files still processing',
+      });
+
+      // Should NOT clear loading/streaming state for inactive conversation
+      expect(mockFinishStreaming).not.toHaveBeenCalled();
+      expect(mockSetLoading).not.toHaveBeenCalled();
+    });
+
+    it('should use default message if message is empty', () => {
+      const { result } = renderHook(() => useWebSocketEvents({
+        ...defaultParams,
+        activeConversationId: 'conv-1',
+      }));
+
+      result.current.handleFileProcessingError({
+        conversationId: 'conv-1',
+        missingFileIds: ['file-1'],
+        message: '', // Empty message
+      });
+
+      // Should still finish streaming/loading
+      expect(mockFinishStreaming).toHaveBeenCalled();
+      expect(mockSetLoading).toHaveBeenCalledWith(false);
+    });
+  });
+
   describe('Callback Stability', () => {
     it('should maintain stable references when unrelated state changes', () => {
       const { result, rerender } = renderHook(
@@ -955,6 +1029,12 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleExtractionFailed).toBe(handlersBeforeRerender.handleExtractionFailed);
       expect(result.current.handleQuestionnaireReady).toBe(handlersBeforeRerender.handleQuestionnaireReady);
       expect(result.current.handleGenerationPhase).toBe(handlersBeforeRerender.handleGenerationPhase);
+      expect(result.current.handleScoringStarted).toBe(handlersBeforeRerender.handleScoringStarted);
+      expect(result.current.handleScoringProgress).toBe(handlersBeforeRerender.handleScoringProgress);
+      expect(result.current.handleScoringComplete).toBe(handlersBeforeRerender.handleScoringComplete);
+      expect(result.current.handleScoringError).toBe(handlersBeforeRerender.handleScoringError);
+      expect(result.current.handleVendorClarificationNeeded).toBe(handlersBeforeRerender.handleVendorClarificationNeeded);
+      expect(result.current.handleFileProcessingError).toBe(handlersBeforeRerender.handleFileProcessingError);
     });
 
     it('should update handlers when dependencies change', () => {

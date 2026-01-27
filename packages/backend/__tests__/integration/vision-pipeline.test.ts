@@ -66,6 +66,7 @@ describe('Vision Pipeline Integration Tests', () => {
     mockFileRepository = {
       findByConversationWithExcerpt: jest.fn(),
       updateTextExcerpt: jest.fn().mockResolvedValue(undefined),
+      updateExcerptAndClassification: jest.fn().mockResolvedValue(undefined),
       create: jest.fn(),
       findById: jest.fn(),
       findByIds: jest.fn(),

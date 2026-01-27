@@ -126,6 +126,9 @@ export class FileContextBuilder {
     scopeToFileIds?: string[],
     options?: FileContextOptions
   ): Promise<FileContextResult> {
+    const buildStartTime = Date.now();
+    console.log(`[TIMING] FileContextBuilder buildWithImages START: ${buildStartTime} (conversationId: ${conversationId}, scopeToFileIds: ${scopeToFileIds?.join(',') || 'all'})`);
+
     // Story 30.4.3: Check if Vision API is enabled for this mode
     // Vision is enabled in Consult and Assessment modes (NOT in Scoring mode)
     const mode = options?.mode || 'consult';
@@ -141,8 +144,11 @@ export class FileContextBuilder {
     }
 
     if (files.length === 0) {
+      console.log(`[TIMING] FileContextBuilder NO_FILES_FOUND: ${Date.now()} (duration: ${Date.now() - buildStartTime}ms)`);
       return { textContext: '', imageBlocks: [] };
     }
+
+    console.log(`[TIMING] FileContextBuilder FILES_FOUND: ${Date.now()} (count: ${files.length}, files: ${files.map(f => `${f.id}:${f.filename}:hasExcerpt=${!!f.textExcerpt}:hasIntake=${!!f.intakeContext}`).join(', ')})`);
 
     const contextParts: string[] = [];
     const imageBlocks: ImageContentBlock[] = [];
@@ -230,6 +236,9 @@ export class FileContextBuilder {
     if (contextParts.length > 0) {
       textContext = `\n\n--- Attached Documents ---\n${contextParts.join('\n\n')}`;
     }
+
+    const buildEndTime = Date.now();
+    console.log(`[TIMING] FileContextBuilder buildWithImages END: ${buildEndTime} (duration: ${buildEndTime - buildStartTime}ms, textContextLength: ${textContext.length}, imageBlocksCount: ${imageBlocks.length})`);
 
     return { textContext, imageBlocks };
   }

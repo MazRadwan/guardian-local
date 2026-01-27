@@ -150,6 +150,28 @@ export class DrizzleFileRepository implements IFileRepository {
       .where(eq(files.id, fileId))
   }
 
+  /**
+   * Epic 31: Update text excerpt AND classification fields after background extraction
+   * Used by BackgroundExtractor to backfill classification after async text extraction.
+   */
+  async updateExcerptAndClassification(
+    fileId: string,
+    data: {
+      textExcerpt: string
+      detectedDocType: DetectedDocType | null
+      detectedVendorName: string | null
+    }
+  ): Promise<void> {
+    await this.db
+      .update(files)
+      .set({
+        textExcerpt: data.textExcerpt,
+        detectedDocType: data.detectedDocType,
+        detectedVendorName: data.detectedVendorName,
+      })
+      .where(eq(files.id, fileId))
+  }
+
   // Epic 18: Update parse status for a file
   async updateParseStatus(fileId: string, status: ParseStatus): Promise<void> {
     await this.db

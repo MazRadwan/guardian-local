@@ -148,6 +148,7 @@ describe('ScoringService', () => {
       findByConversationWithContext: jest.fn(),
       // Epic 18 methods
       updateTextExcerpt: jest.fn(),
+      updateExcerptAndClassification: jest.fn(),
       updateParseStatus: jest.fn(),
       tryStartParsing: jest.fn(),
       findByConversationWithExcerpt: jest.fn(),

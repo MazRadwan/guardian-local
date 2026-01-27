@@ -107,6 +107,10 @@ export interface SendMessageValidationResult {
   messageText?: string;
   /** Enriched attachments with server-side metadata */
   enrichedAttachments?: MessageAttachment[];
+  /** Story 31.2: Whether to emit file_processing_error event instead of generic error */
+  emitFileProcessingError?: boolean;
+  /** Story 31.2: File IDs that are missing after retry */
+  missingFileIds?: string[];
 }
 
 /**
@@ -229,6 +233,9 @@ export class MessageHandler {
     socket: IAuthenticatedSocket,
     payload: SendMessagePayload
   ): Promise<SendMessageValidationResult> {
+    const validateStartTime = Date.now();
+    console.log(`[TIMING] MessageHandler validateSendMessage START: ${validateStartTime} (conversationId: ${payload?.conversationId}, hasAttachments: ${!!(payload?.attachments?.length)})`);
+
     // Validate payload is an object
     if (!payload || typeof payload !== 'object') {
       return {
@@ -301,10 +308,21 @@ export class MessageHandler {
       const attachmentResult = await this.validateAndEnrichAttachments(
         attachments,
         conversationId,
-        socket.userId
+        socket.userId,
+        socket
       );
 
       if (!attachmentResult.valid) {
+        // Story 31.2: Pass through file_processing_error flag for special handling
+        if (attachmentResult.emitFileProcessingError) {
+          return {
+            valid: false,
+            error: attachmentResult.error,
+            emitFileProcessingError: true,
+            missingFileIds: attachmentResult.missingFileIds,
+            conversationId,
+          };
+        }
         return {
           valid: false,
           error: attachmentResult.error,
@@ -313,6 +331,9 @@ export class MessageHandler {
 
       enrichedAttachments = attachmentResult.attachments;
     }
+
+    const validateEndTime = Date.now();
+    console.log(`[TIMING] MessageHandler validateSendMessage END: ${validateEndTime} (duration: ${validateEndTime - validateStartTime}ms, valid: true)`);
 
     return {
       valid: true,
@@ -325,7 +346,9 @@ export class MessageHandler {
   /**
    * Validate and enrich attachments
    *
+   * Story 31.2: Now includes file existence waiting for race condition handling.
    * CRITICAL: Uses findByIdAndConversation for validation
+   * - First waits for file records to exist (race condition with file_attached)
    * - Verifies file exists in the specified conversation
    * - Verifies file ownership matches requesting user
    * - Returns enriched attachments with server-side metadata (don't trust client)
@@ -333,17 +356,39 @@ export class MessageHandler {
    * @param attachments - Attachment array with fileId from client
    * @param conversationId - Conversation ID for file lookup
    * @param userId - User ID for ownership validation
+   * @param socket - Socket for emitting file_processing_error if files missing
    * @returns Validation result with enriched attachments or error
    */
   private async validateAndEnrichAttachments(
     attachments: Array<{ fileId: string }>,
     conversationId: string,
-    userId: string
+    userId: string,
+    socket?: IAuthenticatedSocket
   ): Promise<{
     valid: boolean;
     attachments?: MessageAttachment[];
     error?: ValidationError;
+    emitFileProcessingError?: boolean;
+    missingFileIds?: string[];
   }> {
+    // Story 31.2: Wait for file records before validation (race condition handling)
+    const fileIds = attachments.map(att => att.fileId);
+    const { found, missing } = await this.waitForFileRecords(fileIds);
+
+    if (missing.length > 0) {
+      console.warn(`[MessageHandler] Files missing after retry: ${missing.join(', ')}`);
+      // Signal to caller that file_processing_error should be emitted
+      return {
+        valid: false,
+        emitFileProcessingError: true,
+        missingFileIds: missing,
+        error: {
+          event: 'file_processing_error',
+          message: 'Some files are still processing. Please wait a moment and try again.',
+        },
+      };
+    }
+
     const enriched: MessageAttachment[] = [];
 
     for (const att of attachments) {
@@ -421,6 +466,51 @@ export class MessageHandler {
   }
 
   /**
+   * Story 31.2.1: Wait for file records to exist in DB with retry
+   *
+   * Handles race condition where user sends message before file_attached completes.
+   * Uses heuristic polling with configurable timeout and interval.
+   *
+   * @param fileIds - Array of file IDs to check for existence
+   * @param maxWaitMs - Maximum time to wait for files (default: 2000ms)
+   * @param intervalMs - Polling interval (default: 100ms)
+   * @returns Object with found and missing file ID arrays
+   */
+  async waitForFileRecords(
+    fileIds: string[],
+    maxWaitMs: number = 2000,
+    intervalMs: number = 100
+  ): Promise<{ found: string[]; missing: string[] }> {
+    if (fileIds.length === 0) {
+      return { found: [], missing: [] };
+    }
+
+    const startTime = Date.now();
+    let found: string[] = [];
+    let missing: string[] = [...fileIds];
+
+    while (missing.length > 0 && (Date.now() - startTime) < maxWaitMs) {
+      // Check which files exist
+      const existingFiles = await this.fileRepository.findByIds(missing);
+      const existingIds = new Set(existingFiles.map(f => f.id));
+
+      found = fileIds.filter(id => existingIds.has(id) || found.includes(id));
+      missing = fileIds.filter(id => !found.includes(id));
+
+      if (missing.length > 0) {
+        console.log(`[MessageHandler] Waiting for file records: ${missing.length} missing, elapsed: ${Date.now() - startTime}ms`);
+        await new Promise(resolve => setTimeout(resolve, intervalMs));
+      }
+    }
+
+    if (missing.length > 0) {
+      console.warn(`[MessageHandler] Files still missing after ${maxWaitMs}ms: ${missing.join(', ')}`);
+    }
+
+    return { found, missing };
+  }
+
+  /**
    * Build file context for Claude prompt
    *
    * Story 28.9.2: File context building for Claude prompts
@@ -454,22 +544,32 @@ export class MessageHandler {
     enrichedAttachments?: MessageAttachment[],
     mode?: 'consult' | 'assessment' | 'scoring'
   ): Promise<FileContextResult> {
+    const buildContextStartTime = Date.now();
+    console.log(`[TIMING] MessageHandler buildFileContext START: ${buildContextStartTime} (conversationId: ${conversationId}, attachmentCount: ${enrichedAttachments?.length || 0}, mode: ${mode || 'consult'})`);
+
     // No FileContextBuilder configured - return empty result
     if (!this.fileContextBuilder) {
+      console.log(`[TIMING] MessageHandler buildFileContext NO_BUILDER: ${Date.now()}`);
       return { textContext: '', imageBlocks: [] };
     }
 
     // Build options with mode for Vision API gating
     const options = mode ? { mode } : undefined;
 
+    let result: FileContextResult;
     // No specific files - use all conversation files
     if (!enrichedAttachments || enrichedAttachments.length === 0) {
-      return await this.fileContextBuilder.buildWithImages(conversationId, undefined, options);
+      result = await this.fileContextBuilder.buildWithImages(conversationId, undefined, options);
+    } else {
+      // Scope to specific validated files
+      const fileIds = enrichedAttachments.map((a) => a.fileId);
+      result = await this.fileContextBuilder.buildWithImages(conversationId, fileIds, options);
     }
 
-    // Scope to specific validated files
-    const fileIds = enrichedAttachments.map((a) => a.fileId);
-    return await this.fileContextBuilder.buildWithImages(conversationId, fileIds, options);
+    const buildContextEndTime = Date.now();
+    console.log(`[TIMING] MessageHandler buildFileContext END: ${buildContextEndTime} (duration: ${buildContextEndTime - buildContextStartTime}ms, textContextLength: ${result.textContext.length}, imageBlocksCount: ${result.imageBlocks.length})`);
+
+    return result;
   }
 
   /**

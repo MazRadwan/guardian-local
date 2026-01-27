@@ -1,0 +1,16 @@
+{
+  "name": "guardian-extraction-benchmark",
+  "version": "1.0.0",
+  "description": "Benchmark script for testing document extraction times against Guardian's 3-second SLO",
+  "main": "extraction-benchmark.js",
+  "scripts": {
+    "benchmark": "node extraction-benchmark.js"
+  },
+  "dependencies": {
+    "pdf-parse": "^2.4.5",
+    "mammoth": "^1.11.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

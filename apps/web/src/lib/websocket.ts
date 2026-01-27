@@ -274,6 +274,19 @@ export interface VendorClarificationNeededPayload {
 }
 
 /**
+ * Epic 31.2.2: File processing error payload
+ *
+ * Emitted when files are still being processed when a message is sent.
+ * The backend's waitForFileRecords() found missing files.
+ * Frontend should show a toast/notification to inform the user.
+ */
+export interface FileProcessingErrorPayload {
+  conversationId: string;
+  missingFileIds: string[];
+  message: string;
+}
+
+/**
  * Payload for questionnaire_ready event from backend
  */
 export interface QuestionnaireReadyPayload {
@@ -1030,6 +1043,22 @@ export class WebSocketClient {
     if (!this.socket) throw new Error('WebSocket not initialized');
     console.log('[WebSocket] Selecting vendor:', vendorName);
     this.socket.emit('vendor_selected', { conversationId, vendorName });
+  }
+
+  /**
+   * Epic 31.2.2: Subscribe to file_processing_error events
+   * Emitted when files are still processing when a message is sent
+   */
+  onFileProcessingError(callback: (data: FileProcessingErrorPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: FileProcessingErrorPayload) => {
+      console.warn('[WebSocket] File processing error:', data.missingFileIds.length, 'files missing');
+      callback(data);
+    };
+
+    this.socket.on('file_processing_error', handler);
+    return () => this.socket?.off('file_processing_error', handler);
   }
 
 }

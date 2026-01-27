@@ -58,6 +58,7 @@ const createMockFileRepository = (): jest.Mocked<IFileRepository> => ({
   updateIntakeContext: jest.fn(),
   findByConversationWithContext: jest.fn(),
   updateTextExcerpt: jest.fn(),
+  updateExcerptAndClassification: jest.fn(),
   updateParseStatus: jest.fn(),
   tryStartParsing: jest.fn(),
   findByConversationWithExcerpt: jest.fn(),
