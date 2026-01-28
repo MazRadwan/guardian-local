@@ -64,11 +64,11 @@ const PROGRESS_MESSAGES = [
 ### Data Flow
 
 ```
-QuestionnaireService.generate()
+QuestionnaireGenerationService.generate()
     |
     +--> Emits progress events via IProgressEmitter
     |        |
-    |        +--> WebSocket broadcasts to client
+    |        +--> socket.emit() to requesting client
     |                  |
     |                  +--> Stepper displays ephemeral text
     |

@@ -33,7 +33,7 @@ Stream progress messages during questionnaire generation to replace the frozen 6
 
 | Sprint | Focus | Stories | Estimated |
 |--------|-------|---------|-----------|
-| Sprint 1 | Backend Infrastructure | 3 | IProgressEmitter, QuestionnaireService integration, WebSocket events |
+| Sprint 1 | Backend Infrastructure | 3 | IProgressEmitter, QuestionnaireGenerationService integration, WebSocket events |
 | Sprint 2 | Frontend Integration | 3 | Stepper event subscription, progress display, reconnection handling |
 
 **Total Stories:** 6
@@ -49,8 +49,8 @@ Sprint 1 (Backend) - backend-agent
          ├──────────────────────┐
          │                      │
          ▼                      ▼
-  32.1.2 QuestionnaireService   32.1.3 WebSocket Progress Events
-         Integration            (can run PARALLEL with 32.1.2)
+  32.1.2 QuestionnaireGenerationService   32.1.3 SocketProgressEmitter
+         Integration                      (can run PARALLEL with 32.1.2)
          │                      │
          └──────────┬───────────┘
                     │
@@ -155,8 +155,8 @@ interface QuestionnaireCompleteEvent {
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Claude API doesn't expose progress | High | Emit progress based on parsing stages, not API callbacks |
-| Messages arrive out of order | Low | Timestamp-based ordering on client |
+| Claude API doesn't expose progress | High | Timer-based progress (curated messages every ~5s) |
+| Messages arrive out of order | Low | Monotonic seq ordering on client (reject old seq) |
 | Connection drops during generation | Medium | Fallback to polling or "Generating..." state |
 | Over-engineering | Low | Keep interface minimal (emit only) |
 

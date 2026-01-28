@@ -276,8 +276,8 @@ async handleGenerateQuestionnaire(
     ├──────────────────────────────┐
     │                              │
     ▼                              ▼
-32.1.2 QuestionnaireService    32.1.3 WebSocketProgressEmitter
-(application layer)            (infrastructure layer)
+32.1.2 QuestionnaireGenerationService    32.1.3 SocketProgressEmitter
+(application layer)                      (infrastructure layer)
     │                              │
     └──────────────────────────────┘
                   │
@@ -286,8 +286,8 @@ async handleGenerateQuestionnaire(
 ```
 
 **32.1.2 and 32.1.3 can run in parallel** after 32.1.1 completes:
-- 32.1.2 modifies `QuestionnaireService.ts` (application layer)
-- 32.1.3 creates new files in `infrastructure/websocket/` (infrastructure layer)
+- 32.1.2 modifies `QuestionnaireGenerationService.ts` (application layer)
+- 32.1.3 creates new files in `infrastructure/websocket/emitters/` (infrastructure layer)
 - No file overlap between them
 
 ---
@@ -295,8 +295,8 @@ async handleGenerateQuestionnaire(
 ## Definition of Done
 
 - [ ] IProgressEmitter interface defined and exported
-- [ ] QuestionnaireService emits progress events
-- [ ] WebSocketProgressEmitter broadcasts to correct room
+- [ ] QuestionnaireGenerationService emits timer-based progress events
+- [ ] SocketProgressEmitter emits to requesting socket (direct socket.emit)
 - [ ] All unit tests pass
 - [ ] Integration test verifies end-to-end progress flow
 - [ ] No regression in questionnaire generation
