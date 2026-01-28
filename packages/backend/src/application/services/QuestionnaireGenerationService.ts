@@ -2,15 +2,21 @@
  * QuestionnaireGenerationService - Orchestrates questionnaire generation
  *
  * Part of Epic 12.5: Hybrid Questionnaire Generation Architecture
+ * Updated Epic 32: Timer-based progress emission
  *
  * This service:
  * 1. Builds the generation prompt
- * 2. Makes a single Claude call
+ * 2. Makes a single Claude call (with timer-based progress emission)
  * 3. Parses and validates the JSON response
  * 4. Persists questions to the assessment
  * 5. Renders markdown for chat display
  *
  * Single source of truth: The JSON schema drives everything.
+ *
+ * IMPORTANT: Progress is timer-based perceived progress, NOT actual generation status.
+ * Since questionnaire generation is a single Claude API call (~60s), we cannot know
+ * which dimension Claude is currently processing. Progress messages are curated and
+ * emitted on a timer interval to improve perceived responsiveness.
  */
 
 import {
@@ -18,6 +24,7 @@ import {
   GenerationContext,
   GenerationResult,
 } from '../interfaces/IQuestionnaireGenerationService.js';
+import { IProgressEmitter, NullProgressEmitter } from '../interfaces/IProgressEmitter.js';
 import {
   QuestionnaireSchema,
   QuestionnaireSection,
@@ -43,6 +50,29 @@ import {
   QUESTIONNAIRE_OUTPUT_TOOL_NAME,
 } from '../../infrastructure/ai/tools/questionnaireOutputTool.js';
 
+/**
+ * Curated progress messages for timer-based emission during questionnaire generation.
+ *
+ * These are perceived progress messages, NOT actual generation status.
+ * Emitted every ~5 seconds to improve UX during the ~60s Claude API call.
+ */
+const PROGRESS_MESSAGES = [
+  'Analyzing vendor context...',
+  'Identifying applicable risk dimensions...',
+  'Generating questions for Data Security...',
+  'Generating questions for Data Privacy...',
+  'Generating questions for Model Risk...',
+  'Generating questions for Vendor Governance...',
+  'Generating questions for Regulatory Compliance...',
+  'Generating questions for Ethical AI...',
+  'Generating questions for Clinical Safety...',
+  'Validating questionnaire structure...',
+  'Finalizing questionnaire...',
+] as const;
+
+/** Interval between progress emissions in milliseconds */
+const PROGRESS_INTERVAL_MS = 5000;
+
 export class QuestionnaireGenerationService implements IQuestionnaireGenerationService {
   constructor(
     private readonly claudeClient: IClaudeClient,
@@ -52,7 +82,10 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
     private readonly conversationService: ConversationService
   ) {}
 
-  async generate(context: GenerationContext): Promise<GenerationResult> {
+  async generate(
+    context: GenerationContext,
+    progressEmitter: IProgressEmitter = new NullProgressEmitter()
+  ): Promise<GenerationResult> {
     console.log('[QuestionnaireGenerationService] Starting generation:', {
       conversationId: context.conversationId,
       assessmentType: context.assessmentType,
@@ -69,93 +102,123 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
       console.log(
         '[QuestionnaireGenerationService] FAST_GENERATION enabled - using fixture (skipping Claude)'
       );
-      return this.generateFastFixture(context);
+      return this.generateFastFixture(context, progressEmitter);
     }
 
-    // 1. Build the generation prompt
-    const prompt = buildQuestionGenerationPrompt({
-      vendorType: context.vendorName || 'AI Vendor',
-      solutionType: context.solutionName || 'AI Solution',
-      vendorName: context.vendorName,
-      solutionName: context.solutionName,
-      assessmentFocus: context.contextSummary,
-      assessmentType: context.assessmentType,
-      category: context.selectedCategories?.[0],
-    });
+    // Timer-based progress emission state
+    const totalSteps = PROGRESS_MESSAGES.length;
+    let currentStep = 0;
+    let seq = 0;
 
-    // 2. Call Claude with tool_use for structured output
-    // Use higher max_tokens (16384) because questionnaires are large JSON objects
-    // Default 4096 causes Claude to truncate output before generating sections
-    const response = await this.claudeClient.sendMessage(
-      [{ role: 'user', content: prompt }],
-      {
-        systemPrompt:
-          'You are a healthcare AI governance expert. Generate comprehensive vendor assessment questionnaires. ' +
-          'Use the output_questionnaire tool to return your questionnaire in structured JSON format.',
-        tools: [questionnaireOutputTool],
-        tool_choice: { type: 'tool', name: QUESTIONNAIRE_OUTPUT_TOOL_NAME },
-        maxTokens: 32768, // Comprehensive questionnaires (100 questions) need ~20K tokens
+    // Emit first progress message immediately
+    progressEmitter.emit(PROGRESS_MESSAGES[0], 1, totalSteps, ++seq);
+    currentStep = 1;
+
+    // Start timer-based progress emission (every 5 seconds)
+    // This is perceived progress, NOT actual Claude status
+    const progressInterval = setInterval(() => {
+      if (currentStep < totalSteps) {
+        progressEmitter.emit(PROGRESS_MESSAGES[currentStep], currentStep + 1, totalSteps, ++seq);
+        currentStep++;
       }
-    );
+    }, PROGRESS_INTERVAL_MS);
 
-    // 3. Extract schema from tool_use response
-    const rawSchema = this.extractSchemaFromToolUse(response);
-
-    // DEBUG: Log raw schema from Claude BEFORE normalization
-    const fullRawJson = JSON.stringify(rawSchema, null, 2) || 'undefined';
-    console.log('[QuestionnaireGenerationService] Raw schema from Claude (full):', fullRawJson.slice(0, 5000));
-
-    const schema = this.normalizeSchema(rawSchema);
-
-    // 4. Validate schema (log reason if invalid)
-    const validationResult = validateQuestionnaireSchemaDetailed(schema);
-    if (!validationResult.isValid) {
-      console.error('[QuestionnaireGenerationService] Invalid schema received from Claude:', {
-        reason: validationResult.error,
-        schemaPreview: JSON.stringify(schema).slice(0, 2000),
+    try {
+      // 1. Build the generation prompt
+      const prompt = buildQuestionGenerationPrompt({
+        vendorType: context.vendorName || 'AI Vendor',
+        solutionType: context.solutionName || 'AI Solution',
+        vendorName: context.vendorName,
+        solutionName: context.solutionName,
+        assessmentFocus: context.contextSummary,
+        assessmentType: context.assessmentType,
+        category: context.selectedCategories?.[0],
       });
-      throw new Error('Claude returned invalid questionnaire schema');
-    }
 
-    // 5. Validate question count (warning only)
-    const range = QUESTION_COUNT_RANGES[context.assessmentType];
-    const actualQuestionCount = schema.sections.reduce(
-      (total, section) => total + section.questions.length,
-      0
-    );
-    if (actualQuestionCount < range.min * 0.8 || actualQuestionCount > range.max * 1.2) {
-      console.warn(
-        `[QuestionnaireGenerationService] Question count ${actualQuestionCount} outside expected range [${range.min}, ${range.max}]`
+      // 2. Call Claude with tool_use for structured output
+      // Use higher max_tokens (16384) because questionnaires are large JSON objects
+      // Default 4096 causes Claude to truncate output before generating sections
+      const response = await this.claudeClient.sendMessage(
+        [{ role: 'user', content: prompt }],
+        {
+          systemPrompt:
+            'You are a healthcare AI governance expert. Generate comprehensive vendor assessment questionnaires. ' +
+            'Use the output_questionnaire tool to return your questionnaire in structured JSON format.',
+          tools: [questionnaireOutputTool],
+          tool_choice: { type: 'tool', name: QUESTIONNAIRE_OUTPUT_TOOL_NAME },
+          maxTokens: 32768, // Comprehensive questionnaires (100 questions) need ~20K tokens
+        }
       );
-      // Don't throw - just warn. Claude may have good reasons.
+
+      // Clear timer on successful completion
+      clearInterval(progressInterval);
+
+      // Note: Final "Finalizing questionnaire..." is already in PROGRESS_MESSAGES (last item)
+      // and will be emitted by timer. Only emit if timer hasn't reached it yet.
+      if (currentStep < totalSteps) {
+        progressEmitter.emit('Finalizing questionnaire...', totalSteps, totalSteps, ++seq);
+      }
+
+      // 3. Extract schema from tool_use response
+      const rawSchema = this.extractSchemaFromToolUse(response);
+
+      // Schema normalization - verbose logging removed for security/performance (Story 32 review fix)
+      const schema = this.normalizeSchema(rawSchema);
+
+      // 4. Validate schema (log reason if invalid)
+      const validationResult = validateQuestionnaireSchemaDetailed(schema);
+      if (!validationResult.isValid) {
+        console.error('[QuestionnaireGenerationService] Invalid schema received from Claude:', {
+          reason: validationResult.error,
+          schemaPreview: JSON.stringify(schema).slice(0, 2000),
+        });
+        throw new Error('Claude returned invalid questionnaire schema');
+      }
+
+      // 5. Validate question count (warning only)
+      const range = QUESTION_COUNT_RANGES[context.assessmentType];
+      const actualQuestionCount = schema.sections.reduce(
+        (total, section) => total + section.questions.length,
+        0
+      );
+      if (actualQuestionCount < range.min * 0.8 || actualQuestionCount > range.max * 1.2) {
+        console.warn(
+          `[QuestionnaireGenerationService] Question count ${actualQuestionCount} outside expected range [${range.min}, ${range.max}]`
+        );
+        // Don't throw - just warn. Claude may have good reasons.
+      }
+
+      // 6. Correct metadata to match actual count (Claude may claim wrong count)
+      schema.metadata.questionCount = actualQuestionCount;
+
+      // 7. Get or create assessment
+      const assessmentId = await this.ensureAssessment(context, schema);
+
+      // 7.5. Add assessmentId to schema metadata (required for scoring workflow)
+      schema.metadata.assessmentId = assessmentId;
+
+      // 8. Persist questions to assessment (replaces existing if re-generating)
+      await this.persistQuestions(assessmentId, schema);
+
+      // 9. Render markdown
+      const markdown = questionnaireToMarkdown(schema);
+
+      console.log('[QuestionnaireGenerationService] Generation complete:', {
+        assessmentId,
+        questionCount: actualQuestionCount,
+        sectionCount: schema.sections.length,
+      });
+
+      return {
+        schema,
+        assessmentId,
+        markdown,
+      };
+    } catch (error) {
+      // Clear timer on error to prevent memory leaks
+      clearInterval(progressInterval);
+      throw error;
     }
-
-    // 6. Correct metadata to match actual count (Claude may claim wrong count)
-    schema.metadata.questionCount = actualQuestionCount;
-
-    // 7. Get or create assessment
-    const assessmentId = await this.ensureAssessment(context, schema);
-
-    // 7.5. Add assessmentId to schema metadata (required for scoring workflow)
-    schema.metadata.assessmentId = assessmentId;
-
-    // 8. Persist questions to assessment (replaces existing if re-generating)
-    await this.persistQuestions(assessmentId, schema);
-
-    // 9. Render markdown
-    const markdown = questionnaireToMarkdown(schema);
-
-    console.log('[QuestionnaireGenerationService] Generation complete:', {
-      assessmentId,
-      questionCount: actualQuestionCount,
-      sectionCount: schema.sections.length,
-    });
-
-    return {
-      schema,
-      assessmentId,
-      markdown,
-    };
   }
 
   /**
@@ -334,10 +397,8 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
       );
     }
 
-    // Log the raw tool input to see what Claude actually returned
-    console.log('[QuestionnaireGenerationService] Raw tool input from Claude:', JSON.stringify(toolBlock.input, null, 2));
-
     // Tool input is already parsed JSON matching our schema structure
+    // Debug logging removed for security/performance (Story 32 review fix)
     // Cast through unknown since tool input is typed as Record<string, unknown>
     return toolBlock.input as unknown as QuestionnaireSchema;
   }
@@ -421,7 +482,14 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
    *
    * Enabled by: GUARDIAN_FAST_GENERATION=true (only in non-production)
    */
-  private async generateFastFixture(context: GenerationContext): Promise<GenerationResult> {
+  private async generateFastFixture(
+    context: GenerationContext,
+    progressEmitter: IProgressEmitter
+  ): Promise<GenerationResult> {
+    // Emit a single progress message for fast fixture (no need for timer)
+    const totalSteps = PROGRESS_MESSAGES.length;
+    progressEmitter.emit('Generating quick fixture...', 1, totalSteps, 1);
+
     // Create minimal schema with 3 questions
     const schema = this.createMinimalFixtureSchema(context);
 
@@ -433,6 +501,9 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
 
     // Persist questions (same as normal flow)
     await this.persistQuestions(assessmentId, schema);
+
+    // Emit completion
+    progressEmitter.emit('Finalizing questionnaire...', totalSteps, totalSteps, 2);
 
     // Render markdown (same as normal flow)
     const markdown = questionnaireToMarkdown(schema);

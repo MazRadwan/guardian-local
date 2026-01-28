@@ -7,12 +7,25 @@ import type { Step } from '@/types/stepper';
 export type { Step };
 
 /**
+ * Epic 32.2.2: Progress info passed from chatStore
+ */
+export interface ProgressInfo {
+  message: string;
+  step: number;
+  totalSteps: number;
+}
+
+/**
  * Props for the VerticalStepper component
  */
 interface VerticalStepperProps {
   steps: Step[];
   currentStep: number; // -1 = none, 0-N = active step index
   isRunning: boolean;
+  /** Epic 32.2.2: Questionnaire generation progress (dimension-level feedback) */
+  progress?: ProgressInfo | null;
+  /** Epic 32.2.3: Whether reconnection is in progress */
+  isReconnecting?: boolean;
 }
 
 /**
@@ -23,6 +36,9 @@ interface VerticalStepperProps {
  * - Active: Blue pulsing indicator, gray line
  * - Future: Not rendered
  *
+ * Epic 32.2.2: Added progress prop for dimension-level feedback during generation
+ * Epic 32.2.3: Added isReconnecting prop for reconnection state display
+ *
  * @example
  * <VerticalStepper
  *   steps={[
@@ -31,10 +47,11 @@ interface VerticalStepperProps {
  *   ]}
  *   currentStep={1}
  *   isRunning={true}
+ *   progress={{ message: "Generating questions for Data Security...", step: 3, totalSteps: 10 }}
  * />
  */
 export const VerticalStepper = React.memo<VerticalStepperProps>(
-  ({ steps, currentStep, isRunning }) => {
+  ({ steps, currentStep, isRunning, progress, isReconnecting }) => {
     // Don't render anything if no steps have started
     if (currentStep < 0) {
       return null;
@@ -93,8 +110,8 @@ export const VerticalStepper = React.memo<VerticalStepperProps>(
                   />
                 )}
               </div>
-              {/* Step label */}
-              <div className={`pb-3 ${isLast ? 'pb-0' : ''}`}>
+              {/* Step label and progress */}
+              <div className={`pb-3 ${isLast ? 'pb-0' : ''} flex-1`}>
                 <div
                   className={`
                     text-sm transition-colors duration-300
@@ -105,6 +122,37 @@ export const VerticalStepper = React.memo<VerticalStepperProps>(
                   {step.label}
                   {isActive && <span className="text-sky-500 animate-pulse">...</span>}
                 </div>
+
+                {/* Epic 32.2.2: Progress message for active step */}
+                {isActive && (
+                  <div
+                    className="mt-1 text-xs transition-opacity duration-300"
+                    data-testid="progress-message"
+                    aria-live="polite"
+                  >
+                    {/* Epic 32.2.3: Reconnection state */}
+                    {isReconnecting ? (
+                      <span className="text-amber-600" data-testid="reconnecting-message">
+                        Reconnecting...{progress?.message && ` (${progress.message})`}
+                      </span>
+                    ) : progress ? (
+                      <>
+                        <span className="text-sky-600" data-testid="progress-step-counter">
+                          Step {progress.step} of {progress.totalSteps}
+                        </span>
+                        <span className="mx-1 text-slate-400">-</span>
+                        <span className="text-slate-500 animate-pulse" data-testid="progress-text">
+                          {progress.message}
+                        </span>
+                      </>
+                    ) : (
+                      /* Epic 32.2.3: Fallback when no progress received yet */
+                      <span className="text-slate-400" data-testid="progress-fallback">
+                        Generating...
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           );

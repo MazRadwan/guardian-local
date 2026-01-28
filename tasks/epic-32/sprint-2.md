@@ -287,11 +287,42 @@ socket.on('connect', () => {
 
 ## Definition of Done
 
-- [ ] Progress events received and displayed in stepper
-- [ ] Ordering protection prevents out-of-order display
-- [ ] Smooth animations on progress updates
-- [ ] Reconnection handling works correctly
-- [ ] All unit tests pass
+- [x] Progress events received and displayed in stepper
+- [x] Ordering protection prevents out-of-order display
+- [x] Smooth animations on progress updates
+- [x] Reconnection handling works correctly
+- [x] All unit tests pass
 - [ ] Manual QA: disconnect WiFi during generation, verify graceful handling
-- [ ] No memory leaks (event listeners cleaned up)
-- [ ] Accessible: progress announcements for screen readers (aria-live)
+- [x] No memory leaks (event listeners cleaned up)
+- [x] Accessible: progress announcements for screen readers (aria-live)
+- [x] **Event wiring complete** (useWebSocketEvents → chatStore)
+- [x] **Reconnection state wired** (disconnect/reconnect → setReconnecting)
+- [x] **Excel filtered from UI** (regression fix)
+
+---
+
+## Review Findings (Post-Implementation)
+
+**Date:** 2026-01-28
+
+### Critical Miss: Event Wiring
+Initial implementation created primitives (`onQuestionnaireProgress`, `setQuestionnaireProgress`, `questionnaireProgress` state) but **did not wire them together**. `useWebSocketEvents` had the handler but `useChatController` wasn't passing it to `useWebSocket`.
+
+**Lesson:** Same as Sprint 1 - always verify the full event flow from source to sink. Unit tests on isolated components don't catch missing wiring.
+
+### Critical Miss: Reconnection State
+`setReconnecting` action existed and was tested, but nothing called it on actual socket disconnect/reconnect events.
+
+**Lesson:** State management code needs integration tests that verify actual event sources trigger state changes.
+
+### Regression: Excel Reintroduced
+Dynamic rendering of `exportData.formats` reintroduced the Excel button that was previously removed. Backend still sends `['pdf','word','excel']`.
+
+**Fix Applied:** Frontend filters `format !== 'excel'` before rendering.
+
+**Recommendation (non-blocking):** Backend should stop advertising Excel in `formats` array to keep contract clean.
+
+### What Worked Well
+- Store tests caught the right invariants (seq ordering, ephemeral state)
+- UI component threading was correct (ChatInterface → MessageList → QuestionnaireMessage → QuestionnairePromptCard → VerticalStepper)
+- Accessibility handled properly (aria-live="polite")

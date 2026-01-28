@@ -222,4 +222,103 @@ describe('VerticalStepper', () => {
       expect(screen.queryByTestId('step-line-only')).not.toBeInTheDocument();
     });
   });
+
+  // Epic 32.2.2: Progress display tests
+  describe('progress display (Epic 32.2.2)', () => {
+    it('shows fallback text when no progress provided', () => {
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={1} isRunning={true} />
+      );
+
+      expect(screen.getByTestId('progress-fallback')).toHaveTextContent('Generating...');
+    });
+
+    it('displays progress message when provided', () => {
+      const progress = {
+        message: 'Generating questions for Data Security...',
+        step: 3,
+        totalSteps: 10,
+      };
+
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={1} isRunning={true} progress={progress} />
+      );
+
+      expect(screen.getByTestId('progress-text')).toHaveTextContent('Generating questions for Data Security...');
+      expect(screen.getByTestId('progress-step-counter')).toHaveTextContent('Step 3 of 10');
+    });
+
+    it('does not show progress for completed steps', () => {
+      const progress = {
+        message: 'Generating...',
+        step: 3,
+        totalSteps: 10,
+      };
+
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={2} isRunning={true} progress={progress} />
+      );
+
+      // Progress should only show for active step (index 2)
+      // Completed steps (0, 1) should not have progress
+      const stepContext = screen.getByTestId('step-context');
+      expect(stepContext).not.toContainElement(screen.queryByTestId('progress-text'));
+    });
+
+    it('does not show progress when not running', () => {
+      const progress = {
+        message: 'Generating...',
+        step: 3,
+        totalSteps: 10,
+      };
+
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={1} isRunning={false} progress={progress} />
+      );
+
+      // Progress should not be shown when not running
+      expect(screen.queryByTestId('progress-message')).not.toBeInTheDocument();
+    });
+  });
+
+  // Epic 32.2.3: Reconnection state tests
+  describe('reconnection state (Epic 32.2.3)', () => {
+    it('shows reconnecting message when isReconnecting is true', () => {
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={1} isRunning={true} isReconnecting={true} />
+      );
+
+      expect(screen.getByTestId('reconnecting-message')).toBeInTheDocument();
+      expect(screen.getByTestId('reconnecting-message')).toHaveTextContent('Reconnecting...');
+    });
+
+    it('shows progress message in parentheses during reconnection', () => {
+      const progress = {
+        message: 'Data Security',
+        step: 3,
+        totalSteps: 10,
+      };
+
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={1} isRunning={true} progress={progress} isReconnecting={true} />
+      );
+
+      expect(screen.getByTestId('reconnecting-message')).toHaveTextContent('Reconnecting... (Data Security)');
+    });
+
+    it('shows normal progress when not reconnecting', () => {
+      const progress = {
+        message: 'Generating questions for Data Security...',
+        step: 3,
+        totalSteps: 10,
+      };
+
+      render(
+        <VerticalStepper steps={mockSteps} currentStep={1} isRunning={true} progress={progress} isReconnecting={false} />
+      );
+
+      expect(screen.queryByTestId('reconnecting-message')).not.toBeInTheDocument();
+      expect(screen.getByTestId('progress-text')).toHaveTextContent('Generating questions for Data Security...');
+    });
+  });
 });

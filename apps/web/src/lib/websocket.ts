@@ -287,6 +287,21 @@ export interface FileProcessingErrorPayload {
 }
 
 /**
+ * Epic 32.2.1: Questionnaire progress event payload
+ *
+ * Emitted during questionnaire generation to provide real-time feedback
+ * about which dimension is currently being processed.
+ */
+export interface QuestionnaireProgressPayload {
+  conversationId: string;
+  message: string;      // e.g., "Generating questions for Data Security..."
+  step: number;         // 1-based step number
+  totalSteps: number;   // Total expected steps
+  timestamp: number;    // Unix timestamp
+  seq: number;          // Monotonic sequence number for ordering
+}
+
+/**
  * Payload for questionnaire_ready event from backend
  */
 export interface QuestionnaireReadyPayload {
@@ -1059,6 +1074,54 @@ export class WebSocketClient {
 
     this.socket.on('file_processing_error', handler);
     return () => this.socket?.off('file_processing_error', handler);
+  }
+
+  /**
+   * Epic 32.2.1: Subscribe to questionnaire_progress events
+   * Emitted during questionnaire generation for real-time dimension feedback
+   */
+  onQuestionnaireProgress(callback: (data: QuestionnaireProgressPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: QuestionnaireProgressPayload) => {
+      console.log('[WebSocket] Questionnaire progress:', data.step, '/', data.totalSteps, '-', data.message);
+      callback(data);
+    };
+
+    this.socket.on('questionnaire_progress', handler);
+    return () => this.socket?.off('questionnaire_progress', handler);
+  }
+
+  /**
+   * Epic 32.2.3: Subscribe to disconnect events
+   * Emitted when socket connection is lost
+   */
+  onDisconnect(callback: (reason: string) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (reason: string) => {
+      console.log('[WebSocket] Disconnect callback:', reason);
+      callback(reason);
+    };
+
+    this.socket.on('disconnect', handler);
+    return () => this.socket?.off('disconnect', handler);
+  }
+
+  /**
+   * Epic 32.2.3: Subscribe to reconnect events
+   * Emitted when socket successfully reconnects
+   */
+  onReconnect(callback: (attemptNumber: number) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (attemptNumber: number) => {
+      console.log('[WebSocket] Reconnect callback:', attemptNumber, 'attempts');
+      callback(attemptNumber);
+    };
+
+    this.socket.on('reconnect', handler);
+    return () => this.socket?.off('reconnect', handler);
   }
 
 }

@@ -297,6 +297,36 @@ async handleGenerateQuestionnaire(
 - [ ] IProgressEmitter interface defined and exported
 - [ ] QuestionnaireGenerationService emits timer-based progress events
 - [ ] SocketProgressEmitter emits to requesting socket (direct socket.emit)
+- [ ] **QuestionnaireHandler wires SocketProgressEmitter to service** (critical!)
+- [ ] Handler-level test verifies socket receives progress events
 - [ ] All unit tests pass
 - [ ] Integration test verifies end-to-end progress flow
 - [ ] No regression in questionnaire generation
+
+---
+
+## Review Findings (Post-Implementation)
+
+**Date:** 2026-01-28
+
+### Critical Miss: Handler Wiring
+The initial implementation created the primitives (`IProgressEmitter`, `SocketProgressEmitter`, timer in service) but **did not wire them in `QuestionnaireHandler`**. Result: production used `NullProgressEmitter` → no events reached client → feature didn't work.
+
+**Lesson:** When implementing event-driven features, always verify the full call chain from entry point (handler) to output (socket). Unit tests on isolated components don't catch missing wiring.
+
+### Missing Handler Test
+Sprint spec called for "integration test verifies end-to-end progress flow" but only service-level and emitter-level tests were written. A handler-level test was needed to verify:
+- Handler creates emitter with correct socket/conversationId
+- Events actually reach the socket during generation
+
+**Lesson:** For WebSocket features, always include a handler-level test with mocked socket.
+
+### Security: Excessive Logging
+`QuestionnaireGenerationService.extractSchemaFromToolUse()` logged full `JSON.stringify(toolBlock.input)` without truncation. This is a security/performance risk.
+
+**Lesson:** Never log full API payloads. Truncate or use debug-level logging with size limits.
+
+### UX: Duplicate Messages
+Timer-based progress ended with "Finalizing questionnaire..." AND explicit emit after Claude call sent same message. Creates UI flicker.
+
+**Lesson:** Review message sequence for duplicates when combining timer-based and event-based emissions.

@@ -36,6 +36,7 @@ import type { IAuthenticatedSocket, ChatContext } from '../ChatContext.js';
 import type { StreamingHandler } from '../StreamingHandler.js';
 import type { GenerationPhasePayload, GenerationPhaseId } from '@guardian/shared';
 import { sanitizeErrorForClient, isValidVendorName } from '../../../utils/sanitize.js';
+import { createSocketProgressEmitter } from '../emitters/SocketProgressEmitter.js';
 
 /**
  * Payload for generate_questionnaire event
@@ -161,6 +162,10 @@ export class QuestionnaireHandler {
       // Phase 0: Context ready (validation passed, about to call Claude)
       this.emitGenerationPhase(socket, conversationId, 0, 'context');
 
+      // Create progress emitter for real-time progress events during generation
+      // Story 32.1.3: Timer-based progress emission to improve perceived responsiveness
+      const progressEmitter = createSocketProgressEmitter(socket, conversationId);
+
       // Delegate to service (single Claude call, returns schema + markdown)
       // NOTE: Service creates assessment - handler does NOT create assessments
       const result = await this.questionnaireGenerationService.generate({
@@ -171,7 +176,7 @@ export class QuestionnaireHandler {
         solutionName,
         contextSummary,
         selectedCategories,
-      });
+      }, progressEmitter);
 
       // Phase 1: Claude call complete
       this.emitGenerationPhase(socket, conversationId, 1, 'generating');

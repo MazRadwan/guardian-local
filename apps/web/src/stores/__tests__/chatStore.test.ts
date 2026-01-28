@@ -1328,4 +1328,278 @@ describe('chatStore', () => {
       expect(parsed.state.questionnaireMessageIndex).toBeUndefined();
     });
   });
+
+  // Epic 32.2.1: Questionnaire Progress State Tests
+  describe('questionnaireProgress (Epic 32.2.1)', () => {
+    it('initializes with null progress', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      expect(result.current.questionnaireProgress).toBeNull();
+    });
+
+    it('setQuestionnaireProgress sets progress state', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress = {
+        message: 'Generating questions for Data Security...',
+        step: 3,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 1,
+      };
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress);
+      });
+
+      expect(result.current.questionnaireProgress).toEqual(progress);
+    });
+
+    it('setQuestionnaireProgress clears with null', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress = {
+        message: 'Generating...',
+        step: 1,
+        totalSteps: 5,
+        timestamp: Date.now(),
+        seq: 1,
+      };
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress);
+      });
+
+      expect(result.current.questionnaireProgress).not.toBeNull();
+
+      act(() => {
+        result.current.setQuestionnaireProgress(null);
+      });
+
+      expect(result.current.questionnaireProgress).toBeNull();
+    });
+
+    it('ordering protection rejects events with old seq', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress1 = {
+        message: 'Step 1',
+        step: 1,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 5,
+      };
+
+      const progress2 = {
+        message: 'Step 2 (old)',
+        step: 2,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 3, // Old seq
+      };
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress1);
+      });
+
+      expect(result.current.questionnaireProgress?.seq).toBe(5);
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress2);
+      });
+
+      // Should still be the first progress (old seq rejected)
+      expect(result.current.questionnaireProgress?.seq).toBe(5);
+      expect(result.current.questionnaireProgress?.message).toBe('Step 1');
+    });
+
+    it('ordering protection accepts events with newer seq', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress1 = {
+        message: 'Step 1',
+        step: 1,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 5,
+      };
+
+      const progress2 = {
+        message: 'Step 2',
+        step: 2,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 6, // Newer seq
+      };
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress1);
+      });
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress2);
+      });
+
+      // Should be updated to second progress
+      expect(result.current.questionnaireProgress?.seq).toBe(6);
+      expect(result.current.questionnaireProgress?.message).toBe('Step 2');
+    });
+
+    it('progress resets on conversation switch', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress = {
+        message: 'Generating...',
+        step: 3,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 1,
+      };
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress);
+      });
+
+      expect(result.current.questionnaireProgress).not.toBeNull();
+
+      act(() => {
+        result.current.setActiveConversation('new-conv');
+      });
+
+      expect(result.current.questionnaireProgress).toBeNull();
+    });
+
+    it('questionnaireProgress is NOT persisted to localStorage', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setQuestionnaireProgress({
+          message: 'Test',
+          step: 1,
+          totalSteps: 5,
+          timestamp: Date.now(),
+          seq: 1,
+        });
+      });
+
+      // Check localStorage
+      const stored = localStorage.getItem('guardian-chat-store');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+
+      // questionnaireProgress should NOT be in persisted state
+      expect(parsed.state.questionnaireProgress).toBeUndefined();
+    });
+  });
+
+  // Epic 32.2.3: Reconnection State Tests
+  describe('isReconnecting (Epic 32.2.3)', () => {
+    it('initializes with false', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      expect(result.current.isReconnecting).toBe(false);
+    });
+
+    it('setReconnecting updates state', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setReconnecting(true);
+      });
+
+      expect(result.current.isReconnecting).toBe(true);
+
+      act(() => {
+        result.current.setReconnecting(false);
+      });
+
+      expect(result.current.isReconnecting).toBe(false);
+    });
+
+    it('progress not cleared during reconnection', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress = {
+        message: 'Progress during reconnect',
+        step: 3,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 100, // High seq to ensure it's accepted regardless of prior state
+      };
+
+      // First ensure reconnection is off
+      act(() => {
+        result.current.setReconnecting(false);
+      });
+
+      // Set the progress
+      act(() => {
+        result.current.setQuestionnaireProgress(progress);
+      });
+
+      // Verify it was set
+      expect(result.current.questionnaireProgress?.message).toBe('Progress during reconnect');
+
+      // Now enable reconnection protection
+      act(() => {
+        result.current.setReconnecting(true);
+      });
+
+      // Try to clear progress during reconnection
+      act(() => {
+        result.current.setQuestionnaireProgress(null);
+      });
+
+      // Progress should NOT be cleared
+      expect(result.current.questionnaireProgress).not.toBeNull();
+      expect(result.current.questionnaireProgress?.message).toBe('Progress during reconnect');
+    });
+
+    it('progress cleared when not reconnecting', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      const progress = {
+        message: 'Progress to clear',
+        step: 3,
+        totalSteps: 10,
+        timestamp: Date.now(),
+        seq: 200, // High seq to ensure acceptance
+      };
+
+      // Ensure reconnecting is false first
+      act(() => {
+        result.current.setReconnecting(false);
+      });
+
+      act(() => {
+        result.current.setQuestionnaireProgress(progress);
+      });
+
+      expect(result.current.questionnaireProgress).not.toBeNull();
+
+      // Clear when not reconnecting
+      act(() => {
+        result.current.setReconnecting(false);
+        result.current.setQuestionnaireProgress(null);
+      });
+
+      expect(result.current.questionnaireProgress).toBeNull();
+    });
+
+    it('isReconnecting is NOT persisted to localStorage', () => {
+      const { result } = renderHook(() => useChatStore());
+
+      act(() => {
+        result.current.setReconnecting(true);
+      });
+
+      // Check localStorage
+      const stored = localStorage.getItem('guardian-chat-store');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+
+      // isReconnecting should NOT be in persisted state
+      expect(parsed.state.isReconnecting).toBeUndefined();
+    });
+  });
 });

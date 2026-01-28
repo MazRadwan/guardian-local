@@ -650,7 +650,8 @@ describe('QuestionnaireHandler', () => {
         expect(mockQuestionnaireGenerationService.generate).toHaveBeenCalledWith(
           expect.objectContaining({
             assessmentType: 'comprehensive',
-          })
+          }),
+          expect.any(Object) // Progress emitter
         );
       });
 
@@ -665,7 +666,8 @@ describe('QuestionnaireHandler', () => {
         expect(mockQuestionnaireGenerationService.generate).toHaveBeenCalledWith(
           expect.objectContaining({
             assessmentType: 'quick',
-          })
+          }),
+          expect.any(Object) // Progress emitter
         );
       });
 
@@ -680,7 +682,8 @@ describe('QuestionnaireHandler', () => {
         expect(mockQuestionnaireGenerationService.generate).toHaveBeenCalledWith(
           expect.objectContaining({
             assessmentType: 'category_focused',
-          })
+          }),
+          expect.any(Object) // Progress emitter
         );
       });
     });

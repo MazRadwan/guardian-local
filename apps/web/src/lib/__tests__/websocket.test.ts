@@ -410,4 +410,57 @@ describe('WebSocketClient', () => {
       expect(client.isConnected()).toBe(false);
     });
   });
+
+  // Epic 32.2.1: Questionnaire progress subscription tests
+  describe('onQuestionnaireProgress', () => {
+    it('registers questionnaire_progress event listener', async () => {
+      const client = new WebSocketClient({
+        url: 'http://localhost:8000',
+      });
+
+      mockSocket.on = jest.fn((event, handler) => {
+        if (event === 'connect') {
+          setTimeout(() => (handler as () => void)(), 0);
+        }
+        return mockSocket as Socket;
+      });
+
+      await client.connect();
+
+      const callback = jest.fn();
+      client.onQuestionnaireProgress(callback);
+
+      expect(mockSocket.on).toHaveBeenCalledWith('questionnaire_progress', expect.any(Function));
+    });
+
+    it('returns unsubscribe function', async () => {
+      const client = new WebSocketClient({
+        url: 'http://localhost:8000',
+      });
+
+      mockSocket.on = jest.fn((event, handler) => {
+        if (event === 'connect') {
+          setTimeout(() => (handler as () => void)(), 0);
+        }
+        return mockSocket as Socket;
+      });
+
+      await client.connect();
+
+      const callback = jest.fn();
+      const unsubscribe = client.onQuestionnaireProgress(callback);
+
+      unsubscribe();
+
+      expect(mockSocket.off).toHaveBeenCalledWith('questionnaire_progress', expect.any(Function));
+    });
+
+    it('throws error if socket not initialized', () => {
+      const client = new WebSocketClient({
+        url: 'http://localhost:8000',
+      });
+
+      expect(() => client.onQuestionnaireProgress(jest.fn())).toThrow('WebSocket not initialized');
+    });
+  });
 });

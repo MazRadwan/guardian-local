@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload } from '@/lib/websocket';
 import { toast } from 'sonner';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
@@ -88,6 +88,8 @@ export interface UseWebSocketEventsReturn {
   handleVendorClarificationNeeded: (data: VendorClarificationNeededPayload) => void;
   // Epic 31.2.2: File processing error handler
   handleFileProcessingError: (data: FileProcessingErrorPayload) => void;
+  // Epic 32.2.1: Questionnaire progress handler
+  handleQuestionnaireProgress: (data: QuestionnaireProgressPayload) => void;
 }
 
 /**
@@ -471,6 +473,9 @@ export function useWebSocketEvents({
       useChatStore.getState().setQuestionnaireUIState('download');
       useChatStore.getState().setGenerating(false);
 
+      // Epic 32.2.1: Clear questionnaire progress on completion
+      useChatStore.getState().setQuestionnaireProgress(null);
+
       // IMPORTANT: On session resume, there is no questionnaire streaming happening,
       // so we must bypass the "wait for stream complete" gate (Story 14.1.5) or the
       // download buttons will stay hidden forever.
@@ -508,6 +513,9 @@ export function useWebSocketEvents({
       useChatStore.getState().setQuestionnaireUIState('error');
       useChatStore.getState().setQuestionnaireError(data.error);
       useChatStore.getState().setGenerating(false);
+
+      // Epic 32.2.1: Clear questionnaire progress on failure
+      useChatStore.getState().setQuestionnaireProgress(null);
     },
     [activeConversationId, clearExportReady, persistence]
   );
@@ -777,6 +785,29 @@ export function useWebSocketEvents({
     [activeConversationId, finishStreaming, setLoading]
   );
 
+  // Epic 32.2.1: Questionnaire progress handler
+  const handleQuestionnaireProgress = useCallback(
+    (data: QuestionnaireProgressPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring questionnaire_progress for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Questionnaire progress:', data.step, '/', data.totalSteps, '-', data.message);
+
+      // Update chatStore with progress (includes ordering protection)
+      useChatStore.getState().setQuestionnaireProgress({
+        message: data.message,
+        step: data.step,
+        totalSteps: data.totalSteps,
+        timestamp: data.timestamp,
+        seq: data.seq,
+      });
+    },
+    [activeConversationId]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -799,5 +830,6 @@ export function useWebSocketEvents({
     handleScoringError,
     handleVendorClarificationNeeded,
     handleFileProcessingError,
+    handleQuestionnaireProgress,
   };
 }
