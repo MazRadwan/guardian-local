@@ -6,6 +6,7 @@ import { ShieldCheck } from 'lucide-react';
 import { QuestionnairePromptCard, QuestionnaireUIState } from './QuestionnairePromptCard';
 import { QuestionnaireReadyPayload } from '@/lib/websocket';
 import type { Step } from '@/types/stepper';
+import type { ProgressInfo } from './VerticalStepper';
 
 export interface QuestionnaireMessageProps {
   /** Payload from questionnaire_ready event */
@@ -32,6 +33,10 @@ export interface QuestionnaireMessageProps {
   timestamp?: Date;
   /** Optional className */
   className?: string;
+  /** Epic 32.2.2: Questionnaire progress (dimension-level feedback) */
+  progress?: ProgressInfo | null;
+  /** Epic 32.2.3: Whether reconnection is in progress */
+  isReconnecting?: boolean;
 }
 
 /**
@@ -53,6 +58,8 @@ export function QuestionnaireMessage({
   isRunning = false,
   timestamp,
   className,
+  progress,
+  isReconnecting = false,
 }: QuestionnaireMessageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -105,6 +112,8 @@ export function QuestionnaireMessage({
           isRunning={isRunning}
           className="" // Clear default max-w-md via empty className
           inline={true} // Signal inline rendering
+          progress={progress}
+          isReconnecting={isReconnecting}
         />
 
         {/* Timestamp */}

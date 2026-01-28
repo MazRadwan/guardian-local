@@ -27,6 +27,9 @@ export * from './IVisionContentBuilder.js';
 // Epic 31: Background Text Extraction
 export * from './IBackgroundExtractor.js';
 
+// Epic 32: Questionnaire Generation Progress Streaming
+export * from './IProgressEmitter.js';
+
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)
 export type { QuestionnaireData } from './IExcelExporter.js';

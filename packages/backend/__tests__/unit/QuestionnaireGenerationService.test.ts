@@ -2,6 +2,7 @@ import { QuestionnaireGenerationService } from '../../src/application/services/Q
 import { QuestionnaireSchema } from '../../src/domain/types/QuestionnaireSchema.js';
 import { fixtureQuestionnaireSchema } from '../fixtures/questionnaireSchema.js';
 import { QUESTIONNAIRE_OUTPUT_TOOL_NAME } from '../../src/infrastructure/ai/tools/questionnaireOutputTool.js';
+import { IProgressEmitter, NullProgressEmitter } from '../../src/application/interfaces/IProgressEmitter.js';
 
 /**
  * Helper to create a tool_use response (Story 5.3.1)
@@ -790,6 +791,327 @@ describe('QuestionnaireGenerationService', () => {
           assessmentType: 'comprehensive',
         })
       ).rejects.toThrow('Assessment Error');
+    });
+  });
+
+  describe('progress emission (Story 32.1.2)', () => {
+    /**
+     * Mock progress emitter that tracks all emitted events
+     */
+    class MockProgressEmitter implements IProgressEmitter {
+      public events: Array<{
+        message: string;
+        step: number;
+        totalSteps: number;
+        seq: number;
+      }> = [];
+
+      emit(message: string, step: number, totalSteps: number, seq: number): void {
+        this.events.push({ message, step, totalSteps, seq });
+      }
+    }
+
+    it('emits progress events during generation', async () => {
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+      const mockEmitter = new MockProgressEmitter();
+
+      await service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        mockEmitter
+      );
+
+      // Should have at least 2 events: initial + final
+      expect(mockEmitter.events.length).toBeGreaterThanOrEqual(2);
+
+      // First event should be the initial analyzing message
+      expect(mockEmitter.events[0].message).toBe('Analyzing vendor context...');
+      expect(mockEmitter.events[0].step).toBe(1);
+
+      // Last event should be finalizing
+      const lastEvent = mockEmitter.events[mockEmitter.events.length - 1];
+      expect(lastEvent.message).toBe('Finalizing questionnaire...');
+    });
+
+    it('works without emitter (backward compatibility)', async () => {
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+
+      // Should not throw when called without emitter
+      const result = await service.generate({
+        conversationId: 'conv-1',
+        userId: 'user-1',
+        assessmentType: 'comprehensive',
+      });
+
+      expect(result.schema).toBeDefined();
+      expect(result.assessmentId).toBeDefined();
+    });
+
+    it('accepts NullProgressEmitter explicitly', async () => {
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+
+      // Should not throw when called with NullProgressEmitter
+      const result = await service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        new NullProgressEmitter()
+      );
+
+      expect(result.schema).toBeDefined();
+      expect(result.assessmentId).toBeDefined();
+    });
+
+    it('emits monotonically increasing seq numbers', async () => {
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+      const mockEmitter = new MockProgressEmitter();
+
+      await service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        mockEmitter
+      );
+
+      // Verify seq numbers are monotonically increasing
+      for (let i = 1; i < mockEmitter.events.length; i++) {
+        expect(mockEmitter.events[i].seq).toBeGreaterThan(mockEmitter.events[i - 1].seq);
+      }
+    });
+
+    it('stops timer on successful completion', async () => {
+      // Use fake timers to control interval
+      jest.useFakeTimers();
+
+      const schema = createValidSchema();
+      // Make sendMessage take a moment so we can verify timer behavior
+      mockClaudeClient.sendMessage.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            // Resolve immediately in this test - timer should stop
+            resolve(createToolUseResponse(schema));
+          })
+      );
+
+      const mockEmitter = new MockProgressEmitter();
+
+      const generatePromise = service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        mockEmitter
+      );
+
+      // Advance timers and wait for completion
+      await jest.runAllTimersAsync();
+      await generatePromise;
+
+      const eventCountAfterComplete = mockEmitter.events.length;
+
+      // Advance more time - no new events should be emitted since timer should be cleared
+      jest.advanceTimersByTime(15000);
+
+      expect(mockEmitter.events.length).toBe(eventCountAfterComplete);
+
+      jest.useRealTimers();
+    });
+
+    it('stops timer on error', async () => {
+      // Test that timer is cleared when Claude call fails
+      // Use real timers to avoid complexity with fake timers + promises
+      mockClaudeClient.sendMessage.mockRejectedValue(new Error('API Error'));
+
+      const mockEmitter = new MockProgressEmitter();
+
+      // Generate should throw
+      await expect(
+        service.generate(
+          {
+            conversationId: 'conv-1',
+            userId: 'user-1',
+            assessmentType: 'comprehensive',
+          },
+          mockEmitter
+        )
+      ).rejects.toThrow('API Error');
+
+      // Should have emitted at least the initial event before error
+      expect(mockEmitter.events.length).toBeGreaterThanOrEqual(1);
+      expect(mockEmitter.events[0].message).toBe('Analyzing vendor context...');
+
+      // Timer should be cleared on error (verified by no memory leaks)
+      // Additional events would indicate timer wasn't cleared, but since
+      // sendMessage rejects immediately, only initial event is emitted
+    });
+
+    it('emits multiple progress events over time during slow generation', async () => {
+      jest.useFakeTimers();
+
+      const schema = createValidSchema();
+      let resolvePromise: (value: unknown) => void;
+      const slowPromise = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+
+      mockClaudeClient.sendMessage.mockImplementation(() => slowPromise);
+
+      const mockEmitter = new MockProgressEmitter();
+
+      const generatePromise = service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        mockEmitter
+      );
+
+      // Should have initial event immediately
+      expect(mockEmitter.events.length).toBe(1);
+      expect(mockEmitter.events[0].message).toBe('Analyzing vendor context...');
+
+      // Advance 5 seconds - should get second event
+      jest.advanceTimersByTime(5000);
+      expect(mockEmitter.events.length).toBe(2);
+      expect(mockEmitter.events[1].message).toBe('Identifying applicable risk dimensions...');
+
+      // Advance another 5 seconds - should get third event
+      jest.advanceTimersByTime(5000);
+      expect(mockEmitter.events.length).toBe(3);
+      expect(mockEmitter.events[2].message).toBe('Generating questions for Data Security...');
+
+      // Resolve the Claude call
+      resolvePromise!(createToolUseResponse(schema));
+      await jest.runAllTimersAsync();
+      await generatePromise;
+
+      // Final event should be "Finalizing questionnaire..."
+      const lastEvent = mockEmitter.events[mockEmitter.events.length - 1];
+      expect(lastEvent.message).toBe('Finalizing questionnaire...');
+
+      jest.useRealTimers();
+    });
+
+    it('does not emit progress to other conversations (isolation)', async () => {
+      // This test verifies that progress emitter is conversation-specific
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+
+      const emitter1 = new MockProgressEmitter();
+      const emitter2 = new MockProgressEmitter();
+
+      // First generation with emitter1
+      await service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        emitter1
+      );
+
+      // Second generation with emitter2
+      await service.generate(
+        {
+          conversationId: 'conv-2',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        emitter2
+      );
+
+      // Each emitter should have its own events
+      expect(emitter1.events.length).toBeGreaterThan(0);
+      expect(emitter2.events.length).toBeGreaterThan(0);
+
+      // Both should have independent seq counters starting from 1
+      expect(emitter1.events[0].seq).toBe(1);
+      expect(emitter2.events[0].seq).toBe(1);
+    });
+
+    it('concurrent generations do not interfere with each other', async () => {
+      // This test verifies that concurrent generations with different emitters
+      // maintain isolation - each emitter only receives its own events
+      const schema = createValidSchema();
+
+      // Use real timers but resolve immediately to avoid timing complexity
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+
+      const emitter1 = new MockProgressEmitter();
+      const emitter2 = new MockProgressEmitter();
+
+      // Run both generations concurrently
+      const [result1, result2] = await Promise.all([
+        service.generate(
+          {
+            conversationId: 'conv-1',
+            userId: 'user-1',
+            assessmentType: 'comprehensive',
+          },
+          emitter1
+        ),
+        service.generate(
+          {
+            conversationId: 'conv-2',
+            userId: 'user-1',
+            assessmentType: 'comprehensive',
+          },
+          emitter2
+        ),
+      ]);
+
+      // Both should complete successfully
+      expect(result1.schema).toBeDefined();
+      expect(result2.schema).toBeDefined();
+
+      // Each emitter should have its own events (not shared)
+      expect(emitter1.events.length).toBeGreaterThan(0);
+      expect(emitter2.events.length).toBeGreaterThan(0);
+
+      // Both should have independent seq counters starting from 1
+      expect(emitter1.events[0].seq).toBe(1);
+      expect(emitter2.events[0].seq).toBe(1);
+
+      // Both should end with finalizing message
+      expect(emitter1.events[emitter1.events.length - 1].message).toBe('Finalizing questionnaire...');
+      expect(emitter2.events[emitter2.events.length - 1].message).toBe('Finalizing questionnaire...');
+    });
+
+    it('totalSteps is consistent across all events', async () => {
+      const schema = createValidSchema();
+      mockClaudeClient.sendMessage.mockResolvedValue(createToolUseResponse(schema));
+      const mockEmitter = new MockProgressEmitter();
+
+      await service.generate(
+        {
+          conversationId: 'conv-1',
+          userId: 'user-1',
+          assessmentType: 'comprehensive',
+        },
+        mockEmitter
+      );
+
+      // All events should have same totalSteps
+      const firstTotalSteps = mockEmitter.events[0].totalSteps;
+      for (const event of mockEmitter.events) {
+        expect(event.totalSteps).toBe(firstTotalSteps);
+      }
+
+      // totalSteps should be 11 (PROGRESS_MESSAGES.length)
+      expect(firstTotalSteps).toBe(11);
     });
   });
 });

@@ -181,7 +181,7 @@ describe('QuestionnairePromptCard', () => {
   });
 
   describe('Download state', () => {
-    it('renders download buttons for each format', () => {
+    it('renders download buttons for each format (excluding excel)', () => {
       render(
         <QuestionnairePromptCard
           {...defaultProps}
@@ -191,7 +191,8 @@ describe('QuestionnairePromptCard', () => {
       );
       expect(screen.getByTestId('download-pdf-btn')).toBeInTheDocument();
       expect(screen.getByTestId('download-word-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('download-excel-btn')).toBeInTheDocument();
+      // Excel is filtered out by Epic 32.2 (backend sends it but UI removed Excel support)
+      expect(screen.queryByTestId('download-excel-btn')).not.toBeInTheDocument();
     });
 
     it('displays correct text for download state', () => {
@@ -894,7 +895,7 @@ describe('QuestionnairePromptCard', () => {
   // Story 13.6.3 - Download Buttons Always Visible
   // ─────────────────────────────────────────────────────────────
   describe('Download buttons visibility (Story 13.6.3)', () => {
-    it('download buttons visible when expanded', () => {
+    it('download buttons visible when expanded (excluding excel)', () => {
       render(
         <QuestionnairePromptCard
           {...defaultProps}
@@ -909,13 +910,14 @@ describe('QuestionnairePromptCard', () => {
       // Stepper is expanded
       expect(screen.getByTestId('stepper-toggle').parentElement?.querySelector('.max-h-64')).toBeInTheDocument();
 
-      // Download buttons should be visible
+      // Download buttons should be visible (excel filtered out)
       expect(screen.getByTestId('download-pdf-btn')).toBeInTheDocument();
       expect(screen.getByTestId('download-word-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('download-excel-btn')).toBeInTheDocument();
+      // Excel is filtered out by Epic 32.2
+      expect(screen.queryByTestId('download-excel-btn')).not.toBeInTheDocument();
     });
 
-    it('download buttons visible when collapsed', async () => {
+    it('download buttons visible when collapsed (excluding excel)', async () => {
       render(
         <QuestionnairePromptCard
           {...defaultProps}
@@ -934,10 +936,11 @@ describe('QuestionnairePromptCard', () => {
         expect(screen.getByTestId('stepper-toggle').parentElement?.querySelector('.max-h-0')).toBeInTheDocument();
       });
 
-      // Download buttons should STILL be visible (outside collapsible section)
+      // Download buttons should STILL be visible (outside collapsible section, excel filtered out)
       expect(screen.getByTestId('download-pdf-btn')).toBeInTheDocument();
       expect(screen.getByTestId('download-word-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('download-excel-btn')).toBeInTheDocument();
+      // Excel is filtered out by Epic 32.2
+      expect(screen.queryByTestId('download-excel-btn')).not.toBeInTheDocument();
     });
 
     it('download buttons work after auto-collapse', async () => {
@@ -981,7 +984,7 @@ describe('QuestionnairePromptCard', () => {
           {...defaultProps}
           onDownload={onDownload}
           uiState="download"
-          exportData={{ formats: ['pdf', 'word', 'excel'], assessmentId: 'assess-123' }}
+          exportData={{ formats: ['pdf', 'word'], assessmentId: 'assess-123' }}
           steps={mockSteps}
           currentStep={GENERATION_STEPS.length}
           isRunning={false}
@@ -1229,10 +1232,11 @@ describe('QuestionnairePromptCard', () => {
   // Story 14.2.2 - Download Button Styling
   // ─────────────────────────────────────────────────────────────
   describe('Download Button Styling (Story 14.2.2)', () => {
+    // Note: Excel is filtered out by Epic 32.2 (backend sends it but UI removed Excel support)
     const downloadProps = {
       ...defaultProps,
       uiState: 'download' as const,
-      exportData: { formats: ['word', 'pdf', 'excel'], assessmentId: 'assess-123' },
+      exportData: { formats: ['word', 'pdf'], assessmentId: 'assess-123' },
     };
 
     describe('Primary button (first format)', () => {
@@ -1305,15 +1309,12 @@ describe('QuestionnairePromptCard', () => {
         render(<QuestionnairePromptCard {...downloadProps} />);
 
         const pdfBtn = screen.getByTestId('download-pdf-btn');
-        const excelBtn = screen.getByTestId('download-excel-btn');
 
         // Should NOT have primary styling
         expect(pdfBtn).not.toHaveClass('bg-slate-800');
-        expect(excelBtn).not.toHaveClass('bg-slate-800');
 
         // Should have ghost text color
         expect(pdfBtn).toHaveClass('text-slate-600');
-        expect(excelBtn).toHaveClass('text-slate-600');
       });
 
       it('has correct padding (px-3 py-2)', () => {
@@ -1344,18 +1345,14 @@ describe('QuestionnairePromptCard', () => {
         render(<QuestionnairePromptCard {...downloadProps} />);
 
         const pdfBtn = screen.getByTestId('download-pdf-btn');
-        const excelBtn = screen.getByTestId('download-excel-btn');
         expect(pdfBtn).toHaveAttribute('type', 'button');
-        expect(excelBtn).toHaveAttribute('type', 'button');
       });
 
       it('does NOT contain download icon', () => {
         render(<QuestionnairePromptCard {...downloadProps} />);
 
         const pdfBtn = screen.getByTestId('download-pdf-btn');
-        const excelBtn = screen.getByTestId('download-excel-btn');
         expect(pdfBtn.querySelector('svg')).not.toBeInTheDocument();
-        expect(excelBtn.querySelector('svg')).not.toBeInTheDocument();
       });
 
       it('does NOT have font-medium', () => {
@@ -1396,18 +1393,16 @@ describe('QuestionnairePromptCard', () => {
             {...defaultProps}
             onDownload={onDownload}
             uiState="download"
-            exportData={{ formats: ['word', 'pdf', 'excel'], assessmentId: 'assess-123' }}
+            exportData={{ formats: ['word', 'pdf'], assessmentId: 'assess-123' }}
           />
         );
 
         fireEvent.click(screen.getByTestId('download-word-btn'));
         fireEvent.click(screen.getByTestId('download-pdf-btn'));
-        fireEvent.click(screen.getByTestId('download-excel-btn'));
 
         expect(onDownload).toHaveBeenCalledWith('word');
         expect(onDownload).toHaveBeenCalledWith('pdf');
-        expect(onDownload).toHaveBeenCalledWith('excel');
-        expect(onDownload).toHaveBeenCalledTimes(3);
+        expect(onDownload).toHaveBeenCalledTimes(2);
       });
 
       it('displays capitalized format labels', () => {
@@ -1415,7 +1410,6 @@ describe('QuestionnairePromptCard', () => {
 
         expect(screen.getByTestId('download-word-btn')).toHaveTextContent('Word');
         expect(screen.getByTestId('download-pdf-btn')).toHaveTextContent('Pdf');
-        expect(screen.getByTestId('download-excel-btn')).toHaveTextContent('Excel');
       });
     });
   });

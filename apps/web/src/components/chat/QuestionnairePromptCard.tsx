@@ -5,9 +5,12 @@ import { Button } from '@/components/ui/button';
 import { FileText, Download, AlertCircle, RefreshCw, ChevronDown } from 'lucide-react';
 import { QuestionnaireReadyPayload } from '@/lib/websocket';
 import { cn } from '@/lib/utils';
-import { VerticalStepper } from './VerticalStepper';
+import { VerticalStepper, type ProgressInfo } from './VerticalStepper';
 import type { Step } from '@/types/stepper';
 import { useChatStore } from '@/stores/chatStore';
+
+// Re-export ProgressInfo for consumers
+export type { ProgressInfo };
 
 export type QuestionnaireUIState = 'hidden' | 'ready' | 'generating' | 'download' | 'error';
 
@@ -36,6 +39,10 @@ interface QuestionnairePromptCardProps {
   isRunning?: boolean;
   /** Whether rendered inline in chat message (no card styling) */
   inline?: boolean;
+  /** Epic 32.2.2: Questionnaire generation progress (dimension-level feedback) */
+  progress?: ProgressInfo | null;
+  /** Epic 32.2.3: Whether reconnection is in progress */
+  isReconnecting?: boolean;
 }
 
 /**
@@ -74,7 +81,7 @@ const assessmentTypeConfig = {
  */
 export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnairePromptCardProps>(
   (
-    { payload, uiState, error, exportData, onGenerate, onDownload, onRetry, className, steps = [], currentStep = -1, isRunning = false, inline = false },
+    { payload, uiState, error, exportData, onGenerate, onDownload, onRetry, className, steps = [], currentStep = -1, isRunning = false, inline = false, progress, isReconnecting = false },
     ref
   ) => {
     const config = assessmentTypeConfig[payload.assessmentType] || assessmentTypeConfig.comprehensive;
@@ -280,7 +287,13 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
               >
                 <div className="px-3 pb-3 border-t border-slate-100">
                   <div className="pt-3">
-                    <VerticalStepper steps={steps} currentStep={currentStep} isRunning={false} />
+                    <VerticalStepper
+                      steps={steps}
+                      currentStep={currentStep}
+                      isRunning={false}
+                      progress={null} // No progress in download state
+                      isReconnecting={false}
+                    />
                   </div>
                 </div>
               </div>
@@ -302,8 +315,10 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
           {/* Download buttons - dynamically rendered from exportData.formats */}
           {/* Story 14.2.2: Primary dark (Word) + ghost (others) per Appendix */}
           {/* Word is primary as it's the most common enterprise format */}
+          {/* Epic 32.2: Filter out 'excel' - backend sends it but UI removed Excel support */}
           <div className="flex flex-wrap items-center gap-2 animate-fadeIn">
             {[...exportData.formats]
+              .filter((format) => format !== 'excel') // Excel removed from UI (Epic 32.2)
               .sort((a, b) => {
                 // Word first (primary), then PDF, then others alphabetically
                 if (a === 'word') return -1;
@@ -397,7 +412,13 @@ export const QuestionnairePromptCard = forwardRef<HTMLDivElement, QuestionnaireP
             >
               <div className="px-3 pb-3 border-t border-slate-100">
                 <div className="pt-3">
-                  <VerticalStepper steps={steps} currentStep={currentStep} isRunning={isRunning} />
+                  <VerticalStepper
+                    steps={steps}
+                    currentStep={currentStep}
+                    isRunning={isRunning}
+                    progress={progress}
+                    isReconnecting={isReconnecting}
+                  />
                 </div>
               </div>
             </div>

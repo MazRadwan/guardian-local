@@ -2,11 +2,12 @@
 # Maps diagram nodes to actual code paths for validation
 # Used by diagram-updater-agent
 #
-# VALIDATED: 2026-01-26 - Paths verified against actual codebase
+# VALIDATED: 2026-01-27 - Paths verified against actual codebase
+# UPDATED: 2026-01-27 - Added Epic 31 Async Extraction (BackgroundExtractor, TextExtractionService)
 # UPDATED: 2026-01-26 - Added Epic 30 Vision API support (VisionContentBuilder, updated FileContextBuilder)
 
 diagram: architecture-latest.mmd
-last_verified: "2026-01-26"
+last_verified: "2026-01-27"
 
 # Subgraph to directory mappings
 subgraphs:
@@ -230,7 +231,7 @@ nodes:
     paths: ["packages/backend/src/infrastructure/http/controllers/"]
     validation_strategy: directory
     status: EXISTS
-    note: "AuthController, AssessmentController, VendorController, ExportController, etc."
+    note: "AuthController, AssessmentController, VendorController, ExportController, DocumentUploadController (Epic 31: uses BackgroundExtractor for async extraction)"
 
   # === Backend Layer - WebSocket Handlers (Epic 28) ===
   ConnectionHandler:
@@ -252,7 +253,7 @@ nodes:
     exports: ["MessageHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Core message processing, streaming, tool use orchestration"
+    note: "Core message processing, streaming, tool use orchestration. Epic 31: waitForFileRecords() retry logic for async extraction race condition"
 
   ModeSwitchHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeSwitchHandler.ts"]
@@ -326,6 +327,21 @@ nodes:
     validation_strategy: export
     status: EXISTS
     note: "Tracks tool use blocks during Claude streaming responses"
+
+  # === Backend Layer - Extraction Infrastructure (Epic 31) ===
+  BackgroundExtractor:
+    paths: ["packages/backend/src/infrastructure/extraction/BackgroundExtractor.ts"]
+    exports: ["BackgroundExtractor"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 31: Fire-and-forget async text extraction service. Decouples upload from extraction for parallel performance."
+
+  TextExtractionService:
+    paths: ["packages/backend/src/infrastructure/extraction/TextExtractionService.ts"]
+    exports: ["TextExtractionService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 18/31: Fast text extraction from PDF/DOCX/images. Used by BackgroundExtractor for async extraction."
 
   # === Services Layer ===
   AuthService:
@@ -601,6 +617,10 @@ not_in_diagram:
   interfaces:
     - IVisionContentBuilder: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
     - VisionFileDTO: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
+
+  # Epic 31: Background extraction interface
+  extraction_interfaces:
+    - IBackgroundExtractor: "packages/backend/src/application/interfaces/IBackgroundExtractor.ts"
 
 # Edge rules for relational validation
 edge_rules:

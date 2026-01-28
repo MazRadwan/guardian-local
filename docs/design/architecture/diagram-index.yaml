@@ -1,8 +1,8 @@
 # Diagram Index - Auto-maintained by diagram-updater-agent
 # This file tracks all architecture diagrams and their validation status
 
-last_processed_commit: "638ad03"
-last_updated: "2026-01-26"
+last_processed_commit: "4907916"
+last_updated: "2026-01-27"
 
 diagrams:
   - id: architecture-latest
@@ -20,6 +20,7 @@ diagrams:
       - data
       - overview
       - vision
+      - extraction
     description: |
       Comprehensive flowchart showing Guardian's layered architecture:
       Presentation (Next.js/React) → Hooks/State → WebSocket → Backend → Services → Domain → Data
@@ -30,3 +31,7 @@ diagrams:
       Epic 30 update: Added Vision API support - VisionContentBuilder converts images to
       ImageContentBlock, FileContextBuilder.buildWithImages() returns FileContextResult with
       imageBlocks, ClaudeClient.streamMessage() accepts imageBlocks parameter.
+      Epic 31 update: Added async extraction infrastructure - BackgroundExtractor for
+      fire-and-forget text extraction, decouples upload from extraction for parallel
+      file upload performance. MessageHandler has waitForFileRecords() retry logic.
+      Socket.IO pingTimeout/pingInterval increased for long-running operations.

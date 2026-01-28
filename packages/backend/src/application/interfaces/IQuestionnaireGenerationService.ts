@@ -2,9 +2,11 @@
  * IQuestionnaireGenerationService - Interface for questionnaire generation
  *
  * Part of Epic 12.5: Hybrid Questionnaire Generation Architecture
+ * Updated Epic 32: Added progress emission support
  */
 
 import { QuestionnaireSchema } from '../../domain/types/QuestionnaireSchema.js';
+import { IProgressEmitter } from './IProgressEmitter.js';
 
 /**
  * Context for questionnaire generation
@@ -57,8 +59,9 @@ export interface IQuestionnaireGenerationService {
    * persists to database, and returns schema + markdown.
    *
    * @param context - Generation context from conversation
+   * @param progressEmitter - Optional progress emitter for timer-based progress updates
    * @returns Schema, assessment ID, and pre-rendered markdown
    * @throws Error if Claude returns invalid JSON or generation fails
    */
-  generate(context: GenerationContext): Promise<GenerationResult>;
+  generate(context: GenerationContext, progressEmitter?: IProgressEmitter): Promise<GenerationResult>;
 }

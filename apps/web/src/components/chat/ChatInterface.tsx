@@ -93,6 +93,12 @@ export function ChatInterface() {
   // Epic 21 Story 21.7: Sidebar minimized state for canvas logo
   const sidebarMinimized = useChatStore((state) => state.sidebarMinimized);
 
+  // Epic 32.2.1: Questionnaire progress state
+  const questionnaireProgress = useChatStore((state) => state.questionnaireProgress);
+
+  // Epic 32.2.3: Reconnection state
+  const isReconnecting = useChatStore((state) => state.isReconnecting);
+
   // Get export data for active conversation
   const exportData = activeConversationId
     ? exportReadyByConversation[activeConversationId]
@@ -490,6 +496,10 @@ export function ChatInterface() {
                     currentStep: currentGenerationStep,
                     isRunning: isGeneratingQuestionnaire,
                     insertIndex: questionnaireMessageIndex,
+                    // Epic 32.2.1: Pass progress for dimension-level feedback
+                    progress: questionnaireProgress,
+                    // Epic 32.2.3: Pass reconnection state
+                    isReconnecting,
                   }
                 : undefined
             }

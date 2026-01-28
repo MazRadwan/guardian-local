@@ -12,6 +12,7 @@ import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload, VendorClarif
 import { ChevronDown, ShieldCheck } from 'lucide-react';
 import type { Step } from '@/types/stepper';
 import type { QuestionnaireUIState } from './QuestionnairePromptCard';
+import type { ProgressInfo } from './VerticalStepper';
 import type { ScoringResultData, ScoringStatus } from '@/types/scoring';
 
 export interface MessageListProps {
@@ -36,6 +37,10 @@ export interface MessageListProps {
     isRunning?: boolean;
     /** Position in message list (-1 = append at end) */
     insertIndex: number;
+    /** Epic 32.2.2: Questionnaire progress (dimension-level feedback) */
+    progress?: ProgressInfo | null;
+    /** Epic 32.2.3: Whether reconnection is in progress */
+    isReconnecting?: boolean;
   };
   /** Epic 15 Story 5c: Scoring result to display at end of messages */
   scoringResult?: ScoringResultData | null;
@@ -225,6 +230,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                     currentStep={questionnaire.currentStep}
                     isRunning={questionnaire.isRunning}
                     timestamp={new Date()}
+                    progress={questionnaire.progress}
+                    isReconnecting={questionnaire.isReconnecting}
                   />
                 )}
                 <ChatMessage
@@ -257,6 +264,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                 currentStep={questionnaire.currentStep}
                 isRunning={questionnaire.isRunning}
                 timestamp={new Date()}
+                progress={questionnaire.progress}
+                isReconnecting={questionnaire.isReconnecting}
               />
             )}
 

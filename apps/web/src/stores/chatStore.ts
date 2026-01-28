@@ -1,9 +1,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload, ScoringCompletePayload, VendorClarificationNeededPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, QuestionnaireReadyPayload, ScoringCompletePayload, VendorClarificationNeededPayload, QuestionnaireProgressPayload } from '@/lib/websocket';
 import type { Step } from '@/types/stepper';
 import { GENERATION_STEPS } from '@/types/stepper';
 import type { ScoringStatus, ScoringProgressEvent } from '@/types/scoring';
+
+/**
+ * Epic 32.2.1: Questionnaire progress state
+ * Ephemeral UI state - NOT persisted to localStorage
+ */
+export interface QuestionnaireProgressState {
+  message: string;
+  step: number;
+  totalSteps: number;
+  timestamp: number;
+  seq: number;
+}
 
 // Re-export for convenience
 export { GENERATION_STEPS };
@@ -156,6 +168,19 @@ export interface ChatState {
    * Cleared after the message is rendered with streaming
    */
   simulateStreamingForNext: boolean;
+
+  /**
+   * Epic 32.2.1: Questionnaire generation progress (dimension-level feedback)
+   * Ephemeral state - NOT persisted to localStorage
+   * null = no progress yet or cleared
+   */
+  questionnaireProgress: QuestionnaireProgressState | null;
+
+  /**
+   * Epic 32.2.3: Reconnection state tracking
+   * Used to preserve progress during reconnection
+   */
+  isReconnecting: boolean;
 
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
@@ -341,6 +366,19 @@ export interface ChatState {
    * Called when switching to assessment/scoring mode
    */
   setSimulateStreamingForNext: (value: boolean) => void;
+
+  /**
+   * Epic 32.2.1: Set questionnaire progress
+   * Includes ordering protection - rejects events with old seq
+   * @param progress - Progress state or null to clear
+   */
+  setQuestionnaireProgress: (progress: QuestionnaireProgressState | null) => void;
+
+  /**
+   * Epic 32.2.3: Set reconnection state
+   * @param value - Whether currently reconnecting
+   */
+  setReconnecting: (value: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -403,6 +441,12 @@ export const useChatStore = create<ChatState>()(
 
       // Story 24.5: Simulated streaming flag - defaults
       simulateStreamingForNext: false,
+
+      // Epic 32.2.1: Questionnaire progress - defaults (ephemeral)
+      questionnaireProgress: null,
+
+      // Epic 32.2.3: Reconnection state - defaults
+      isReconnecting: false,
 
       addMessage: (message) =>
         set((state) => ({
@@ -553,6 +597,8 @@ export const useChatStore = create<ChatState>()(
         get().setGenerating(false);
         // Reset stepper on conversation change (Story 13.4.2)
         get().resetGenerationStep();
+        // Epic 32.2.1: Clear questionnaire progress on conversation switch
+        set({ questionnaireProgress: null });
       },
 
       // Delete conversation immediately (used by tests and direct local operations)
@@ -904,6 +950,36 @@ export const useChatStore = create<ChatState>()(
       setSimulateStreamingForNext: (value) => {
         console.log('[chatStore] Setting simulateStreamingForNext:', value);
         set({ simulateStreamingForNext: value });
+      },
+
+      // Epic 32.2.1: Set questionnaire progress with ordering protection
+      setQuestionnaireProgress: (progress) => {
+        set((state) => {
+          // Clearing progress - check reconnection state
+          if (progress === null) {
+            // Epic 32.2.3: Don't clear during reconnection
+            if (state.isReconnecting) {
+              console.log('[chatStore] Ignoring progress clear during reconnection');
+              return state;
+            }
+            return { questionnaireProgress: null };
+          }
+
+          // Setting progress - apply ordering protection
+          if (state.questionnaireProgress && progress.seq <= state.questionnaireProgress.seq) {
+            console.log('[chatStore] Ignoring out-of-order progress event:', progress.seq, '<=', state.questionnaireProgress.seq);
+            return state;
+          }
+
+          console.log('[chatStore] Setting questionnaireProgress:', progress.step, '/', progress.totalSteps, '-', progress.message);
+          return { questionnaireProgress: progress };
+        });
+      },
+
+      // Epic 32.2.3: Set reconnection state
+      setReconnecting: (value) => {
+        console.log('[chatStore] Setting isReconnecting:', value);
+        set({ isReconnecting: value });
       },
     }),
     {
