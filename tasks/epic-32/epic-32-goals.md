@@ -80,10 +80,10 @@ QuestionnaireService.generate()
 | Component | Layer | Responsibility |
 |-----------|-------|----------------|
 | `IProgressEmitter` | Application | Interface for emitting progress |
-| `QuestionnaireService` | Application | Calls emitter at key milestones |
-| `WebSocketProgressEmitter` | Infrastructure | Implements IProgressEmitter via Socket.IO |
-| `QuestionnaireHandler` | Infrastructure | Wires emitter to WebSocket room |
-| `QuestionnaireWizard` | Frontend | Subscribes to progress events, updates stepper |
+| `QuestionnaireGenerationService` | Application | Calls emitter at timer intervals |
+| `SocketProgressEmitter` | Infrastructure | Implements IProgressEmitter via direct socket.emit() |
+| `QuestionnaireHandler` | Infrastructure | Wires emitter to requesting socket |
+| `VerticalStepper` + `chatStore` | Frontend | Receives progress events, updates stepper display |
 
 ## Scope
 
@@ -113,13 +113,13 @@ QuestionnaireService.generate()
 
 - Progress messages are generic, contain no user data
 - No PHI or PII in progress events
-- Events scoped to user's session only (WebSocket room isolation)
+- Events scoped to requesting socket only (direct socket.emit(), not broadcast)
 
 ## Dependencies
 
 - Existing WebSocket infrastructure (Socket.IO)
-- QuestionnaireService (current implementation)
-- Frontend QuestionnaireWizard component
+- QuestionnaireGenerationService (current implementation)
+- Frontend VerticalStepper + chatStore (existing chat-first architecture)
 
 ## Sprints
 
