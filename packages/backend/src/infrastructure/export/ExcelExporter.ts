@@ -98,6 +98,16 @@ export class ExcelExporter implements IExcelExporter {
 
     // Add blank row
     worksheet.addRow([])
+
+    // Add "All fields are required" note
+    worksheet.mergeCells('A7:D7')
+    const requiredNoteCell = worksheet.getCell('A7')
+    requiredNoteCell.value = 'Note: All fields are required.'
+    requiredNoteCell.font = { bold: true, italic: true, color: { argb: 'FF475569' } }
+    requiredNoteCell.alignment = { horizontal: 'left' }
+
+    // Add blank row after note
+    worksheet.addRow([])
   }
 
   /**
@@ -171,13 +181,6 @@ export class ExcelExporter implements IExcelExporter {
         }
         questionRow.alignment = { vertical: 'top', wrapText: true }
         questionRow.height = 40
-
-        // Add metadata as comment if present (required indicator only - help text removed from display)
-        const metadata = question.questionMetadata || {}
-        if (metadata.required) {
-          const questionCell = worksheet.getCell(`C${currentRow}`)
-          questionCell.note = '* Required'
-        }
 
         currentRow++
       })

@@ -236,7 +236,7 @@ describe('ExcelExporter Integration Tests', () => {
       expect(coloredRows).toBeGreaterThan(0)
     })
 
-    it('should handle question metadata as comments', async () => {
+    it('should include "All fields are required" note in header', async () => {
       const vendor = Vendor.create({
         name: 'Metadata Vendor',
         industry: 'Retail',
@@ -271,7 +271,7 @@ describe('ExcelExporter Integration Tests', () => {
         questions,
       })
 
-      // Parse Excel to verify comments/notes
+      // Parse Excel to verify the required note in header
       const workbook = new ExcelJS.Workbook()
       // @ts-expect-error - Node.js 22 Buffer type incompatible with ExcelJS types
       await workbook.xlsx.load(excelBuffer)
@@ -279,18 +279,9 @@ describe('ExcelExporter Integration Tests', () => {
       const worksheet = workbook.getWorksheet('Assessment Questionnaire')
       if (!worksheet) throw new Error('Worksheet not found')
 
-      // Look for cells with notes
-      let hasNotes = false
-      worksheet.eachRow((row) => {
-        row.eachCell((cell) => {
-          if (cell.note) {
-            hasNotes = true
-          }
-        })
-      })
-
-      // Should have at least one note (for the metadata)
-      expect(hasNotes).toBe(true)
+      // Check for "All fields are required" note in header area (row 7)
+      const requiredNote = worksheet.getCell('A7').value
+      expect(requiredNote).toBe('Note: All fields are required.')
     })
 
     it('should freeze header row', async () => {

@@ -178,6 +178,17 @@ export class WordExporter implements IWordExporter {
       }),
       new Paragraph({
         text: 'Please provide detailed responses to all questions. Your answers will be used to evaluate the vendor\'s suitability and identify any gaps that need to be addressed.',
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'Note: All fields are required.',
+            bold: true,
+            italics: true,
+            color: '475569',
+          }),
+        ],
         spacing: { after: 400 },
       }),
     ]
@@ -247,25 +258,6 @@ export class WordExporter implements IWordExporter {
         spacing: { after: 100 },
       })
     )
-
-    // Metadata (required indicator only - help text removed from display)
-    const metadata = question.questionMetadata || {}
-
-    if (metadata.required) {
-      elements.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: '* Required',
-              italics: true,
-              color: 'DC2626',
-              size: 18,
-            }),
-          ],
-          spacing: { after: 100 },
-        })
-      )
-    }
 
     // Response area (fillable text box using table)
     elements.push(
