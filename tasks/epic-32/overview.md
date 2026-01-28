@@ -16,6 +16,19 @@ Stream progress messages during questionnaire generation to replace the frozen 6
 | **Reconnection handling**: Graceful degradation on connection drop | Encoded in Sprint 2 |
 | **No regression**: Questionnaire quality/format unchanged | Encoded in Sprint 2 |
 
+## Implementation Guardrails
+
+**CRITICAL: Follow these constraints during implementation.**
+
+| Guardrail | Reason |
+|-----------|--------|
+| Do NOT reuse `assistant_token` event for progress | Would interfere with existing message streaming |
+| Use dedicated `questionnaire_progress` event | Clean separation of concerns |
+| Store progress in ephemeral UI state only | Not in messages, not in database |
+| Include monotonic `seq` number in events | Ordering protection - client can reject out-of-order |
+| Use direct socket emission (NOT room-based) | Matches existing ChatServer patterns |
+| Timer-based progress (NOT actual status) | Single Claude call means no real-time dimension tracking |
+
 ## Sprints
 
 | Sprint | Focus | Stories | Estimated |
@@ -85,35 +98,38 @@ Day 2: frontend-agent (after Sprint 1 complete)
 
 ### New Files
 - `packages/backend/src/application/interfaces/IProgressEmitter.ts`
-- `packages/backend/src/infrastructure/websocket/emitters/WebSocketProgressEmitter.ts`
+- `packages/backend/src/infrastructure/websocket/emitters/SocketProgressEmitter.ts`
+- `packages/backend/src/infrastructure/websocket/emitters/index.ts`
 - `packages/backend/__tests__/unit/application/interfaces/IProgressEmitter.test.ts`
-- `packages/backend/__tests__/unit/infrastructure/websocket/emitters/WebSocketProgressEmitter.test.ts`
+- `packages/backend/__tests__/unit/infrastructure/websocket/emitters/SocketProgressEmitter.test.ts`
 
 ### Modified Files
-- `packages/backend/src/application/services/QuestionnaireService.ts` - Add progress emission
+- `packages/backend/src/application/services/QuestionnaireGenerationService.ts` - Add progress emission
 - `packages/backend/src/application/interfaces/index.ts` - Export IProgressEmitter
 - `packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts` - Wire emitter
-- `packages/backend/src/index.ts` - DI wiring
-- `apps/web/src/components/questionnaire/QuestionnaireWizard.tsx` - Progress display
-- `apps/web/src/hooks/useQuestionnaireSocket.ts` - Event subscription (if exists)
+- `apps/web/src/lib/websocket.ts` - Add onQuestionnaireProgress method
+- `apps/web/src/stores/chatStore.ts` - Add questionnaireProgress state
+- `apps/web/src/components/chat/VerticalStepper.tsx` - Progress display
+- `apps/web/src/components/chat/ChatInterface.tsx` - Pass progress to stepper
+- `apps/web/src/hooks/useWebSocket.ts` - Wire progress subscription
 
 ## WebSocket Protocol Extension
 
 ### New Event: `questionnaire_progress`
 
 ```typescript
-// Server → Client
+// Server → Client (direct socket emission, NOT room-based)
 interface QuestionnaireProgressEvent {
-  type: 'questionnaire_progress';
-  payload: {
-    conversationId: string;
-    message: string;      // e.g., "Generating questions for Data Security..."
-    step: number;         // 1-based step number (1-10 for risk dimensions)
-    totalSteps: number;   // Total expected steps (10 + validation)
-    timestamp: number;    // Unix timestamp for ordering
-  };
+  conversationId: string;
+  message: string;      // e.g., "Generating questions for Data Security..."
+  step: number;         // 1-based step number (1-11 for curated messages)
+  totalSteps: number;   // Total expected steps (typically 11)
+  timestamp: number;    // Unix timestamp for ordering
+  seq: number;          // Monotonic sequence number (client can reject out-of-order)
 }
 ```
+
+**Note:** Progress is timer-based (every ~5s), NOT tied to actual dimension completion.
 
 ### Existing Event: `questionnaire_complete` (unchanged)
 

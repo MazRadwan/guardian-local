@@ -2,7 +2,11 @@
 
 ## Goal
 
-Establish the progress emission infrastructure and integrate it into QuestionnaireService and WebSocket handlers.
+Establish the progress emission infrastructure and integrate it into QuestionnaireGenerationService and WebSocket handlers.
+
+**IMPORTANT: Progress is timer-based perceived progress, NOT actual generation status.**
+
+Since questionnaire generation is a single Claude API call, the backend cannot know which dimension Claude is currently processing. Progress events are curated messages emitted on a timer interval to improve perceived responsiveness. This is a UX enhancement, not a true progress indicator.
 
 ## Stories
 
@@ -25,6 +29,7 @@ export interface ProgressEvent {
   step: number;
   totalSteps: number;
   timestamp: number;
+  seq: number;  // Monotonic sequence number for ordering protection
 }
 
 export interface IProgressEmitter {
@@ -33,13 +38,14 @@ export interface IProgressEmitter {
    * @param message - Human-readable progress message
    * @param step - Current step number (1-based)
    * @param totalSteps - Total expected steps
+   * @param seq - Monotonic sequence number (client can reject out-of-order events)
    */
-  emit(message: string, step: number, totalSteps: number): void;
+  emit(message: string, step: number, totalSteps: number, seq: number): void;
 }
 
 // No-op implementation for when progress isn't needed
 export class NullProgressEmitter implements IProgressEmitter {
-  emit(_message: string, _step: number, _totalSteps: number): void {
+  emit(_message: string, _step: number, _totalSteps: number, _seq: number): void {
     // Intentionally empty - used when no progress reporting needed
   }
 }
@@ -57,158 +63,207 @@ export class NullProgressEmitter implements IProgressEmitter {
 
 ---
 
-### 32.1.2: Integrate Progress Emission into QuestionnaireService
+### 32.1.2: Integrate Progress Emission into QuestionnaireGenerationService
 
-**Description:** Update QuestionnaireService to accept an optional IProgressEmitter and emit progress events at key milestones during questionnaire generation.
+**Description:** Update QuestionnaireGenerationService to accept an optional IProgressEmitter and emit timer-based progress events during questionnaire generation.
 
 **Acceptance Criteria:**
-- [ ] `QuestionnaireService.generate()` accepts optional `progressEmitter?: IProgressEmitter`
-- [ ] Emits progress at start: "Analyzing vendor context..."
-- [ ] Emits progress for each risk dimension: "Generating questions for {dimension}..."
-- [ ] Emits progress at validation: "Validating questionnaire structure..."
-- [ ] Emits progress at completion: "Finalizing questionnaire..."
+- [ ] `QuestionnaireGenerationService.generate()` accepts optional `progressEmitter?: IProgressEmitter`
+- [ ] Starts a timer-based progress loop when generation begins
+- [ ] Emits progress messages from curated list at ~5-second intervals
+- [ ] Stops timer when Claude call completes (success or error)
 - [ ] Works without emitter (backward compatible - uses NullProgressEmitter)
-- [ ] Total of ~12 progress events (1 start + 10 dimensions + 1 validation)
+- [ ] Progress events include monotonic `seq` number for ordering protection
+- [ ] Total of ~10-12 progress events (spread over typical 60s generation time)
 
 **Technical Approach:**
 ```typescript
-// QuestionnaireService.ts
+// packages/backend/src/application/services/QuestionnaireGenerationService.ts
 
-const RISK_DIMENSIONS = [
-  'Data Security',
-  'Data Privacy',
-  'Model Risk',
-  'Operational Resilience',
-  'Vendor Governance',
-  'Regulatory Compliance',
-  'Ethical AI',
-  'Transparency',
-  'Clinical Safety',
-  'Financial Risk',
+import { IProgressEmitter, NullProgressEmitter } from '../interfaces/IProgressEmitter.js';
+
+const PROGRESS_MESSAGES = [
+  'Analyzing vendor context...',
+  'Identifying applicable risk dimensions...',
+  'Generating questions for Data Security...',
+  'Generating questions for Data Privacy...',
+  'Generating questions for Model Risk...',
+  'Generating questions for Vendor Governance...',
+  'Generating questions for Regulatory Compliance...',
+  'Generating questions for Ethical AI...',
+  'Generating questions for Clinical Safety...',
+  'Validating questionnaire structure...',
+  'Finalizing questionnaire...',
 ] as const;
 
 async generate(
-  context: VendorContext,
+  context: GenerationContext,
   progressEmitter: IProgressEmitter = new NullProgressEmitter()
-): Promise<Questionnaire> {
-  const totalSteps = RISK_DIMENSIONS.length + 2; // dimensions + start/end
+): Promise<GenerationResult> {
+  const totalSteps = PROGRESS_MESSAGES.length;
+  let currentStep = 0;
+  let seq = 0;
 
-  progressEmitter.emit('Analyzing vendor context...', 1, totalSteps);
+  // Start timer-based progress emission (every 5 seconds)
+  const progressInterval = setInterval(() => {
+    if (currentStep < totalSteps) {
+      progressEmitter.emit(PROGRESS_MESSAGES[currentStep], currentStep + 1, totalSteps, ++seq);
+      currentStep++;
+    }
+  }, 5000);
 
-  // During generation, emit dimension-specific progress
-  // Note: Since generation is a single Claude call, we emit before the call
-  // and estimate timing based on typical generation patterns
+  // Emit first message immediately
+  progressEmitter.emit(PROGRESS_MESSAGES[0], 1, totalSteps, ++seq);
+  currentStep = 1;
 
-  for (let i = 0; i < RISK_DIMENSIONS.length; i++) {
-    progressEmitter.emit(
-      `Generating questions for ${RISK_DIMENSIONS[i]}...`,
-      i + 2,
-      totalSteps
-    );
-    // In reality, this happens during the Claude call
-    // We'll emit these at intervals during the streaming response
+  try {
+    // Single Claude call - cannot know actual dimension progress
+    const response = await this.claudeClient.sendMessage(...);
+
+    // Clear timer and emit completion
+    clearInterval(progressInterval);
+    progressEmitter.emit('Finalizing questionnaire...', totalSteps, totalSteps, ++seq);
+
+    // ... rest of validation and persistence logic
+  } catch (error) {
+    clearInterval(progressInterval);
+    throw error;
   }
-
-  progressEmitter.emit('Validating questionnaire structure...', totalSteps, totalSteps);
-
-  // ... actual generation logic
 }
 ```
 
-**Implementation Note:** Since questionnaire generation is a single Claude call, we have two options:
-1. **Option A (simpler):** Emit all progress before the call, with delays
-2. **Option B (accurate):** Parse Claude's streaming response and emit progress when dimension patterns detected
+**CRITICAL: Timer-Based Progress**
 
-Start with Option A; refine to Option B if needed.
+Since questionnaire generation is a single Claude API call (~60s), we CANNOT know:
+- Which dimension Claude is currently processing
+- Actual progress percentage
+- When a specific dimension completes
+
+Progress messages are **perceived progress** - curated messages emitted on a timer to improve UX. They are NOT actual generation status.
 
 **Files Touched:**
-- `packages/backend/src/application/services/QuestionnaireService.ts` - Add progressEmitter parameter and emissions
+- `packages/backend/src/application/services/QuestionnaireGenerationService.ts` - Add progressEmitter parameter and timer-based emissions
 - `packages/backend/src/application/interfaces/IProgressEmitter.ts` - Import NullProgressEmitter
 
 **Agent:** backend-agent
 
 **Tests Required:**
-- `QuestionnaireService.test.ts` - Verify progress events emitted in correct order
-- `QuestionnaireService.test.ts` - Verify works without emitter (backward compat)
-- `QuestionnaireService.test.ts` - Verify correct step numbers and totals
+- `QuestionnaireGenerationService.test.ts` - Verify timer starts on generate call
+- `QuestionnaireGenerationService.test.ts` - Verify timer stops on completion
+- `QuestionnaireGenerationService.test.ts` - Verify timer stops on error
+- `QuestionnaireGenerationService.test.ts` - Verify works without emitter (backward compat)
+- `QuestionnaireGenerationService.test.ts` - Verify seq numbers are monotonically increasing
+- `QuestionnaireGenerationService.test.ts` - Verify progress events emitted only for correct conversation (no cross-conversation leaks)
+- `QuestionnaireGenerationService.test.ts` - Verify concurrent generations don't interfere with each other
 
 ---
 
 ### 32.1.3: WebSocket Progress Event Type
 
-**Description:** Create the WebSocket event handler infrastructure to broadcast progress events to connected clients.
+**Description:** Create the WebSocket event handler infrastructure to emit progress events to the connected client socket.
 
 **Acceptance Criteria:**
-- [ ] `WebSocketProgressEmitter` implements `IProgressEmitter`
-- [ ] Emits `questionnaire_progress` event via Socket.IO
-- [ ] Events scoped to conversation room (not broadcast to all users)
-- [ ] Event payload includes conversationId, message, step, totalSteps, timestamp
-- [ ] Registered in DI and available to QuestionnaireHandler
+- [ ] `SocketProgressEmitter` implements `IProgressEmitter`
+- [ ] Emits `questionnaire_progress` event via direct socket emission (NOT room-based)
+- [ ] Event payload includes conversationId, message, step, totalSteps, timestamp, seq
+- [ ] Events only sent to the socket that initiated the generation request
+- [ ] Available to QuestionnaireHandler via factory function
 
 **Technical Approach:**
+
+**CRITICAL: Use direct socket emission, NOT room-based emission.**
+
+Guardian's ChatServer uses direct socket emission (`socket.emit()`) for all events, NOT room-based broadcasting (`io.to('conversation:${id}').emit()`). This is because:
+1. Users only connect to their own conversations
+2. Progress events are specific to the requesting client
+3. Room-based emission is unnecessary overhead
+
 ```typescript
-// packages/backend/src/infrastructure/websocket/emitters/WebSocketProgressEmitter.ts
+// packages/backend/src/infrastructure/websocket/emitters/SocketProgressEmitter.ts
 
-import { Server, Socket } from 'socket.io';
-import { IProgressEmitter, ProgressEvent } from '@/application/interfaces';
+import type { Socket } from 'socket.io';
+import { IProgressEmitter, ProgressEvent } from '../../application/interfaces/IProgressEmitter.js';
 
-export class WebSocketProgressEmitter implements IProgressEmitter {
+/**
+ * WebSocket progress emitter that emits directly to the client socket.
+ *
+ * Uses direct socket.emit() (NOT io.to(room).emit()) to match ChatServer patterns.
+ * Progress events are client-specific, not broadcast to conversation rooms.
+ */
+export class SocketProgressEmitter implements IProgressEmitter {
   constructor(
-    private readonly io: Server,
+    private readonly socket: Socket,
     private readonly conversationId: string
   ) {}
 
-  emit(message: string, step: number, totalSteps: number): void {
-    const event: ProgressEvent = {
+  emit(message: string, step: number, totalSteps: number, seq: number): void {
+    const event: ProgressEvent & { conversationId: string; seq: number } = {
+      conversationId: this.conversationId,
       message,
       step,
       totalSteps,
       timestamp: Date.now(),
+      seq,
     };
 
-    // Emit to conversation room only
-    this.io.to(`conversation:${this.conversationId}`).emit('questionnaire_progress', {
-      conversationId: this.conversationId,
-      ...event,
-    });
+    // Direct socket emission - NOT room-based
+    this.socket.emit('questionnaire_progress', event);
   }
 }
 
 // Factory function for creating emitters
-export function createProgressEmitter(
-  io: Server,
+export function createSocketProgressEmitter(
+  socket: Socket,
   conversationId: string
 ): IProgressEmitter {
-  return new WebSocketProgressEmitter(io, conversationId);
+  return new SocketProgressEmitter(socket, conversationId);
 }
 ```
 
 ```typescript
-// In QuestionnaireHandler.ts
-async handleGenerateQuestionnaire(socket: Socket, payload: GeneratePayload): Promise<void> {
-  const progressEmitter = createProgressEmitter(this.io, payload.conversationId);
+// In packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts
+import { createSocketProgressEmitter } from '../emitters/SocketProgressEmitter.js';
 
-  const questionnaire = await this.questionnaireService.generate(
-    payload.context,
+async handleGenerateQuestionnaire(
+  socket: IAuthenticatedSocket,
+  payload: GenerateQuestionnairePayload,
+  userId: string,
+  chatContext: ChatContext
+): Promise<void> {
+  // ... validation ...
+
+  // Create progress emitter bound to this socket
+  const progressEmitter = createSocketProgressEmitter(socket, payload.conversationId);
+
+  // Pass emitter to generation service
+  const result = await this.questionnaireGenerationService.generate(
+    {
+      conversationId: payload.conversationId,
+      userId,
+      assessmentType,
+      vendorName,
+      solutionName,
+      contextSummary,
+      selectedCategories,
+    },
     progressEmitter
   );
 
-  socket.emit('questionnaire_complete', { conversationId, questionnaire });
+  // ... rest of handler logic (unchanged)
 }
 ```
 
 **Files Touched:**
-- `packages/backend/src/infrastructure/websocket/emitters/WebSocketProgressEmitter.ts` - NEW: WebSocket implementation
+- `packages/backend/src/infrastructure/websocket/emitters/SocketProgressEmitter.ts` - NEW: Socket-based implementation
 - `packages/backend/src/infrastructure/websocket/emitters/index.ts` - NEW: Export emitter
 - `packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts` - Wire emitter to generate call
-- `packages/backend/src/index.ts` - Ensure handler has access to io instance
 
 **Agent:** backend-agent
 
 **Tests Required:**
-- `WebSocketProgressEmitter.test.ts` - Verify emit calls io.to().emit()
-- `WebSocketProgressEmitter.test.ts` - Verify correct event structure
-- `WebSocketProgressEmitter.test.ts` - Verify room scoping (conversation ID)
+- `SocketProgressEmitter.test.ts` - Verify emit calls socket.emit()
+- `SocketProgressEmitter.test.ts` - Verify correct event structure including seq
+- `SocketProgressEmitter.test.ts` - Verify conversationId in payload
 - `QuestionnaireHandler.test.ts` - Integration test: verify progress events during generation
 
 ---

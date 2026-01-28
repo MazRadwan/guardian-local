@@ -26,7 +26,18 @@ When users generate a questionnaire:
 
 ## Technical Approach
 
-### Architecture: Progress Event Streaming
+### Architecture: Timer-Based Perceived Progress
+
+**Key Design Decision:** Stream curated progress messages on a timer, NOT actual generation status.
+
+**CRITICAL UNDERSTANDING:**
+
+Since questionnaire generation is a **single Claude API call** (~60 seconds, ~32K tokens output), the backend **CANNOT know**:
+- Which risk dimension Claude is currently processing
+- Actual progress percentage
+- When a specific dimension completes
+
+Progress messages are **perceived progress** - curated messages emitted on a fixed timer interval (every ~5 seconds) to improve UX. They are NOT actual generation status. This is a common UX pattern for long-running operations where true progress cannot be measured.
 
 **Key Design Decision:** Stream whitelisted progress messages, NOT actual content.
 
@@ -123,6 +134,8 @@ QuestionnaireService.generate()
 
 ## References
 
-- Current QuestionnaireService: `packages/backend/src/application/services/QuestionnaireService.ts`
-- WebSocket handlers: `packages/backend/src/infrastructure/websocket/handlers/`
-- Frontend wizard: `apps/web/src/components/questionnaire/QuestionnaireWizard.tsx`
+- QuestionnaireGenerationService: `packages/backend/src/application/services/QuestionnaireGenerationService.ts`
+- WebSocket handlers: `packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts`
+- Frontend stepper: `apps/web/src/components/chat/VerticalStepper.tsx`
+- Chat store: `apps/web/src/stores/chatStore.ts`
+- WebSocket client: `apps/web/src/lib/websocket.ts`
