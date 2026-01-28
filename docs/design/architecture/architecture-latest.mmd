@@ -60,8 +60,13 @@ flowchart TB
     StreamingHandler["StreamingHandler"]
     ToolUseRegistry["ToolUseRegistry"]
 
+    subgraph Extraction["Extraction Infrastructure (Epic 31)"]
+      BackgroundExtractor["BackgroundExtractor\n(async text extraction)"]
+      TextExtractionService["TextExtractionService"]
+    end
+
     HttpRoutes["HTTP routes:\n/api/auth\n/api/vendors\n/api/assessments\n/api/questions\n/api/assessments/:id/export/{pdf|word|excel}"]
-    Controllers["Auth / Vendor / Assessment /\nQuestion / Export Controllers"]
+    Controllers["Auth / Vendor / Assessment /\nQuestion / Export / Document Controllers"]
   end
 
   subgraph Services["Application Services"]
@@ -181,6 +186,10 @@ flowchart TB
   QuestionnaireHandler --> QuestionnaireReadyService
   QuestionnaireHandler --> QuestionnaireGenerationService
   ScoringHandler --> ScoringService
+
+  %% Epic 31: Async Extraction Pipeline
+  Controllers --> BackgroundExtractor
+  BackgroundExtractor --> TextExtractionService
 
   %% ChatServer to AI
   ChatServer --> PromptCacheManager
