@@ -231,7 +231,7 @@ describe('questionnaireToMarkdown', () => {
       expect(markdown).toContain('**3.** Third question here?');
     });
 
-    it('includes guidance when present', () => {
+    it('does not include guidance in output (removed from rendering)', () => {
       const schema = createSchema({
         sections: [
           createSection({
@@ -243,20 +243,9 @@ describe('questionnaireToMarkdown', () => {
       });
       const markdown = questionnaireToMarkdown(schema);
 
-      expect(markdown).toContain('> *Guidance: Consider HIPAA requirements.*');
-    });
-
-    it('omits guidance when not present', () => {
-      const schema = createSchema({
-        sections: [
-          createSection({
-            questions: [createQuestion({ guidance: undefined })],
-          }),
-        ],
-      });
-      const markdown = questionnaireToMarkdown(schema);
-
+      // Guidance should not be rendered (removed from display)
       expect(markdown).not.toContain('> *Guidance:');
+      expect(markdown).not.toContain('Consider HIPAA requirements.');
     });
 
     it('formats multiple choice options', () => {
@@ -404,7 +393,7 @@ describe('questionnaireToMarkdown', () => {
       expect(markdown).toContain('\\_underscores\\_');
     });
 
-    it('escapes markdown control characters in guidance', () => {
+    it('does not render guidance even with markdown control characters', () => {
       const schema = createSchema({
         sections: [
           createSection({
@@ -418,9 +407,9 @@ describe('questionnaireToMarkdown', () => {
       });
       const markdown = questionnaireToMarkdown(schema);
 
-      // Should escape backticks and asterisks
-      expect(markdown).toContain('\\`code\\`');
-      expect(markdown).toContain('\\*emphasis\\*');
+      // Guidance should not be rendered at all (removed from display)
+      expect(markdown).not.toContain('Guidance:');
+      expect(markdown).not.toContain('Check for');
     });
 
     it('escapes markdown control characters in multiple choice options', () => {

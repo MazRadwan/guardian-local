@@ -15,8 +15,6 @@
 
 **2.** How is PHI encrypted at rest?
 
-> *Guidance: Look for AES-256 or equivalent.*
-
 
 ---
 

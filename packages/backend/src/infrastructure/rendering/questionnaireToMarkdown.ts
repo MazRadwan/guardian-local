@@ -76,12 +76,6 @@ function formatQuestion(question: QuestionnaireQuestion, index: number): string 
   // Question with bold number prefix for clear visibility
   lines.push(`**${index + 1}.** ${escapeMarkdown(question.text)}`);
 
-  // Optional guidance on its own line with clear formatting
-  if (question.guidance) {
-    lines.push('');
-    lines.push(`> *Guidance: ${escapeMarkdown(question.guidance)}*`);
-  }
-
   // Options for multiple choice (escaped)
   if (question.questionType === 'multiple_choice' && question.options) {
     lines.push('');

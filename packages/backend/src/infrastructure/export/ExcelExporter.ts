@@ -172,19 +172,11 @@ export class ExcelExporter implements IExcelExporter {
         questionRow.alignment = { vertical: 'top', wrapText: true }
         questionRow.height = 40
 
-        // Add metadata as comment if present
+        // Add metadata as comment if present (required indicator only - help text removed from display)
         const metadata = question.questionMetadata || {}
-        if (metadata.helpText || metadata.required) {
-          const comments: string[] = []
-          if (metadata.helpText) {
-            comments.push(`Help: ${metadata.helpText}`)
-          }
-          if (metadata.required) {
-            comments.push('* Required')
-          }
-
+        if (metadata.required) {
           const questionCell = worksheet.getCell(`C${currentRow}`)
-          questionCell.note = comments.join('\n')
+          questionCell.note = '* Required'
         }
 
         currentRow++

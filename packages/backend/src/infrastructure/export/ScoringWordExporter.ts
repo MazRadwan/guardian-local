@@ -23,7 +23,10 @@ const RECOMMENDATION_COLORS = {
   more_info: { background: 'DBEAFE', text: '1E40AF' },
 };
 
-const BRAND_COLOR = '7C3AED'; // Purple
+const BRAND_COLOR = '1E40AF'; // Primary Blue
+const BRAND_COLOR_LIGHT = '3B82F6'; // Primary Light Blue
+const BRAND_BACKGROUND = 'EFF6FF'; // Light Blue Background
+const BRAND_BORDER = 'BFDBFE'; // Blue Border
 
 export class ScoringWordExporter implements IScoringWordExporter {
   async generateWord(data: ScoringExportData): Promise<Buffer> {
@@ -186,7 +189,7 @@ export class ScoringWordExporter implements IScoringWordExporter {
           }),
         ],
         spacing: { after: 100 },
-        shading: { type: ShadingType.CLEAR, fill: 'F5F3FF' },
+        shading: { type: ShadingType.CLEAR, fill: BRAND_BACKGROUND },
       }),
       new Paragraph({
         children: [
@@ -202,7 +205,7 @@ export class ScoringWordExporter implements IScoringWordExporter {
           }),
         ],
         spacing: { after: 400 },
-        shading: { type: ShadingType.CLEAR, fill: 'F5F3FF' },
+        shading: { type: ShadingType.CLEAR, fill: BRAND_BACKGROUND },
       }),
     ];
   }

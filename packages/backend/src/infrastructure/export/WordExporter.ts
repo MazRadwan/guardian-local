@@ -248,27 +248,8 @@ export class WordExporter implements IWordExporter {
       })
     )
 
-    // Metadata (help text, required)
+    // Metadata (required indicator only - help text removed from display)
     const metadata = question.questionMetadata || {}
-    if (metadata.helpText) {
-      elements.push(
-        new Paragraph({
-          children: [
-            new TextRun({
-              text: 'Help: ',
-              italics: true,
-              size: 18,
-            }),
-            new TextRun({
-              text: metadata.helpText,
-              italics: true,
-              size: 18,
-            }),
-          ],
-          spacing: { after: 50 },
-        })
-      )
-    }
 
     if (metadata.required) {
       elements.push(

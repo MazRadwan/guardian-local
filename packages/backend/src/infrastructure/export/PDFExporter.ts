@@ -182,9 +182,6 @@ export class PDFExporter implements IPDFExporter {
    */
   private renderQuestion(question: Question, sectionNumber: number): string {
     const metadata = question.questionMetadata || {}
-    const helpText = metadata.helpText
-      ? `<div class="question-metadata">Help: ${this.escapeHtml(metadata.helpText)}</div>`
-      : ''
     const requiredText = metadata.required
       ? `<div class="question-metadata" style="color: #dc2626;">* Required</div>`
       : ''
@@ -197,7 +194,6 @@ export class PDFExporter implements IPDFExporter {
         <div class="question-text">
           ${this.escapeHtml(question.questionText)}
         </div>
-        ${helpText}
         ${requiredText}
         <div class="response-area">
           <!-- Response area for vendor to fill in -->
