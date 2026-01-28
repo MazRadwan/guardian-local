@@ -314,7 +314,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
 
             {/* Epic 15 Story 5c: Scoring Result Card - inside scrollable area */}
             {scoringResult && scoringResult.assessmentId && (
-              <div className="py-4">
+              <div className="py-4 animate-fadeIn">
                 <ScoringResultCard result={scoringResult} />
               </div>
             )}

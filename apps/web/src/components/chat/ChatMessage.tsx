@@ -490,7 +490,7 @@ function EmbeddedScoringResult({ data }: { data: Record<string, any> }) {
   };
 
   return (
-    <div data-testid="scoring-result-component">
+    <div data-testid="scoring-result-component" className="animate-fadeIn">
       <ScoringResultCard result={result} />
     </div>
   );
