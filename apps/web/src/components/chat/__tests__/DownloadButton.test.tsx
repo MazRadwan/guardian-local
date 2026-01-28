@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { DownloadButton } from '../DownloadButton';
 
 // Mock useRouter
@@ -196,7 +196,7 @@ describe('DownloadButton', () => {
       fireEvent.click(button);
 
       // Should show loading text
-      expect(screen.getByText('Downloading...')).toBeInTheDocument();
+      expect(screen.getByText('Generating...')).toBeInTheDocument();
 
       await waitFor(() => {
         expect(screen.getByText('PDF')).toBeInTheDocument();
@@ -470,6 +470,169 @@ describe('DownloadButton', () => {
       await waitFor(() => {
         expect(global.URL.createObjectURL).toHaveBeenCalled();
         expect(global.URL.revokeObjectURL).toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('progress messages', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('shows status message during download', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      let resolveDownload: (value: unknown) => void;
+      (global.fetch as jest.Mock).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveDownload = resolve;
+          })
+      );
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      // Should show first status message
+      expect(screen.getByTestId('status-message')).toHaveTextContent(
+        'Generating detailed report...'
+      );
+
+      // Resolve the download
+      resolveDownload!(createMockResponse({ ok: true, status: 200, blob: mockBlob }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('status-message')).not.toBeInTheDocument();
+      });
+    });
+
+    it('cycles through status messages every 5 seconds', async () => {
+      let resolveDownload: (value: unknown) => void;
+      (global.fetch as jest.Mock).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveDownload = resolve;
+          })
+      );
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      // Should show first status message
+      expect(screen.getByTestId('status-message')).toHaveTextContent(
+        'Generating detailed report...'
+      );
+
+      // Advance timers by 5 seconds (wrapped in act for state update)
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      // Should show second status message
+      expect(screen.getByTestId('status-message')).toHaveTextContent('This may take a minute...');
+
+      // Advance timers by another 5 seconds
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      // Should cycle back to first message
+      expect(screen.getByTestId('status-message')).toHaveTextContent(
+        'Generating detailed report...'
+      );
+
+      // Clean up - resolve the pending promise
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      resolveDownload!(createMockResponse({ ok: true, status: 200, blob: mockBlob }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('status-message')).not.toBeInTheDocument();
+      });
+    });
+
+    it('clears status message on download error', async () => {
+      let rejectDownload: (reason: Error) => void;
+      (global.fetch as jest.Mock).mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectDownload = reject;
+          })
+      );
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      // Should show status message
+      expect(screen.getByTestId('status-message')).toBeInTheDocument();
+
+      // Reject the download
+      rejectDownload!(new Error('Network error'));
+
+      await waitFor(() => {
+        // Status message should be cleared
+        expect(screen.queryByTestId('status-message')).not.toBeInTheDocument();
+        // Error message should be shown
+        expect(screen.getByText(/Network error/)).toBeInTheDocument();
+      });
+    });
+
+    it('resets message index when download completes', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      let resolveDownload: (value: unknown) => void;
+      (global.fetch as jest.Mock).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveDownload = resolve;
+          })
+      );
+
+      render(<DownloadButton assessmentId="test-123" format="pdf" />);
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      // Advance to second message (wrapped in act for state update)
+      act(() => {
+        jest.advanceTimersByTime(5000);
+      });
+      expect(screen.getByTestId('status-message')).toHaveTextContent('This may take a minute...');
+
+      // Resolve the download
+      resolveDownload!(createMockResponse({ ok: true, status: 200, blob: mockBlob }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('status-message')).not.toBeInTheDocument();
+      });
+
+      // Start another download
+      (global.fetch as jest.Mock).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveDownload = resolve;
+          })
+      );
+
+      fireEvent.click(button);
+
+      // Should start from first message again
+      expect(screen.getByTestId('status-message')).toHaveTextContent(
+        'Generating detailed report...'
+      );
+
+      // Clean up
+      resolveDownload!(createMockResponse({ ok: true, status: 200, blob: mockBlob }));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('status-message')).not.toBeInTheDocument();
       });
     });
   });

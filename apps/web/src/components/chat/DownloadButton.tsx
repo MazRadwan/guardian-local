@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Download, Loader2, AlertCircle } from 'lucide-react';
@@ -14,6 +14,11 @@ export interface DownloadButtonProps {
   onDownload?: () => void;
 }
 
+const STATUS_MESSAGES = [
+  'Generating detailed report...',
+  'This may take a minute...',
+];
+
 export function DownloadButton({
   assessmentId,
   format,
@@ -23,8 +28,22 @@ export function DownloadButton({
 }: DownloadButtonProps) {
   const router = useRouter();
   const { token, logout } = useAuth();
-  const [isDownloading, setIsDownloading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'idle' | 'generating'>('idle');
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  // Cycle through status messages every 5 seconds during generation
+  useEffect(() => {
+    if (phase !== 'generating') {
+      setMsgIndex(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setMsgIndex((i) => (i + 1) % STATUS_MESSAGES.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [phase]);
 
   const handleDownload = async () => {
     // Clear any previous error
@@ -40,6 +59,7 @@ export function DownloadButton({
     }
 
     setIsDownloading(true);
+    setPhase('generating');
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -109,6 +129,7 @@ export function DownloadButton({
       setError(err instanceof Error ? err.message : 'Failed to download file');
     } finally {
       setIsDownloading(false);
+      setPhase('idle');
     }
   };
 
@@ -139,8 +160,13 @@ export function DownloadButton({
         ) : (
           <Download className="h-4 w-4" />
         )}
-        {isDownloading ? 'Downloading...' : formatLabel}
+        {isDownloading ? 'Generating...' : formatLabel}
       </Button>
+      {phase === 'generating' && (
+        <span className="text-xs text-gray-500" data-testid="status-message">
+          {STATUS_MESSAGES[msgIndex]}
+        </span>
+      )}
       {!token && !error && !isDownloading && (
         <span className="text-xs text-muted-foreground">Click to log in and download</span>
       )}
