@@ -238,6 +238,25 @@ export function ChatMessage({
                 hr: ({node, ...props}) => (
                   <hr className="my-6 border-t border-slate-200" {...props} />
                 ),
+                // Bold text used as subheadings: Add margin-top when strong tag starts a paragraph.
+                // This handles Claude's pattern of using **Bold Text** instead of ### Heading for sections.
+                // The addSectionSpacing() function adds blank lines in markdown, but we also need
+                // CSS margin to ensure proper visual separation from the preceding paragraph.
+                p: ({node, children, ...props}) => {
+                  // Check if first child is a strong element (bold subheading pattern)
+                  const childArray = React.Children.toArray(children);
+                  const firstChild = childArray[0];
+                  const startsWithStrong = React.isValidElement(firstChild) && firstChild.type === 'strong';
+
+                  return (
+                    <p
+                      className={startsWithStrong ? 'mt-6 first:mt-0' : undefined}
+                      {...props}
+                    >
+                      {children}
+                    </p>
+                  );
+                },
               }}
             >
               {renderedContent}

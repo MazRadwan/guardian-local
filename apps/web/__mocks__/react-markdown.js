@@ -126,7 +126,13 @@ module.exports = function ReactMarkdown({ children, components = {} }) {
       }
       content = parts;
     }
-    elements.push(React.createElement('p', { key: `p-${index}` }, content));
+    // Use custom p component if provided, otherwise use default p element
+    const PComponent = components.p;
+    if (PComponent) {
+      elements.push(React.createElement(PComponent, { key: `p-${index}`, node: {} }, content));
+    } else {
+      elements.push(React.createElement('p', { key: `p-${index}` }, content));
+    }
   });
 
   flushList();

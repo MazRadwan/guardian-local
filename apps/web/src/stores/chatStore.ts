@@ -6,6 +6,18 @@ import { GENERATION_STEPS } from '@/types/stepper';
 import type { ScoringStatus, ScoringProgressEvent } from '@/types/scoring';
 
 /**
+ * NOTE: Console errors like "A listener indicated an asynchronous response by returning true,
+ * but the message channel closed before a response was received" are NOT from this code.
+ *
+ * This error is caused by Chrome extensions that use chrome.runtime.onMessage with `return true`
+ * (indicating async response) but the sender tab/context closes before the response arrives.
+ * Common culprits: React DevTools, ad blockers, password managers.
+ *
+ * To verify: disable all extensions and the error disappears.
+ * This store uses only Zustand's synchronous state updates - no message channels.
+ */
+
+/**
  * Epic 32.2.1: Questionnaire progress state
  * Ephemeral UI state - NOT persisted to localStorage
  */

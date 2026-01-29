@@ -140,6 +140,40 @@ describe('ChatMessage', () => {
       const heading = screen.getByRole('heading', { level: 2 });
       expect(heading).toHaveClass('first:mt-0');
     });
+
+    it('adds margin to paragraphs that start with bold text (subheading pattern)', () => {
+      // This tests Claude's pattern of using **Bold** instead of ### Heading
+      const markdownContent = 'Introduction paragraph.\n\n**Key Finding:** This is important.';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      // Find all paragraphs
+      const paragraphs = screen.getByRole('article').querySelectorAll('p');
+      expect(paragraphs.length).toBeGreaterThanOrEqual(2);
+
+      // Second paragraph should have margin class (starts with bold)
+      const boldParagraph = Array.from(paragraphs).find(p =>
+        p.querySelector('strong')?.textContent?.includes('Key Finding')
+      );
+      expect(boldParagraph).toHaveClass('mt-6');
+    });
+
+    it('does not add extra margin to paragraphs with inline bold text', () => {
+      // Bold in the middle should NOT trigger the subheading margin
+      const markdownContent = 'This has **bold text** in the middle.';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      const paragraph = screen.getByRole('article').querySelector('p');
+      expect(paragraph).not.toHaveClass('mt-6');
+    });
+
+    it('first bold paragraph does not have excessive top margin', () => {
+      // First paragraph should use first:mt-0 to avoid double spacing at top
+      const markdownContent = '**Introduction:** Start of message.';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      const paragraph = screen.getByRole('article').querySelector('p');
+      expect(paragraph).toHaveClass('first:mt-0');
+    });
   });
 
   // Epic 21 Story 21.3: Timestamps removed from UI
