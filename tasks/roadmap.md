@@ -270,6 +270,11 @@ This roadmap defines **what we're building and when**. Features are organized by
 - ⏸️ Vendor dashboard (track assessment status)
 - ⏸️ Remediation tracking (vendor can update on progress)
 
+**Security Enhancements:**
+- ⏸️ Refresh token implementation (silent token refresh, 7-day refresh token lifespan)
+- ⏸️ Session management UI (view/revoke active sessions)
+- ⏸️ Audit logging (track user actions)
+
 ### Database
 
 TBD based on features selected.

@@ -30,7 +30,7 @@ export class JWTProvider implements ITokenProvider {
       throw new Error('JWT_SECRET environment variable is required')
     }
 
-    this.expiresIn = expiresIn || '4h' // 4 hours as per requirements
+    this.expiresIn = expiresIn || '24h' // 24 hours for better UX
   }
 
   /**

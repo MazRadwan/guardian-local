@@ -413,9 +413,12 @@ export class WebSocketClient {
    * Connect to the WebSocket server.
    * @param options Optional callbacks that must be registered BEFORE the socket connects
    *                to avoid missing immediately-emitted events like connection_ready
+   *                - onConnectionReady: Called when connection is established
+   *                - onAuthError: Called when authentication fails (invalid/expired token)
    */
   connect(options?: {
     onConnectionReady?: (data: { conversationId?: string; resumed: boolean; hasActiveConversation: boolean }) => void;
+    onAuthError?: () => void;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -453,6 +456,21 @@ export class WebSocketClient {
 
         this.socket.on('connect_error', (error) => {
           console.error('[WebSocket] Connection error:', error);
+
+          // Check if this is an authentication error (invalid/expired token)
+          // Backend sends "Invalid authentication token" or "Authentication token required"
+          const errorMessage = error.message || '';
+          const isAuthError = errorMessage.includes('authentication token') ||
+                             errorMessage.includes('Authentication token');
+
+          if (isAuthError) {
+            console.log('[WebSocket] Authentication failed - triggering auth error callback');
+            options?.onAuthError?.();
+            // Reject immediately for auth errors - no point retrying with invalid token
+            reject(new Error('Authentication failed'));
+            return;
+          }
+
           this.reconnectAttempts++;
           if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             reject(new Error('Max reconnection attempts reached'));

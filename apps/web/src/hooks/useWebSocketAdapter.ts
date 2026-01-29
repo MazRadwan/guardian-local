@@ -43,6 +43,8 @@ export interface WebSocketEventHandlers {
   onFileProcessingError?: (data: FileProcessingErrorPayload) => void;
   // Epic 32.2.1: Questionnaire progress callback
   onQuestionnaireProgress?: (data: QuestionnaireProgressPayload) => void;
+  // Auth error callback (session expired, invalid token)
+  onAuthError?: () => void;
 }
 
 /**
@@ -175,6 +177,7 @@ export function useWebSocketAdapter({
     onVendorClarificationNeeded: handlers.onVendorClarificationNeeded,
     onFileProcessingError: handlers.onFileProcessingError,
     onQuestionnaireProgress: handlers.onQuestionnaireProgress,
+    onAuthError: handlers.onAuthError,
     autoConnect,
   });
 

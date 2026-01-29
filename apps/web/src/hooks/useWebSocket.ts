@@ -40,6 +40,8 @@ export interface UseWebSocketOptions {
   onFileProcessingError?: (data: FileProcessingErrorPayload) => void;
   // Epic 32.2.1: Questionnaire progress callback
   onQuestionnaireProgress?: (data: QuestionnaireProgressPayload) => void;
+  // Auth error callback (session expired, invalid token)
+  onAuthError?: () => void;
   autoConnect?: boolean;
 }
 
@@ -73,6 +75,7 @@ export function useWebSocket({
   onVendorClarificationNeeded,
   onFileProcessingError,
   onQuestionnaireProgress,
+  onAuthError,
   autoConnect = true,
 }: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
@@ -82,6 +85,10 @@ export function useWebSocket({
   // Ref to store latest onConnectionReady callback to avoid stale closures
   const onConnectionReadyRef = useRef(onConnectionReady);
   onConnectionReadyRef.current = onConnectionReady;
+
+  // Ref to store latest onAuthError callback to avoid stale closures
+  const onAuthErrorRef = useRef(onAuthError);
+  onAuthErrorRef.current = onAuthError;
 
   const connect = useCallback(async () => {
     // Guard: Don't connect if already connected or connecting
@@ -100,9 +107,13 @@ export function useWebSocket({
       // CRITICAL: Pass onConnectionReady to connect() so it's registered BEFORE
       // the socket actually connects. The server emits connection_ready immediately
       // after connect, so we must register this listener before connect completes.
+      // Also pass onAuthError to handle expired/invalid tokens.
       await client.connect({
         onConnectionReady: onConnectionReadyRef.current
           ? (data) => onConnectionReadyRef.current?.(data)
+          : undefined,
+        onAuthError: onAuthErrorRef.current
+          ? () => onAuthErrorRef.current?.()
           : undefined,
       });
       clientRef.current = client;

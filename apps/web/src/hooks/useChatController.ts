@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState, useRef, useMemo, useLayoutEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { ComposerRef } from '@/components/chat/Composer';
 import { ConversationMode } from '@/components/chat/ModeSelector';
 import { useChatStore } from '@/stores/chatStore';
@@ -83,7 +85,8 @@ export function useChatController(): UseChatControllerReturn {
     getExportReady,
   } = useChatStore();
   const { mode, changeMode, isChanging, setModeFromConversation } = useConversationMode('consult');
-  const { token, user } = useAuth();
+  const { token, user, logout } = useAuth();
+  const router = useRouter();
   const composerRef = useRef<ComposerRef>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const hasInitialized = useRef(false);
@@ -231,6 +234,15 @@ export function useChatController(): UseChatControllerReturn {
     // Don't disrupt UX - user can still generate if needed
   }, []);
 
+  // Handler for authentication errors (expired/invalid token)
+  // Shows a user-friendly toast and redirects to login
+  const handleAuthError = useCallback(() => {
+    console.log('[useChatController] Authentication error - session expired');
+    toast.error('Session expired. Please log in again.');
+    logout();
+    router.push('/login');
+  }, [logout, router]);
+
   // Memoize handlers to prevent adapter recreation on every render
   const handlers = useMemo(() => ({
     onMessage: handleMessage,
@@ -258,6 +270,7 @@ export function useChatController(): UseChatControllerReturn {
     onVendorClarificationNeeded: handleVendorClarificationNeeded,
     onFileProcessingError: handleFileProcessingError,
     onQuestionnaireProgress: handleQuestionnaireProgress,
+    onAuthError: handleAuthError,
   }), [
     handleMessage,
     handleMessageStream,
@@ -284,6 +297,7 @@ export function useChatController(): UseChatControllerReturn {
     handleVendorClarificationNeeded,
     handleFileProcessingError,
     handleQuestionnaireProgress,
+    handleAuthError,
   ]);
 
   // WebSocket adapter - provides clean interface over raw socket
