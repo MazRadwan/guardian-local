@@ -203,6 +203,10 @@ export function ChatMessage({
           {/* Message content */}
           <div className="prose prose-slate prose-base max-w-none break-words
             prose-p:leading-7 prose-p:my-4 prose-li:leading-7
+            prose-headings:mt-6 prose-headings:mb-3 prose-headings:font-semibold
+            prose-h2:text-lg prose-h2:mt-8 prose-h2:mb-4 prose-h2:text-slate-800
+            prose-h3:text-base prose-h3:mt-6 prose-h3:mb-3 prose-h3:text-slate-700
+            prose-hr:my-6 prose-hr:border-slate-200
             prose-pre:p-0 prose-pre:bg-transparent
             [&>table]:my-4
             [&>th]:bg-gray-100 [&>th]:p-2 [&>th]:text-left [&>th]:border [&>th]:border-gray-300
@@ -224,7 +228,16 @@ export function ChatMessage({
                 ),
                 td: ({node, ...props}) => (
                   <td className="px-4 py-3 text-sm text-gray-900 border-b last:border-0" {...props} />
-                )
+                ),
+                h2: ({node, ...props}) => (
+                  <h2 className="text-lg font-semibold text-slate-800 mt-8 mb-4 first:mt-0" {...props} />
+                ),
+                h3: ({node, ...props}) => (
+                  <h3 className="text-base font-semibold text-slate-700 mt-6 mb-3 first:mt-0" {...props} />
+                ),
+                hr: ({node, ...props}) => (
+                  <hr className="my-6 border-t border-slate-200" {...props} />
+                ),
               }}
             >
               {renderedContent}
