@@ -1,8 +1,8 @@
 # Guardian App - Project Overview
 
-**Version:** 1.1
-**Last Updated:** 2025-01-04
-**Status:** Planning / Architecture Phase
+**Version:** 1.2
+**Last Updated:** 2026-01-29
+**Status:** Production MVP
 
 ---
 
@@ -613,6 +613,7 @@ section_11_interviewer_assessment:
 | 1.7 | 2025-01-04 | Updated | Replaced Prisma with Drizzle ORM (SQL-first, lightweight, better for complex queries and repository pattern). |
 | 1.8 | 2025-01-04 | Updated | Clarified report generation as interactive web-first with multi-format export (PDF, Word, Excel, email delivery). YAML is import/export only, not primary interface. Assessment is conversational Q&A, not forms. |
 | 1.9 | 2025-01-04 | Updated | system-design.md split into 3 focused documents (architecture-layers.md, implementation-guide.md, deployment-guide.md). Updated related documents section. Added architecture/README.md index. |
+| 1.10 | 2026-01-29 | Updated | Epic 30-32 complete. Added Vision API for image analysis, parallel file upload with background extraction, questionnaire progress streaming. Production MVP status. |
 
 ---
 

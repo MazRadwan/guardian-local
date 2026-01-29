@@ -1,7 +1,7 @@
 # Guardian Database Schema
 
-**Version:** 2.0 (Epic 25 Complete)
-**Last Updated:** 2026-01-20
+**Version:** 2.1 (Epic 31 Complete)
+**Last Updated:** 2026-01-29
 **ORM:** Drizzle ORM
 **Database:** PostgreSQL 17.x
 **Status:** Production - 10 Tables
@@ -428,6 +428,16 @@ export const files = pgTable('files', {
   intakeContext: jsonb('intake_context'),
   intakeGapCategories: text('intake_gap_categories').array(),
   intakeParsedAt: timestamp('intake_parsed_at', { withTimezone: true }),
+
+  // Epic 18: Text excerpt for fast context injection
+  textExcerpt: text('text_excerpt'),
+
+  // Epic 18/31: Idempotency guard for parse/scoring operations
+  parseStatus: varchar('parse_status', { length: 20 }).default('pending'), // 'pending' | 'complete' | 'failed'
+
+  // Epic 18.4: Document type detection (heuristics)
+  detectedDocType: varchar('detected_doc_type', { length: 20 }), // 'questionnaire' | 'document' | 'unknown'
+  detectedVendorName: varchar('detected_vendor_name', { length: 255 }),
 
   // Timestamps
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -973,6 +983,7 @@ CREATE TABLE audit_log (...);
 | 1.1 | 2025-01-04 | Simplified to MVP scope - 6 core tables (users, vendors, assessments, questions, conversations, messages). Deferred 4 tables to Phase 2 (responses, risk_scores, reports, audit_log). Removed progress tracking, complex state machines, and analysis features. Focus on chat + questionnaire generation only. |
 | 1.2 | 2025-12-19 | Epic 16/17 complete - Added 7th table `files` with intake context fields (intakeContext, intakeGapCategories, intakeParsedAt). Added `attachments` JSONB field to messages table. Updated relationships to include files. |
 | 2.0 | 2026-01-20 | Major update for Epics 15, 18, 20, 25. Added 3 new tables: `responses` (extracted vendor answers), `dimension_scores` (per-dimension risk scores), `assessment_results` (composite scores + narratives). Updated `conversations` with 'scoring' mode, title fields. Updated `assessments` with 'scored' status, 'category_focused' type. Schema now has 10 production tables. |
+| 2.1 | 2026-01-29 | Epic 31: Added `textExcerpt`, `parseStatus`, `detectedDocType`, `detectedVendorName` fields to files table for background extraction support. |
 
 ---
 

@@ -86,6 +86,10 @@ TABLE(files) {
     intake_context : jsonb
     intake_gap_categories : text[]
     intake_parsed_at : timestamp
+    text_excerpt : text
+    parse_status : varchar
+    detected_doc_type : varchar
+    detected_vendor_name : varchar
     created_at : timestamp
 }
 

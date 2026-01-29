@@ -1,7 +1,7 @@
 # Guardian Implementation Guide
 
-**Version:** 1.1
-**Last Updated:** 2026-01-26
+**Version:** 1.2
+**Last Updated:** 2026-01-29
 **Status:** Active Development Reference
 
 ---
@@ -1496,12 +1496,128 @@ This ensures no orphaned image data remains in memory after conversation ends.
 
 ---
 
+## Parallel File Upload & Background Extraction (Epic 31)
+
+### Architecture Overview
+
+Guardian uses **async background extraction** for file processing, enabling parallel uploads without blocking the user.
+
+**Before Epic 31:** Files processed sequentially during upload (blocking)
+**After Epic 31:** Files uploaded instantly, extraction runs in background
+
+### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| BackgroundExtractor | `infrastructure/extraction/BackgroundExtractor.ts` | Async text extraction service |
+| IBackgroundExtractor | `application/interfaces/IBackgroundExtractor.ts` | Interface for DI |
+| DocumentClassifier | `infrastructure/extraction/DocumentClassifier.ts` | Detects questionnaire vs document |
+
+### File Processing Flow
+
+```
+User Upload → S3 Storage → File Record (parseStatus: 'pending')
+                                ↓
+                    BackgroundExtractor.processFile()
+                                ↓
+            Text Extraction → Classification → DB Update
+                                ↓
+                    File Record (parseStatus: 'complete')
+```
+
+### Database Fields (files table)
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `parseStatus` | varchar(20) | 'pending' → 'complete' → 'failed' |
+| `textExcerpt` | text | Extracted text for context injection |
+| `detectedDocType` | varchar(20) | 'questionnaire' \| 'document' \| 'unknown' |
+| `detectedVendorName` | varchar(255) | Auto-detected vendor name |
+
+### MessageHandler Retry Logic
+
+When user sends message with attachments, MessageHandler checks file readiness:
+
+```typescript
+// Retry with exponential backoff (100ms, 200ms, 400ms)
+const files = await this.fileRepository.waitForFileRecords(fileIds, {
+  maxRetries: 3,
+  retryDelayMs: 100,
+  backoffMultiplier: 2
+});
+```
+
+If files still processing after retries, emits `file_processing_error` event.
+
+### Frontend Feedback
+
+- Processing indicator shown while files extracting
+- Toast notification if files not ready
+- User can retry sending message after extraction completes
+
+---
+
+## Questionnaire Progress Streaming (Epic 32)
+
+### Architecture Overview
+
+Questionnaire generation provides **real-time progress feedback** as Claude generates each section.
+
+### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| IProgressEmitter | `application/interfaces/IProgressEmitter.ts` | Progress event interface |
+| SocketProgressEmitter | `infrastructure/websocket/emitters/SocketProgressEmitter.ts` | WebSocket implementation |
+| QuestionnaireGenerationService | `application/services/QuestionnaireGenerationService.ts` | Uses emitter during generation |
+
+### Progress Events
+
+| Event | Payload | When Emitted |
+|-------|---------|--------------|
+| `questionnaire:progress` | `{ section, current, total, message }` | Each section starts |
+| `questionnaire:complete` | `{ questionnaireId }` | Generation complete |
+
+### Event Payload Example
+
+```typescript
+{
+  section: 'Privacy Compliance',
+  current: 3,
+  total: 10,
+  message: 'Generating Privacy Compliance questions... (3/10)'
+}
+```
+
+### Frontend Integration
+
+```typescript
+// useChatController.ts
+socket.on('questionnaire:progress', (data) => {
+  setProgress({
+    current: data.current,
+    total: data.total,
+    message: data.message
+  });
+});
+```
+
+### Reconnection Handling
+
+If WebSocket disconnects during generation:
+1. Progress state preserved in React state
+2. On reconnect, generation continues (server-side stateless)
+3. Progress resumes from current section
+
+---
+
 ## Document History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-01-04 | Extracted from system-design.md v1.5 - Contains folder structure, tech stack, data flows, sequence diagrams, state machines, transaction boundaries, caching, testing strategies, and report formats |
 | 1.1 | 2026-01-26 | Epic 30: Enhanced Vision & Image Handling section with new types, ClaudeClient integration, cache cleanup, and frontend size limits |
+| 1.2 | 2026-01-29 | Epic 31-32: Added Parallel File Upload section (background extraction) and Questionnaire Progress Streaming section |
 
 ---
 
