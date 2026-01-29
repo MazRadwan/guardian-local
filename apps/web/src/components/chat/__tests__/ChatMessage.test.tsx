@@ -77,6 +77,71 @@ describe('ChatMessage', () => {
     expect(article).toBeInTheDocument();
   });
 
+  describe('Markdown Heading and HR Rendering', () => {
+    it('renders h2 headings with proper styling', () => {
+      const markdownContent = '## Clinical Risk\n\nThis is content.';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      const heading = screen.getByRole('heading', { level: 2 });
+      expect(heading).toBeInTheDocument();
+      expect(heading).toHaveTextContent('Clinical Risk');
+      expect(heading).toHaveClass('text-lg', 'font-semibold', 'text-slate-800');
+    });
+
+    it('renders h3 headings with proper styling', () => {
+      const markdownContent = '### Sub-section\n\nContent here.';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      const heading = screen.getByRole('heading', { level: 3 });
+      expect(heading).toBeInTheDocument();
+      expect(heading).toHaveTextContent('Sub-section');
+      expect(heading).toHaveClass('text-base', 'font-semibold', 'text-slate-700');
+    });
+
+    it('renders horizontal rules with proper margin', () => {
+      const markdownContent = 'Section 1\n\n---\n\nSection 2';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      const hr = screen.getByRole('separator');
+      expect(hr).toBeInTheDocument();
+      expect(hr).toHaveClass('my-6', 'border-t', 'border-slate-200');
+    });
+
+    it('renders questionnaire-style markdown with visual hierarchy', () => {
+      const questionnaireMarkdown = `## Clinical Risk
+
+1. How does the AI model handle patient data?
+2. What clinical validation has been performed?
+
+---
+
+## Operational Risk
+
+3. Describe your deployment process.
+4. What monitoring is in place?`;
+
+      render(<ChatMessage role="assistant" content={questionnaireMarkdown} />);
+
+      // Should have two h2 headings
+      const headings = screen.getAllByRole('heading', { level: 2 });
+      expect(headings).toHaveLength(2);
+      expect(headings[0]).toHaveTextContent('Clinical Risk');
+      expect(headings[1]).toHaveTextContent('Operational Risk');
+
+      // Should have a separator
+      const hr = screen.getByRole('separator');
+      expect(hr).toBeInTheDocument();
+    });
+
+    it('first heading does not have excessive top margin', () => {
+      const markdownContent = '## First Section\n\nContent.';
+      render(<ChatMessage role="assistant" content={markdownContent} />);
+
+      const heading = screen.getByRole('heading', { level: 2 });
+      expect(heading).toHaveClass('first:mt-0');
+    });
+  });
+
   // Epic 21 Story 21.3: Timestamps removed from UI
   // it('displays timestamp when provided', () => {
   //   const timestamp = new Date('2024-01-01T12:00:00');
