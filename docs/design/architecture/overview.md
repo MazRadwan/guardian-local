@@ -120,7 +120,7 @@ The Guardian system prompt works well in Claude.ai Projects for **one-off assess
 - **Progress Tracking:** Save and resume assessments over multiple sessions with chat history preserved
 - **Assessment Types:** Quick (targeted), Comprehensive (full scope), Renewal (follow-up)
 - **Flexible Scope:** Analysts can request Guardian add/remove question sections based on relevance
-- **YAML Import:** Backward compatibility for existing Guardian YAML files from Claude.ai Project version (optional, not primary workflow)
+- **Document Upload:** PDF and Word documents for intake parsing and scoring
 
 ### Risk Analysis (10 Dimensions)
 - **Clinical Risk:** Patient safety, care quality, clinical decision support
@@ -141,7 +141,7 @@ Each dimension scored 0-100 with severity rating (Low, Adequate, Concern, High R
 - **Internal Decision Report:** Comprehensive analysis for leadership (executive summary, risk dashboard, critical findings, gap analysis, compliance assessment, recommendation)
 - **Vendor Feedback Package:** Professional external communication (strengths acknowledged, required remediations, actionable guidance)
 - **Modular Sections:** Generate full report or individual sections on-demand (streaming, cached for 24 hours)
-- **Multi-Format Export:** PDF (professional sharing), Word (editable), Excel (data analysis), JSON (API/integrations), YAML (backward compatibility)
+- **Multi-Format Export:** PDF (professional sharing), Word (editable), Excel (data analysis)
 - **Email Delivery:** Direct email to leadership or vendors with PDF attachments and professional messaging
 - **Customizable Templates:** Adapt reports to organizational branding
 
@@ -488,36 +488,13 @@ Each dimension scored **0-100** with severity rating based on thresholds:
 
 **Detailed scoring rubrics:** See `.claude/documentation/GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md` (lines 446-684)
 
-### YAML Data Structure
-
-**Compatibility Requirement:** Must support import/export of YAML assessment files from Claude.ai Project version.
-
-**Structure:**
-```yaml
-assessment_metadata:
-  assessment_type: "Quick Assessment | Comprehensive | Renewal"
-  vendor_name: string
-  solution_name: string
-  assessment_date: date
-  assessor_name: string
-
-section_1_clinical_use_case:
-  q1_1_response: text
-  q1_2_response: text
-  # ... dynamic per section
-
-section_11_interviewer_assessment:
-  q11_1_preparedness: enum
-  q11_2_transparency: enum
-  q11_10_overall_impression: enum
-  q11_10_details: text
-```
+### Data Storage
 
 **Storage:**
 - PostgreSQL stores structured assessment data (normalized tables)
-- JSONB columns for flexible response storage
-- Can serialize to/from YAML for import/export
-- Original YAML preserved for audit trail
+- JSONB columns for flexible response storage (questions, findings, metadata)
+- Document uploads stored in S3-compatible object storage
+- Extracted text cached in database for fast context injection
 
 ---
 
@@ -566,7 +543,7 @@ section_11_interviewer_assessment:
 - ✅ Natural language interaction for consultations and portfolio queries
 - ✅ Generate Guardian-quality reports via API that match Claude.ai Project output
 - ✅ Support 50+ stored assessments with portfolio analytics (vendor history, comparisons, trends)
-- ✅ YAML import from Claude.ai assessments works correctly (backward compatibility)
+- ✅ Document upload (PDF, Word) with AI-powered intake parsing
 - ✅ All 10 risk dimensions scored accurately with transparent methodology
 - ✅ Mode switching (Consult/Assessment/Portfolio) is intuitive, no commands needed
 

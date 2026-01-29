@@ -143,8 +143,7 @@ guardian-app/
 │   │       │   │   ├── PDFExporter.ts        # Puppeteer/Playwright
 │   │       │   │   ├── WordExporter.ts       # HTML to .docx
 │   │       │   │   ├── ExcelExporter.ts      # ExcelJS
-│   │       │   │   ├── JSONSerializer.ts
-│   │       │   │   └── YAMLSerializer.ts     # Backward compat
+│   │       │   │   └── JSONSerializer.ts
 │   │       │   │
 │   │       │   └── external/
 │   │       │       ├── EmailService.ts
@@ -466,57 +465,7 @@ guardian-app/
 
 ---
 
-### Example 4: YAML Import & Validation Flow
-
-```
-1. User clicks "Import YAML" button (Presentation)
-   ↓
-2. Frontend shows file upload dialog (Presentation)
-   ↓
-3. User selects YAML file → Frontend reads file content (Presentation)
-   ↓
-4. Frontend sends: POST /api/assessments/import { yamlContent } (Presentation → Infrastructure)
-   ↓
-5. ImportController receives request (Infrastructure)
-   ↓
-6. Calls ImportService.parseYAML(content) (Infrastructure → Application)
-   ↓
-7. ImportService validates YAML structure (Application)
-   - Check required fields (assessment_metadata, sections)
-   - Validate question IDs match expected format
-   - Check data types (dates, enums, text)
-   ↓
-8. If validation fails → Return structured errors (Application → Infrastructure → Presentation)
-   - Frontend highlights specific YAML lines with errors
-   ↓
-9. If validation passes → Map YAML to domain entities (Application → Domain)
-   - YAMLMapper.toAssessment(yamlData) → Assessment entity
-   ↓
-10. Check for duplicate vendor/assessment (Application → Infrastructure)
-    - Query existing assessments by vendor + date
-    ↓
-11. If duplicate found → Prompt user: "Assessment for TechFlow from 2025-03-15 exists. Overwrite?" (Application → Infrastructure → Presentation)
-    ↓
-12. User confirms → ImportService.save(assessment) (Application)
-    ↓
-13. Repository persists assessment + responses (Infrastructure → Database)
-    ↓
-14. ImportService triggers analysis (optional) (Application)
-    ↓
-15. Returns success with assessment ID (Application → Infrastructure → Presentation)
-    ↓
-16. Frontend navigates to assessment detail view (Presentation)
-```
-
-**Error Paths:**
-- Invalid YAML syntax → Parse error with line number
-- Missing required fields → Validation error list
-- Duplicate assessment → Confirmation dialog
-- Database save fails → Transaction rollback, retry prompt
-
----
-
-### Example 5: Report Generation & Streaming Flow
+### Example 4: Report Generation & Streaming Flow
 
 ```
 1. User clicks "Generate Report" on completed analysis (Presentation)
@@ -575,8 +524,6 @@ guardian-app/
     - 💾 Download PDF
     - 💾 Download Word Document
     - 📊 Download Excel (data tables)
-    - 📄 Download JSON (API format)
-    - ⚙️ Download YAML (backup/migration)
     ↓
 19. User selects format → Backend generates export (Presentation → Infrastructure)
     ↓
@@ -584,7 +531,6 @@ guardian-app/
     - PDF: Use Puppeteer to render web view → PDF
     - Word: Convert HTML to .docx (Mammoth/docx library)
     - Excel: Extract data tables to .xlsx (ExcelJS)
-    - JSON/YAML: Serialize domain entities
     ↓
 21. If email selected → EmailService sends with attachment (Infrastructure)
     - To: Leadership (internal decision report)
@@ -597,8 +543,7 @@ guardian-app/
 
 **UX Flow:**
 - **Primary:** Interactive web report (charts, expandable sections, streaming)
-- **Secondary:** Export in format user needs (PDF for sharing, Excel for data, YAML for backup)
-- **No YAML in UI** unless user explicitly chooses export
+- **Secondary:** Export in format user needs (PDF for sharing, Word for editing, Excel for data)
 
 **Optimization:**
 - Executive summary: Always generated (cached for 24hr)
@@ -939,7 +884,7 @@ Special Transitions:
 |-----------|------------------|------------------|-----------|
 | Create assessment + metadata | `assessment`, `assessment_metadata` tables | Metadata validation fails | Must be atomic - no orphaned assessments |
 | Save all question responses | All `responses` for assessment | Any response validation fails | All-or-nothing - prevents partial saves |
-| Import YAML assessment | `assessment` + `responses` + `metadata` | Parse error, duplicate conflict | Entire import must succeed or fail together |
+| Import document for scoring | `files` + `responses` | Parse error, extraction conflict | File and extracted responses must be consistent |
 | Update vendor profile + history | `vendor` + `assessment_history` | History link fails | Vendor and timeline must stay consistent |
 | User registration + initial permissions | `user` + `user_roles` + `permissions` | Role assignment fails | User must have valid permissions on creation |
 
@@ -1131,8 +1076,6 @@ User clicks "Export" → Format selection modal
 | **PDF** | Professional sharing, email attachments | Puppeteer renders web view → PDF | `puppeteer` or `@playwright/test` |
 | **Word (.docx)** | Editable reports for leadership | HTML to Word conversion | `docx` or `html-docx-js` |
 | **Excel (.xlsx)** | Data analysis, portfolio comparisons | Extract data tables to spreadsheet | `exceljs` |
-| **JSON** | API integrations, machine-readable | Serialize domain entities | Native JSON |
-| **YAML** | Backward compatibility, data migration | Serialize to Guardian YAML format | `js-yaml` |
 
 ### Email Delivery Workflows
 
@@ -1170,35 +1113,6 @@ EmailService.send({
 })
   ↓
 Confirmation: "Vendor feedback sent to vendor@techflow.com"
-```
-
-### YAML Usage (Backward Compatibility Only)
-
-**Import YAML:**
-- User uploads YAML file from Claude.ai Project
-- Backend parses YAML → Maps to domain entities → Stores in PostgreSQL
-- User never sees YAML again (views/edits in web UI)
-
-**Export YAML:**
-- Hidden in advanced export menu ("Developer Formats")
-- Use case: Backup, data migration, integration with other systems
-- NOT promoted as primary export format
-
-**Architecture:**
-```typescript
-// YAML is a serialization format, not storage format
-class YAMLSerializer {
-  static toYAML(assessment: Assessment): string {
-    // Domain entity → YAML string
-  }
-
-  static fromYAML(yaml: string): Assessment {
-    // YAML string → Domain entity
-  }
-}
-
-// Storage is PostgreSQL (Drizzle schema)
-// YAML is just one export option
 ```
 
 ---
@@ -1248,7 +1162,7 @@ class YAMLSerializer {
 **Agent 4:** Build Export Module
 - Files: `application/services/ExportService.ts`, `infrastructure/export/PDFExporter.ts`, `infrastructure/export/WordExporter.ts`, `infrastructure/export/ExcelExporter.ts`
 - Reads: `system-design.md` - knows to read from Reporting module
-- Delivers: Multi-format export (PDF, Word, Excel, JSON, YAML) + email delivery
+- Delivers: Multi-format export (PDF, Word, Excel) + email delivery
 
 **Agents work in parallel** - interfaces defined upfront, implementations built independently.
 
