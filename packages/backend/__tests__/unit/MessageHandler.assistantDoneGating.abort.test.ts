@@ -22,6 +22,7 @@ import type { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter
 import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
 import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IConsultToolLoopService } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
 /**
@@ -106,6 +107,14 @@ const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
 } as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
+ * Create a mock ConsultToolLoopService
+ * Story 34.1.3: Added for ConsultToolLoopService delegation
+ */
+const createMockConsultToolLoopService = (): jest.Mocked<IConsultToolLoopService> => ({
+  execute: jest.fn(),
+} as unknown as jest.Mocked<IConsultToolLoopService>);
+
+/**
  * Create a mock Message (for sendMessage response)
  */
 const createMockMessage = (overrides?: Partial<Message>): Message => ({
@@ -172,6 +181,7 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
   let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
   let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
+  let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
@@ -181,8 +191,9 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
     mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
     mockToolRegistry = createMockToolRegistry();
+    mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Create handler with ToolUseRegistry
+    // Create handler with ToolUseRegistry and ConsultToolLoopService
     handler = new MessageHandler(
       mockConversationService,
       mockFileRepository,
@@ -192,7 +203,8 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       undefined, // fileStorage
       undefined, // intakeParser
       undefined, // titleGenerationService
-      mockToolRegistry
+      mockToolRegistry,
+      mockConsultToolLoopService
     );
 
     mockSocket = createMockSocket('user-123');
@@ -202,6 +214,37 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
 
     // Default: sendMessage returns a message
     mockConversationService.sendMessage.mockResolvedValue(createMockMessage());
+
+    // Story 34.1.4: Default mock for ConsultToolLoopService
+    // When the tool loop is triggered, it handles all events including abort
+    mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+      // Check if abort was requested during execution
+      if (options.socket.data.abortRequested) {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        return {
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: undefined,
+        };
+      }
+      // Normal completion
+      options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+      options.socket.emit('assistant_done', {
+        messageId: 'msg-123',
+        conversationId: options.conversationId,
+        fullText: 'Final response',
+        assessmentId: null,
+      });
+      return {
+        fullResponse: 'Final response',
+        toolUseBlocks: [],
+        savedMessageId: 'msg-123',
+        wasAborted: false,
+        stopReason: 'end_turn' as const,
+      };
+    });
 
     // Suppress console output during tests
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -227,15 +270,18 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Simulate abort request DURING tool dispatch (after first stream completes)
-      // Note: streamClaudeResponse resets abortRequested at the start, so we need to
-      // set it during the tool dispatch phase
-      mockToolRegistry.dispatch.mockImplementation(async () => {
-        // Set abort flag during tool execution
-        mockSocket.data.abortRequested = true;
+      // Story 34.1.4: Mock ConsultToolLoopService to simulate abort during execution
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        // Simulate abort being set during tool dispatch
+        options.socket.data.abortRequested = true;
+        // Service emits tool_status 'idle' on abort
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
         return {
-          handled: true,
-          toolResult: { toolUseId: 'tool-1', content: 'results' },
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: undefined,
         };
       });
 
@@ -247,15 +293,14 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
 
       const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // When abort is set during tool dispatch, the abort check happens AFTER dispatch
-      // The abort check at line 994 catches it before continuation
-      // Should NOT save any assistant message (tool results not processed into final response)
+      // MessageHandler does not save assistant messages when tool loop is delegated
+      // ConsultToolLoopService handles abort without saving
       const assistantMessages = mockConversationService.sendMessage.mock.calls.filter(
         call => call[0].role === 'assistant'
       );
       expect(assistantMessages).toHaveLength(0);
 
-      // Should emit tool_status 'idle'
+      // Should emit tool_status 'idle' (from ConsultToolLoopService mock)
       const toolStatusCalls = mockSocket.emit.mock.calls.filter(
         call => call[0] === 'tool_status'
       );
@@ -288,12 +333,16 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Set abort during tool dispatch
-      mockToolRegistry.dispatch.mockImplementation(async () => {
-        mockSocket.data.abortRequested = true;
+      // Story 34.1.4: Mock ConsultToolLoopService to emit idle on abort
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.data.abortRequested = true;
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
         return {
-          handled: true,
-          toolResult: { toolUseId: 'tool-1', content: 'results' },
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: undefined,
         };
       });
 
@@ -305,7 +354,7 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
 
       await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Should emit tool_status 'idle'
+      // Should emit tool_status 'idle' (from ConsultToolLoopService mock)
       const toolStatusCalls = mockSocket.emit.mock.calls.filter(
         call => call[0] === 'tool_status'
       );
@@ -330,21 +379,18 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: Mock ConsultToolLoopService to simulate abort during follow-up stream
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        // Simulate abort during the follow-up stream
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        return {
+          fullResponse: 'Starting...',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: undefined,
+        };
       });
-
-      // Create a generator that triggers abort midway
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Starting...', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-
-      // Use the abort-triggering generator
-      mockClaudeClient.continueWithToolResult.mockReturnValue(
-        createChunkGeneratorWithAbort(secondStreamChunks, mockSocket, 0)
-      );
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -377,21 +423,17 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: Mock ConsultToolLoopService to return partial content on abort
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        return {
+          fullResponse: 'Partial content',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-partial',
+          wasAborted: true,
+          stopReason: undefined,
+        };
       });
-
-      // Generator that yields some content before abort
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Partial content', isComplete: false },
-        { content: ' more content', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-
-      mockClaudeClient.continueWithToolResult.mockReturnValue(
-        createChunkGeneratorWithAbort(secondStreamChunks, mockSocket, 1)
-      );
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -399,17 +441,12 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Should save partial response (if there was content)
-      // Based on current implementation, partial content during abort IS saved
-      const sendMessageCalls = mockConversationService.sendMessage.mock.calls;
-
-      // If there was content, it should be saved
-      if (sendMessageCalls.length > 0) {
-        const savedContent = sendMessageCalls[0][0].content.text;
-        expect(savedContent).toContain('Partial content');
-      }
+      // Story 34.1.4: ConsultToolLoopService handles partial response saving
+      // MessageHandler gets the result from the service
+      expect(result.fullResponse).toBe('Partial content');
+      expect(result.savedMessageId).toBe('msg-partial');
     });
   });
 
@@ -428,12 +465,16 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Set abort before tool execution completes
-      mockToolRegistry.dispatch.mockImplementation(async () => {
-        mockSocket.data.abortRequested = true;
+      // Story 34.1.4: Mock ConsultToolLoopService to return abort with no message saved
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.data.abortRequested = true;
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
         return {
-          handled: true,
-          toolResult: { toolUseId: 'tool-1', content: 'results' },
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: undefined,
         };
       });
 
@@ -446,13 +487,12 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // The pre-tool text should NOT be saved as a message
-      // Only messages with actual final content should be saved
-      // In abort scenarios during tool loop, no message should be persisted
+      // MessageHandler does not persist messages when tool loop is delegated
       const sendMessageCalls = mockConversationService.sendMessage.mock.calls;
 
       // Verify no message was saved with the pre-tool text
       const preTooMessageSaved = sendMessageCalls.some(
-        call => call[0].content.text === 'Pre-tool text'
+        call => call[0].content?.text === 'Pre-tool text'
       );
       expect(preTooMessageSaved).toBe(false);
     });

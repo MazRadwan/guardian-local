@@ -34,6 +34,9 @@ export * from './IProgressEmitter.js';
 export * from './IJinaClient.js';
 export * from './IWebSearchTool.js';
 
+// NOTE: IConsultToolLoopService moved to infrastructure/websocket/services (Epic 34)
+// It's WebSocket-specific, not a reusable application interface
+
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)
 export type { QuestionnaireData } from './IExcelExporter.js';

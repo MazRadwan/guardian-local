@@ -42,6 +42,7 @@ import { ToolUseRegistry } from './ToolUseRegistry.js';
 import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/IToolUseHandler.js';
 import { assessmentModeTools, consultModeTools } from '../ai/tools/index.js';
 import { WebSearchToolService } from '../../application/services/WebSearchToolService.js';
+import { ConsultToolLoopService } from './services/ConsultToolLoopService.js';
 import type { IJinaClient } from '../../application/interfaces/IJinaClient.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
 import type { ITitleGenerationService } from '../../application/interfaces/ITitleGenerationService.js';
@@ -143,11 +144,18 @@ export class ChatServer {
       console.log('[ChatServer] Web search tool registered for consult mode with status events');
     }
 
+    // Story 34.1.3: Create ConsultToolLoopService for consult mode tool execution
+    const consultToolLoopService = new ConsultToolLoopService(
+      claudeClient,
+      this.toolRegistry,
+      conversationService
+    );
+
     // Initialize MessageHandler with all dependencies for Story 28.11.2
-    // Story 33.2.2: Pass toolRegistry for consult mode tool loop
+    // Story 34.1.3: Pass consultToolLoopService instead of toolRegistry
     this.messageHandler = new MessageHandler(
       conversationService, fileRepository, rateLimiter, fileContextBuilder, claudeClient,
-      fileStorage, intakeParser, titleGenerationService, this.toolRegistry
+      fileStorage, intakeParser, titleGenerationService, this.toolRegistry, consultToolLoopService
     );
 
     this.setupNamespace();

@@ -9,6 +9,35 @@ Conversational AI assistant for healthcare organizations to assess AI vendors ag
 
 ## 🚨 Critical Rules
 
+### File Size Limit
+**Max 300 LOC per source file.** Enforces single responsibility, improves testability.
+
+**Exceptions:** Test files (`*.test.ts`), type definitions (`types.ts`, `*.d.ts`), generated files.
+
+**If a file exceeds 300 LOC:** Split into focused modules by concern.
+
+### Controller Purity
+**Controllers delegate. They do NOT contain inline logic.**
+
+- Controllers (ChatServer, MessageHandler, etc.) should ONLY receive input and delegate to services/handlers
+- If you're writing business logic inside a controller → extract to a dedicated service
+- If a method grows beyond simple delegation → it belongs in its own module
+
+**Anti-pattern:**
+```typescript
+// ❌ WRONG: Inline logic in controller
+async handleMessage() {
+  // 50+ lines of tool loop logic here
+}
+
+// ✅ RIGHT: Delegate to service
+async handleMessage() {
+  await this.toolLoopService.execute(...);
+}
+```
+
+**Why:** Controllers that accumulate logic become god modules and violate the 300 LOC limit.
+
 ### Hard Rule: Agent Delegation
 **You are the ORCHESTRATOR. Keep your context clean and sharp.**
 - Dispatch agents for ALL exploration, research, and implementation tasks
@@ -322,10 +351,7 @@ Main Agent identifies: "Need to complete Epic 9 Stories 9.1-9.3"
 ## For New Claude Sessions
 
 1. Read `.claude/PROJECT_CONTEXT.md` - 2 min overview
-2. Check `tasks/task-overview.md` - What's next?
-3. Check `tasks/implementation-logs/epic-X.md` - Recent work context (if available)
-4. Check `tasks/agent-workflow.md` - How to use sub-agents
-5. If needed: `docs/design/architecture/overview.md` - Full vision
+2. If needed: `docs/design/architecture/overview.md` - Full vision
 
 ---
 
@@ -408,4 +434,4 @@ Main Agent identifies: "Need to complete Epic 9 Stories 9.1-9.3"
 - [ ] Update implementation log with fix details (recommended)
 - [ ] Clear commit message with "fix:" prefix
 
-**Last Updated:** 2026-01-16 v5.2 (added Chrome DevTools MCP, deprecated Puppeteer/Playwright MCPs)
+**Last Updated:** 2026-02-04 v5.4 (added 300 LOC limit, controller purity rule, simplified new session onboarding)

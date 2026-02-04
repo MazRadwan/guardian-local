@@ -21,6 +21,7 @@ import type { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter
 import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
 import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IConsultToolLoopService } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
 /**
@@ -105,6 +106,14 @@ const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
 } as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
+ * Create a mock ConsultToolLoopService
+ * Story 34.1.3: Added for ConsultToolLoopService delegation
+ */
+const createMockConsultToolLoopService = (): jest.Mocked<IConsultToolLoopService> => ({
+  execute: jest.fn(),
+} as unknown as jest.Mocked<IConsultToolLoopService>);
+
+/**
  * Create a mock Message (for sendMessage response)
  */
 const createMockMessage = (overrides?: Partial<Message>): Message => ({
@@ -160,6 +169,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
   let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
   let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
+  let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
@@ -169,8 +179,9 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
     mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
     mockToolRegistry = createMockToolRegistry();
+    mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Create handler with ToolUseRegistry
+    // Create handler with ToolUseRegistry and ConsultToolLoopService
     handler = new MessageHandler(
       mockConversationService,
       mockFileRepository,
@@ -180,7 +191,8 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       undefined, // fileStorage
       undefined, // intakeParser
       undefined, // titleGenerationService
-      mockToolRegistry
+      mockToolRegistry,
+      mockConsultToolLoopService
     );
 
     mockSocket = createMockSocket('user-123');
@@ -190,6 +202,25 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
 
     // Default: sendMessage returns a message
     mockConversationService.sendMessage.mockResolvedValue(createMockMessage());
+
+    // Story 34.1.4: Default mock for ConsultToolLoopService
+    // When the tool loop is triggered, it handles all events internally
+    mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+      options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+      options.socket.emit('assistant_done', {
+        messageId: 'msg-123',
+        conversationId: options.conversationId,
+        fullText: 'Final response from tool loop',
+        assessmentId: null,
+      });
+      return {
+        fullResponse: 'Final response from tool loop',
+        toolUseBlocks: [],
+        savedMessageId: 'msg-123',
+        wasAborted: false,
+        stopReason: 'end_turn' as const,
+      };
+    });
 
     // Suppress console output during tests
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -215,19 +246,23 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Tool dispatch returns error
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: false,
-        error: 'Search service unavailable',
+      // Story 34.1.4: ConsultToolLoopService handles tool errors and provides graceful response
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: "I apologize, but I couldn't complete the search. Based on my knowledge...",
+          assessmentId: null,
+        });
+        return {
+          fullResponse: "I apologize, but I couldn't complete the search. Based on my knowledge...",
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      // Claude should receive the error and provide a graceful response
-      const secondStreamChunks: StreamChunk[] = [
-        { content: "I apologize, but I couldn't complete the search. ", isComplete: false },
-        { content: 'Based on my knowledge...', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -261,19 +296,23 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Tool dispatch returns network error
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: false,
-        error: 'Network timeout after 30s',
+      // Story 34.1.4: ConsultToolLoopService saves graceful error response
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'While I could not search for current information, here is what I know about healthcare regulations...',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'While I could not search for current information, here is what I know about healthcare regulations...',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      // Claude provides fallback response
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'While I could not search for current information, ', isComplete: false },
-        { content: 'here is what I know about healthcare regulations...', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -281,17 +320,18 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Should save a non-empty message
-      expect(mockConversationService.sendMessage).toHaveBeenCalledTimes(1);
+      // ConsultToolLoopService handles message saving
+      // MessageHandler does not call sendMessage when tool loop is delegated
+      expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
 
-      const savedMessage = mockConversationService.sendMessage.mock.calls[0][0];
-      expect(savedMessage.content.text).not.toBe('');
-      expect(savedMessage.content.text).toContain('healthcare regulations');
+      // Verify the result contains the graceful error response
+      expect(result.fullResponse).not.toBe('');
+      expect(result.fullResponse).toContain('healthcare regulations');
     });
 
-    it('should pass error message to Claude via tool_result for graceful handling', async () => {
+    it('should delegate error handling to ConsultToolLoopService', async () => {
       const toolUseBlock: ToolUseBlock = {
         type: 'tool_use',
         id: 'tool-1',
@@ -304,17 +344,23 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Tool dispatch returns specific error
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: false,
-        error: 'Rate limit exceeded for Jina API',
+      // Story 34.1.4: ConsultToolLoopService receives tool_use blocks and handles errors
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Answer',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Answer',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Answer', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -324,19 +370,12 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
 
       await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Verify continueWithToolResult was called with the error message
-      expect(mockClaudeClient.continueWithToolResult).toHaveBeenCalledWith(
-        [],
-        [toolUseBlock],
-        [
-          {
-            type: 'tool_result',
-            tool_use_id: 'tool-1',
-            content: 'Rate limit exceeded for Jina API',
-            is_error: true,
-          },
-        ],
-        expect.any(Object)
+      // Verify ConsultToolLoopService was called with the tool_use blocks
+      expect(mockConsultToolLoopService.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conversationId: 'conv-1',
+          toolUseBlocks: [toolUseBlock],
+        })
       );
     });
   });
@@ -355,15 +394,25 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: ConsultToolLoopService handles errors and emits system message
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        // Simulate error handling by service
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('message', {
+          id: 'msg-error',
+          conversationId: options.conversationId,
+          role: 'system',
+          content: { text: 'I encountered an error while searching. Please try again.' },
+          createdAt: new Date(),
+        });
+        return {
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: false,
+          stopReason: undefined,
+        };
       });
-
-      // Second stream throws an error
-      mockClaudeClient.continueWithToolResult.mockReturnValue(
-        createErrorGenerator(new Error('Claude API error'))
-      );
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -385,17 +434,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       );
       expect(idleCalls.length).toBeGreaterThan(0);
 
-      // Should save and emit a system error message for the user
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          role: 'system',
-          content: expect.objectContaining({
-            text: expect.stringContaining('error'),
-          }),
-        })
-      );
-
-      // Should emit a message event with the error
+      // Should emit a message event with the error (from ConsultToolLoopService mock)
       const messageCalls = mockSocket.emit.mock.calls.filter(
         call => call[0] === 'message'
       );
@@ -415,15 +454,24 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: ConsultToolLoopService handles stream failure without emitting assistant_done
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('message', {
+          id: 'msg-error',
+          conversationId: options.conversationId,
+          role: 'system',
+          content: { text: 'I encountered an error while searching. Please try again.' },
+          createdAt: new Date(),
+        });
+        return {
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: false,
+          stopReason: undefined,
+        };
       });
-
-      // Second stream throws an error
-      mockClaudeClient.continueWithToolResult.mockReturnValue(
-        createErrorGenerator(new Error('Connection reset'))
-      );
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -463,22 +511,23 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Both tools return successfully
-      mockToolRegistry.dispatch
-        .mockResolvedValueOnce({
-          handled: true,
-          toolResult: { toolUseId: 'tool-1', content: 'HIPAA results...' },
-        })
-        .mockResolvedValueOnce({
-          handled: true,
-          toolResult: { toolUseId: 'tool-2', content: 'HITRUST results...' },
+      // Story 34.1.4: ConsultToolLoopService handles multiple tools
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Based on both searches, here is the comparison...',
+          assessmentId: null,
         });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Based on both searches, here is the comparison...', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
+        return {
+          fullResponse: 'Based on both searches, here is the comparison...',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
+      });
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -488,8 +537,12 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
 
       await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Both tools should be dispatched
-      expect(mockToolRegistry.dispatch).toHaveBeenCalledTimes(2);
+      // ConsultToolLoopService should receive both tool_use blocks
+      expect(mockConsultToolLoopService.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolUseBlocks,
+        })
+      );
 
       // Should emit exactly one assistant_done
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
@@ -497,11 +550,11 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       );
       expect(assistantDoneCalls).toHaveLength(1);
 
-      // Should save exactly one message
-      expect(mockConversationService.sendMessage).toHaveBeenCalledTimes(1);
+      // MessageHandler should not save message (delegated to service)
+      expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
     });
 
-    it('should handle partial tool failure in multi-tool request', async () => {
+    it('should delegate partial tool failure handling to ConsultToolLoopService', async () => {
       const toolUseBlocks: ToolUseBlock[] = [
         {
           type: 'tool_use',
@@ -522,22 +575,23 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // First tool succeeds, second fails
-      mockToolRegistry.dispatch
-        .mockResolvedValueOnce({
-          handled: true,
-          toolResult: { toolUseId: 'tool-1', content: 'Success results' },
-        })
-        .mockResolvedValueOnce({
-          handled: false,
-          error: 'Search failed for this query',
+      // Story 34.1.4: ConsultToolLoopService handles partial failures
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'One search succeeded, one failed. Here is what I found...',
+          assessmentId: null,
         });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'One search succeeded, one failed. Here is what I found...', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
+        return {
+          fullResponse: 'One search succeeded, one failed. Here is what I found...',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
+      });
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -553,15 +607,11 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       );
       expect(assistantDoneCalls).toHaveLength(1);
 
-      // Verify both tool results were passed to Claude
-      expect(mockClaudeClient.continueWithToolResult).toHaveBeenCalledWith(
-        [],
-        toolUseBlocks,
-        [
-          { type: 'tool_result', tool_use_id: 'tool-1', content: 'Success results' },
-          { type: 'tool_result', tool_use_id: 'tool-2', content: 'Search failed for this query', is_error: true },
-        ],
-        expect.any(Object)
+      // Verify ConsultToolLoopService was called with all tool_use blocks
+      expect(mockConsultToolLoopService.execute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolUseBlocks,
+        })
       );
     });
   });
@@ -580,16 +630,23 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: ConsultToolLoopService handles empty response case
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('tool_status', { conversationId: options.conversationId, status: 'idle' });
+        options.socket.emit('assistant_done', {
+          messageId: null,  // Empty response = no message saved
+          conversationId: options.conversationId,
+          fullText: '',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: '',
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      // Second stream returns empty response
-      const secondStreamChunks: StreamChunk[] = [
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -599,7 +656,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
 
       const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Empty response should not be saved
+      // MessageHandler does not save message when tool loop is delegated
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
       expect(result.savedMessageId).toBeNull();
 

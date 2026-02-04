@@ -27,6 +27,7 @@ import type { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter
 import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
 import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IConsultToolLoopService } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
 /**
@@ -111,6 +112,14 @@ const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
 } as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
+ * Create a mock ConsultToolLoopService
+ * Story 34.1.3: Added for ConsultToolLoopService delegation
+ */
+const createMockConsultToolLoopService = (): jest.Mocked<IConsultToolLoopService> => ({
+  execute: jest.fn(),
+} as unknown as jest.Mocked<IConsultToolLoopService>);
+
+/**
  * Create a mock Message (for sendMessage response)
  */
 const createMockMessage = (overrides?: Partial<Message>): Message => ({
@@ -157,6 +166,7 @@ describe('MessageHandler Assistant Done Gating', () => {
   let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
   let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
+  let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
@@ -166,8 +176,9 @@ describe('MessageHandler Assistant Done Gating', () => {
     mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
     mockToolRegistry = createMockToolRegistry();
+    mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Create handler with ToolUseRegistry
+    // Create handler with ToolUseRegistry and ConsultToolLoopService
     handler = new MessageHandler(
       mockConversationService,
       mockFileRepository,
@@ -177,7 +188,8 @@ describe('MessageHandler Assistant Done Gating', () => {
       undefined, // fileStorage
       undefined, // intakeParser
       undefined, // titleGenerationService
-      mockToolRegistry
+      mockToolRegistry,
+      mockConsultToolLoopService
     );
 
     mockSocket = createMockSocket('user-123');
@@ -187,6 +199,26 @@ describe('MessageHandler Assistant Done Gating', () => {
 
     // Default: sendMessage returns a message
     mockConversationService.sendMessage.mockResolvedValue(createMockMessage());
+
+    // Story 34.1.4: Default mock for ConsultToolLoopService
+    // When the tool loop is triggered, it handles all events internally
+    // Set up a default mock that emits events and returns expected results
+    mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+      // Emit assistant_done as the service would
+      options.socket.emit('assistant_done', {
+        messageId: 'msg-123',
+        conversationId: options.conversationId,
+        fullText: 'Final response from tool loop',
+        assessmentId: null,
+      });
+      return {
+        fullResponse: 'Final response from tool loop',
+        toolUseBlocks: [],
+        savedMessageId: 'msg-123',
+        wasAborted: false,
+        stopReason: 'end_turn' as const,
+      };
+    });
 
     // Suppress console output during tests
     jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -214,22 +246,24 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      // Tool dispatch returns success
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: {
-          toolUseId: 'tool-1',
-          content: 'Search results here',
-        },
+      // Story 34.1.4: Mock ConsultToolLoopService to return the expected final response
+      // The service handles tool dispatch, continuation, and event emission internally
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        // Service emits assistant_done with the final response (not pre-tool text)
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Based on the search results, here is your answer.',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Based on the search results, here is your answer.',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      // Second stream: final response
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Based on the search results, ', isComplete: false },
-        { content: 'here is your answer.', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -250,7 +284,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         call => call[0] === 'assistant_done'
       );
 
-      // Should have exactly ONE assistant_done (from continueAfterToolUse, not from first stream)
+      // Should have exactly ONE assistant_done (from ConsultToolLoopService)
       expect(assistantDoneCalls).toHaveLength(1);
 
       // The assistant_done should contain the FINAL response text
@@ -274,16 +308,22 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: Mock ConsultToolLoopService
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Final answer from tool results',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Final answer from tool results',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Final answer from tool results', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -344,16 +384,22 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: Mock ConsultToolLoopService
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Here is the answer.',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Here is the answer.',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Here is the answer.', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -445,16 +491,24 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: Mock ConsultToolLoopService to emit second stream tokens
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        // Service emits tokens from the second stream (tool continuation)
+        options.socket.emit('assistant_token', { conversationId: options.conversationId, token: 'Answer.' });
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Answer.',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Answer.',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Answer.', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -472,12 +526,12 @@ describe('MessageHandler Assistant Done Gating', () => {
       // Should have tokens from BOTH first stream and second stream
       const tokenTexts = tokenCalls.map(call => (call[1] as { token: string }).token);
 
-      // First stream tokens
+      // First stream tokens (emitted by MessageHandler)
       expect(tokenTexts).toContain('Let me ');
       expect(tokenTexts).toContain('search ');
       expect(tokenTexts).toContain('for that.');
 
-      // Second stream tokens
+      // Second stream tokens (emitted by ConsultToolLoopService mock)
       expect(tokenTexts).toContain('Answer.');
     });
   });
@@ -497,16 +551,23 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: ConsultToolLoopService handles message persistence
+      // MessageHandler should NOT call sendMessage when tool loop is triggered
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Final answer',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Final answer',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Final answer', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -516,15 +577,9 @@ describe('MessageHandler Assistant Done Gating', () => {
 
       await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // sendMessage should be called exactly ONCE (only for final response)
-      expect(mockConversationService.sendMessage).toHaveBeenCalledTimes(1);
-
-      // The saved message should contain the FINAL response, not pre-tool text
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
-        conversationId: 'conv-1',
-        role: 'assistant',
-        content: { text: 'Final answer' },
-      });
+      // MessageHandler should NOT call sendMessage when tool loop is delegated
+      // Message persistence is handled by ConsultToolLoopService
+      expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
     });
 
     it('should persist exactly one assistant message after tool_result processing', async () => {
@@ -540,16 +595,22 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'results' },
+      // Story 34.1.4: ConsultToolLoopService saves exactly one message
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'The answer is 42.',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'The answer is 42.',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'The answer is 42.', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -559,17 +620,10 @@ describe('MessageHandler Assistant Done Gating', () => {
 
       const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Exactly one message persisted
-      expect(mockConversationService.sendMessage).toHaveBeenCalledTimes(1);
+      // MessageHandler does not persist message when tool loop is delegated
+      expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
 
-      // Message contains the final response
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
-        conversationId: 'conv-1',
-        role: 'assistant',
-        content: { text: 'The answer is 42.' },
-      });
-
-      // Result includes the saved message ID
+      // Result includes the saved message ID from the service
       expect(result.savedMessageId).toBe('msg-123');
     });
 
@@ -588,17 +642,22 @@ describe('MessageHandler Assistant Done Gating', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
-      mockToolRegistry.dispatch.mockResolvedValue({
-        handled: true,
-        toolResult: { toolUseId: 'tool-1', content: 'HIPAA requires X, Y, Z...' },
+      // Story 34.1.4: ConsultToolLoopService persists final response (not pre-tool text)
+      mockConsultToolLoopService.execute.mockImplementation(async (options) => {
+        options.socket.emit('assistant_done', {
+          messageId: 'msg-123',
+          conversationId: options.conversationId,
+          fullText: 'Based on my search, HIPAA requires organizations to...',
+          assessmentId: null,
+        });
+        return {
+          fullResponse: 'Based on my search, HIPAA requires organizations to...',
+          toolUseBlocks: [],
+          savedMessageId: 'msg-123',
+          wasAborted: false,
+          stopReason: 'end_turn' as const,
+        };
       });
-
-      // Second stream has the actual answer
-      const secondStreamChunks: StreamChunk[] = [
-        { content: 'Based on my search, HIPAA requires organizations to...', isComplete: false },
-        { content: '', isComplete: true, stopReason: 'end_turn' },
-      ];
-      mockClaudeClient.continueWithToolResult.mockReturnValue(createChunkGenerator(secondStreamChunks));
 
       const options: StreamingOptions = {
         enableTools: true,
@@ -606,15 +665,13 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // Verify the saved message contains ONLY the final response
-      const sendMessageCalls = mockConversationService.sendMessage.mock.calls;
-      expect(sendMessageCalls).toHaveLength(1);
+      // MessageHandler does not persist message when tool loop is delegated
+      expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
 
-      const savedContent = sendMessageCalls[0][0].content.text;
-      expect(savedContent).toBe('Based on my search, HIPAA requires organizations to...');
-      expect(savedContent).not.toContain('I will search for HIPAA info');
+      // Verify the result contains the final response (not pre-tool text)
+      expect(result.fullResponse).toBe('Based on my search, HIPAA requires organizations to...');
     });
   });
 
