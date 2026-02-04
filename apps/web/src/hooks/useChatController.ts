@@ -180,6 +180,7 @@ export function useChatController(): UseChatControllerReturn {
     handleVendorClarificationNeeded,
     handleFileProcessingError,
     handleQuestionnaireProgress,
+    handleToolStatus,
   } = useWebSocketEvents({
     addMessage,
     setMessages,
@@ -270,6 +271,7 @@ export function useChatController(): UseChatControllerReturn {
     onVendorClarificationNeeded: handleVendorClarificationNeeded,
     onFileProcessingError: handleFileProcessingError,
     onQuestionnaireProgress: handleQuestionnaireProgress,
+    onToolStatus: handleToolStatus,
     onAuthError: handleAuthError,
   }), [
     handleMessage,
@@ -297,6 +299,7 @@ export function useChatController(): UseChatControllerReturn {
     handleVendorClarificationNeeded,
     handleFileProcessingError,
     handleQuestionnaireProgress,
+    handleToolStatus,
     handleAuthError,
   ]);
 

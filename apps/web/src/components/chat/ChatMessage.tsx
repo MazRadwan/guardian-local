@@ -9,6 +9,7 @@ import { User, ShieldCheck, Copy, Check, RefreshCw, AlertTriangle } from 'lucide
 import { DownloadButton } from './DownloadButton';
 import { FileChipInChat } from './FileChipInChat';
 import { ScoringResultCard } from './ScoringResultCard';
+import { LinkBadge } from './LinkBadge';
 import { useChatStore } from '@/stores/chatStore';
 import { useStreamingText } from '@/hooks/useStreamingText';
 import type { ScoringResultData, RiskRating, Recommendation, DimensionScoreData } from '@/types/scoring';
@@ -255,6 +256,26 @@ export function ChatMessage({
                     >
                       {children}
                     </p>
+                  );
+                },
+                // Epic 33: Claude-style link badges with hover preview
+                // External links render as domain badges, hover shows full title and URL
+                a: ({node, href, children, ...props}) => {
+                  // Only use LinkBadge for external URLs (http/https)
+                  if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+                    return <LinkBadge href={href}>{children}</LinkBadge>;
+                  }
+                  // Fallback for non-http links (mailto, tel, anchors, etc.)
+                  return (
+                    <a
+                      href={href}
+                      className="text-blue-600 underline hover:text-blue-800"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      {...props}
+                    >
+                      {children}
+                    </a>
                   );
                 },
               }}
