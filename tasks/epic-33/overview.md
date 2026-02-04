@@ -1,9 +1,11 @@
 # Epic 33: Consult Mode Search Tool
 
-**Status:** Planned
+**Status:** In Progress
 **Branch:** `epic/33-consult-search-tool`
 **Created:** 2026-01-29
 **Planned:** 2026-02-03
+
+> **⚠️ SESSION HANDOFF:** See `.session-handoff.md` in this folder for current implementation status, bugs, and context for continuing work.
 
 ---
 
