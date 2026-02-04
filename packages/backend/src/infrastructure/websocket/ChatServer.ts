@@ -233,10 +233,14 @@ export class ChatServer {
     const { conversationId, messageText, enrichedAttachments } = validation;
     const hasAttachments = !!(enrichedAttachments && enrichedAttachments.length > 0);
 
-    // Step 2: Save user message
+    // Step 2: Save user message (skip for regenerate - message already exists in DB)
+    // When isRegenerate is true, the user message already exists from the original send,
+    // we're just requesting a different assistant response
     let finalText = messageText || '';
     if (!finalText && hasAttachments) finalText = this.messageHandler.generatePlaceholderText(enrichedAttachments!);
-    await this.messageHandler.saveUserMessageAndEmit(socket as IAuthenticatedSocket, conversationId!, finalText, enrichedAttachments, payload.components);
+    if (!payload.isRegenerate) {
+      await this.messageHandler.saveUserMessageAndEmit(socket as IAuthenticatedSocket, conversationId!, finalText, enrichedAttachments, payload.components);
+    }
 
     // Step 3: Get context and mode config
     const { messages, systemPrompt, promptCache, mode } = await this.contextBuilder.build(conversationId!, payload.isRegenerate);

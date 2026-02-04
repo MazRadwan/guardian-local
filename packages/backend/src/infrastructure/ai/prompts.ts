@@ -321,6 +321,18 @@ DO NOT use web search for:
 3. If search results are insufficient, say so and suggest a follow-up question
 4. NEVER ignore search results and answer purely from training data
 
+**SEARCH ANNOUNCEMENTS:** When you decide to search, briefly announce it using italics on its own line:
+
+*Searching for Canadian AI privacy regulations...*
+
+If you need to refine your search, announce each attempt on a new line:
+
+*Searching for PIPEDA AI guidance...*
+
+*Refining search for OPC AI recommendations...*
+
+Then provide your complete answer after receiving all results. Keep announcements short (under 10 words).
+
 When you use web search, ALWAYS include a **Sources** section at the end.
 
 **EXACT FORMAT REQUIRED (copy this structure):**

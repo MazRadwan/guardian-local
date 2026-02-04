@@ -588,6 +588,11 @@ export function useChatController(): UseChatControllerReturn {
 
   const handleRegenerate = useCallback(
     (messageIndex: number) => {
+      // Guard: Prevent multiple concurrent regenerate calls
+      if (regeneratingMessageIndex !== null || isLoading) {
+        console.log('[useChatController] Regenerate blocked - already in progress');
+        return;
+      }
       // Delegate to chat service
       chatService.regenerateMessage(
         messageIndex,
@@ -596,7 +601,7 @@ export function useChatController(): UseChatControllerReturn {
         setRegeneratingMessageIndex
       );
     },
-    [chatService, activeConversationId, messages, setRegeneratingMessageIndex]
+    [chatService, activeConversationId, messages, setRegeneratingMessageIndex, regeneratingMessageIndex, isLoading]
   );
 
   // Create abortStream wrapper that delegates to chatService

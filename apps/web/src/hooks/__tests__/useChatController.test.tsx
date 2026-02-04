@@ -614,6 +614,54 @@ describe('useChatController', () => {
         expect.any(Function)
       );
     });
+
+    it('blocks regenerate when isLoading is true (prevents duplicate calls)', () => {
+      const messages = [
+        { role: 'user' as const, content: 'Question 1', timestamp: new Date() },
+        { role: 'assistant' as const, content: 'Answer 1', timestamp: new Date() },
+      ];
+
+      // Mock store with isLoading: true
+      (useChatStore as unknown as jest.Mock).mockReturnValue({
+        messages,
+        isLoading: true, // Simulates regenerate already in progress
+        error: null,
+        isStreaming: false,
+        addMessage: mockAddMessage,
+        setMessages: mockSetMessages,
+        startStreaming: mockStartStreaming,
+        appendToLastMessage: mockAppendToLastMessage,
+        finishStreaming: mockFinishStreaming,
+        setLoading: mockSetLoading,
+        setError: mockSetError,
+        clearMessages: mockClearMessages,
+        activeConversationId: 'conv-123',
+        setActiveConversation: mockSetActiveConversation,
+        setConversations: mockSetConversations,
+        addConversation: mockAddConversation,
+        updateConversationTitle: mockUpdateConversationTitle,
+        conversations: [],
+        newChatRequested: false,
+        clearNewChatRequest: mockClearNewChatRequest,
+        requestNewChat: mockRequestNewChat,
+        deleteConversationRequested: null,
+        clearDeleteConversationRequest: mockClearDeleteConversationRequest,
+        removeConversationFromList: mockRemoveConversationFromList,
+        setExportReady: jest.fn(),
+        clearExportReady: jest.fn(),
+        getExportReady: jest.fn(() => null),
+        appendComponentToLastAssistantMessage: jest.fn(),
+      });
+
+      const { result } = renderHook(() => useChatController());
+
+      act(() => {
+        result.current.handleRegenerate(1);
+      });
+
+      // Should NOT call chatService when already loading
+      expect(mockChatServiceRegenerateMessage).not.toHaveBeenCalled();
+    });
   });
 
   describe('Handler: abortStream', () => {
