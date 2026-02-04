@@ -1110,5 +1110,38 @@ describe('Composer', () => {
       const textarea = screen.getByPlaceholderText('Type a message...');
       expect(textarea).toBeDisabled();
     });
+
+    // Epic 33: Stop button during tool loop (isLoading but not yet streaming)
+    it('renders stop button when isLoading (tool loop phase) even without streaming', () => {
+      render(
+        <Composer
+          onSendMessage={mockOnSendMessage}
+          isStreaming={false}
+          isLoading={true}
+          onStopStream={jest.fn()}
+        />
+      );
+
+      // Stop button should show during tool loop (web search) before text starts streaming
+      expect(screen.getByLabelText('Stop generating')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Send message')).not.toBeInTheDocument();
+    });
+
+    it('stop button works during isLoading phase', async () => {
+      const mockOnStopStream = jest.fn();
+      render(
+        <Composer
+          onSendMessage={mockOnSendMessage}
+          isStreaming={false}
+          isLoading={true}
+          onStopStream={mockOnStopStream}
+        />
+      );
+
+      const stopButton = screen.getByLabelText('Stop generating');
+      await userEvent.click(stopButton);
+
+      expect(mockOnStopStream).toHaveBeenCalledTimes(1);
+    });
   });
 });

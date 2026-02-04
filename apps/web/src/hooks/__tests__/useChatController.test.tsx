@@ -194,6 +194,8 @@ describe('useChatController', () => {
       setConversationTitleLoading: jest.fn(),
       setConversationTitleManuallyEdited: jest.fn(),
       setEditingConversationId: jest.fn(),
+      // Epic 33.3.2: Tool status
+      setToolStatus: jest.fn(),
     });
 
     // Default useWebSocketAdapter mock

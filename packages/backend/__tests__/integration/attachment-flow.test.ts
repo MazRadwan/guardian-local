@@ -51,6 +51,11 @@ class MockClaudeClient implements IClaudeClient {
     yield { content: 'streaming response', isComplete: false };
     yield { content: '', isComplete: true };
   }
+
+  async *continueWithToolResult(): AsyncGenerator<StreamChunk> {
+    yield { content: 'Tool result processed', isComplete: false };
+    yield { content: '', isComplete: true };
+  }
 }
 
 // Mock service repositories

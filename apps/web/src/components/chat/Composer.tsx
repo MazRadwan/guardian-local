@@ -443,7 +443,8 @@ export const Composer = forwardRef<ComposerRef, ComposerProps>(
               </div>
 
               {/* Right group: Send button or Stop button */}
-              {isStreaming && onStopStream ? (
+              {/* Show stop button when either streaming text OR loading (tool loop phase) */}
+              {(isStreaming || isLoading) && onStopStream ? (
                 <Button
                   type="button"
                   onClick={onStopStream}

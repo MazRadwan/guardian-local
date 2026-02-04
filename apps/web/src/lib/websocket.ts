@@ -302,6 +302,17 @@ export interface QuestionnaireProgressPayload {
 }
 
 /**
+ * Epic 33.3.2: Tool status event payload
+ *
+ * Emitted by backend during consult mode when tools (web search, URL reader) are active.
+ * Used to show tool activity indicator in the UI.
+ */
+export interface ToolStatusPayload {
+  conversationId: string;
+  status: 'searching' | 'reading' | 'idle';
+}
+
+/**
  * Payload for questionnaire_ready event from backend
  */
 export interface QuestionnaireReadyPayload {
@@ -1140,6 +1151,22 @@ export class WebSocketClient {
 
     this.socket.on('reconnect', handler);
     return () => this.socket?.off('reconnect', handler);
+  }
+
+  /**
+   * Epic 33.3.2: Subscribe to tool_status events
+   * Emitted during consult mode when tools (web search, URL reader) are active
+   */
+  onToolStatus(callback: (data: ToolStatusPayload) => void): () => void {
+    if (!this.socket) throw new Error('WebSocket not initialized');
+
+    const handler = (data: ToolStatusPayload) => {
+      console.log('[WebSocket] Tool status:', data.status);
+      callback(data);
+    };
+
+    this.socket.on('tool_status', handler);
+    return () => this.socket?.off('tool_status', handler);
   }
 
 }

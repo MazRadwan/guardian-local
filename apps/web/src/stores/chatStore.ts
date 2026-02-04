@@ -29,6 +29,20 @@ export interface QuestionnaireProgressState {
   seq: number;
 }
 
+/**
+ * Epic 33.3.2: Tool status type for consult mode
+ * 'idle' - no tool running
+ * 'searching' - web search in progress
+ * 'reading' - reading URLs in progress
+ */
+export type ToolStatus = 'idle' | 'searching' | 'reading';
+
+/**
+ * Epic 33.3.2: Tool status timeout constant (30 seconds)
+ * Safety net to prevent stuck UI states
+ */
+export const TOOL_STATUS_TIMEOUT_MS = 30000;
+
 // Re-export for convenience
 export { GENERATION_STEPS };
 
@@ -193,6 +207,14 @@ export interface ChatState {
    * Used to preserve progress during reconnection
    */
   isReconnecting: boolean;
+
+  /**
+   * Epic 33.3.2: Tool execution status for consult mode
+   * 'idle' - no tool running
+   * 'searching' - web search in progress
+   * 'reading' - reading URLs in progress
+   */
+  toolStatus: ToolStatus;
 
   addMessage: (message: ChatMessage) => void;
   setMessages: (messages: ChatMessage[]) => void;
@@ -391,7 +413,27 @@ export interface ChatState {
    * @param value - Whether currently reconnecting
    */
   setReconnecting: (value: boolean) => void;
+
+  /**
+   * Epic 33.3.2: Set tool status with safety timeout
+   * Includes 30-second safety timeout that auto-clears to 'idle'
+   * @param status - Tool status ('idle' | 'searching' | 'reading')
+   */
+  setToolStatus: (status: ToolStatus) => void;
+
+  /**
+   * Epic 33.3.2: Clear tool status timeout (internal use)
+   * Called when status changes or on cleanup
+   */
+  clearToolStatusTimeout: () => void;
 }
+
+/**
+ * Epic 33.3.2: Module-level timeout ID for tool status safety timeout
+ * Stored outside of Zustand state because setTimeout returns an opaque value
+ * that doesn't serialize well and isn't part of the UI state
+ */
+let toolStatusTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -459,6 +501,9 @@ export const useChatStore = create<ChatState>()(
 
       // Epic 32.2.3: Reconnection state - defaults
       isReconnecting: false,
+
+      // Epic 33.3.2: Tool status - defaults
+      toolStatus: 'idle' as ToolStatus,
 
       addMessage: (message) =>
         set((state) => ({
@@ -611,6 +656,8 @@ export const useChatStore = create<ChatState>()(
         get().resetGenerationStep();
         // Epic 32.2.1: Clear questionnaire progress on conversation switch
         set({ questionnaireProgress: null });
+        // Epic 33.3.2: Clear tool status on conversation switch
+        get().setToolStatus('idle');
       },
 
       // Delete conversation immediately (used by tests and direct local operations)
@@ -992,6 +1039,32 @@ export const useChatStore = create<ChatState>()(
       setReconnecting: (value) => {
         console.log('[chatStore] Setting isReconnecting:', value);
         set({ isReconnecting: value });
+      },
+
+      // Epic 33.3.2: Clear tool status timeout
+      clearToolStatusTimeout: () => {
+        if (toolStatusTimeoutId) {
+          clearTimeout(toolStatusTimeoutId);
+          toolStatusTimeoutId = null;
+        }
+      },
+
+      // Epic 33.3.2: Set tool status with safety timeout
+      setToolStatus: (status) => {
+        // Clear any existing timeout
+        get().clearToolStatusTimeout();
+
+        console.log('[chatStore] Setting toolStatus:', status);
+        set({ toolStatus: status });
+
+        // If not idle, start safety timeout
+        if (status !== 'idle') {
+          toolStatusTimeoutId = setTimeout(() => {
+            console.warn('[chatStore] Tool status safety timeout - forcing idle');
+            set({ toolStatus: 'idle' });
+            toolStatusTimeoutId = null;
+          }, TOOL_STATUS_TIMEOUT_MS);
+        }
       },
     }),
     {

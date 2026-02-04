@@ -14,3 +14,10 @@ export {
   questionnaireOutputTool,
   QUESTIONNAIRE_OUTPUT_TOOL_NAME,
 } from './questionnaireOutputTool.js';
+
+// Epic 33: Consult Search Tool
+export {
+  webSearchTool,
+  consultModeTools,
+  type WebSearchInput,
+} from './webSearchTool.js';

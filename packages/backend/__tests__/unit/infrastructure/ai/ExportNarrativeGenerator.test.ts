@@ -70,6 +70,7 @@ describe('ExportNarrativeGenerator', () => {
     mockClaudeClient = {
       sendMessage: jest.fn(),
       streamMessage: jest.fn(),
+      continueWithToolResult: jest.fn(),
       analyzeImages: jest.fn(),
       prepareDocument: jest.fn(),
       streamWithTool: jest.fn(),

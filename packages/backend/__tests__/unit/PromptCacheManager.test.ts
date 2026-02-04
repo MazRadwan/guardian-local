@@ -1,8 +1,10 @@
 import { describe, it, expect } from '@jest/globals'
 import { PromptCacheManager } from '../../src/infrastructure/ai/PromptCacheManager'
 import type { ConversationMode } from '../../src/domain/entities/Conversation'
+import type { SystemPromptOptions } from '../../src/infrastructure/ai/prompts'
 
-const mockPromptProvider = (suffix: string) => (mode: ConversationMode) => `prompt-${suffix}-${mode}`
+// Mock provider that ignores options - used for basic tests
+const mockPromptProvider = (suffix: string) => (mode: ConversationMode, _options?: SystemPromptOptions) => `prompt-${suffix}-${mode}`
 
 describe('PromptCacheManager', () => {
   it('returns cache metadata when enabled', () => {

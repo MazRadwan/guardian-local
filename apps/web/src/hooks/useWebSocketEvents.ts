@@ -2,7 +2,7 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload } from '@/lib/websocket';
+import { ChatMessage, EmbeddedComponent, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload, ToolStatusPayload } from '@/lib/websocket';
 import { toast } from 'sonner';
 import { useChatStore, GENERATION_STEPS } from '@/stores/chatStore';
 import type { GenerationPhasePayload } from '@guardian/shared';
@@ -90,6 +90,8 @@ export interface UseWebSocketEventsReturn {
   handleFileProcessingError: (data: FileProcessingErrorPayload) => void;
   // Epic 32.2.1: Questionnaire progress handler
   handleQuestionnaireProgress: (data: QuestionnaireProgressPayload) => void;
+  // Epic 33.3.2: Tool status handler
+  handleToolStatus: (data: ToolStatusPayload) => void;
 }
 
 /**
@@ -232,6 +234,8 @@ export function useWebSocketEvents({
       // Transition to error state for questionnaire card to show retry
       useChatStore.getState().setQuestionnaireUIState('error');
       useChatStore.getState().setQuestionnaireError(errorMessage);
+      // Epic 33.3.2: Clear tool status on error
+      useChatStore.getState().setToolStatus('idle');
 
       // Story 26.3: Clear title loading for active conversation on error
       // This handles the case where title generation fails
@@ -363,6 +367,8 @@ export function useWebSocketEvents({
       finishStreaming();
       setLoading(false);
       setRegeneratingMessageIndex(null); // Reset regenerating state
+      // Epic 33.3.2: Clear tool status on abort
+      useChatStore.getState().setToolStatus('idle');
       // Auto-focus composer after abort
       focusComposer();
     },
@@ -808,6 +814,23 @@ export function useWebSocketEvents({
     [activeConversationId]
   );
 
+  // Epic 33.3.2: Tool status handler
+  const handleToolStatus = useCallback(
+    (data: ToolStatusPayload) => {
+      // Only process for active conversation
+      if (data.conversationId !== activeConversationId) {
+        console.log('[useWebSocketEvents] Ignoring tool_status for inactive conversation');
+        return;
+      }
+
+      console.log('[useWebSocketEvents] Tool status:', data.status);
+
+      // Update chatStore with tool status (includes safety timeout)
+      useChatStore.getState().setToolStatus(data.status);
+    },
+    [activeConversationId]
+  );
+
   return {
     handleMessage,
     handleMessageStream,
@@ -831,5 +854,6 @@ export function useWebSocketEvents({
     handleVendorClarificationNeeded,
     handleFileProcessingError,
     handleQuestionnaireProgress,
+    handleToolStatus,
   };
 }

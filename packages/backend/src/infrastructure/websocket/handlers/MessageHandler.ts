@@ -46,8 +46,10 @@ import type { IAuthenticatedSocket } from '../ChatContext.js';
 import type { RateLimiter } from '../RateLimiter.js';
 import type { MessageAttachment, MessageComponent } from '../../../domain/entities/Message.js';
 import type { FileContextBuilder, FileContextResult } from '../context/FileContextBuilder.js';
-import type { IClaudeClient, ClaudeMessage, ToolUseBlock, ClaudeTool } from '../../../application/interfaces/IClaudeClient.js';
+import type { IClaudeClient, ClaudeMessage, ToolUseBlock, ToolResultBlock, ClaudeTool } from '../../../application/interfaces/IClaudeClient.js';
 import type { ImageContentBlock } from '../../ai/types/vision.js';
+import type { ToolUseRegistry } from '../ToolUseRegistry.js';
+import type { ToolUseInput, ToolUseContext } from '../../../application/interfaces/IToolUseHandler.js';
 
 /**
  * Story 28.11.2: MIME type to validated document type mapping
@@ -148,9 +150,10 @@ export interface BypassClaudeResult {
 
 /**
  * Story 28.9.5: Result of streamClaudeResponse
+ * Story 33.2.2: Extended with stopReason for tool loop detection
  *
  * Contains the full response text, any tool use blocks from Claude,
- * the saved message ID (if response was non-empty), and abort status.
+ * the saved message ID (if response was non-empty), abort status, and stop reason.
  */
 export interface StreamingResult {
   /** Full accumulated response text */
@@ -161,11 +164,14 @@ export interface StreamingResult {
   savedMessageId: string | null;
   /** Whether the stream was aborted by user */
   wasAborted: boolean;
+  /** Story 33.2.2: Stop reason from Claude API */
+  stopReason?: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence';
 }
 
 /**
  * Story 28.9.5: Options for streamClaudeResponse
  * Epic 30 Sprint 3: Added imageBlocks for Vision API support
+ * Story 33.2.2: Added mode and source for tool loop gating
  */
 export interface StreamingOptions {
   /** Whether to enable Claude tools */
@@ -178,6 +184,10 @@ export interface StreamingOptions {
   cachedPromptId?: string;
   /** Epic 30: Image content blocks for Vision API */
   imageBlocks?: ImageContentBlock[];
+  /** Story 33.2.2: Conversation mode for tool loop gating */
+  mode?: 'consult' | 'assessment' | 'scoring';
+  /** Story 33.2.2: Message source for tool loop gating (only 'user_input' triggers tools) */
+  source?: 'user_input' | 'auto_summarize';
 }
 
 /**
@@ -211,7 +221,9 @@ export class MessageHandler {
     // Story 28.11.2: Dependencies for background enrichment and title generation
     private readonly fileStorage?: IFileStorage,
     private readonly intakeParser?: IIntakeDocumentParser,
-    private readonly titleGenerationService?: ITitleGenerationService
+    private readonly titleGenerationService?: ITitleGenerationService,
+    // Story 33.2.2: ToolUseRegistry for consult mode tool loop
+    private readonly toolRegistry?: ToolUseRegistry
   ) {}
 
   /**
@@ -610,7 +622,7 @@ export class MessageHandler {
       default:
         return {
           mode: 'consult',
-          enableTools: false,        // No tools in consult
+          enableTools: true,         // Epic 33: Enable web_search tool in consult mode
           autoSummarize: true,       // Auto-summarize empty file messages
           backgroundEnrich: false,
           bypassClaude: false,
@@ -669,6 +681,7 @@ export class MessageHandler {
    * Stream Claude response to client
    *
    * Story 28.9.5: Claude streaming with abort handling
+   * Story 33.2.2: Consult mode tool loop (web_search)
    *
    * CRITICAL BEHAVIORS TO PRESERVE:
    * 1. Uses async iterator: `for await (const chunk of claudeClient.streamMessage(...))`
@@ -677,12 +690,19 @@ export class MessageHandler {
    * 4. Partial response saved to DB even on abort
    * 5. Tool uses captured from final chunk (chunk.isComplete && chunk.toolUse)
    *
+   * Story 33.2.2 Tool Loop:
+   * - Only triggered when: mode === 'consult' AND source === 'user_input' AND stopReason === 'tool_use'
+   * - Executes tool via ToolUseRegistry
+   * - Sends tool_result back to Claude via continueWithToolResult
+   * - Maximum 1 tool loop iteration (prevents infinite loops)
+   * - Returns empty toolUseBlocks to prevent double handling by ChatServer
+   *
    * @param socket - Authenticated socket to emit events on
    * @param conversationId - Conversation ID for the message
    * @param messages - Message history for Claude context
    * @param systemPrompt - System prompt for Claude
-   * @param options - Streaming options (tools, caching, imageBlocks)
-   * @returns StreamingResult with response, tool uses, and abort status
+   * @param options - Streaming options (tools, caching, imageBlocks, mode, source)
+   * @returns StreamingResult with response, tool uses, abort status, and stopReason
    */
   async streamClaudeResponse(
     socket: IAuthenticatedSocket,
@@ -708,6 +728,7 @@ export class MessageHandler {
     let toolUseBlocks: ToolUseBlock[] = [];
     let savedMessageId: string | null = null;
     let wasAborted = false;
+    let stopReason: StreamingResult['stopReason'];
 
     try {
       // Build Claude options
@@ -740,10 +761,67 @@ export class MessageHandler {
           });
         }
 
-        // Capture tool use from final chunk
-        if (chunk.isComplete && chunk.toolUse) {
-          toolUseBlocks = chunk.toolUse;
+        // Capture tool use and stop reason from final chunk
+        if (chunk.isComplete) {
+          if (chunk.toolUse) {
+            toolUseBlocks = chunk.toolUse;
+            console.log(`[MessageHandler] Claude emitted ${toolUseBlocks.length} tool_use block(s): ${toolUseBlocks.map(t => t.name).join(', ')}`);
+          }
+          if (chunk.stopReason) {
+            stopReason = chunk.stopReason as StreamingResult['stopReason'];
+            console.log(`[MessageHandler] Claude stop_reason: ${stopReason}`);
+          }
         }
+      }
+
+      // Story 33.2.2: Consult mode tool loop
+      // Gating: Only process tool loop when ALL conditions are met:
+      // 1. mode === 'consult' (not assessment or scoring)
+      // 2. source === 'user_input' (not auto_summarize)
+      // 3. stopReason === 'tool_use'
+      // 4. toolUseBlocks.length > 0
+      // 5. toolRegistry is configured
+
+      // Debug log to diagnose tool loop gating
+      console.log(`[MessageHandler] Tool loop check: mode=${options.mode}, source=${options.source}, stopReason=${stopReason}, toolUseBlocks=${toolUseBlocks.length}, hasRegistry=${!!this.toolRegistry}, wasAborted=${wasAborted}`);
+
+      const shouldExecuteToolLoop =
+        options.mode === 'consult' &&
+        options.source === 'user_input' &&
+        stopReason === 'tool_use' &&
+        toolUseBlocks.length > 0 &&
+        this.toolRegistry &&
+        !wasAborted;
+
+      if (shouldExecuteToolLoop) {
+        console.log(`[MessageHandler] Consult mode tool loop triggered for ${toolUseBlocks.length} tool(s)`);
+
+        // Execute tool loop (maximum 1 iteration)
+        const toolLoopResult = await this.executeConsultToolLoop(
+          socket,
+          conversationId,
+          messages,
+          fullResponse,
+          toolUseBlocks,
+          systemPrompt,
+          claudeOptions
+        );
+
+        // Update with final response from tool loop
+        fullResponse = toolLoopResult.fullResponse;
+        savedMessageId = toolLoopResult.savedMessageId;
+        wasAborted = toolLoopResult.wasAborted;
+        stopReason = toolLoopResult.stopReason;
+
+        // CRITICAL: Return empty toolUseBlocks to prevent double handling by ChatServer
+        // The tool loop handled the tools internally
+        return {
+          fullResponse,
+          toolUseBlocks: [],  // Cleared - tools already handled
+          savedMessageId,
+          wasAborted,
+          stopReason,
+        };
       }
 
       // Save message to database (even if aborted, save partial response)
@@ -773,6 +851,7 @@ export class MessageHandler {
         toolUseBlocks,
         savedMessageId,
         wasAborted,
+        stopReason,
       };
     } catch (error) {
       console.error('[MessageHandler] Claude API error:', error);
@@ -799,6 +878,234 @@ export class MessageHandler {
         toolUseBlocks: [],
         savedMessageId: null,
         wasAborted: false,
+        stopReason: undefined,
+      };
+    }
+  }
+
+  /**
+   * Story 33.2.2: Execute consult mode tool loop
+   *
+   * This method handles the tool_use -> tool_result -> final response flow for consult mode.
+   * It executes exactly ONE tool loop iteration to prevent infinite loops.
+   *
+   * Flow:
+   * 1. Emit tool_status 'searching' for UI feedback
+   * 2. Execute tools via ToolUseRegistry.dispatch
+   * 3. Build tool_result blocks
+   * 4. Call claudeClient.continueWithToolResult for second stream
+   * 5. Stream final response to client
+   * 6. Save ONLY the final message to database
+   * 7. Emit tool_status 'idle' when done
+   *
+   * @param socket - Authenticated socket
+   * @param conversationId - Conversation ID
+   * @param originalMessages - Original message history
+   * @param firstResponse - Response text from first stream (may be empty)
+   * @param toolUseBlocks - Tool use blocks from Claude
+   * @param systemPrompt - System prompt for continuation
+   * @param claudeOptions - Claude options for continuation
+   * @returns Final streaming result
+   */
+  private async executeConsultToolLoop(
+    socket: IAuthenticatedSocket,
+    conversationId: string,
+    originalMessages: ClaudeMessage[],
+    firstResponse: string,
+    toolUseBlocks: ToolUseBlock[],
+    systemPrompt: string,
+    claudeOptions: Record<string, unknown>
+  ): Promise<StreamingResult> {
+    let fullResponse = '';
+    let savedMessageId: string | null = null;
+    let wasAborted = false;
+    let stopReason: StreamingResult['stopReason'];
+
+    try {
+      // 1. Emit tool_status for UI feedback
+      socket.emit('tool_status', {
+        conversationId,
+        status: 'searching',
+      });
+
+      // 2. Check for abort before tool execution
+      if (socket.data.abortRequested) {
+        console.log('[MessageHandler] Tool loop aborted before execution');
+        socket.emit('tool_status', { conversationId, status: 'idle' });
+        return {
+          fullResponse: firstResponse,
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: 'tool_use',
+        };
+      }
+
+      // 3. Execute tools via ToolUseRegistry
+      const toolResults: ToolResultBlock[] = [];
+
+      for (const toolUse of toolUseBlocks) {
+        // Check abort before each tool
+        if (socket.data.abortRequested) {
+          console.log('[MessageHandler] Tool loop aborted during execution');
+          socket.emit('tool_status', { conversationId, status: 'idle' });
+          return {
+            fullResponse: firstResponse,
+            toolUseBlocks: [],
+            savedMessageId: null,
+            wasAborted: true,
+            stopReason: 'tool_use',
+          };
+        }
+
+        const input: ToolUseInput = {
+          toolName: toolUse.name,
+          toolUseId: toolUse.id,
+          input: toolUse.input,
+        };
+
+        const context: ToolUseContext = {
+          conversationId,
+          userId: socket.userId!,
+          assessmentId: null,
+          mode: 'consult',
+        };
+
+        console.log(`[MessageHandler] Dispatching tool: ${toolUse.name}`);
+        const result = await this.toolRegistry!.dispatch(input, context);
+
+        if (result.handled && result.toolResult) {
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: result.toolResult.toolUseId,
+            content: result.toolResult.content,
+          });
+        } else {
+          // Tool not handled or failed - return error as tool_result
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: result.error || 'Tool execution failed. Please answer based on your knowledge.',
+          });
+        }
+      }
+
+      // 4. Emit reading status (if there are results to process)
+      socket.emit('tool_status', {
+        conversationId,
+        status: 'reading',
+      });
+
+      // 5. Check abort before continuation
+      if (socket.data.abortRequested) {
+        console.log('[MessageHandler] Tool loop aborted before continuation');
+        socket.emit('tool_status', { conversationId, status: 'idle' });
+        return {
+          fullResponse: firstResponse,
+          toolUseBlocks: [],
+          savedMessageId: null,
+          wasAborted: true,
+          stopReason: 'tool_use',
+        };
+      }
+
+      // 6. Continue conversation with tool results
+      // NOTE: We intentionally don't pass tools on continuation to prevent nested tool_use.
+      // This limits consult mode to one tool invocation per query (v1 design choice).
+      // If Claude needs multiple searches, the user can ask follow-up questions.
+      console.log(`[MessageHandler] Continuing with ${toolResults.length} tool result(s)`);
+
+      for await (const chunk of this.claudeClient!.continueWithToolResult(
+        originalMessages,
+        toolUseBlocks,
+        toolResults,
+        {
+          systemPrompt,
+          // tools intentionally omitted - prevents nested tool_use (v1 limitation)
+        }
+      )) {
+        // Check abort during final stream
+        if (socket.data.abortRequested) {
+          console.log('[MessageHandler] Tool loop aborted during final stream');
+          wasAborted = true;
+          break;
+        }
+
+        if (!chunk.isComplete && chunk.content) {
+          fullResponse += chunk.content;
+
+          // Emit tokens to client
+          socket.emit('assistant_token', {
+            conversationId,
+            token: chunk.content,
+          });
+        }
+
+        if (chunk.isComplete && chunk.stopReason) {
+          stopReason = chunk.stopReason as StreamingResult['stopReason'];
+        }
+      }
+
+      // 7. Save FINAL message to database (only the response after tool_result)
+      if (fullResponse.length > 0) {
+        const completeMessage = await this.conversationService.sendMessage({
+          conversationId,
+          role: 'assistant',
+          content: { text: fullResponse },
+        });
+        savedMessageId = completeMessage.id;
+      }
+
+      // 8. Emit tool_status idle and assistant_done
+      socket.emit('tool_status', { conversationId, status: 'idle' });
+
+      if (!wasAborted) {
+        socket.emit('assistant_done', {
+          messageId: savedMessageId,
+          conversationId,
+          fullText: fullResponse,
+          assessmentId: null,
+        });
+      } else {
+        console.log(`[MessageHandler] Tool loop aborted - partial response saved (${fullResponse.length} chars)`);
+      }
+
+      return {
+        fullResponse,
+        toolUseBlocks: [],  // Tools already handled
+        savedMessageId,
+        wasAborted,
+        stopReason,
+      };
+    } catch (error) {
+      console.error('[MessageHandler] Tool loop error:', error);
+
+      // Emit idle status on error
+      socket.emit('tool_status', { conversationId, status: 'idle' });
+
+      // Send user-friendly error message
+      const errorMessage = await this.conversationService.sendMessage({
+        conversationId,
+        role: 'system',
+        content: {
+          text: "I encountered an error while searching. Please try again.",
+        },
+      });
+
+      socket.emit('message', {
+        id: errorMessage.id,
+        conversationId: errorMessage.conversationId,
+        role: errorMessage.role,
+        content: errorMessage.content,
+        createdAt: errorMessage.createdAt,
+      });
+
+      return {
+        fullResponse: '',
+        toolUseBlocks: [],
+        savedMessageId: null,
+        wasAborted: false,
+        stopReason: undefined,
       };
     }
   }

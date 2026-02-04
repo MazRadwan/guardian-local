@@ -30,6 +30,10 @@ export * from './IBackgroundExtractor.js';
 // Epic 32: Questionnaire Generation Progress Streaming
 export * from './IProgressEmitter.js';
 
+// Epic 33: Consult Search Tool
+export * from './IJinaClient.js';
+export * from './IWebSearchTool.js';
+
 // Export QuestionnaireData only once to avoid ambiguity
 // (it's duplicated across IExcelExporter, IPDFExporter, IWordExporter)
 export type { QuestionnaireData } from './IExcelExporter.js';

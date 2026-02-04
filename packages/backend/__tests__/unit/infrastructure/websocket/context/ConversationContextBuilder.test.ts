@@ -109,10 +109,12 @@ describe('ConversationContextBuilder', () => {
 
       await builder.build('conv-123');
 
+      // Epic 33: Assessment mode has tools but NOT web search
       expect(mockPromptCacheManager.ensureCached).toHaveBeenCalledWith(
         'assessment',
         {
           includeToolInstructions: true,
+          includeWebSearchInstructions: false,
         }
       );
     });
@@ -633,9 +635,10 @@ describe('ConversationContextBuilder', () => {
       const context = await builder.build('conv-123');
 
       expect(context.mode).toBe('consult');
+      // Epic 33: Consult mode includes web search instructions
       expect(mockPromptCacheManager.ensureCached).toHaveBeenCalledWith(
         'consult',
-        { includeToolInstructions: true }
+        { includeToolInstructions: true, includeWebSearchInstructions: true }
       );
     });
 
@@ -649,9 +652,10 @@ describe('ConversationContextBuilder', () => {
       const context = await builder.build('conv-123');
 
       expect(context.mode).toBe('assessment');
+      // Epic 33: Assessment mode does NOT include web search instructions
       expect(mockPromptCacheManager.ensureCached).toHaveBeenCalledWith(
         'assessment',
-        { includeToolInstructions: true }
+        { includeToolInstructions: true, includeWebSearchInstructions: false }
       );
     });
 
@@ -665,9 +669,10 @@ describe('ConversationContextBuilder', () => {
       const context = await builder.build('conv-123');
 
       expect(context.mode).toBe('scoring');
+      // Epic 33: Scoring mode does NOT include web search instructions
       expect(mockPromptCacheManager.ensureCached).toHaveBeenCalledWith(
         'scoring',
-        { includeToolInstructions: true }
+        { includeToolInstructions: true, includeWebSearchInstructions: false }
       );
     });
   });

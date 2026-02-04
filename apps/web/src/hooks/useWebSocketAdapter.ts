@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useWebSocket } from '@/hooks/useWebSocket';
-import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload } from '@/lib/websocket';
+import { ChatMessage, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, MessageAttachment, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload, ToolStatusPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import type { Conversation } from '@/stores/chatStore';
 
@@ -43,6 +43,8 @@ export interface WebSocketEventHandlers {
   onFileProcessingError?: (data: FileProcessingErrorPayload) => void;
   // Epic 32.2.1: Questionnaire progress callback
   onQuestionnaireProgress?: (data: QuestionnaireProgressPayload) => void;
+  // Epic 33.3.2: Tool status callback
+  onToolStatus?: (data: ToolStatusPayload) => void;
   // Auth error callback (session expired, invalid token)
   onAuthError?: () => void;
 }
@@ -177,6 +179,7 @@ export function useWebSocketAdapter({
     onVendorClarificationNeeded: handlers.onVendorClarificationNeeded,
     onFileProcessingError: handlers.onFileProcessingError,
     onQuestionnaireProgress: handlers.onQuestionnaireProgress,
+    onToolStatus: handlers.onToolStatus,
     onAuthError: handlers.onAuthError,
     autoConnect,
   });

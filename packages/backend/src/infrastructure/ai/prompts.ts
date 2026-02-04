@@ -297,6 +297,69 @@ FIRST MESSAGE: If user says "hi" or "how does this work":
 `;
 
 /**
+ * Web search tool usage instructions for consult mode
+ * Added for Epic 33: Consult Search Tool
+ */
+const WEB_SEARCH_INSTRUCTIONS = `
+
+## Web Search Tool (CONSULT MODE ONLY)
+
+You have access to a \`web_search\` tool for finding current information. Use it when:
+- User asks about recent regulatory changes, news, or updates
+- User needs citations or sources to back up claims
+- Information may have changed since your training data
+- Verifying specific facts, dates, or statistics
+
+DO NOT use web search for:
+- General healthcare AI governance concepts you know well
+- Questions about Guardian's assessment process
+- Simple explanations of frameworks like PIPEDA, HIPAA, NIST
+
+When you use web search, ALWAYS include a **Sources** section at the end.
+
+**EXACT FORMAT REQUIRED (copy this structure):**
+
+\`\`\`
+[Your answer text here. This can be multiple paragraphs
+with detailed information from the sources.]
+
+---
+
+**Sources:**
+1. [Title of first article](https://example.com/url1)
+2. [Title of second source](https://example.com/url2)
+3. [Third source title](https://example.com/url3)
+\`\`\`
+
+**CRITICAL FORMATTING RULES:**
+- MUST have a blank line before the --- separator (Markdown requires this)
+- MUST have exactly three dashes: --- (not more, not less)
+- MUST have a blank line after the --- separator
+- Number each source sequentially (1, 2, 3...)
+- Use Markdown link format: [Title](URL)
+- Maximum 5 sources per response (even if more were found)
+- Only cite sources that directly informed your answer
+- Do NOT cite sources you didn't actually use
+
+**Example of WRONG formatting (will break Markdown):**
+\`\`\`
+Here is the answer.
+---
+Sources:
+\`\`\`
+
+**Example of CORRECT formatting:**
+\`\`\`
+Here is the answer.
+
+---
+
+**Sources:**
+1. [Source](url)
+\`\`\`
+`;
+
+/**
  * Tool usage instructions for assessment mode
  * Added for Epic 12: Tool-Based Questionnaire Generation
  */
@@ -482,12 +545,20 @@ WHAT YOU CAN HELP WITH:
 `;
 
 /**
+ * Options for customizing the system prompt
+ */
+export interface SystemPromptOptions {
+  /** Include questionnaire_ready tool instructions (assessment mode only) */
+  includeToolInstructions?: boolean;
+  /** Include web_search tool instructions (consult mode only) */
+  includeWebSearchInstructions?: boolean;
+}
+
+/**
  * Get the appropriate system prompt based on conversation mode
  * Mode preamble is ALWAYS prepended to ensure deterministic mode awareness
  */
-export function getSystemPrompt(mode: ConversationMode, options?: {
-  includeToolInstructions?: boolean;
-}): string {
+export function getSystemPrompt(mode: ConversationMode, options?: SystemPromptOptions): string {
   // Handle scoring mode separately - uses specialized prompt from scoringPrompt.ts
   if (mode === 'scoring') {
     // For scoring mode, return the preamble which directs to use the specialized service
@@ -502,12 +573,17 @@ export function getSystemPrompt(mode: ConversationMode, options?: {
     ? TOOL_USAGE_INSTRUCTIONS
     : '';
 
+  // Web search instructions only apply to consult mode and only when enabled
+  const webSearchSection = (mode === 'consult' && options?.includeWebSearchInstructions === true)
+    ? WEB_SEARCH_INSTRUCTIONS
+    : '';
+
   if (CUSTOM_PROMPT) {
-    return `${modePreamble}${CUSTOM_PROMPT}${toolSection}\n\n${FORMATTING_GUIDELINES}`;
+    return `${modePreamble}${CUSTOM_PROMPT}${toolSection}${webSearchSection}\n\n${FORMATTING_GUIDELINES}`;
   }
 
   const fallbackPrompt = mode === 'consult' ? CONSULT_MODE_PROMPT_WITH_FORMATTING : ASSESSMENT_MODE_PROMPT_WITH_FORMATTING;
-  return `${modePreamble}${fallbackPrompt}${toolSection}`;
+  return `${modePreamble}${fallbackPrompt}${toolSection}${webSearchSection}`;
 }
 
 /**

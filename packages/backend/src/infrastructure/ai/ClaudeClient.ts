@@ -18,6 +18,7 @@ import type {
   ClaudeRequestOptions,
   ClaudeTool,
   ToolUseBlock,
+  ToolResultBlock,
 } from '../../application/interfaces/IClaudeClient.js';
 import type {
   IVisionClient,
@@ -277,6 +278,159 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
 
     throw new ClaudeAPIError(
       `Streaming failed after ${this.retryAttempts} attempts: ${lastError?.message}`,
+      lastError || undefined
+    );
+  }
+
+  /**
+   * Continue a conversation after tool use (Epic 33)
+   *
+   * Sends tool_result blocks back to Claude and streams the response.
+   * Builds message array: existing messages + assistant tool_use + user tool_result
+   *
+   * @param messages - Original conversation history
+   * @param toolUseBlocks - Tool use blocks from Claude's response
+   * @param toolResults - Tool results to send back to Claude
+   * @param options - Optional request settings
+   * @yields Chunks of the response as they arrive
+   */
+  async *continueWithToolResult(
+    messages: ClaudeMessage[],
+    toolUseBlocks: ToolUseBlock[],
+    toolResults: ToolResultBlock[],
+    options: ClaudeRequestOptions = {}
+  ): AsyncGenerator<StreamChunk> {
+    const { systemPrompt, usePromptCache, tools } = options;
+    const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
+    const requestOptions = usePromptCache
+      ? { headers: { 'anthropic-beta': 'prompt-caching-2024-07-31' } }
+      : undefined;
+
+    // Build extended message history using Anthropic SDK types directly:
+    // 1. Original messages (converted to API format)
+    // 2. Assistant message with tool_use blocks
+    // 3. User message with tool_result blocks
+    const extendedMessages: Anthropic.MessageParam[] = [
+      ...this.toApiMessages(messages),
+      {
+        role: 'assistant',
+        content: toolUseBlocks.map((tu) => ({
+          type: 'tool_use' as const,
+          id: tu.id,
+          name: tu.name,
+          input: tu.input,
+        })),
+      },
+      {
+        role: 'user',
+        content: toolResults.map((tr) => ({
+          type: 'tool_result' as const,
+          tool_use_id: tr.tool_use_id,
+          content: tr.content,
+        })),
+      },
+    ];
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt < this.retryAttempts; attempt++) {
+      try {
+        const stream = await this.client.messages.stream(
+          {
+            model: this.model,
+            max_tokens: this.maxTokens,
+            system,
+            messages: extendedMessages,
+            // Add tools if provided (may need them for follow-up tool calls)
+            ...(tools && tools.length > 0 && { tools }),
+          },
+          requestOptions
+        );
+
+        // Track tool use blocks during streaming (for nested tool calls)
+        const streamToolUseBlocks: ToolUseBlock[] = [];
+        let currentToolUse: Partial<ToolUseBlock> | null = null;
+        let toolInputJson = '';
+
+        for await (const event of stream) {
+          if (event.type === 'content_block_start') {
+            if (event.content_block.type === 'tool_use') {
+              // Start tracking a new tool use
+              currentToolUse = {
+                type: 'tool_use',
+                id: event.content_block.id,
+                name: event.content_block.name,
+              };
+              toolInputJson = '';
+            }
+          } else if (event.type === 'content_block_delta') {
+            if (event.delta.type === 'text_delta') {
+              yield {
+                content: event.delta.text,
+                isComplete: false,
+              };
+            } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
+              // Accumulate tool input JSON
+              toolInputJson += event.delta.partial_json;
+            }
+          } else if (event.type === 'content_block_stop') {
+            if (currentToolUse) {
+              // Parse accumulated JSON and complete the tool use block
+              try {
+                currentToolUse.input = JSON.parse(toolInputJson || '{}');
+              } catch {
+                currentToolUse.input = {};
+              }
+              streamToolUseBlocks.push(currentToolUse as ToolUseBlock);
+              currentToolUse = null;
+              toolInputJson = '';
+            }
+          } else if (event.type === 'message_stop') {
+            // Final chunk with any tool uses
+            yield {
+              content: '',
+              isComplete: true,
+              toolUse: streamToolUseBlocks.length > 0 ? streamToolUseBlocks : undefined,
+              stopReason: stream.currentMessage?.stop_reason || 'end_turn',
+            };
+          }
+        }
+
+        // If we get here without error, the stream completed successfully
+        return;
+      } catch (error) {
+        lastError = error as Error;
+        const errorMessage = (error as Error).message || '';
+
+        // Check if this is a retryable error (overloaded, rate limit, etc.)
+        const isRetryable =
+          errorMessage.includes('overloaded') ||
+          errorMessage.includes('rate_limit') ||
+          errorMessage.includes('529') ||
+          errorMessage.includes('503');
+
+        if (!isRetryable) {
+          // Non-retryable error, throw immediately
+          throw new ClaudeAPIError(`Tool result continuation failed: ${errorMessage}`, error as Error);
+        }
+
+        // If this is the last attempt, don't wait
+        if (attempt === this.retryAttempts - 1) {
+          break;
+        }
+
+        // Log retry attempt
+        console.log(
+          `[ClaudeClient] Retryable error (attempt ${attempt + 1}/${this.retryAttempts}): ${errorMessage}. Retrying in ${this.retryDelays[attempt]}ms...`
+        );
+
+        // Wait before retry (exponential backoff)
+        await this.sleep(this.retryDelays[attempt]);
+      }
+    }
+
+    throw new ClaudeAPIError(
+      `Tool result continuation failed after ${this.retryAttempts} attempts: ${lastError?.message}`,
       lastError || undefined
     );
   }

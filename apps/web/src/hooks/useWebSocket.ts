@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload } from '@/lib/websocket';
+import { WebSocketClient, ChatMessage, StreamEvent, Conversation, ExportReadyPayload, ExtractionFailedPayload, QuestionnaireReadyPayload, GenerateQuestionnairePayload, ExportStatusNotFoundPayload, ExportStatusErrorPayload, UploadProgressEvent, IntakeContextResult, ScoringParseResult, ScoringStartedPayload, ScoringProgressPayload, ScoringCompletePayload, ScoringErrorPayload, VendorClarificationNeededPayload, FileProcessingErrorPayload, QuestionnaireProgressPayload, ToolStatusPayload } from '@/lib/websocket';
 import type { GenerationPhasePayload } from '@guardian/shared';
 import { useChatStore } from '@/stores/chatStore';
 
@@ -40,6 +40,8 @@ export interface UseWebSocketOptions {
   onFileProcessingError?: (data: FileProcessingErrorPayload) => void;
   // Epic 32.2.1: Questionnaire progress callback
   onQuestionnaireProgress?: (data: QuestionnaireProgressPayload) => void;
+  // Epic 33.3.2: Tool status callback
+  onToolStatus?: (data: ToolStatusPayload) => void;
   // Auth error callback (session expired, invalid token)
   onAuthError?: () => void;
   autoConnect?: boolean;
@@ -75,6 +77,7 @@ export function useWebSocket({
   onVendorClarificationNeeded,
   onFileProcessingError,
   onQuestionnaireProgress,
+  onToolStatus,
   onAuthError,
   autoConnect = true,
 }: UseWebSocketOptions) {
@@ -409,17 +412,29 @@ export function useWebSocket({
       unsubscribers.push(unsub);
     }
 
+    // Epic 33.3.2: Tool status subscription
+    if (onToolStatus) {
+      const unsub = client.onToolStatus((data) => {
+        onToolStatus(data);
+      });
+      unsubscribers.push(unsub);
+    }
+
     // Epic 32.2.3: Wire reconnection state to chatStore
     // Always register these to track reconnection state
     const disconnectUnsub = client.onDisconnect((reason) => {
       console.log('[useWebSocket] Disconnect detected, setting reconnecting=true, reason:', reason);
       useChatStore.getState().setReconnecting(true);
+      // Epic 33.3.2: Clear tool status on disconnect
+      useChatStore.getState().setToolStatus('idle');
     });
     unsubscribers.push(disconnectUnsub);
 
     const reconnectUnsub = client.onReconnect((attemptNumber) => {
       console.log('[useWebSocket] Reconnect successful after', attemptNumber, 'attempts, setting reconnecting=false');
       useChatStore.getState().setReconnecting(false);
+      // Epic 33.3.2: Clear any stale tool status on reconnect
+      useChatStore.getState().setToolStatus('idle');
     });
     unsubscribers.push(reconnectUnsub);
 
@@ -427,7 +442,7 @@ export function useWebSocket({
       unsubscribers.forEach((unsub) => unsub());
     };
   // NOTE: onConnectionReady is NOT in deps - it's registered in connect() before the socket connects
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError, onVendorClarificationNeeded, onFileProcessingError, onQuestionnaireProgress]);
+  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError, onVendorClarificationNeeded, onFileProcessingError, onQuestionnaireProgress, onToolStatus]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
@@ -482,6 +497,14 @@ export function useWebSocket({
     []
   );
 
+  // Epic 33.3.2: Subscribe to tool status events
+  const subscribeToolStatus = useCallback(
+    (handler: (data: ToolStatusPayload) => void) => {
+      return clientRef.current?.onToolStatus(handler) ?? (() => {});
+    },
+    []
+  );
+
   return useMemo(() => ({
     isConnected,
     isConnecting,
@@ -506,6 +529,8 @@ export function useWebSocket({
     selectVendor,
     // Epic 32.2.1: Questionnaire progress subscription
     subscribeQuestionnaireProgress,
+    // Epic 33.3.2: Tool status subscription
+    subscribeToolStatus,
   }), [
     isConnected,
     isConnecting,
@@ -526,5 +551,6 @@ export function useWebSocket({
     subscribeFileAttached,
     selectVendor,
     subscribeQuestionnaireProgress,
+    subscribeToolStatus,
   ]);
 }

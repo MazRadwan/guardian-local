@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
 import type { ConversationMode } from '../../domain/entities/Conversation.js';
+import type { SystemPromptOptions } from './prompts.js';
 
-type SystemPromptProvider = (mode: ConversationMode, options?: { includeToolInstructions?: boolean }) => string;
+type SystemPromptProvider = (mode: ConversationMode, options?: SystemPromptOptions) => string;
 
 export interface PromptCacheConfig {
   enabled: boolean;
@@ -36,12 +37,14 @@ export class PromptCacheManager {
     this.getPrompt = promptProvider;
   }
 
-  ensureCached(mode: ConversationMode, options?: { includeToolInstructions?: boolean }): PromptCacheEntry {
+  ensureCached(mode: ConversationMode, options?: SystemPromptOptions): PromptCacheEntry {
     const systemPrompt = this.getPrompt(mode, options);
     const hash = this.hashPrompt(systemPrompt);
 
-    // Create cache key that includes options to differentiate tool-enabled vs tool-disabled prompts
-    const cacheKey = `${mode}-${options?.includeToolInstructions !== false ? 'with-tools' : 'no-tools'}`;
+    // Create cache key that includes options to differentiate different prompt variants
+    const toolFlag = options?.includeToolInstructions !== false ? 'with-tools' : 'no-tools';
+    const webSearchFlag = options?.includeWebSearchInstructions === true ? 'with-websearch' : 'no-websearch';
+    const cacheKey = `${mode}-${toolFlag}-${webSearchFlag}`;
     const existing = this.cache.get(cacheKey);
 
     if (existing && existing.hash === hash) {

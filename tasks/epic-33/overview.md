@@ -1,116 +1,98 @@
 # Epic 33: Consult Mode Search Tool
 
-**Status:** Planning
+**Status:** Planned
 **Branch:** `epic/33-consult-search-tool`
 **Created:** 2026-01-29
+**Planned:** 2026-02-03
 
 ---
 
-## Goal
+## Summary
 
-Add search capabilities to Consult mode, allowing Guardian to retrieve real-time information when answering user questions.
-
----
-
-## Problem Statement
-
-Currently, Guardian in Consult mode can only answer based on:
-1. Claude's training data (knowledge cutoff)
-2. Uploaded documents in the conversation
-
-Users asking about current regulations, recent vendor news, or up-to-date compliance requirements get stale or incomplete answers.
+Add web search capabilities to Consult mode using Jina Search + Reader APIs. Guardian can invoke a `web_search` tool to retrieve current information and cite sources in responses.
 
 ---
 
-## Proposed Solution
+## Goals Document
 
-Integrate a search tool that Guardian can invoke during Consult mode conversations to:
-- Look up current information
-- Verify facts
-- Find recent regulatory updates
-- Research vendor-specific information
+See `epic-33-goals.md` for complete goals, success criteria, technical approach, and risks.
 
 ---
 
-## Open Questions
+## Sprints
 
-### 1. Search Scope
-- [ ] **Web search** (Brave Search API, Tavily, SerpAPI)?
-- [ ] **Document search** (RAG over uploaded files)?
-- [ ] **Healthcare-specific** (PubMed, FDA, Health Canada)?
-- [ ] **All of the above**?
+| Sprint | Focus | Stories | Status |
+|--------|-------|---------|--------|
+| Sprint 1 | Core Tool Loop | 33.1.1-33.1.4 (4 stories) | Planned |
+| Sprint 2 | Consult-Only Wiring | 33.2.1-33.2.4 (4 stories) | Planned |
+| Sprint 3 | UI Feedback + Tests | 33.3.1-33.3.4 (4 stories) | Planned |
 
-### 2. Implementation Approach
-- [ ] **Claude tool_use** - Let Claude decide when to search
-- [ ] **User-triggered** - User explicitly asks to search
-- [ ] **Hybrid** - Both options available
-
-### 3. Search Provider
-| Provider | Free Tier | Notes |
-|----------|-----------|-------|
-| Brave Search API | 2,000 queries/month | Privacy-focused |
-| Tavily | 1,000 queries/month | AI-optimized results |
-| SerpAPI | 100 queries/month | Google results |
-| Perplexity API | Paid only | High quality |
-
-### 4. UX Considerations
-- Show search indicator while searching?
-- Display sources/citations in response?
-- Allow user to see raw search results?
+**Total:** 12 stories across 3 sprints
 
 ---
 
-## Success Criteria
+## Sprint Files
 
-- [ ] Guardian can answer questions about current events/regulations
-- [ ] Sources are cited in responses
-- [ ] Search is fast (<3 seconds)
-- [ ] Works within existing chat UX
-- [ ] Cost stays within free tier for demo
+- `sprint-1-overview.md` - Core tool loop (tool definition, Jina client, Claude tool_result)
+- `sprint-2-overview.md` - Consult-only wiring (mode gating, ChatServer flow, prompts)
+- `sprint-3-overview.md` - UI feedback (tool_status event, typing indicator, integration tests)
 
 ---
 
-## Technical Considerations
+## Story Files
 
-### Claude Tool Use
-```typescript
-// Example tool definition
-{
-  name: "web_search",
-  description: "Search the web for current information",
-  input_schema: {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Search query" }
-    },
-    required: ["query"]
-  }
-}
-```
+### Sprint 1: Core Tool Loop
+- `sprint-1-story-1.md` - Web Search Tool Definition
+- `sprint-1-story-2.md` - Jina Client Service
+- `sprint-1-story-3.md` - WebSearchToolService
+- `sprint-1-story-4.md` - Claude Client Tool Result Support
 
-### Affected Files (Estimated)
-- `packages/backend/src/infrastructure/ai/ClaudeClient.ts` - Add tool handling
-- `packages/backend/src/infrastructure/ai/tools/` - New search tool
-- `packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts` - Tool execution
-- `apps/web/src/components/chat/` - Citation display (optional)
+### Sprint 2: Consult-Only Wiring
+- `sprint-2-story-1.md` - Register WebSearchToolService
+- `sprint-2-story-2.md` - Consult Mode Tool Loop
+- `sprint-2-story-3.md` - Consult Prompt Update
+- `sprint-2-story-4.md` - Assistant Done Gating
+
+### Sprint 3: UI Feedback + Tests
+- `sprint-3-story-1.md` - Tool Status WebSocket Event
+- `sprint-3-story-2.md` - Frontend Tool Status Handler
+- `sprint-3-story-3.md` - Typing Indicator Swap
+- `sprint-3-story-4.md` - Integration Tests
 
 ---
 
-## Dependencies
+## Key Decisions
 
-- Search API account and keys
-- Claude tool_use support (already in ClaudeClient)
+1. **Search Provider:** Jina AI (Search + Reader APIs)
+   - Free tier available
+   - Clean text extraction from URLs
+   - No complex result parsing needed
+
+2. **Tool Invocation:** Claude tool_use
+   - Claude decides when to search
+   - Fits existing tool pattern (questionnaire_ready)
+
+3. **Citation Format:** Markdown Sources section
+   - Numbered links at end of response
+   - Consistent with academic citation style
+
+4. **Mode Isolation:** Consult-only
+   - Assessment/scoring modes unchanged
+   - New `consultModeTools` array separate from `assessmentModeTools`
 
 ---
 
-## Sprints (TBD)
+## Environment Variables
 
-Will be defined after scope is clarified.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `JINA_API_KEY` | Yes | Jina AI API key for search + reader |
+| `ENABLE_WEB_SEARCH` | No | Feature flag (default: true) |
 
 ---
 
 ## Notes
 
-- Keep scope minimal for demo
-- Prioritize web search over RAG initially
-- Can expand to document search in future epic
+- Requires Jina API key for testing (free tier available)
+- Integration tests mock Jina API for CI
+- Feature can be disabled via `ENABLE_WEB_SEARCH=false`

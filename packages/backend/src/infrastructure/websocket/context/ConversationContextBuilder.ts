@@ -122,8 +122,10 @@ export class ConversationContextBuilder {
 
     // Get system prompt (and cache metadata) based on conversation mode
     // Always include tool instructions (tool-based trigger is now the only path)
+    // Epic 33: Include web search instructions for consult mode
     const promptCache = this.promptCacheManager.ensureCached(mode, {
       includeToolInstructions: true,
+      includeWebSearchInstructions: mode === 'consult',
     });
 
     // Story 24.1: Add retry context when regenerating to get different response

@@ -153,6 +153,7 @@ const createMockFileContextBuilder = (): jest.Mocked<FileContextBuilder> => ({
 const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
   sendMessage: jest.fn(),
   streamMessage: jest.fn(),
+  continueWithToolResult: jest.fn(),
 } as unknown as jest.Mocked<IClaudeClient>);
 
 /**
@@ -1559,14 +1560,14 @@ describe('MessageHandler', () => {
    * Story 28.9.4: getModeConfig tests
    *
    * Tests mode-specific configuration for message processing.
-   * CRITICAL: Tools are ONLY enabled in assessment mode.
+   * Epic 33: Consult mode now has tools enabled (web_search tool).
    */
   describe('getModeConfig', () => {
-    it('should return consult config with NO tools', () => {
+    it('should return consult config with web_search tools enabled (Epic 33)', () => {
       const config = handler.getModeConfig('consult');
 
       expect(config.mode).toBe('consult');
-      expect(config.enableTools).toBe(false);  // CRITICAL: No tools in consult
+      expect(config.enableTools).toBe(true);   // Epic 33: web_search tool in consult mode
       expect(config.autoSummarize).toBe(true);
       expect(config.backgroundEnrich).toBe(false);
       expect(config.bypassClaude).toBe(false);
@@ -1596,7 +1597,7 @@ describe('MessageHandler', () => {
       const config = handler.getModeConfig('unknown');
 
       expect(config.mode).toBe('consult');
-      expect(config.enableTools).toBe(false);
+      expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
       expect(config.autoSummarize).toBe(true);
       expect(config.bypassClaude).toBe(false);
     });
@@ -1605,14 +1606,14 @@ describe('MessageHandler', () => {
       const config = handler.getModeConfig('');
 
       expect(config.mode).toBe('consult');
-      expect(config.enableTools).toBe(false);
+      expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
     });
 
     it('should be case-sensitive for mode names', () => {
       const config = handler.getModeConfig('Assessment'); // Capital A
 
       expect(config.mode).toBe('consult'); // Defaults to consult (unknown mode)
-      expect(config.enableTools).toBe(false);
+      expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
     });
   });
 
@@ -1730,23 +1731,24 @@ describe('MessageHandler', () => {
    * Tests combinations of mode config with real scenarios.
    */
   describe('mode-specific routing integration', () => {
-    it('should correctly identify tool enablement pattern', () => {
-      // Matches the pattern from ChatServer.ts line 916:
-      // const shouldUseTool = mode === 'assessment';
+    it('should correctly identify tool enablement pattern (Epic 33: consult now has tools)', () => {
+      // Epic 33: Both consult and assessment now have tools enabled
+      // consult -> web_search tool
+      // assessment -> questionnaire_ready tool
 
       const consultConfig = handler.getModeConfig('consult');
       const assessmentConfig = handler.getModeConfig('assessment');
       const scoringConfig = handler.getModeConfig('scoring');
 
-      // Only assessment has tools
-      expect(consultConfig.enableTools).toBe(false);
-      expect(assessmentConfig.enableTools).toBe(true);
-      expect(scoringConfig.enableTools).toBe(false);
+      // Epic 33: Both consult and assessment have tools, only scoring doesn't
+      expect(consultConfig.enableTools).toBe(true);     // Epic 33: web_search tool
+      expect(assessmentConfig.enableTools).toBe(true);  // questionnaire_ready tool
+      expect(scoringConfig.enableTools).toBe(false);    // No tools in scoring
 
-      // Verify: enableTools exactly matches (mode === 'assessment')
-      expect(consultConfig.enableTools).toBe(consultConfig.mode === 'assessment');
-      expect(assessmentConfig.enableTools).toBe(assessmentConfig.mode === 'assessment');
-      expect(scoringConfig.enableTools).toBe(scoringConfig.mode === 'assessment');
+      // Verify: enableTools is true for consult and assessment, false for scoring
+      expect(consultConfig.enableTools).toBe(consultConfig.mode !== 'scoring');
+      expect(assessmentConfig.enableTools).toBe(assessmentConfig.mode !== 'scoring');
+      expect(scoringConfig.enableTools).toBe(scoringConfig.mode !== 'scoring');
     });
 
     it('should correctly identify scoring bypass pattern', () => {

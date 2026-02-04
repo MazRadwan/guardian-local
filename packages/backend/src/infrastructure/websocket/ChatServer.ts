@@ -40,7 +40,9 @@ import { QuestionnaireHandler } from './handlers/QuestionnaireHandler.js';
 import { MessageHandler, type SendMessagePayload } from './handlers/MessageHandler.js';
 import { ToolUseRegistry } from './ToolUseRegistry.js';
 import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/IToolUseHandler.js';
-import { assessmentModeTools } from '../ai/tools/index.js';
+import { assessmentModeTools, consultModeTools } from '../ai/tools/index.js';
+import { WebSearchToolService } from '../../application/services/WebSearchToolService.js';
+import type { IJinaClient } from '../../application/interfaces/IJinaClient.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
 import type { ITitleGenerationService } from '../../application/interfaces/ITitleGenerationService.js';
 import type { IVisionContentBuilder } from '../../application/interfaces/IVisionContentBuilder.js';
@@ -58,6 +60,15 @@ interface AuthenticatedSocket extends Socket {
   conversationId?: string;
 }
 
+/**
+ * Story 33.3.1: Tool status event payload
+ * Emitted when web search tool changes status
+ */
+export interface ToolStatusPayload {
+  conversationId: string;
+  status: 'searching' | 'reading' | 'idle';
+}
+
 export class ChatServer {
   private readonly chatContext: ChatContext;
   private readonly contextBuilder: ConversationContextBuilder;
@@ -68,6 +79,7 @@ export class ChatServer {
   private readonly questionnaireHandler: QuestionnaireHandler;
   private readonly messageHandler: MessageHandler;
   private readonly toolRegistry: ToolUseRegistry;
+  private readonly webSearchEnabled: boolean;  // Epic 33: Track if web search is available
 
   constructor(
     private readonly io: SocketIOServer,
@@ -88,7 +100,8 @@ export class ChatServer {
     intakeParser?: IIntakeDocumentParser,
     vendorValidationService?: VendorValidationService,
     titleGenerationService?: ITitleGenerationService,  // Optional - MessageHandler handles absence gracefully
-    visionContentBuilder?: IVisionContentBuilder       // Epic 30 Sprint 3: Vision API for image files
+    visionContentBuilder?: IVisionContentBuilder,      // Epic 30 Sprint 3: Vision API for image files
+    jinaClient?: IJinaClient                          // Epic 33: Jina client for web search in consult mode
   ) {
     // Initialize shared state
     this.chatContext = createChatContext(rateLimiter, promptCacheManager);
@@ -111,10 +124,30 @@ export class ChatServer {
     this.toolRegistry = new ToolUseRegistry();
     this.toolRegistry.register(questionnaireReadyService);
 
+    // Epic 33: Register web search tool service if Jina client provided
+    // Story 33.3.1: Create status callback factory for tool_status WebSocket events
+    this.webSearchEnabled = !!jinaClient;
+    if (jinaClient) {
+      // Create callback factory that emits tool_status events with conversationId
+      const createStatusCallback = (conversationId: string) => {
+        return (status: 'searching' | 'reading' | 'idle') => {
+          this.io.of('/chat').emit('tool_status', {
+            conversationId,
+            status,
+          } satisfies ToolStatusPayload);
+        };
+      };
+
+      const webSearchService = new WebSearchToolService(jinaClient, createStatusCallback);
+      this.toolRegistry.register(webSearchService);
+      console.log('[ChatServer] Web search tool registered for consult mode with status events');
+    }
+
     // Initialize MessageHandler with all dependencies for Story 28.11.2
+    // Story 33.2.2: Pass toolRegistry for consult mode tool loop
     this.messageHandler = new MessageHandler(
       conversationService, fileRepository, rateLimiter, fileContextBuilder, claudeClient,
-      fileStorage, intakeParser, titleGenerationService
+      fileStorage, intakeParser, titleGenerationService, this.toolRegistry
     );
 
     this.setupNamespace();
@@ -237,12 +270,22 @@ export class ChatServer {
     }
 
     // Step 7: Stream Claude response (Epic 30 Sprint 3: pass imageBlocks for Vision API)
+    // Epic 33: Use mode-specific tool arrays (consult gets web_search, assessment gets questionnaire_ready)
+    // Story 33.2.2: Pass mode and source for tool loop gating
+    // Epic 33 Fix: Only pass consultModeTools if webSearchToolService is registered (prevents "Tool execution failed")
+    const tools = modeConfig.enableTools
+      ? (mode === 'consult'
+          ? (this.webSearchEnabled ? consultModeTools : undefined)  // Gate consult tools by handler presence
+          : assessmentModeTools)
+      : undefined;
     const result = await this.messageHandler.streamClaudeResponse(socket as IAuthenticatedSocket, conversationId!, messages, enhancedPrompt, {
       enableTools: modeConfig.enableTools,
-      tools: modeConfig.enableTools ? assessmentModeTools : undefined,
+      tools,
       usePromptCache: promptCache?.usePromptCache || false,
       cachedPromptId: promptCache?.cachedPromptId,
       imageBlocks,
+      mode,                        // Story 33.2.2: Tool loop gating
+      source: 'user_input',        // Story 33.2.2: User-initiated message triggers tool loop
     });
 
     // Step 8: Post-streaming (tool use, enrichment, title generation)

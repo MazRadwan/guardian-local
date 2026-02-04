@@ -14,6 +14,7 @@ import type { Step } from '@/types/stepper';
 import type { QuestionnaireUIState } from './QuestionnairePromptCard';
 import type { ProgressInfo } from './VerticalStepper';
 import type { ScoringResultData, ScoringStatus } from '@/types/scoring';
+import { useChatStore, type ToolStatus } from '@/stores/chatStore';
 
 export interface MessageListProps {
   messages: ChatMessageType[];
@@ -58,12 +59,29 @@ export interface MessageListProps {
   };
 }
 
+/**
+ * Story 33.3.3: Get indicator text based on tool status
+ * Returns contextual text for the typing indicator
+ */
+function getIndicatorText(toolStatus: ToolStatus): string {
+  if (toolStatus === 'searching') {
+    return 'Searching the web...';
+  }
+  if (toolStatus === 'reading') {
+    return 'Reading sources...';
+  }
+  return 'Guardian is thinking...';
+}
+
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
   function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire, scoringResult, scoringProgress, vendorClarification }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
     const [isNearBottom, setIsNearBottom] = useState(true);
+
+    // Story 33.3.3: Read tool status from store for contextual typing indicator
+    const toolStatus = useChatStore((state) => state.toolStatus);
 
     // Story 14.1.3: Track previous questionnaire visibility to detect appearance
     const prevQuestionnaireVisibleRef = useRef<boolean>(false);
@@ -269,19 +287,21 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
               />
             )}
 
-            {isLoading && (
+            {/* Story 33.3.3: Show indicator when isLoading OR tool is active */}
+            {(isLoading || toolStatus !== 'idle') && (
               <div data-testid="typing-indicator" className="flex items-center gap-3 py-6">
                 {/* Pulsing Avatar */}
                 <div className="w-10 h-10 rounded-full bg-sky-500 flex items-center justify-center animate-pulse-shield">
                   <ShieldCheck className="h-5 w-5 text-white" />
                 </div>
 
-                {/* Shimmer Text */}
+                {/* Shimmer Text - Story 33.3.3: Show contextual text based on tool status */}
                 <span
+                  data-testid="typing-indicator-text"
                   className="text-sm font-medium bg-gradient-to-r from-slate-500 via-sky-400 to-slate-500 bg-clip-text text-transparent animate-shimmer"
                   style={{ backgroundSize: '200% 100%' }}
                 >
-                  Guardian is thinking...
+                  {getIndicatorText(toolStatus)}
                 </span>
               </div>
             )}

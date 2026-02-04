@@ -102,6 +102,11 @@ class MockClaudeClient implements IClaudeClient {
     yield { content: '', isComplete: true };
   }
 
+  async *continueWithToolResult(): AsyncGenerator<StreamChunk> {
+    yield { content: 'Tool result processed', isComplete: false };
+    yield { content: '', isComplete: true };
+  }
+
   // Helper to reset captured data between tests
   reset() {
     this.capturedMessages = [];

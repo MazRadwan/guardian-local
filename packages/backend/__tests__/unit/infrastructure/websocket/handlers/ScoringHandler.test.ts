@@ -103,6 +103,7 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
 const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
   sendMessage: jest.fn(),
   streamMessage: jest.fn(),
+  continueWithToolResult: jest.fn(),
 });
 
 /**

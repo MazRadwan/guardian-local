@@ -145,4 +145,29 @@ export interface IClaudeClient {
     options?: ClaudeRequestOptions,
     imageBlocks?: ImageContentBlock[]
   ): AsyncGenerator<StreamChunk>;
+
+  /**
+   * Continue a conversation after tool use (Epic 33)
+   *
+   * When Claude returns a tool_use stop reason, the calling code needs to send
+   * a follow-up message containing the tool result. This method builds the correct
+   * message array with assistant tool_use + user tool_result and streams the response.
+   *
+   * Message array structure:
+   * 1. Original messages
+   * 2. Assistant message with tool_use blocks
+   * 3. User message with tool_result blocks
+   *
+   * @param messages - Original conversation history
+   * @param toolUseBlocks - Tool use blocks from Claude's response
+   * @param toolResults - Tool results to send back to Claude
+   * @param options - Optional request settings (system prompt, tools, etc.)
+   * @yields Chunks of the response as they arrive
+   */
+  continueWithToolResult(
+    messages: ClaudeMessage[],
+    toolUseBlocks: ToolUseBlock[],
+    toolResults: ToolResultBlock[],
+    options?: ClaudeRequestOptions
+  ): AsyncGenerator<StreamChunk>;
 }

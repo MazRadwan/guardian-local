@@ -75,6 +75,9 @@ import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativ
 import { ExportNarrativeGenerator } from './infrastructure/ai/ExportNarrativeGenerator.js';
 import { DrizzleTransactionRunner } from './infrastructure/database/DrizzleTransactionRunner.js';
 import { errorHandler } from './infrastructure/http/middleware/error.middleware.js';
+// Epic 33: Web search tool for consult mode
+import { JinaClient } from './infrastructure/ai/JinaClient.js';
+import type { IJinaClient } from './application/interfaces/IJinaClient.js';
 
 const PORT = parseInt(process.env.PORT || '8000', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -91,6 +94,13 @@ if (!ANTHROPIC_API_KEY && process.env.NODE_ENV !== 'test') {
 }
 if (!ANTHROPIC_API_KEY && process.env.NODE_ENV === 'test') {
   console.warn('[App] ANTHROPIC_API_KEY not set - Claude features will fail in tests');
+}
+
+// Epic 33: Web search configuration
+const JINA_API_KEY = process.env.JINA_API_KEY || '';
+const ENABLE_WEB_SEARCH = process.env.ENABLE_WEB_SEARCH !== 'false'; // Default: true
+if (!JINA_API_KEY && ENABLE_WEB_SEARCH && process.env.NODE_ENV !== 'test') {
+  console.warn('[App] JINA_API_KEY not set - web search will be disabled in consult mode');
 }
 
 // Initialize repositories
@@ -254,6 +264,20 @@ const rateLimiter = new RateLimiter(
   parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10)
 );
 
+// Epic 33: Initialize Jina client for web search (optional - graceful degradation if JINA_API_KEY missing)
+// Story 33.3.1: ChatServer creates WebSearchToolService internally with status callback factory
+let jinaClient: IJinaClient | undefined;
+if (ENABLE_WEB_SEARCH && JINA_API_KEY) {
+  try {
+    jinaClient = new JinaClient(JINA_API_KEY);
+    console.log('[App] Jina client initialized for web search');
+  } catch (error) {
+    console.warn('[App] Failed to initialize Jina client:', error instanceof Error ? error.message : 'Unknown error');
+  }
+} else if (!ENABLE_WEB_SEARCH) {
+  console.log('[App] Web search disabled via ENABLE_WEB_SEARCH=false');
+}
+
 // Initialize ChatServer with WebSocket
 const chatServer = new ChatServer(
   server.getIO(),
@@ -274,7 +298,8 @@ const chatServer = new ChatServer(
   documentParserService,    // Epic 18: Background enrichment (implements IIntakeDocumentParser)
   vendorValidationService,  // Epic 18.4: Vendor validation for multi-vendor clarification
   titleGenerationService,   // Story 28.11.1: LLM-based title generation
-  visionContentBuilder      // Epic 30 Sprint 3: Vision API for image files
+  visionContentBuilder,     // Epic 30 Sprint 3: Vision API for image files
+  jinaClient                // Epic 33: Jina client for web search (ChatServer creates service with status callback)
 );
 
 console.log('[App] ChatServer initialized');

@@ -84,7 +84,7 @@ describe('useWebSocketEvents', () => {
   });
 
   describe('Initialization', () => {
-    it('should return all 21 event handlers', () => {
+    it('should return all 23 event handlers', () => {
       const { result } = renderHook(() => useWebSocketEvents(defaultParams));
 
       expect(result.current.handleMessage).toBeInstanceOf(Function);
@@ -108,6 +108,8 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleScoringError).toBeInstanceOf(Function);
       expect(result.current.handleVendorClarificationNeeded).toBeInstanceOf(Function);
       expect(result.current.handleFileProcessingError).toBeInstanceOf(Function);
+      expect(result.current.handleQuestionnaireProgress).toBeInstanceOf(Function);
+      expect(result.current.handleToolStatus).toBeInstanceOf(Function);
     });
 
     it('should return stable handler references across re-renders', () => {
@@ -137,6 +139,8 @@ describe('useWebSocketEvents', () => {
       expect(result.current.handleScoringError).toBe(handlers.handleScoringError);
       expect(result.current.handleVendorClarificationNeeded).toBe(handlers.handleVendorClarificationNeeded);
       expect(result.current.handleFileProcessingError).toBe(handlers.handleFileProcessingError);
+      expect(result.current.handleQuestionnaireProgress).toBe(handlers.handleQuestionnaireProgress);
+      expect(result.current.handleToolStatus).toBe(handlers.handleToolStatus);
     });
   });
 

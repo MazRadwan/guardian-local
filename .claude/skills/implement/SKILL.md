@@ -67,15 +67,29 @@ What scope do you want to implement?
 [2] Single Sprint - Specify sprint number
 [3] Specific Stories - Specify story IDs (e.g., 26.1.1, 26.1.2)
 
+GPT Review Scope?
+
+[1] Sprint-scoped (default) - GPT reviews each batch/sprint before advancing
+[2] Epic-scoped - GPT reviews entire epic once at end (faster, less token usage)
+    Recommended when: specs are well-vetted (multiple review rounds)
+
 Custom GPT review prompt? [Enter for default]:
 ```
 
 Update state with selection:
 ```python
 state.targetScope = scope  # "epic" | "sprint:2" | "stories:26.1.1,26.1.2"
+state.reviewScope = review_scope  # "sprint" (default) | "epic"
 state.gptReviewPrompt = custom_prompt or DEFAULT_PROMPT
 save_state()
 ```
+
+**Review Scope Behavior:**
+
+| reviewScope | GPT Reviews When | Use Case |
+|-------------|------------------|----------|
+| `"sprint"` (default) | After each batch/sprint | Normal workflow, catches issues early |
+| `"epic"` | Once at end of all sprints | Well-vetted specs, faster execution |
 
 ---
 
@@ -106,27 +120,30 @@ save_state()
 
 ## Step 4: Execute Batches
 
-**⚠️ HARD GATE: Each batch MUST pass GPT review before advancing to next batch.**
+**⚠️ HARD GATE (sprint-scoped only): Each batch MUST pass GPT review before advancing.**
+
+**Note:** When `reviewScope="epic"`, the hard gate is skipped and GPT reviews the entire epic once at the end (Step 5b).
 
 ### 4a. Spawn Parallel Agents
 
 ```python
 for batch_num, batch in enumerate(state.batches):
     # ════════════════════════════════════════════════════════════════════════
-    # HARD GATE CHECK: Was previous batch GPT-reviewed?
+    # HARD GATE CHECK: Only applies when reviewScope="sprint" (default)
     # ════════════════════════════════════════════════════════════════════════
-    if batch_num > 0 and state.reviewRounds.code < batch_num:
-        error(f"""
-        🚫 BATCH GATE BLOCKED
+    if state.reviewScope != "epic":
+        if batch_num > 0 and state.reviewRounds.code < batch_num:
+            error(f"""
+            🚫 BATCH GATE BLOCKED
 
-        You are trying to start Batch {batch_num + 1} but Batch {batch_num}
-        was never GPT-reviewed (reviewRounds.code = {state.reviewRounds.code}).
+            You are trying to start Batch {batch_num + 1} but Batch {batch_num}
+            was never GPT-reviewed (reviewRounds.code = {state.reviewRounds.code}).
 
-        You MUST run GPT code review for each batch before advancing.
+            You MUST run GPT code review for each batch before advancing.
 
-        Do NOT skip this step. Execute Step 5 (GPT Code Review Loop) now.
-        """)
-        return  # STOP - do not proceed
+            Do NOT skip this step. Execute Step 5 (GPT Code Review Loop) now.
+            """)
+            return  # STOP - do not proceed
 
     state.currentBatch = batch_num
     save_state()
@@ -182,47 +199,59 @@ for batch_num, batch in enumerate(state.batches):
         save_state()  # Checkpoint immediately after each story
 
     # ════════════════════════════════════════════════════════════════════════
-    # 4b. MANDATORY GPT REVIEW (INLINE - cannot skip)
+    # 4b. GPT REVIEW (Conditional based on reviewScope)
     # ════════════════════════════════════════════════════════════════════════
-    log(f"🤖 GPT Review for Batch {batch_num + 1} (MANDATORY)")
 
-    # Run verification first
+    # Run verification first (ALWAYS - regardless of reviewScope)
     run_verification()  # pnpm test, lint, typecheck
 
-    # Invoke GPT review via Bash
-    gpt_approved = False
-    review_round = 0
-
-    while not gpt_approved and review_round < 7:
-        review_round += 1
-        state.reviewRounds.code = state.reviewRounds.code + 1
-
-        # Build and send GPT review prompt (see Step 5 for full prompt)
-        gpt_response = Bash(f'''
-            codex review - <<'EOF'
-            STATUS: APPROVED or STATUS: NEEDS_REVISION required.
-            Review batch {batch_num + 1}: stories {batch.stories}
-            CONFIDENCE: [0.0-1.0] required at end.
-            EOF
-        ''')
-
-        if "STATUS: APPROVED" in gpt_response:
-            gpt_approved = True
-            log(f"✅ Batch {batch_num + 1} APPROVED by GPT")
-            state.batchReview.reReviewRequired = False
-        else:
-            log(f"📝 Batch {batch_num + 1} needs revision (round {review_round})")
-            # Parse findings, apply fixes, re-run verification
-            apply_gpt_fixes(gpt_response)
-            run_verification()
-
+    if state.reviewScope == "epic":
+        # ════════════════════════════════════════════════════════════════════
+        # EPIC-SCOPED: Skip per-batch GPT review, just verify tests pass
+        # ════════════════════════════════════════════════════════════════════
+        log(f"📦 Batch {batch_num + 1} complete (GPT review deferred to epic-level)")
+        state.batchReview.reReviewRequired = False  # Will be reviewed at epic level
         save_state()
+    else:
+        # ════════════════════════════════════════════════════════════════════
+        # SPRINT-SCOPED (default): Mandatory per-batch GPT review
+        # ════════════════════════════════════════════════════════════════════
+        log(f"🤖 GPT Review for Batch {batch_num + 1} (MANDATORY)")
 
-    if not gpt_approved:
-        log(f"⚠️ Max rounds reached - applying remaining GPT recommendations")
+        # Invoke GPT review via Bash
+        gpt_approved = False
+        review_round = 0
 
-    # Log to review log
-    append_to_review_log(batch_num, gpt_response)
+        while not gpt_approved and review_round < 7:
+            review_round += 1
+            state.reviewRounds.code = state.reviewRounds.code + 1
+
+            # Build and send GPT review prompt (see Step 5 for full prompt)
+            gpt_response = Bash(f'''
+                codex review - <<'EOF'
+                STATUS: APPROVED or STATUS: NEEDS_REVISION required.
+                Review batch {batch_num + 1}: stories {batch.stories}
+                CONFIDENCE: [0.0-1.0] required at end.
+                EOF
+            ''')
+
+            if "STATUS: APPROVED" in gpt_response:
+                gpt_approved = True
+                log(f"✅ Batch {batch_num + 1} APPROVED by GPT")
+                state.batchReview.reReviewRequired = False
+            else:
+                log(f"📝 Batch {batch_num + 1} needs revision (round {review_round})")
+                # Parse findings, apply fixes, re-run verification
+                apply_gpt_fixes(gpt_response)
+                run_verification()
+
+            save_state()
+
+        if not gpt_approved:
+            log(f"⚠️ Max rounds reached - applying remaining GPT recommendations")
+
+        # Log to review log
+        append_to_review_log(batch_num, gpt_response)
 
     # ════════════════════════════════════════════════════════════════════════
     # END OF BATCH - Now safe to continue to next batch
@@ -327,6 +356,152 @@ if review_round >= MAX_REVIEW_ROUNDS:
     state.batchReview.reReviewRequired = False
 
 save_state()
+```
+
+---
+
+## Step 5b: Epic-Level GPT Review (When reviewScope="epic")
+
+**Only runs when `reviewScope="epic"` was selected in Step 2.**
+
+This is a single comprehensive GPT review of the entire epic's implementation, run after all batches complete.
+
+```python
+if state.reviewScope == "epic":
+    log("🤖 Starting Epic-Level GPT Review (all sprints)")
+
+    state.phase = "epic_code_review"
+    save_state()
+
+    # Gather ALL files and stories from entire epic
+    all_files = gather_all_epic_files(state.completedStories)
+    all_stories = gather_all_epic_stories(state.completedStories)
+
+    MAX_REVIEW_ROUNDS = 7
+    review_round = 0
+    gpt_approved = False
+
+    while not gpt_approved and review_round < MAX_REVIEW_ROUNDS:
+        review_round += 1
+        state.reviewRounds.epicLevel = review_round
+        save_state()
+
+        log(f"🤖 Epic-Level GPT Review Round {review_round}")
+
+        # Run full verification
+        run_verification()  # pnpm test, lint, typecheck
+
+        # Build epic-level context for GPT
+        epic_context = build_epic_context(all_stories, all_files)
+
+        # Invoke GPT via Codex CLI
+        gpt_response = invoke_codex_review(
+            type="epic_code_review",
+            epic_id=state.epic,
+            stories=all_stories,
+            files=all_files,
+            context=epic_context,
+            focus=[
+                "cross-sprint integration",
+                "architectural consistency",
+                "security vulnerabilities",
+                "error handling patterns",
+                "test coverage gaps",
+                "clean architecture compliance"
+            ]
+        )
+
+        status = parse_status(gpt_response)
+        confidence = parse_confidence(gpt_response)
+        findings = parse_findings(gpt_response) if status == "NEEDS_REVISION" else []
+
+        # Log to review log
+        append_review_log(f"epic_review", review_round, gpt_response)
+
+        if status == "APPROVED" and confidence >= 0.5:
+            log(f"✅ Epic APPROVED (round {review_round}, confidence {confidence})")
+            gpt_approved = True
+            break
+
+        elif status == "NEEDS_REVISION":
+            log(f"📝 Epic needs revision (round {review_round})")
+
+            for finding in findings:
+                severity = finding.severity
+
+                if opus_agrees_with_finding(finding):
+                    apply_code_fix(finding)
+                    log(f"  ✓ Fixed ({severity}): {finding.summary}")
+                else:
+                    pushback = create_pushback_response(finding)
+                    log(f"  ↩ Pushback ({severity}): {finding.summary}")
+
+            save_state()
+
+    if not gpt_approved:
+        log(f"⚠️ Max rounds reached - applying remaining GPT recommendations")
+        apply_all_remaining_gpt_recommendations()
+
+    state.epicReviewComplete = True
+    save_state()
+
+    output("<promise>EPIC_REVIEWED</promise>")
+```
+
+**Epic-Level Review Prompt Template:**
+
+```bash
+RESPONSE=$(codex review - <<'EOF'
+CRITICAL: Your response MUST begin with exactly:
+STATUS: APPROVED
+or
+STATUS: NEEDS_REVISION
+
+CONFIDENCE: [0.0-1.0] is REQUIRED at the end.
+
+---
+
+## TASK
+Review ENTIRE epic implementation for Epic {epic_id}.
+
+## EXPECTED OUTCOME
+Comprehensive review of all code changes across all sprints.
+Return STATUS: APPROVED or STATUS: NEEDS_REVISION with findings.
+
+## CONTEXT
+Epic: {epic_id}
+Total Stories: {story_count}
+Total Files Changed: {file_count}
+Sprints: {sprint_list}
+
+Test Results:
+- Unit tests: {pass/fail}
+- Lint: {pass/fail}
+- Typecheck: {pass/fail}
+
+## FOCUS AREAS
+- Cross-sprint integration issues
+- Architectural consistency
+- Security vulnerabilities (OWASP)
+- Error handling patterns
+- Test coverage completeness
+- Clean architecture compliance
+
+## MUST DO
+- Verify all stories meet acceptance criteria
+- Check for cross-file/cross-sprint regressions
+- Validate integration points work correctly
+- Review security implications holistically
+
+## OUTPUT FORMAT
+STATUS: APPROVED | STATUS: NEEDS_REVISION
+
+REQUIRED CHANGES (if any):
+1. [Story/File] — [Change] — Why: [rationale] — Severity: [CRITICAL|HIGH|MEDIUM|LOW]
+
+CONFIDENCE: [0.0-1.0]
+EOF
+)
 ```
 
 ---
@@ -676,16 +851,17 @@ if same_error_count >= 3:
 ## Important Rules
 
 1. **Runs in main context** - Can spawn subagents via Task tool
-2. **Always prompt for scope** - Even when resuming
+2. **Always prompt for scope** - Even when resuming (includes reviewScope option)
 3. **GPT review loops are MANDATORY** - Loop until APPROVED or max rounds
-4. **Browser QA for frontend** - Visual verification with Chrome DevTools MCP
-5. **Checkpoint per-story** - Not per-batch, enables precise resume
-6. **Commit after approval** - Keep git clean for next review
-7. **Log all GPT exchanges** - Audit trail in .review-log.md
-8. **Update CLAUDE.md** - Institutional memory from learnings
-9. **Respect 7 round limit** - GPT gets final say after that
-10. **No Opus fallback** - Clean exit on GPT errors, user fixes, resume
-11. **Verification before GPT** - Don't waste GPT time on failing tests
+4. **Review scope flexibility** - Sprint-scoped (default) or epic-scoped (one review at end)
+5. **Browser QA for frontend** - Visual verification with Chrome DevTools MCP
+6. **Checkpoint per-story** - Not per-batch, enables precise resume
+7. **Commit after approval** - Keep git clean for next review
+8. **Log all GPT exchanges** - Audit trail in .review-log.md
+9. **Update CLAUDE.md** - Institutional memory from learnings
+10. **Respect 7 round limit** - GPT gets final say after that
+11. **No Opus fallback** - Clean exit on GPT errors, user fixes, resume
+12. **Verification before GPT** - Don't waste GPT time on failing tests
 
 ---
 
@@ -693,7 +869,8 @@ if same_error_count >= 3:
 
 | Promise | Meaning |
 |---------|---------|
-| `BATCH_APPROVED` | Implementation batch approved by GPT |
+| `BATCH_APPROVED` | Implementation batch approved by GPT (sprint-scoped) |
+| `EPIC_REVIEWED` | Epic-level GPT review approved (epic-scoped) |
 | `SPRINT_REVIEWED` | Sprint final pass approved |
 | `SCOPE_COMPLETE` | All work done |
 | `STUCK` | Unrecoverable issue, skipping |
