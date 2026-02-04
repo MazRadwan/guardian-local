@@ -89,9 +89,11 @@ export class WebSearchToolService implements IToolUseHandler {
       };
     }
 
-    // 3. Create status callback for this conversation and emit searching status
+    // 3. Status callback (kept for potential future use, but not emitting here)
+    // V2: MessageHandler.executeConsultToolLoop now manages status emissions for the multi-iteration loop
+    // Emitting here caused duplicate/out-of-order status events (searching → idle → reading)
     const onStatusChange = this.createStatusCallback?.(context.conversationId);
-    onStatusChange?.('searching');
+    // onStatusChange?.('searching'); // Removed - MessageHandler emits this
 
     try {
       // 4. Parse and validate input
@@ -133,7 +135,7 @@ export class WebSearchToolService implements IToolUseHandler {
       }
 
       // 9. Read top URLs (fail-soft: partial failures OK)
-      onStatusChange?.('reading');
+      // onStatusChange?.('reading'); // Removed - MessageHandler emits this after tool dispatch
       const urls = searchResults.slice(0, JINA_CONFIG.MAX_URLS_TO_READ).map(r => r.url);
       const readResults = await this.jinaClient.readUrls(urls);
 
@@ -158,7 +160,7 @@ export class WebSearchToolService implements IToolUseHandler {
         },
       };
     } finally {
-      onStatusChange?.('idle');
+      // onStatusChange?.('idle'); // Removed - MessageHandler emits idle when loop completes
     }
   }
 

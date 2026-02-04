@@ -612,6 +612,7 @@ describe('MessageHandler Tool Loop', () => {
             type: 'tool_result',
             tool_use_id: 'tool-1',
             content: 'Network timeout',
+            is_error: true,
           },
         ],
         expect.any(Object)

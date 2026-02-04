@@ -333,6 +333,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
             type: 'tool_result',
             tool_use_id: 'tool-1',
             content: 'Rate limit exceeded for Jina API',
+            is_error: true,
           },
         ],
         expect.any(Object)
@@ -558,7 +559,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         toolUseBlocks,
         [
           { type: 'tool_result', tool_use_id: 'tool-1', content: 'Success results' },
-          { type: 'tool_result', tool_use_id: 'tool-2', content: 'Search failed for this query' },
+          { type: 'tool_result', tool_use_id: 'tool-2', content: 'Search failed for this query', is_error: true },
         ],
         expect.any(Object)
       );

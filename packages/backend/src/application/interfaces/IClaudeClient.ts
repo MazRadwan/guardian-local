@@ -69,6 +69,8 @@ export interface ToolResultBlock {
   tool_use_id: string;
   /** Result content */
   content: string;
+  /** Set to true if tool execution resulted in an error (Claude handles gracefully) */
+  is_error?: boolean;
 }
 
 export interface ClaudeResponse {

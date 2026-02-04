@@ -327,6 +327,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
           type: 'tool_result' as const,
           tool_use_id: tr.tool_use_id,
           content: tr.content,
+          ...(tr.is_error && { is_error: tr.is_error }),
         })),
       },
     ];

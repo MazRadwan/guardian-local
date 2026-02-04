@@ -127,33 +127,40 @@ describe('WebSearchToolService', () => {
     });
   });
 
-  describe('handle - status callbacks', () => {
-    it('should emit searching status before search', async () => {
+  describe('handle - status callbacks (V2: no emissions from service)', () => {
+    /**
+     * V2 ARCHITECTURE: Status emissions moved to MessageHandler.executeConsultToolLoop()
+     * WebSearchToolService no longer emits status directly to prevent duplicate/out-of-order events
+     */
+    it('should NOT emit searching status (V2: MessageHandler handles this)', async () => {
       await service.handle(baseInput, baseContext);
 
-      expect(statusChanges[0]).toEqual({ conversationId: 'conv-123', status: 'searching' });
+      // V2: No status emissions from WebSearchToolService
+      expect(statusChanges).toHaveLength(0);
     });
 
-    it('should emit reading status before reading URLs', async () => {
+    it('should NOT emit reading status (V2: MessageHandler handles this)', async () => {
       await service.handle(baseInput, baseContext);
 
-      expect(statusChanges.some(s => s.status === 'reading' && s.conversationId === 'conv-123')).toBe(true);
+      // V2: No status emissions from WebSearchToolService
+      expect(statusChanges).toHaveLength(0);
     });
 
-    it('should emit idle status on completion', async () => {
+    it('should NOT emit idle status on completion (V2: MessageHandler handles this)', async () => {
       await service.handle(baseInput, baseContext);
 
-      const lastStatus = statusChanges[statusChanges.length - 1];
-      expect(lastStatus).toEqual({ conversationId: 'conv-123', status: 'idle' });
+      // V2: No status emissions from WebSearchToolService
+      expect(statusChanges).toHaveLength(0);
     });
 
-    it('should emit idle status on error', async () => {
+    it('should NOT emit idle status on error (V2: MessageHandler handles this)', async () => {
       mockJinaClient.search.mockRejectedValue(new Error('Network error'));
 
-      await service.handle(baseInput, baseContext);
+      const result = await service.handle(baseInput, baseContext);
 
-      const lastStatus = statusChanges[statusChanges.length - 1];
-      expect(lastStatus).toEqual({ conversationId: 'conv-123', status: 'idle' });
+      // V2: No status emissions, but error is properly returned
+      expect(statusChanges).toHaveLength(0);
+      expect(result.toolResult?.content).toContain('Search failed');
     });
 
     it('should work without status callback', async () => {
@@ -165,14 +172,14 @@ describe('WebSearchToolService', () => {
       expect(result.handled).toBe(true);
     });
 
-    it('should include correct conversationId in all status callbacks', async () => {
+    it('should accept callback factory but not use it (V2)', async () => {
       await service.handle(baseInput, baseContext);
 
-      // All status changes should have the same conversationId
-      expect(statusChanges.every(s => s.conversationId === 'conv-123')).toBe(true);
+      // Callback factory wired but no emissions
+      expect(statusChanges).toHaveLength(0);
     });
 
-    it('should use different conversationId for different contexts', async () => {
+    it('should handle multiple conversations independently without status', async () => {
       // First call
       await service.handle(baseInput, baseContext);
 
@@ -184,11 +191,11 @@ describe('WebSearchToolService', () => {
         ...baseContext,
         conversationId: 'conv-different',
       };
-      await service.handle(baseInput, differentContext);
+      const result2 = await service.handle(baseInput, differentContext);
 
-      // Should have status changes for both conversations
-      expect(statusChanges.some(s => s.conversationId === 'conv-123')).toBe(true);
-      expect(statusChanges.some(s => s.conversationId === 'conv-different')).toBe(true);
+      // V2: No status changes, but both searches work
+      expect(statusChanges).toHaveLength(0);
+      expect(result2.handled).toBe(true);
     });
   });
 
@@ -507,14 +514,15 @@ describe('WebSearchToolService', () => {
       expect(mockJinaClient.search).toHaveBeenCalledTimes(2);
     });
 
-    it('should not emit searching status when rate limited', async () => {
+    it('should return rate limit error without emitting status (V2)', async () => {
       await service.handle(baseInput, baseContext);
       statusChanges = []; // Clear after first call
 
-      await service.handle(baseInput, baseContext);
+      const result = await service.handle(baseInput, baseContext);
 
-      // Should not emit 'searching' when rate limited
-      expect(statusChanges.some(s => s.status === 'searching')).toBe(false);
+      // V2: No status emissions at all (rate limited case returns early)
+      expect(statusChanges).toHaveLength(0);
+      expect(result.toolResult?.content).toContain('Rate limit exceeded');
     });
   });
 
@@ -570,16 +578,18 @@ describe('WebSearchToolService', () => {
       expect(result.toolResult?.content).toContain('Full content here');
     });
 
-    it('should emit idle on validation error', async () => {
+    it('should NOT emit status on validation error (V2)', async () => {
       const input: ToolUseInput = {
         ...baseInput,
         input: { query: '' },
       };
 
-      await service.handle(input, baseContext);
+      const result = await service.handle(input, baseContext);
 
-      const lastStatus = statusChanges[statusChanges.length - 1];
-      expect(lastStatus).toEqual({ conversationId: 'conv-123', status: 'idle' });
+      // V2: No status emissions from WebSearchToolService
+      expect(statusChanges).toHaveLength(0);
+      // But validation error is properly returned
+      expect(result.toolResult?.content).toContain('query');
     });
   });
 

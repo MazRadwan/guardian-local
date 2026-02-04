@@ -65,6 +65,13 @@ const MIME_TYPE_MAP: Record<string, ValidatedDocumentType> = {
 };
 
 /**
+ * Epic 33 V2: Maximum tool iterations per user query.
+ * Allows Claude to make multiple searches before forcing conclusion.
+ * On exceeding this limit, Claude receives is_error tool_result and must respond with available info.
+ */
+const MAX_TOOL_ITERATIONS = 3;
+
+/**
  * Send message payload from client
  * CRITICAL: Supports both `text` and `content` fields for backward compatibility
  */
@@ -921,132 +928,186 @@ export class MessageHandler {
     let wasAborted = false;
     let stopReason: StreamingResult['stopReason'];
 
+    // V2: Track iterations and current tool_use blocks
+    let iteration = 0;
+    let currentToolUseBlocks = toolUseBlocks;
+
+    // Track accumulated context for multi-iteration (simplified - text only)
+    const accumulatedResponses: string[] = [];
+    const accumulatedToolSummaries: string[] = [];
+
     try {
-      // 1. Emit tool_status for UI feedback
-      socket.emit('tool_status', {
-        conversationId,
-        status: 'searching',
-      });
+      // V2: Loop until Claude stops calling tools or max iterations reached
+      while (currentToolUseBlocks.length > 0 && !wasAborted) {
+        iteration++;
+        console.log(`[MessageHandler] Tool loop iteration ${iteration}/${MAX_TOOL_ITERATIONS}`);
 
-      // 2. Check for abort before tool execution
-      if (socket.data.abortRequested) {
-        console.log('[MessageHandler] Tool loop aborted before execution');
-        socket.emit('tool_status', { conversationId, status: 'idle' });
-        return {
-          fullResponse: firstResponse,
-          toolUseBlocks: [],
-          savedMessageId: null,
-          wasAborted: true,
-          stopReason: 'tool_use',
-        };
-      }
+        // Check if we've hit max iterations
+        if (iteration > MAX_TOOL_ITERATIONS) {
+          console.log(`[MessageHandler] Max tool iterations (${MAX_TOOL_ITERATIONS}) reached, sending is_error`);
 
-      // 3. Execute tools via ToolUseRegistry
-      const toolResults: ToolResultBlock[] = [];
+          // Build error results for all pending tool calls
+          const errorResults: ToolResultBlock[] = currentToolUseBlocks.map(tu => ({
+            type: 'tool_result' as const,
+            tool_use_id: tu.id,
+            content: 'Search limit reached for this query. Please provide your best answer based on the information gathered so far.',
+            is_error: true,
+          }));
 
-      for (const toolUse of toolUseBlocks) {
-        // Check abort before each tool
+          // Final continuation WITHOUT tools - forces Claude to conclude
+          socket.emit('tool_status', { conversationId, status: 'reading' });
+
+          let finalResponse = '';
+          for await (const chunk of this.claudeClient!.continueWithToolResult(
+            this.buildAugmentedMessages(originalMessages, accumulatedResponses, accumulatedToolSummaries),
+            currentToolUseBlocks,
+            errorResults,
+            { systemPrompt }
+          )) {
+            if (socket.data.abortRequested) {
+              wasAborted = true;
+              break;
+            }
+            if (!chunk.isComplete && chunk.content) {
+              finalResponse += chunk.content;
+              socket.emit('assistant_token', { conversationId, token: chunk.content });
+            }
+            if (chunk.isComplete && chunk.stopReason) {
+              stopReason = chunk.stopReason as StreamingResult['stopReason'];
+            }
+          }
+          fullResponse += finalResponse;
+          break;
+        }
+
+        // 1. Emit tool_status for UI feedback
+        socket.emit('tool_status', { conversationId, status: 'searching' });
+
+        // 2. Check for abort before tool execution
         if (socket.data.abortRequested) {
-          console.log('[MessageHandler] Tool loop aborted during execution');
+          console.log('[MessageHandler] Tool loop aborted before execution');
           socket.emit('tool_status', { conversationId, status: 'idle' });
-          return {
-            fullResponse: firstResponse,
-            toolUseBlocks: [],
-            savedMessageId: null,
-            wasAborted: true,
-            stopReason: 'tool_use',
-          };
-        }
-
-        const input: ToolUseInput = {
-          toolName: toolUse.name,
-          toolUseId: toolUse.id,
-          input: toolUse.input,
-        };
-
-        const context: ToolUseContext = {
-          conversationId,
-          userId: socket.userId!,
-          assessmentId: null,
-          mode: 'consult',
-        };
-
-        console.log(`[MessageHandler] Dispatching tool: ${toolUse.name}`);
-        const result = await this.toolRegistry!.dispatch(input, context);
-
-        if (result.handled && result.toolResult) {
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: result.toolResult.toolUseId,
-            content: result.toolResult.content,
-          });
-        } else {
-          // Tool not handled or failed - return error as tool_result
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: result.error || 'Tool execution failed. Please answer based on your knowledge.',
-          });
-        }
-      }
-
-      // 4. Emit reading status (if there are results to process)
-      socket.emit('tool_status', {
-        conversationId,
-        status: 'reading',
-      });
-
-      // 5. Check abort before continuation
-      if (socket.data.abortRequested) {
-        console.log('[MessageHandler] Tool loop aborted before continuation');
-        socket.emit('tool_status', { conversationId, status: 'idle' });
-        return {
-          fullResponse: firstResponse,
-          toolUseBlocks: [],
-          savedMessageId: null,
-          wasAborted: true,
-          stopReason: 'tool_use',
-        };
-      }
-
-      // 6. Continue conversation with tool results
-      // NOTE: We intentionally don't pass tools on continuation to prevent nested tool_use.
-      // This limits consult mode to one tool invocation per query (v1 design choice).
-      // If Claude needs multiple searches, the user can ask follow-up questions.
-      console.log(`[MessageHandler] Continuing with ${toolResults.length} tool result(s)`);
-
-      for await (const chunk of this.claudeClient!.continueWithToolResult(
-        originalMessages,
-        toolUseBlocks,
-        toolResults,
-        {
-          systemPrompt,
-          // tools intentionally omitted - prevents nested tool_use (v1 limitation)
-        }
-      )) {
-        // Check abort during final stream
-        if (socket.data.abortRequested) {
-          console.log('[MessageHandler] Tool loop aborted during final stream');
           wasAborted = true;
           break;
         }
 
-        if (!chunk.isComplete && chunk.content) {
-          fullResponse += chunk.content;
+        // 3. Execute tools via ToolUseRegistry
+        const toolResults: ToolResultBlock[] = [];
 
-          // Emit tokens to client
-          socket.emit('assistant_token', {
+        for (const toolUse of currentToolUseBlocks) {
+          if (socket.data.abortRequested) {
+            console.log('[MessageHandler] Tool loop aborted during execution');
+            socket.emit('tool_status', { conversationId, status: 'idle' });
+            wasAborted = true;
+            break;
+          }
+
+          const input: ToolUseInput = {
+            toolName: toolUse.name,
+            toolUseId: toolUse.id,
+            input: toolUse.input,
+          };
+
+          const context: ToolUseContext = {
             conversationId,
-            token: chunk.content,
-          });
+            userId: socket.userId!,
+            assessmentId: null,
+            mode: 'consult',
+          };
+
+          console.log(`[MessageHandler] Dispatching tool: ${toolUse.name} (iteration ${iteration})`);
+          const result = await this.toolRegistry!.dispatch(input, context);
+
+          if (result.handled && result.toolResult) {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: result.toolResult.toolUseId,
+              content: result.toolResult.content,
+            });
+            // Track tool summary for context accumulation
+            accumulatedToolSummaries.push(`[Search ${iteration}: ${JSON.stringify(toolUse.input)}]`);
+          } else {
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: result.error || 'Tool execution failed. Please answer based on your knowledge.',
+              is_error: true,
+            });
+          }
         }
 
-        if (chunk.isComplete && chunk.stopReason) {
-          stopReason = chunk.stopReason as StreamingResult['stopReason'];
+        if (wasAborted) break;
+
+        // 4. Emit reading status
+        socket.emit('tool_status', { conversationId, status: 'reading' });
+
+        // 5. Check abort before continuation
+        if (socket.data.abortRequested) {
+          console.log('[MessageHandler] Tool loop aborted before continuation');
+          socket.emit('tool_status', { conversationId, status: 'idle' });
+          wasAborted = true;
+          break;
+        }
+
+        // 6. Continue conversation with tool results
+        // V2: Pass tools to allow Claude to make additional searches
+        console.log(`[MessageHandler] Continuing with ${toolResults.length} tool result(s), tools enabled for multi-search`);
+
+        let iterationResponse = '';
+        let newToolUseBlocks: ToolUseBlock[] = [];
+
+        // Build messages with accumulated context for iterations 2+
+        const messagesForContinuation = iteration === 1
+          ? originalMessages
+          : this.buildAugmentedMessages(originalMessages, accumulatedResponses, accumulatedToolSummaries);
+
+        for await (const chunk of this.claudeClient!.continueWithToolResult(
+          messagesForContinuation,
+          currentToolUseBlocks,
+          toolResults,
+          {
+            systemPrompt,
+            tools: claudeOptions.tools as ClaudeTool[], // V2: Enable tools for multi-search
+          }
+        )) {
+          if (socket.data.abortRequested) {
+            console.log('[MessageHandler] Tool loop aborted during stream');
+            wasAborted = true;
+            break;
+          }
+
+          if (!chunk.isComplete && chunk.content) {
+            iterationResponse += chunk.content;
+            socket.emit('assistant_token', { conversationId, token: chunk.content });
+          }
+
+          if (chunk.toolUse && chunk.toolUse.length > 0) {
+            newToolUseBlocks = chunk.toolUse;
+            console.log(`[MessageHandler] Claude emitted ${newToolUseBlocks.length} new tool_use block(s) in iteration ${iteration}`);
+          }
+
+          if (chunk.isComplete && chunk.stopReason) {
+            stopReason = chunk.stopReason as StreamingResult['stopReason'];
+          }
+        }
+
+        // Accumulate response for context
+        if (iterationResponse) {
+          accumulatedResponses.push(iterationResponse);
+        }
+        fullResponse += iterationResponse;
+
+        // Update for next iteration
+        currentToolUseBlocks = newToolUseBlocks;
+
+        // If no more tool calls or not tool_use stop reason, we're done
+        if (currentToolUseBlocks.length === 0 || stopReason !== 'tool_use') {
+          console.log(`[MessageHandler] Tool loop complete after ${iteration} iteration(s), stopReason=${stopReason}`);
+          break;
         }
       }
 
-      // 7. Save FINAL message to database (only the response after tool_result)
+      // 7. Save FINAL message to database
       if (fullResponse.length > 0) {
         const completeMessage = await this.conversationService.sendMessage({
           conversationId,
@@ -1108,6 +1169,56 @@ export class MessageHandler {
         stopReason: undefined,
       };
     }
+  }
+
+  /**
+   * V2: Build augmented messages with accumulated context from previous tool iterations.
+   *
+   * For multi-iteration tool loops, we need to give Claude context about what it
+   * found in previous searches. This helper appends a summary of previous iterations
+   * to the original messages.
+   *
+   * @param originalMessages - Original conversation history
+   * @param accumulatedResponses - Text responses from previous iterations
+   * @param accumulatedToolSummaries - Summaries of tool calls made
+   * @returns Augmented messages array with context
+   */
+  private buildAugmentedMessages(
+    originalMessages: ClaudeMessage[],
+    accumulatedResponses: string[],
+    accumulatedToolSummaries: string[]
+  ): ClaudeMessage[] {
+    if (accumulatedResponses.length === 0 && accumulatedToolSummaries.length === 0) {
+      return originalMessages;
+    }
+
+    // Build context summary of previous iterations
+    const contextParts: string[] = [];
+
+    if (accumulatedToolSummaries.length > 0) {
+      contextParts.push('Previous searches in this query:');
+      contextParts.push(...accumulatedToolSummaries);
+    }
+
+    if (accumulatedResponses.length > 0) {
+      contextParts.push('\nPrevious findings:');
+      accumulatedResponses.forEach((response, i) => {
+        if (response.trim()) {
+          contextParts.push(`[Iteration ${i + 1}]: ${response.slice(0, 500)}${response.length > 500 ? '...' : ''}`);
+        }
+      });
+    }
+
+    const contextMessage = contextParts.join('\n');
+
+    // Append context as a user message to give Claude awareness of previous iterations
+    return [
+      ...originalMessages,
+      {
+        role: 'user' as const,
+        content: `[Context from previous search iterations]\n${contextMessage}\n\n[Continue with the next search or provide your answer]`,
+      },
+    ];
   }
 
   /**

@@ -306,14 +306,20 @@ const WEB_SEARCH_INSTRUCTIONS = `
 
 You have access to a \`web_search\` tool for finding current information. Use it when:
 - User asks about recent regulatory changes, news, or updates
+- User asks for specific, current, or regional information (e.g., "Canadian", "2025", "latest")
 - User needs citations or sources to back up claims
 - Information may have changed since your training data
 - Verifying specific facts, dates, or statistics
 
 DO NOT use web search for:
-- General healthcare AI governance concepts you know well
-- Questions about Guardian's assessment process
-- Simple explanations of frameworks like PIPEDA, HIPAA, NIST
+- Questions about Guardian's assessment process or how to use the app
+- Simple conceptual questions like "what is PIPEDA" (unless user asks for current/latest info)
+
+**CRITICAL: When search results are returned, you MUST:**
+1. Base your answer primarily on the search results, not your training data
+2. Include citations to the sources that informed your answer
+3. If search results are insufficient, say so and suggest a follow-up question
+4. NEVER ignore search results and answer purely from training data
 
 When you use web search, ALWAYS include a **Sources** section at the end.
 
