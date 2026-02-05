@@ -18,10 +18,10 @@ export const JINA_CONFIG = {
   MAX_URLS_TO_READ: 3,
   /** Parallel read requests */
   MAX_READ_CONCURRENCY: 3,
-  /** 10 seconds per search */
-  SEARCH_TIMEOUT_MS: 10000,
-  /** 8 seconds per URL read */
-  READ_TIMEOUT_MS: 8000,
+  /** 60 seconds per search (complex queries can take longer) */
+  SEARCH_TIMEOUT_MS: 60000,
+  /** 30 seconds per URL read */
+  READ_TIMEOUT_MS: 30000,
   /** Characters per URL content */
   MAX_CONTENT_LENGTH: 10000,
 } as const;
