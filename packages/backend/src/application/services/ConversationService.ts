@@ -136,6 +136,13 @@ export class ConversationService {
   }
 
   /**
+   * Delete a single message by ID
+   */
+  async deleteMessage(messageId: string): Promise<void> {
+    await this.messageRepo.delete(messageId);
+  }
+
+  /**
    * Delete a conversation and all its messages
    * Idempotent: If conversation doesn't exist, deletion is considered successful
    */

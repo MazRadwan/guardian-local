@@ -17,6 +17,19 @@ Clean Architecture layers:
 3. **Infrastructure** - Database, external APIs, WebSocket
 4. **Presentation** - HTTP routes, controllers
 
+## Hard Rules
+
+### File Size Limit
+**Max 300 LOC per source file.** No exceptions for source files.
+Exceptions: Test files (`*.test.ts`), type definitions (`types.ts`, `*.d.ts`), generated files.
+If a file exceeds 300 LOC → split into focused modules by concern.
+
+### Controller Purity
+**Controllers delegate. They do NOT contain inline logic.**
+- Controllers (ChatServer, MessageHandler, etc.) should ONLY receive input and delegate to services/handlers
+- If you're writing business logic inside a controller → extract to a dedicated service
+- If a method grows beyond simple delegation → it belongs in its own module
+
 ## Conventions
 
 ### Services

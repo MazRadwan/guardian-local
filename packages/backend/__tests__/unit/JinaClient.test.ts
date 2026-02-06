@@ -68,8 +68,8 @@ describe('JinaClient', () => {
       expect(JINA_CONFIG.MAX_SEARCH_RESULTS).toBe(5);
       expect(JINA_CONFIG.MAX_URLS_TO_READ).toBe(3);
       expect(JINA_CONFIG.MAX_READ_CONCURRENCY).toBe(3);
-      expect(JINA_CONFIG.SEARCH_TIMEOUT_MS).toBe(10000);
-      expect(JINA_CONFIG.READ_TIMEOUT_MS).toBe(8000);
+      expect(JINA_CONFIG.SEARCH_TIMEOUT_MS).toBe(60000);
+      expect(JINA_CONFIG.READ_TIMEOUT_MS).toBe(30000);
       expect(JINA_CONFIG.MAX_CONTENT_LENGTH).toBe(10000);
     });
 

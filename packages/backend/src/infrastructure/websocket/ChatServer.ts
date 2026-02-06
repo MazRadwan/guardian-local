@@ -248,6 +248,13 @@ export class ChatServer {
     if (!finalText && hasAttachments) finalText = this.messageHandler.generatePlaceholderText(enrichedAttachments!);
     if (!payload.isRegenerate) {
       await this.messageHandler.saveUserMessageAndEmit(socket as IAuthenticatedSocket, conversationId!, finalText, enrichedAttachments, payload.components);
+    } else {
+      // Delete old assistant message so Claude gets clean context (no stale tool_use/tool_result)
+      const history = await this.conversationService.getHistory(conversationId!, 1, 0);
+      const lastMsg = history[0];
+      if (lastMsg?.role === 'assistant') {
+        await this.conversationService.deleteMessage(lastMsg.id);
+      }
     }
 
     // Step 3: Get context and mode config
