@@ -5,6 +5,10 @@
 **Current LOC:** 1,319 (limit: 300)
 **Branch context:** `epic/34-extract-tool-loop` (active), but decomposition is cross-cutting
 
+> **NEXT SESSION:** A detailed plan for the first extraction (Title Generation) is at
+> `.claude/plans/gleaming-swimming-perlis.md`. The user is creating an epic from this plan.
+> Read that file first, then check `tasks/task-overview.md` for the new epic number.
+
 ---
 
 ## Why This Is Multi-Epic
@@ -116,17 +120,29 @@ Used by 5 of 8 responsibilities. Cannot eliminate this dependency from extracted
 
 ---
 
+## Extraction Progress
+
+| # | Module | Epic | Status | LOC Removed |
+|---|--------|------|--------|-------------|
+| 1 | Streaming + tool loop (consult) | Epic 34 | 🔄 In Progress | ~300 |
+| 2 | Title generation | **Epic 35** | 📋 Spec Created | ~140 (projected) |
+| 3 | Mode routing | TBD | Pending | ~80 |
+| 4 | enrichInBackground | TBD | Pending | ~75 |
+| 5 | Auto-summarization | TBD | Pending | ~100 |
+| 6 | Validation | TBD | Pending | ~220 |
+| 7 | Message persistence | TBD | Pending | ~30 |
+
 ## Suggested Extraction Sequence
 
-This is the recommended order. Each step should be its own story with full feature regression testing.
+This is the recommended order. Each step should be its own epic with full feature regression testing.
 
-1. **Mode routing** -> `ModeRouter.ts` (pure functions, zero risk)
-2. **enrichInBackground** -> `BackgroundEnrichmentService.ts` (isolated deps)
-3. **Title generation** -> `TitleGenerationHandler.ts` (self-contained)
-4. **Auto-summarization** -> `AutoSummarizeService.ts` (distinct flow)
-5. **Validation** -> `MessageValidator.ts` (types may need shared export)
-6. **Message persistence** -> stays or merges with streaming
-7. **Streaming + tool loop** -> LAST, most complex, where regeneration bug lives
+1. ~~**Streaming + tool loop**~~ -> `ConsultToolLoopService.ts` (**Epic 34**, in progress)
+2. ~~**Title generation**~~ -> `TitleUpdateService.ts` (**Epic 35**, spec created — see `tasks/epic-35/`)
+3. **Mode routing** -> `ModeRouter.ts` (pure functions, zero risk)
+4. **enrichInBackground** -> `BackgroundEnrichmentService.ts` (isolated deps)
+5. **Auto-summarization** -> `AutoSummarizeService.ts` (distinct flow)
+6. **Validation** -> `MessageValidator.ts` (types may need shared export)
+7. **Message persistence** -> stays or merges with streaming
 
 ---
 
@@ -144,7 +160,7 @@ After each extraction, test:
 - [ ] Title generation: consult (2 msgs), assessment (3 + 5 msgs), scoring (filename)
 - [ ] Rate limiting: rate-limited user gets proper error
 - [ ] Abort: partial response saved, assistant_done suppressed
-- [ ] Regeneration: retry in consult mode (KNOWN BUG - document behavior)
+- [ ] Regeneration: retry in consult mode (FIXED in Epic 34 - commit d560f54)
 
 ---
 
