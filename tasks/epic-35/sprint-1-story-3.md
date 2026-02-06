@@ -7,6 +7,7 @@ Write unit tests for the new `TitleUpdateService` and verify no regressions acro
 ## Acceptance Criteria
 
 - [ ] `TitleUpdateService.test.ts` created with comprehensive unit tests
+- [ ] NOTE: This story depends on 35.1.1 only (NOT 35.1.2). Can run in parallel with 35.1.2.
 - [ ] Tests cover `generateTitleIfNeeded()` for all modes (consult, assessment, scoring)
 - [ ] Tests cover all guard conditions (scoring skip, message count, manual edit, placeholder detection)
 - [ ] Tests cover vendor info update path (assessment at 5 messages)
@@ -100,7 +101,7 @@ Run full test suite and confirm:
 
 ## Tests Affected
 
-None — this story only creates a new test file. All existing tests should already pass after Story 35.1.2.
+None — this story only creates a new test file. Full suite verification runs after BOTH 35.1.2 and 35.1.3 complete (they run in parallel).
 
 ## Agent Assignment
 

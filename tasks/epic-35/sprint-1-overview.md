@@ -20,27 +20,33 @@ Extract `generateTitleIfNeeded()` and `updateScoringTitle()` from MessageHandler
 |-------|------|--------------|
 | 35.1.1 | Create ITitleUpdateService interface + TitleUpdateService implementation | None |
 | 35.1.2 | Wire service into ChatServer, remove from MessageHandler | 35.1.1 |
-| 35.1.3 | Tests and regression verification | 35.1.2 |
+| 35.1.3 | Tests and regression verification | 35.1.1 (NOT 35.1.2) |
 
 ---
 
 ## Dependency Graph
 
 ```
-35.1.1 (create interface + impl) → 35.1.2 (wire + remove) → 35.1.3 (tests)
+           35.1.1 (create)
+          /              \
+  35.1.2 (wire)    35.1.3 (test)   ← Phase 2: PARALLEL
 ```
+
+35.1.3 tests the TitleUpdateService class directly with mocked deps. It does NOT need the ChatServer wiring from 35.1.2. Zero file overlap between 35.1.2 and 35.1.3.
 
 ### File Overlap Analysis
 
 | Story | Files | Overlap |
 |-------|-------|---------|
 | 35.1.1 | CREATE ITitleUpdateService.ts, CREATE TitleUpdateService.ts, MODIFY ITitleGenerationService.ts, MODIFY services/index.ts | None |
-| 35.1.2 | MODIFY ChatServer.ts, MODIFY MessageHandler.ts, MODIFY test mocks | None with 35.1.1 |
-| 35.1.3 | CREATE TitleUpdateService.test.ts | None with 35.1.1 or 35.1.2 |
+| 35.1.2 | MODIFY ChatServer.ts, MODIFY MessageHandler.ts, MODIFY 4 test mocks | None with 35.1.3 |
+| 35.1.3 | CREATE TitleUpdateService.test.ts | None with 35.1.2 |
 
 ### Parallel Execution Strategy
 
-All sequential — no parallelization possible. Single dependency chain with 3 stories. Each story modifies files the next one depends on.
+**Phase 1:** 35.1.1 (create interface + implementation)
+**Phase 2:** 35.1.2 (wire + remove) + 35.1.3 (tests) — **run in parallel**
+**Post-Phase 2:** Full test suite verification after both agents complete
 
 ---
 
