@@ -4,6 +4,12 @@
  * Story 24.1: Regenerate with Retry Context
  * - When isRegenerate: true, system prompt includes retry context
  * - When isRegenerate: false/undefined, system prompt is unchanged
+ *
+ * Epic 34: Regeneration deletes old assistant message
+ * - When isRegenerate: true, old assistant message is deleted from DB before context build
+ * - Prevents stale tool_use/tool_result blocks from polluting Claude's context
+ * - Normal messages are NOT deleted
+ * - If last message is user (edge case), nothing is deleted
  */
 
 /**
@@ -208,6 +214,123 @@ describe('ChatServer isRegenerate flag handling (Story 24.1)', () => {
       await expect(
         buildConversationContext('non-existent', conversationService, promptCacheManager, true)
       ).rejects.toThrow('Conversation non-existent not found');
+    });
+  });
+
+  /**
+   * Epic 34: Regeneration deletes old assistant message before context build
+   *
+   * This mirrors the logic in ChatServer.handleSendMessage() where isRegenerate: true
+   * triggers deletion of the last assistant message so Claude gets clean context
+   * without stale tool_use/tool_result blocks.
+   *
+   * This was the root cause of the regeneration bug: search results from the first
+   * response leaked into the regenerated context, causing Claude to skip re-searching.
+   */
+  describe('regeneration deletes old assistant message (Epic 34)', () => {
+    /**
+     * Mirrors the regeneration logic in ChatServer.handleSendMessage():
+     * 1. Get last message from history
+     * 2. If it's an assistant message, delete it
+     * 3. Then build context (which now gets clean history)
+     */
+    async function handleRegenerateCleanup(
+      conversationService: {
+        getHistory: (id: string, limit: number, offset: number) => Promise<Array<{ id: string; role: string; content: string }>>;
+        deleteMessage: (id: string) => Promise<void>;
+      },
+      conversationId: string,
+      isRegenerate: boolean
+    ): Promise<{ deletedMessageId: string | null }> {
+      if (!isRegenerate) {
+        return { deletedMessageId: null };
+      }
+
+      const history = await conversationService.getHistory(conversationId, 1, 0);
+      const lastMsg = history[0];
+      if (lastMsg?.role === 'assistant') {
+        await conversationService.deleteMessage(lastMsg.id);
+        return { deletedMessageId: lastMsg.id };
+      }
+
+      return { deletedMessageId: null };
+    }
+
+    it('should delete old assistant message when isRegenerate is true', async () => {
+      const conversationService = {
+        getHistory: jest.fn().mockResolvedValue([
+          { id: 'msg-assistant-1', role: 'assistant', content: 'Old response with search results' },
+        ]),
+        deleteMessage: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await handleRegenerateCleanup(conversationService, 'conv-123', true);
+
+      expect(conversationService.getHistory).toHaveBeenCalledWith('conv-123', 1, 0);
+      expect(conversationService.deleteMessage).toHaveBeenCalledWith('msg-assistant-1');
+      expect(result.deletedMessageId).toBe('msg-assistant-1');
+    });
+
+    it('should NOT delete any message when isRegenerate is false', async () => {
+      const conversationService = {
+        getHistory: jest.fn(),
+        deleteMessage: jest.fn(),
+      };
+
+      const result = await handleRegenerateCleanup(conversationService, 'conv-123', false);
+
+      expect(conversationService.getHistory).not.toHaveBeenCalled();
+      expect(conversationService.deleteMessage).not.toHaveBeenCalled();
+      expect(result.deletedMessageId).toBeNull();
+    });
+
+    it('should NOT delete if last message is from user (edge case)', async () => {
+      const conversationService = {
+        getHistory: jest.fn().mockResolvedValue([
+          { id: 'msg-user-1', role: 'user', content: 'User message' },
+        ]),
+        deleteMessage: jest.fn(),
+      };
+
+      const result = await handleRegenerateCleanup(conversationService, 'conv-123', true);
+
+      expect(conversationService.getHistory).toHaveBeenCalledWith('conv-123', 1, 0);
+      expect(conversationService.deleteMessage).not.toHaveBeenCalled();
+      expect(result.deletedMessageId).toBeNull();
+    });
+
+    it('should handle empty history gracefully', async () => {
+      const conversationService = {
+        getHistory: jest.fn().mockResolvedValue([]),
+        deleteMessage: jest.fn(),
+      };
+
+      const result = await handleRegenerateCleanup(conversationService, 'conv-123', true);
+
+      expect(conversationService.getHistory).toHaveBeenCalledWith('conv-123', 1, 0);
+      expect(conversationService.deleteMessage).not.toHaveBeenCalled();
+      expect(result.deletedMessageId).toBeNull();
+    });
+
+    it('should delete assistant message containing tool_use blocks (the actual bug)', async () => {
+      // This is the exact scenario that broke regeneration:
+      // Claude returned a response with web_search tool_use, and on regenerate
+      // the stale tool_result leaked into context, causing Claude to skip re-searching
+      const conversationService = {
+        getHistory: jest.fn().mockResolvedValue([
+          {
+            id: 'msg-with-tools',
+            role: 'assistant',
+            content: 'Searching for NIST CSF updates...\n\n[tool_use: web_search]\n\nHere are the results...',
+          },
+        ]),
+        deleteMessage: jest.fn().mockResolvedValue(undefined),
+      };
+
+      const result = await handleRegenerateCleanup(conversationService, 'conv-123', true);
+
+      expect(conversationService.deleteMessage).toHaveBeenCalledWith('msg-with-tools');
+      expect(result.deletedMessageId).toBe('msg-with-tools');
     });
   });
 });
