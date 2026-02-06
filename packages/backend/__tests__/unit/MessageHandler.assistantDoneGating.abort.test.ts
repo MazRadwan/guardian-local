@@ -194,6 +194,7 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
     mockConsultToolLoopService = createMockConsultToolLoopService();
 
     // Create handler with ToolUseRegistry and ConsultToolLoopService
+    // Story 35.1.2: titleGenerationService removed (now in TitleUpdateService)
     handler = new MessageHandler(
       mockConversationService,
       mockFileRepository,
@@ -202,7 +203,6 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       mockClaudeClient,
       undefined, // fileStorage
       undefined, // intakeParser
-      undefined, // titleGenerationService
       mockToolRegistry,
       mockConsultToolLoopService
     );

@@ -39,9 +39,6 @@ import type { IFileRepository } from '../../../application/interfaces/IFileRepos
 import type { IFileStorage } from '../../../application/interfaces/IFileStorage.js';
 import type { ITextExtractionService, ValidatedDocumentType } from '../../../application/interfaces/ITextExtractionService.js';
 import type { IIntakeDocumentParser } from '../../../application/interfaces/IIntakeDocumentParser.js';
-import type { ITitleGenerationService } from '../../../application/interfaces/ITitleGenerationService.js';
-import type { TitleContext } from '../../../application/services/TitleGenerationService.js';
-import { isPlaceholderTitle } from '../../../application/services/TitleGenerationService.js';
 import type { IAuthenticatedSocket } from '../ChatContext.js';
 import type { RateLimiter } from '../RateLimiter.js';
 import type { MessageAttachment, MessageComponent } from '../../../domain/entities/Message.js';
@@ -218,10 +215,9 @@ export class MessageHandler {
     private readonly rateLimiter: RateLimiter,
     private readonly fileContextBuilder?: FileContextBuilder,
     private readonly claudeClient?: IClaudeClient,
-    // Story 28.11.2: Dependencies for background enrichment and title generation
+    // Story 28.11.2: Dependencies for background enrichment
     private readonly fileStorage?: IFileStorage,
     private readonly intakeParser?: IIntakeDocumentParser,
-    private readonly titleGenerationService?: ITitleGenerationService,
     // Story 33.2.2: ToolUseRegistry for consult mode tool loop
     private readonly toolRegistry?: ToolUseRegistry,
     // Story 34.1.3: ConsultToolLoopService for consult mode tool execution
@@ -1015,132 +1011,6 @@ export class MessageHandler {
   }
 
   /**
-   * Story 28.11.2: Generate LLM-based title after Q&A exchanges
-   *
-   * Called after assistant response is complete. Fire-and-forget - errors logged but don't
-   * affect the conversation. Uses TitleGenerationService for mode-aware title strategies.
-   *
-   * Title Generation Triggers:
-   * - Consult mode: After first exchange (2 messages: user + assistant)
-   * - Assessment mode: Two triggers:
-   *   1. After first exchange (3 messages: preamble + user + assistant) - generic title
-   *   2. After vendor info (5 messages) - updates title with vendor context
-   * - Scoring mode: Skipped (titles come from filename)
-   *
-   * Guards:
-   * - Skips if title was manually edited by user
-   * - For initial generation: skips if title already set (not a placeholder)
-   * - For vendor update: proceeds to update even if title exists
-   *
-   * @param socket - Client socket to emit title update
-   * @param conversationId - Conversation to generate title for
-   * @param mode - Conversation mode (consult, assessment, scoring)
-   * @param assistantResponse - The assistant's response text (for LLM context)
-   */
-  async generateTitleIfNeeded(
-    socket: IAuthenticatedSocket,
-    conversationId: string,
-    mode: 'consult' | 'assessment' | 'scoring',
-    assistantResponse: string
-  ): Promise<void> {
-    try {
-      // Guard 1: Skip if title generation service not configured
-      if (!this.titleGenerationService) {
-        return;
-      }
-
-      // Guard 2: Skip for scoring mode - titles come from filename (handled in file upload flow)
-      if (mode === 'scoring') {
-        return;
-      }
-
-      // Guard 3: Check message count for title generation triggers
-      // - Consult mode: 2 messages (user + assistant)
-      // - Assessment mode: 3 messages (first exchange) OR 5 messages (after vendor info)
-      const messageCount = await this.conversationService.getMessageCount(conversationId);
-      const validCounts = mode === 'assessment' ? [3, 5] : [2];
-      if (!validCounts.includes(messageCount)) {
-        return;
-      }
-
-      // Check if this is a vendor info update (assessment mode at message 5)
-      const isVendorInfoUpdate = mode === 'assessment' && messageCount === 5;
-
-      // Guard 4: Check if conversation exists
-      const conversation = await this.conversationService.getConversation(conversationId);
-      if (!conversation) {
-        return;
-      }
-
-      // Guard 5: Skip if title was manually edited by user
-      if (conversation.titleManuallyEdited) {
-        return;
-      }
-
-      // Guard 6: For initial generation, skip if title already set (not a placeholder)
-      // For vendor info update, proceed to update with better title
-      if (!isVendorInfoUpdate && !isPlaceholderTitle(conversation.title)) {
-        return;
-      }
-
-      // Get the appropriate user message based on context
-      let userMessage: string | undefined;
-
-      if (isVendorInfoUpdate) {
-        // Get second user message (vendor info) from conversation history
-        // Message order: [preamble, user-1 (type selection), assistant-1, user-2 (vendor info), assistant-2]
-        const history = await this.conversationService.getHistory(conversationId, 10, 0);
-        const userMessages = history.filter(m => m.role === 'user');
-        const secondUserMsg = userMessages[1]; // 0-indexed, second user message
-        userMessage = secondUserMsg?.content.text;
-
-        if (!userMessage) {
-          console.warn('[MessageHandler] No vendor info message found for title update');
-          return;
-        }
-      } else {
-        // Initial generation: use first user message
-        const firstUserMessage = await this.conversationService.getFirstUserMessage(conversationId);
-        userMessage = firstUserMessage?.content.text;
-
-        if (!userMessage) {
-          console.warn('[MessageHandler] No user message found for title generation');
-          return;
-        }
-      }
-
-      // Build context for title generation
-      const titleContext: TitleContext = {
-        mode,
-        userMessage,
-        assistantResponse: assistantResponse,
-      };
-
-      // Generate title using TitleGenerationService
-      const result = await this.titleGenerationService.generateModeAwareTitle(titleContext);
-
-      // Update title in database (only if not manually edited)
-      const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
-        conversationId,
-        result.title
-      );
-
-      if (titleUpdated) {
-        // Emit title update event for real-time sidebar update
-        socket.emit('conversation_title_updated', {
-          conversationId,
-          title: result.title,
-        });
-        const updateType = isVendorInfoUpdate ? 'vendor-update' : 'initial';
-        console.log(`[MessageHandler] Generated ${mode} title (${updateType}, source: ${result.source}): "${result.title}"`);
-      }
-    } catch (error) {
-      // Non-fatal - log and continue
-      console.error('[MessageHandler] Error in generateTitleIfNeeded:', error);
-    }
-  }
-
-  /**
    * Story 28.11.2: Auto-summarize documents in Consult mode
    *
    * When user sends file(s) without a message in Consult mode,
@@ -1269,51 +1139,4 @@ Keep the summary concise (3-5 paragraphs) and focus on information relevant to v
 If the document appears to be a completed questionnaire, mention that it can be scored in Scoring mode.`;
   }
 
-  /**
-   * Story 28.11.2: Update conversation title for scoring mode with filename
-   *
-   * In scoring mode, the title is derived from the uploaded filename.
-   * This method handles truncation while preserving the file extension.
-   *
-   * @param socket - Client socket to emit title update
-   * @param conversationId - Conversation to update title for
-   * @param filename - Uploaded filename to use in title
-   */
-  async updateScoringTitle(
-    socket: IAuthenticatedSocket,
-    conversationId: string,
-    filename: string
-  ): Promise<void> {
-    const maxTitleLength = 50;
-    const prefix = 'Scoring: ';
-    const maxFilenameLength = maxTitleLength - prefix.length;
-
-    let truncatedFilename = filename;
-    if (filename.length > maxFilenameLength) {
-      // Truncate while preserving extension
-      const lastDot = filename.lastIndexOf('.');
-      const extension = lastDot > 0 ? filename.slice(lastDot) : '';
-      const baseName = lastDot > 0 ? filename.slice(0, lastDot) : filename;
-      const availableLength = maxFilenameLength - 3 - extension.length;
-      if (availableLength > 0) {
-        truncatedFilename = baseName.slice(0, availableLength) + '...' + extension;
-      } else {
-        truncatedFilename = filename.slice(0, maxFilenameLength - 3) + '...';
-      }
-    }
-
-    const scoringTitle = `${prefix}${truncatedFilename}`;
-    const titleUpdated = await this.conversationService.updateTitleIfNotManuallyEdited(
-      conversationId,
-      scoringTitle
-    );
-
-    if (titleUpdated) {
-      socket.emit('conversation_title_updated', {
-        conversationId,
-        title: scoringTitle,
-      });
-      console.log(`[MessageHandler] Updated scoring title: "${scoringTitle}"`);
-    }
-  }
 }

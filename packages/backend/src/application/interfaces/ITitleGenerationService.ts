@@ -15,4 +15,15 @@ export interface ITitleGenerationService {
    * @returns Promise with title string and source indicator
    */
   generateModeAwareTitle(context: TitleContext): Promise<TitleGenerationResult>;
+
+  /**
+   * Format scoring title from filename
+   * Truncates long filenames while preserving extension
+   *
+   * Story 35.1.1: Exposed on interface for TitleUpdateService delegation
+   *
+   * @param filename - Uploaded filename to format
+   * @returns Formatted title string (e.g., "Scoring: vendor_report.pdf")
+   */
+  formatScoringTitle(filename: string): string;
 }

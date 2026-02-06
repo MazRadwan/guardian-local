@@ -13,7 +13,8 @@
  * - ConnectionHandler: Auth middleware, connection/disconnect events
  * - ConversationHandler: get_conversations, start_new_conversation, delete_conversation, get_history
  * - ModeSwitchHandler: switch_mode event
- * - MessageHandler: send_message validation, streaming, title generation, auto-summarize, enrichment
+ * - MessageHandler: send_message validation, streaming, auto-summarize, enrichment
+ * - TitleUpdateService: title generation (consult/assessment) and scoring title updates (Epic 35)
  * - ScoringHandler: scoring operations, vendor_selected event
  * - QuestionnaireHandler: generate_questionnaire, get_export_status events
  */
@@ -43,6 +44,7 @@ import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/
 import { assessmentModeTools, consultModeTools } from '../ai/tools/index.js';
 import { WebSearchToolService } from '../../application/services/WebSearchToolService.js';
 import { ConsultToolLoopService } from './services/ConsultToolLoopService.js';
+import { TitleUpdateService } from './services/TitleUpdateService.js';
 import type { IJinaClient } from '../../application/interfaces/IJinaClient.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
 import type { ITitleGenerationService } from '../../application/interfaces/ITitleGenerationService.js';
@@ -80,6 +82,7 @@ export class ChatServer {
   private readonly questionnaireHandler: QuestionnaireHandler;
   private readonly messageHandler: MessageHandler;
   private readonly toolRegistry: ToolUseRegistry;
+  private readonly titleUpdateService: TitleUpdateService;
   private readonly webSearchEnabled: boolean;  // Epic 33: Track if web search is available
 
   constructor(
@@ -151,11 +154,15 @@ export class ChatServer {
       conversationService
     );
 
+    // Epic 35: Create TitleUpdateService for title generation (extracted from MessageHandler)
+    this.titleUpdateService = new TitleUpdateService(conversationService, titleGenerationService);
+
     // Initialize MessageHandler with all dependencies for Story 28.11.2
     // Story 34.1.3: Pass consultToolLoopService instead of toolRegistry
+    // Story 35.1.2: Removed titleGenerationService (now in TitleUpdateService)
     this.messageHandler = new MessageHandler(
       conversationService, fileRepository, rateLimiter, fileContextBuilder, claudeClient,
-      fileStorage, intakeParser, titleGenerationService, this.toolRegistry, consultToolLoopService
+      fileStorage, intakeParser, this.toolRegistry, consultToolLoopService
     );
 
     this.setupNamespace();
@@ -264,7 +271,7 @@ export class ChatServer {
     // Step 4: Scoring mode bypass
     if (modeConfig.bypassClaude && hasAttachments) {
       const fileIds = enrichedAttachments!.map(a => a.fileId);
-      if (enrichedAttachments![0]?.filename) await this.messageHandler.updateScoringTitle(socket as IAuthenticatedSocket, conversationId!, enrichedAttachments![0].filename);
+      if (enrichedAttachments![0]?.filename) await this.titleUpdateService.updateScoringTitle(socket as IAuthenticatedSocket, conversationId!, enrichedAttachments![0].filename);
       const userQuery = messageText && !messageText.startsWith('[Uploaded file') ? messageText : undefined;
       await this.scoringHandler.triggerScoringOnSend(socket as IAuthenticatedSocket, conversationId!, socket.userId!, fileIds, userQuery, (id) => this.contextBuilder.build(id));
       return;
@@ -320,7 +327,7 @@ export class ChatServer {
         this.messageHandler.enrichInBackground(conversationId!, enrichedAttachments!.map(a => a.fileId)).catch(e => console.error('[ChatServer] Enrichment failed:', e));
       }
 
-      this.messageHandler.generateTitleIfNeeded(socket as IAuthenticatedSocket, conversationId!, mode, result.fullResponse).catch(e => console.error('[ChatServer] Title generation failed:', e));
+      this.titleUpdateService.generateTitleIfNeeded(socket as IAuthenticatedSocket, conversationId!, mode, result.fullResponse).catch(e => console.error('[ChatServer] Title generation failed:', e));
     }
   }
 
