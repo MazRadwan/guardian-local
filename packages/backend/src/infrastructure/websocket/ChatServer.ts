@@ -46,6 +46,7 @@ import { assessmentModeTools, consultModeTools } from '../ai/tools/index.js';
 import { WebSearchToolService } from '../../application/services/WebSearchToolService.js';
 import { ConsultToolLoopService } from './services/ConsultToolLoopService.js';
 import { TitleUpdateService } from './services/TitleUpdateService.js';
+import { BackgroundEnrichmentService } from './services/BackgroundEnrichmentService.js';
 import type { IJinaClient } from '../../application/interfaces/IJinaClient.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
 import type { ITitleGenerationService } from '../../application/interfaces/ITitleGenerationService.js';
@@ -84,6 +85,7 @@ export class ChatServer {
   private readonly messageHandler: MessageHandler;
   private readonly toolRegistry: ToolUseRegistry;
   private readonly titleUpdateService: TitleUpdateService;
+  private readonly backgroundEnrichmentService: BackgroundEnrichmentService;
   private readonly webSearchEnabled: boolean;  // Epic 33: Track if web search is available
 
   constructor(
@@ -158,12 +160,15 @@ export class ChatServer {
     // Epic 35: Create TitleUpdateService for title generation (extracted from MessageHandler)
     this.titleUpdateService = new TitleUpdateService(conversationService, titleGenerationService);
 
+    // Create BackgroundEnrichmentService for assessment mode file enrichment
+    this.backgroundEnrichmentService = new BackgroundEnrichmentService(fileRepository, fileStorage!, intakeParser!);
+
     // Initialize MessageHandler with all dependencies for Story 28.11.2
     // Story 34.1.3: Pass consultToolLoopService instead of toolRegistry
     // Story 35.1.2: Removed titleGenerationService (now in TitleUpdateService)
     this.messageHandler = new MessageHandler(
       conversationService, fileRepository, rateLimiter, fileContextBuilder, claudeClient,
-      fileStorage, intakeParser, this.toolRegistry, consultToolLoopService
+      this.toolRegistry, consultToolLoopService
     );
 
     this.setupNamespace();
@@ -332,7 +337,7 @@ export class ChatServer {
       }
 
       if (modeConfig.backgroundEnrich && hasAttachments) {
-        this.messageHandler.enrichInBackground(conversationId!, enrichedAttachments!.map(a => a.fileId)).catch(e => console.error('[ChatServer] Enrichment failed:', e));
+        this.backgroundEnrichmentService.enrichInBackground(conversationId!, enrichedAttachments!.map(a => a.fileId)).catch(e => console.error('[ChatServer] Enrichment failed:', e));
       }
 
       this.titleUpdateService.generateTitleIfNeeded(socket as IAuthenticatedSocket, conversationId!, mode, result.fullResponse).catch(e => console.error('[ChatServer] Title generation failed:', e));

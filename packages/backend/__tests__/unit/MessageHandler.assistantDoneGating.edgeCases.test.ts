@@ -189,8 +189,6 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       mockRateLimiter,
       mockFileContextBuilder,
       mockClaudeClient,
-      undefined, // fileStorage
-      undefined, // intakeParser
       mockToolRegistry,
       mockConsultToolLoopService
     );

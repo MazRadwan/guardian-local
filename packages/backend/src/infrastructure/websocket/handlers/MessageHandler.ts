@@ -36,9 +36,6 @@
 
 import type { ConversationService } from '../../../application/services/ConversationService.js';
 import type { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
-import type { IFileStorage } from '../../../application/interfaces/IFileStorage.js';
-import type { ITextExtractionService, ValidatedDocumentType } from '../../../application/interfaces/ITextExtractionService.js';
-import type { IIntakeDocumentParser } from '../../../application/interfaces/IIntakeDocumentParser.js';
 import type { IAuthenticatedSocket } from '../ChatContext.js';
 import type { RateLimiter } from '../RateLimiter.js';
 import type { MessageAttachment, MessageComponent } from '../../../domain/entities/Message.js';
@@ -47,19 +44,6 @@ import type { IClaudeClient, ClaudeMessage, ToolUseBlock, ClaudeTool } from '../
 import type { ImageContentBlock } from '../../ai/types/vision.js';
 import type { ToolUseRegistry } from '../ToolUseRegistry.js';
 import type { IConsultToolLoopService } from '../services/IConsultToolLoopService.js';
-
-/**
- * Story 28.11.2: MIME type to validated document type mapping
- * Used for context injection fallback when re-reading from S3.
- * Handles DOCX-as-ZIP edge case by mapping to correct type.
- */
-const MIME_TYPE_MAP: Record<string, ValidatedDocumentType> = {
-  'application/pdf': 'pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'image/png': 'image',
-  'image/jpeg': 'image',
-  'image/webp': 'image',
-};
 
 /**
  * Send message payload from client
@@ -182,9 +166,6 @@ export class MessageHandler {
     private readonly rateLimiter: RateLimiter,
     private readonly fileContextBuilder?: FileContextBuilder,
     private readonly claudeClient?: IClaudeClient,
-    // Story 28.11.2: Dependencies for background enrichment
-    private readonly fileStorage?: IFileStorage,
-    private readonly intakeParser?: IIntakeDocumentParser,
     // Story 33.2.2: ToolUseRegistry for consult mode tool loop
     private readonly toolRegistry?: ToolUseRegistry,
     // Story 34.1.3: ConsultToolLoopService for consult mode tool execution
@@ -736,94 +717,6 @@ export class MessageHandler {
         wasAborted: false,
         stopReason: undefined,
       };
-    }
-  }
-
-  /**
-   * Story 28.11.2: Background enrichment for Assessment mode
-   *
-   * Runs in background (fire-and-forget) after immediate response is sent.
-   * Uses tryStartParsing() for idempotency - prevents duplicate processing.
-   *
-   * @param conversationId - Conversation containing files to enrich
-   * @param fileIds - File IDs to process
-   */
-  async enrichInBackground(
-    conversationId: string,
-    fileIds: string[]
-  ): Promise<void> {
-    // Check dependencies
-    if (!this.intakeParser || !this.fileStorage) {
-      console.warn('[MessageHandler] Intake parser or file storage not configured, skipping background enrichment');
-      return;
-    }
-
-    for (const fileId of fileIds) {
-      try {
-        // Use idempotency check (parseStatus column)
-        // Only proceeds if status was 'pending' -> 'in_progress'
-        const started = await this.fileRepository.tryStartParsing(fileId);
-        if (!started) {
-          console.log(`[MessageHandler] File ${fileId} already being processed, skipping`);
-          continue;
-        }
-
-        // Get file record for storage path
-        const file = await this.fileRepository.findById(fileId);
-        if (!file) {
-          console.warn(`[MessageHandler] File ${fileId} not found for enrichment`);
-          await this.fileRepository.updateParseStatus(fileId, 'failed');
-          continue;
-        }
-
-        // Retrieve file from storage
-        const buffer = await this.fileStorage.retrieve(file.storagePath);
-
-        // Map MIME type to document type
-        const documentType = MIME_TYPE_MAP[file.mimeType];
-        if (!documentType) {
-          console.warn(`[MessageHandler] Unsupported MIME type for enrichment: ${file.mimeType}`);
-          await this.fileRepository.updateParseStatus(fileId, 'failed');
-          continue;
-        }
-
-        // Parse for context (assessment mode uses standard enrichment)
-        const result = await this.intakeParser.parseForContext(buffer, {
-          filename: file.filename,
-          mimeType: file.mimeType,
-          sizeBytes: file.size,
-          documentType,
-          storagePath: file.storagePath,
-          uploadedAt: file.createdAt,
-          uploadedBy: file.userId,
-        });
-
-        if (result.success && result.context) {
-          // Store enriched context
-          await this.fileRepository.updateIntakeContext(
-            fileId,
-            {
-              vendorName: result.context.vendorName,
-              solutionName: result.context.solutionName,
-              solutionType: result.context.solutionType,
-              industry: result.context.industry,
-              features: result.context.features,
-              claims: result.context.claims,
-              complianceMentions: result.context.complianceMentions,
-            },
-            result.gapCategories
-          );
-          await this.fileRepository.updateParseStatus(fileId, 'completed');
-          console.log(`[MessageHandler] Background enrichment completed for file ${fileId}`);
-        } else {
-          console.warn(`[MessageHandler] Background enrichment failed for file ${fileId}: ${result.error}`);
-          await this.fileRepository.updateParseStatus(fileId, 'failed');
-        }
-      } catch (err) {
-        console.error(`[MessageHandler] Error during background enrichment for file ${fileId}:`, err);
-        // Mark as failed but continue with other files
-        await this.fileRepository.updateParseStatus(fileId, 'failed').catch(() => {});
-      }
     }
   }
 

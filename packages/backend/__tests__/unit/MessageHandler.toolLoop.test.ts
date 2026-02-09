@@ -183,8 +183,6 @@ describe('MessageHandler Tool Loop', () => {
       mockRateLimiter,
       mockFileContextBuilder,
       mockClaudeClient,
-      undefined, // fileStorage
-      undefined, // intakeParser
       mockToolRegistry,
       mockConsultToolLoopService
     );

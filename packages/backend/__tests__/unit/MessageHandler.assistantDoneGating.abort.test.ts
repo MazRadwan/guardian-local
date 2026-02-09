@@ -201,8 +201,6 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
       mockRateLimiter,
       mockFileContextBuilder,
       mockClaudeClient,
-      undefined, // fileStorage
-      undefined, // intakeParser
       mockToolRegistry,
       mockConsultToolLoopService
     );

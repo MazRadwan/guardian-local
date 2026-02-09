@@ -186,8 +186,6 @@ describe('MessageHandler Assistant Done Gating', () => {
       mockRateLimiter,
       mockFileContextBuilder,
       mockClaudeClient,
-      undefined, // fileStorage
-      undefined, // intakeParser
       mockToolRegistry,
       mockConsultToolLoopService
     );
