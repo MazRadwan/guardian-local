@@ -68,7 +68,7 @@ Every extraction must be tested against ALL three mode paths.
 |----------|--------|-----------|
 | Types location | Shared `types/SendMessage.ts` | Prevents circular deps, ChatServer imports types without importing services |
 | Log prefixes | Update to new class names | 10 min find-replace vs ongoing confusion in prod |
-| buildFileContext fate | Inline into orchestrator | Thin wrapper, ChatServer calls `FileContextBuilder.buildWithImages()` directly |
+| buildFileContext fate | Inline into orchestrator | Thin wrapper, orchestrator calls `FileContextBuilder.buildWithImages()` directly |
 | Duplicate `validateConversationOwnership` | Leave QuestionnaireHandler's copy as-is | Different error messages + security logging, consolidation risks behavior change |
 | Dead `socket` param | Remove from `validateAndEnrichAttachments` during move | Cleanup opportunity, zero risk |
 | `waitForFileRecords` visibility | Keep public on validator | 9 direct test calls, public API preserves test coverage |

@@ -73,6 +73,3 @@ FROM MessageHandler.ts:
 
 ---
 
-## NOTE
-
-Detailed story specs will be written after Sprint 1 is complete. Sprint 1 results may surface additional constraints or simplifications for the streaming extraction.
