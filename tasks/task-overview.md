@@ -57,9 +57,10 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | Epic 16: Document Parser | 6 stories | 🔄 In Progress | - | Single-file upload, parsing, attachments |
 | Epic 17: Multi-File Upload | 16 stories | 📋 Planned | - | See `tasks/epic-17/overview.md` |
 | Epic 34: Extract Consult Tool Loop | 4 stories | 🔄 In Progress | - | MessageHandler decomposition: tool loop extraction |
-| Epic 35: Extract Title Generation | 3 stories | 📋 Planned | - | MessageHandler decomposition: title service extraction |
+| Epic 35: Extract Title Generation | 3 stories | ✅ Complete | - | MessageHandler decomposition: title service extraction |
+| Epic 36: MessageHandler Final Decomposition | 9 stories | 📋 Planned | - | Validation + streaming + orchestrator extraction, delete MessageHandler |
 
-**Progress:** 13 of 18 epics complete (~72%), Epic 8 (Polish), Epic 15 (Rename), Epic 16 (Parser), Epic 17 (Multi-File), Epic 34 (Tool Loop), Epic 35 (Title Gen) pending
+**Progress:** 14 of 19 epics complete (~74%), Epic 8 (Polish), Epic 15 (Rename), Epic 16 (Parser), Epic 17 (Multi-File), Epic 36 (Final Decomp) pending
 
 **Critical Path:** Epic 1-7 ✅ → Epic 9-14 ✅ → Epic 16 (Parser) → Epic 17 (Multi-File) → Epic 8 (Polish)
 
