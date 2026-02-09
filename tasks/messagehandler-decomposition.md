@@ -245,6 +245,26 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - **Mode routing audit COMPLETE** — no hidden bindings found, ready for extraction next session
 - Target: get MessageHandler under 300 LOC (currently 893 — need to remove ~593 more)
 
+### Mode Routing Extraction Plan (NEXT UP)
+
+**What to extract:** `getModeConfig()` (30-line switch) + `ModeConfig` interface (10 lines) → new file `ModeRouter.ts`
+
+**Audit findings (complete):**
+- One caller: `ChatServer.ts` line 282
+- Pure function, zero constructor deps
+- `shouldBypassClaude` was dead code, already deleted (commit `7c0b61f`)
+- `ModeConfig` type exported but no production imports (only test file imports it)
+- ChatServer also has inline `mode ===` checks at lines 297 and 310 (file context gating, tool array selection) — these stay in ChatServer, cosmetic split not a blocker
+- No hidden bindings to upload/extract, assessment, questionnaire gen, or scoring
+
+**Steps:**
+1. Create `packages/backend/src/infrastructure/websocket/handlers/ModeRouter.ts` with `getModeConfig()` + `ModeConfig` interface as pure exported function
+2. Update `ChatServer.ts` line 282: import from `ModeRouter` instead of calling `this.messageHandler.getModeConfig()`
+3. Remove `getModeConfig()` and `ModeConfig` from `MessageHandler.ts`
+4. Update `MessageHandler.test.ts`: move getModeConfig tests to new `ModeRouter.test.ts`
+5. Run tests, verify 0 failures
+6. Browser QA: consult text, assessment with tools, scoring bypass — verify all 3 modes work
+
 ### handleSendMessage Pipeline Map (READ THIS)
 
 ```
