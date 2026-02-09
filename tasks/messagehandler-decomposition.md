@@ -3,7 +3,7 @@
 **Status:** Active - spans multiple epics
 **File:** `packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts`
 **Current LOC:** 929 (limit: 300) — down from 1,319
-**Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline — removed ~390 LOC so far
+**Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline, dead modes/ cleanup — removed ~390 LOC from MessageHandler + 1,330 LOC dead code deleted
 
 ---
 
@@ -43,14 +43,12 @@ The services bound into MessageHandler are tied to features that took weeks of r
 
 **Lesson preserved:** Audit must trace CONTROL FLOW BRANCHES in the orchestrator, not just dependency graphs. Each `return` creates a distinct pipeline path.
 
-### Dead Code: `modes/` Strategy Pattern (Epic 28)
-- **Location:** `packages/backend/src/infrastructure/websocket/modes/`
-- **Files:** `IModeStrategy.ts`, `AssessmentModeStrategy.ts`, `ConsultModeStrategy.ts`, `ScoringModeStrategy.ts`, `ModeStrategyFactory.ts`, `index.ts` + 4 test files
-- **What:** Full Strategy Pattern (GoF) with `preProcess()`, `postProcess()`, `enhanceSystemPrompt()` per mode. Includes a `ModeStrategyFactory`. Fully implemented, fully tested in isolation.
-- **Problem:** Never wired into ChatServer. No production code outside `modes/` imports from it. Created in the Epic 28 monolith refactor (`0f6deaf`) alongside the simpler `getModeConfig()` switch in MessageHandler. The switch was extracted from the original monolith logic and worked — the strategy system was aspirational architecture that was never connected.
-- **Current state:** `ChatServer` uses `messageHandler.getModeConfig(mode)` (30-line switch). The `modes/` directory is dead code.
-- **Decision:** The switch is sufficient for 3 modes with simple config flags. Strategy Pattern would be over-engineering. **Revisit after MessageHandler decomposition is complete** — if mode-specific behavior grows more complex, wire the strategies then. Otherwise delete the dead code in a cleanup pass.
-- **Duplicate flag:** `AssessmentModeStrategy.postProcess()` returns `enrichInBackground: context.hasDocuments` but ChatServer uses the hardcoded `modeConfig.backgroundEnrich: true` from `getModeConfig()` instead. Two decision points for the same thing — only one is live.
+### ~~Dead Code: `modes/` Strategy Pattern (Epic 28)~~ — DELETED
+- **Was:** `packages/backend/src/infrastructure/websocket/modes/` — 5 production files + 4 test files (~950 LOC total)
+- **What it was:** Full Strategy Pattern (GoF) with `preProcess()`, `postProcess()`, `enhanceSystemPrompt()` per mode, plus `ModeStrategyFactory`. Fully implemented, fully tested in isolation.
+- **Why it was dead:** Created in Epic 28 (commit `0f6deaf`, sprint 6 "optional" stories) alongside the simpler `getModeConfig()` switch. The agent implemented both approaches in a single 79-file commit — wired the switch, never wired the strategy pattern. Zero imports from `modes/` anywhere in production code.
+- **Fix (commit `c854231`):** Deleted all 9 files. The 30-line `getModeConfig()` switch is sufficient for 3 modes with simple config flags.
+- **Lesson:** "Optional" in a spec should mean "evaluate then decide," not "build both and leave one dead." Mega-commits (79 files, 44 stories) are impossible to review for unused code.
 
 ---
 
@@ -154,11 +152,12 @@ Used by 5 of 8 responsibilities. Cannot eliminate this dependency from extracted
 | 2 | Title generation | Epic 35 | ✅ **Complete** | 178 | `TitleUpdateService.ts` |
 | 3 | Message persistence | — | ✅ **Complete** | 57 | Inlined into ChatServer (commit `14fdbf5`) |
 | 4 | Auto-summarization | — | ✅ **Removed** | 156 | Dead code since birth — removed, not extracted (commit `5a6f8c4`) |
-| 5 | Mode routing | TBD | ⬜ Pending | ~60 | `ModeRouter.ts` |
-| 6 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
-| 7 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
+| 5 | Dead `modes/` strategy pattern | — | ✅ **Deleted** | 1,330 | Never-wired Epic 28 dead code — 9 files deleted (commit `c854231`) |
+| 6 | Mode routing | TBD | ⬜ Pending | ~60 | `ModeRouter.ts` |
+| 7 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
+| 8 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
 
-**Total removed:** ~691 LOC (1319→929) | **Remaining extractable:** ~355 LOC | **Will stay:** ~194 LOC (constructor/boilerplate) + ~180 LOC (types)
+**MessageHandler removed:** ~691 LOC (1319→929) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~355 LOC | **Will stay:** ~194 LOC (constructor/boilerplate) + ~180 LOC (types)
 
 ## Next Extraction Candidates (by risk)
 
@@ -240,7 +239,8 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - Auto-summarize bug is RESOLVED — feature removed entirely (commit `5a6f8c4`), consult file-only now uses normal streaming path
 - Regeneration bug is FIXED (Epic 34, commit d560f54)
 - Each extraction = its own epic with passing tests
-- Target: get MessageHandler under 300 LOC (currently 1,085 — need to remove ~785 more)
+- Dead `modes/` strategy pattern is DELETED (commit `c854231`) — was ~950 LOC of never-wired code from Epic 28
+- Target: get MessageHandler under 300 LOC (currently 929 — need to remove ~629 more)
 
 ### handleSendMessage Pipeline Map (READ THIS)
 
