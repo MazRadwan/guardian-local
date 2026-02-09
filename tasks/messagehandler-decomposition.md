@@ -76,7 +76,7 @@ The services bound into MessageHandler are tied to features that took weeks of r
 | 1 | **Payload validation** | `validateSendMessage`, `validateAndEnrichAttachments`, `waitForFileRecords`, `validateConversationOwnership` | ~220 | ConversationService, IFileRepository, RateLimiter | **Remaining** |
 | 2 | **File context building** | `buildFileContext` | ~30 | FileContextBuilder | **Remaining** |
 | 3 | ~~**Mode routing**~~ | ~~`getModeConfig`~~ | ~~~60~~ | — | **Extracted** → `ModeRouter.ts` (pure function module) |
-| 4 | ~~**Claude streaming + tool loop**~~ | ~~`streamClaudeResponse`~~ | ~~~170~~ | — | **Extracted** → Epic 34 |
+| 4 | **Claude streaming** | `streamClaudeResponse` | ~187 | IClaudeClient, ToolUseRegistry, IConsultToolLoopService | **Remaining** (tool loop extracted in Epic 34, streaming core remains) |
 | 5 | ~~**Message persistence + events**~~ | ~~`saveUserMessageAndEmit`~~ | ~~~30~~ | — | **Inlined** into ChatServer |
 | 6 | **Background enrichment** | `enrichInBackground` | ~75 | IFileStorage, IIntakeDocumentParser, IFileRepository | **Remaining** |
 | 7 | ~~**Title generation**~~ | ~~`generateTitleIfNeeded`, `updateScoringTitle`~~ | ~~~110~~ | — | **Extracted** → Epic 35 |
@@ -154,11 +154,11 @@ Used by 5 of 8 responsibilities. Cannot eliminate this dependency from extracted
 | 4 | Auto-summarization | — | ✅ **Removed** | 156 | Dead code since birth — removed, not extracted (commit `5a6f8c4`) |
 | 5 | Dead `modes/` strategy pattern | — | ✅ **Deleted** | 1,330 | Never-wired Epic 28 dead code — 9 files deleted (commit `c854231`) |
 | 6 | `shouldBypassClaude` dead method | — | ✅ **Deleted** | 36 | Never called — ChatServer reads `modeConfig.bypassClaude` directly (commit `7c0b61f`) |
-| 7 | Mode routing | TBD | ⬜ **Audit complete** | ~60 | `ModeRouter.ts` — audit found no hidden bindings, ready for extraction |
+| 7 | Mode routing | — | ✅ **Complete** | 63 | `ModeRouter.ts` (57 LOC pure function module, commit `8e16c5f`) |
 | 8 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
 | 9 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
 
-**MessageHandler removed:** ~727 LOC (1319→893) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~355 LOC | **Will stay:** ~194 LOC (constructor/boilerplate) + ~144 LOC (types, after BypassClaudeResult removal)
+**MessageHandler removed:** ~489 LOC (1319→830) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~295 LOC | **Will stay:** ~185 LOC (constructor/boilerplate) + ~150 LOC (types/imports)
 
 ## Next Extraction Candidates (by risk)
 
@@ -166,13 +166,14 @@ Pick one for the next epic:
 
 | Priority | Module | Risk | LOC | Deps | Why This Order |
 |----------|--------|------|-----|------|----------------|
-| **A** | Mode routing | LOW | ~60 | None (pure functions) | **Audit complete.** Zero deps, zero risk. Design note: ChatServer also has inline `mode ===` checks (lines 297, 310) — cosmetic split, not a blocker. Gets MH to ~833. |
-| **B** | enrichInBackground | LOW | ~75 | fileStorage, intakeParser, fileRepo | Fire-and-forget, isolated. Removes 2 constructor deps (IFileStorage, IIntakeDocumentParser). Gets MH to ~818. |
-| **C** | Validation | MEDIUM | ~220 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~673. |
-| ~~D~~ | ~~Auto-summarization~~ | — | ~~156~~ | — | **Done** — removed (commit `5a6f8c4`) |
-| ~~E~~ | ~~Message persistence~~ | — | ~~57~~ | — | **Done** — inlined into ChatServer (commit `14fdbf5`) |
+| ~~A~~ | ~~Mode routing~~ | — | ~~60~~ | — | **Done** — extracted to `ModeRouter.ts` (commit `8e16c5f`) |
+| **B** | enrichInBackground | LOW | ~80 | fileStorage, intakeParser, fileRepo | Fire-and-forget, isolated. Removes 2 constructor deps (IFileStorage, IIntakeDocumentParser). Gets MH to ~750. |
+| **C** | Validation | MEDIUM | ~232 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~598. |
+| **D** | streamClaudeResponse | HIGH | ~187 | claudeClient, toolRegistry, consultToolLoopService | Core streaming. Tightly coupled to socket, abort handling, event emission. Gets MH to ~411. |
+| ~~E~~ | ~~Auto-summarization~~ | — | ~~156~~ | — | **Done** — removed (commit `5a6f8c4`) |
+| ~~F~~ | ~~Message persistence~~ | — | ~~57~~ | — | **Done** — inlined into ChatServer (commit `14fdbf5`) |
 
-**Combo suggestion:** A+B together = ~135 LOC removed, 2 constructor deps eliminated, both LOW risk. Could be a single epic with 2 sprints.
+**To reach 300 LOC:** Need B+C+D (~499 LOC removed, 830→~331). B is low risk. C is medium. D is high. Suggest B next, then C.
 
 ---
 
@@ -242,28 +243,8 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - Each extraction = its own epic with passing tests
 - Dead `modes/` strategy pattern is DELETED (commit `c854231`) — was ~950 LOC of never-wired code from Epic 28
 - Dead `shouldBypassClaude` method + `BypassClaudeResult` type DELETED (commit `7c0b61f`) — never called, ChatServer reads modeConfig directly
-- **Mode routing audit COMPLETE** — no hidden bindings found, ready for extraction next session
-- Target: get MessageHandler under 300 LOC (currently 893 — need to remove ~593 more)
-
-### Mode Routing Extraction Plan (NEXT UP)
-
-**What to extract:** `getModeConfig()` (30-line switch) + `ModeConfig` interface (10 lines) → new file `ModeRouter.ts`
-
-**Audit findings (complete):**
-- One caller: `ChatServer.ts` line 282
-- Pure function, zero constructor deps
-- `shouldBypassClaude` was dead code, already deleted (commit `7c0b61f`)
-- `ModeConfig` type exported but no production imports (only test file imports it)
-- ChatServer also has inline `mode ===` checks at lines 297 and 310 (file context gating, tool array selection) — these stay in ChatServer, cosmetic split not a blocker
-- No hidden bindings to upload/extract, assessment, questionnaire gen, or scoring
-
-**Steps:**
-1. Create `packages/backend/src/infrastructure/websocket/handlers/ModeRouter.ts` with `getModeConfig()` + `ModeConfig` interface as pure exported function
-2. Update `ChatServer.ts` line 282: import from `ModeRouter` instead of calling `this.messageHandler.getModeConfig()`
-3. Remove `getModeConfig()` and `ModeConfig` from `MessageHandler.ts`
-4. Update `MessageHandler.test.ts`: move getModeConfig tests to new `ModeRouter.test.ts`
-5. Run tests, verify 0 failures
-6. Browser QA: consult text, assessment with tools, scoring bypass — verify all 3 modes work
+- **Mode routing extraction COMPLETE** (commit `8e16c5f`) — `ModeRouter.ts` (57 LOC), 9 tests moved to `ModeRouter.test.ts`, browser QA passed (consult + assessment)
+- Target: get MessageHandler under 300 LOC (currently 830 — need to remove ~530 more)
 
 ### handleSendMessage Pipeline Map (READ THIS)
 
