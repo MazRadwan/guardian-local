@@ -110,7 +110,7 @@ export class ChatServer {
     textExtractionService?: ITextExtractionService,
     intakeParser?: IIntakeDocumentParser,
     vendorValidationService?: VendorValidationService,
-    titleGenerationService?: ITitleGenerationService,  // Optional - MessageHandler handles absence gracefully
+    titleGenerationService?: ITitleGenerationService,  // Optional - TitleUpdateService handles absence gracefully
     visionContentBuilder?: IVisionContentBuilder,      // Epic 30 Sprint 3: Vision API for image files
     jinaClient?: IJinaClient                          // Epic 33: Jina client for web search in consult mode
   ) {

@@ -1,9 +1,8 @@
 /**
  * SendMessage types - Shared type definitions for send_message validation and streaming
  *
- * Story 36.1.1: Extracted from MessageHandler.ts to enable reuse by
- * both MessageHandler and SendMessageValidator.
- * Story 36.2.1: Added StreamingResult and StreamingOptions (moved from MessageHandler.ts)
+ * Story 36.1.1: Extracted from MessageHandler.ts to shared types.
+ * Story 36.2.1: Added StreamingResult and StreamingOptions.
  *
  * These types define the contract between the WebSocket handler layer,
  * the validation service layer, and the streaming service layer.
