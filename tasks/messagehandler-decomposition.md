@@ -2,8 +2,8 @@
 
 **Status:** Active - spans multiple epics
 **File:** `packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts`
-**Current LOC:** 830 (limit: 300) — down from 1,319
-**Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline, dead modes/ cleanup, mode routing extraction, shouldBypassClaude dead code — removed ~453 LOC from MessageHandler + 1,330 LOC dead code deleted
+**Current LOC:** 723 (limit: 300) — down from 1,319
+**Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline, dead modes/ cleanup, mode routing extraction, shouldBypassClaude dead code, enrichInBackground extraction — removed ~560 LOC from MessageHandler + 1,330 LOC dead code deleted
 
 ---
 
@@ -52,24 +52,24 @@ The services bound into MessageHandler are tied to features that took weeks of r
 
 ---
 
-## Constructor Dependencies (9 services — was 10)
+## Constructor Dependencies (7 services — was 10)
 
 | # | Dependency | Type | Layer | Used By Methods |
 |---|-----------|------|-------|-----------------|
 | 1 | `ConversationService` | Concrete | Application | validation |
-| 2 | `IFileRepository` | Interface | Application | validation, enrichment, waitForFileRecords |
+| 2 | `IFileRepository` | Interface | Application | validation, waitForFileRecords |
 | 3 | `RateLimiter` | Concrete | Infrastructure | validation only |
 | 4 | `FileContextBuilder` | Concrete | Infrastructure | buildFileContext |
 | 5 | `IClaudeClient` | Interface | Application | streamClaudeResponse |
-| 6 | `IFileStorage` | Interface | Application | enrichInBackground only |
-| 7 | `IIntakeDocumentParser` | Interface | Application | enrichInBackground only |
+| ~~6~~ | ~~`IFileStorage`~~ | ~~Interface~~ | ~~Application~~ | ~~**Removed** — extracted to BackgroundEnrichmentService~~ |
+| ~~7~~ | ~~`IIntakeDocumentParser`~~ | ~~Interface~~ | ~~Application~~ | ~~**Removed** — extracted to BackgroundEnrichmentService~~ |
 | ~~8~~ | ~~`ITitleGenerationService`~~ | ~~Interface~~ | ~~Application~~ | ~~**Removed** — Epic 35~~ |
-| 8 | `ToolUseRegistry` | Concrete | Infrastructure | streamClaudeResponse (tool loop gating) |
-| 9 | `IConsultToolLoopService` | Interface | Infrastructure | streamClaudeResponse (tool loop delegation) |
+| 6 | `ToolUseRegistry` | Concrete | Infrastructure | streamClaudeResponse (tool loop gating) |
+| 7 | `IConsultToolLoopService` | Interface | Infrastructure | streamClaudeResponse (tool loop delegation) |
 
 ---
 
-## Remaining Responsibilities (4 of 8 — 4 removed)
+## Remaining Responsibilities (3 of 8 — 5 removed)
 
 | # | Responsibility | Methods | Approx LOC | Dependencies Used | Status |
 |---|---------------|---------|------------|-------------------|--------|
@@ -78,23 +78,23 @@ The services bound into MessageHandler are tied to features that took weeks of r
 | 3 | ~~**Mode routing**~~ | ~~`getModeConfig`~~ | ~~~60~~ | — | **Extracted** → `ModeRouter.ts` (pure function module) |
 | 4 | **Claude streaming** | `streamClaudeResponse` | ~187 | IClaudeClient, ToolUseRegistry, IConsultToolLoopService | **Remaining** (tool loop extracted in Epic 34, streaming core remains) |
 | 5 | ~~**Message persistence + events**~~ | ~~`saveUserMessageAndEmit`~~ | ~~~30~~ | — | **Inlined** into ChatServer |
-| 6 | **Background enrichment** | `enrichInBackground` | ~75 | IFileStorage, IIntakeDocumentParser, IFileRepository | **Remaining** |
+| 6 | ~~**Background enrichment**~~ | ~~`enrichInBackground`~~ | ~~~75~~ | — | **Extracted** → `BackgroundEnrichmentService.ts` (commit `ac7d3f2`) |
 | 7 | ~~**Title generation**~~ | ~~`generateTitleIfNeeded`, `updateScoringTitle`~~ | ~~~110~~ | — | **Extracted** → Epic 35 |
 | 8 | ~~**Auto-summarization**~~ | ~~`autoSummarizeDocuments`, `buildAutoSummarizePrompt`~~ | ~~~156~~ | — | **Removed** — dead code since Epic 18, consult file-only now uses normal path |
 
 **Types/interfaces at top:** ~200 LOC
 
-### What Remains in MessageHandler (830 LOC)
+### What Remains in MessageHandler (723 LOC)
 
 | Category | LOC | Extractable? |
 |----------|-----|-------------|
-| Types/interfaces/imports | ~150 | Partially (move to shared types file) |
+| Types/interfaces/imports | ~140 | Partially (move to shared types file) |
 | Payload validation | ~220 | Yes → `MessageValidator.ts` |
 | ~~Mode routing~~ | ~~—~~ | **Extracted** → `ModeRouter.ts` |
 | File context building | ~30 | Small, could stay or merge |
 | Claude streaming | ~170 | Partially extracted (tool loop out, streaming core remains) |
-| Background enrichment | ~75 | Yes → `BackgroundEnrichmentService.ts` |
-| Constructor + boilerplate | ~185 | Stays |
+| ~~Background enrichment~~ | ~~—~~ | **Extracted** → `BackgroundEnrichmentService.ts` |
+| Constructor + boilerplate | ~163 | Stays |
 
 ---
 
@@ -103,7 +103,7 @@ The services bound into MessageHandler are tied to features that took weeks of r
 ### Safe (isolated deps, fire-and-forget)
 | Module | Risk | Reason |
 |--------|------|--------|
-| `enrichInBackground` | LOW | Only uses fileStorage + intakeParser + fileRepo. Nothing else calls these. Fire-and-forget. |
+| ~~`enrichInBackground`~~ | ~~LOW~~ | **DONE** — Extracted to `BackgroundEnrichmentService.ts` (106 LOC, commit `ac7d3f2`) |
 | ~~Title generation~~ | ~~LOW~~ | ~~**DONE** — Epic 35~~ |
 | ~~Mode routing~~ | ~~LOW~~ | **DONE** — Extracted to `ModeRouter.ts` (57 LOC pure function module) |
 
@@ -155,10 +155,10 @@ Used by 5 of 8 responsibilities. Cannot eliminate this dependency from extracted
 | 5 | Dead `modes/` strategy pattern | — | ✅ **Deleted** | 1,330 | Never-wired Epic 28 dead code — 9 files deleted (commit `c854231`) |
 | 6 | `shouldBypassClaude` dead method | — | ✅ **Deleted** | 36 | Never called — ChatServer reads `modeConfig.bypassClaude` directly (commit `7c0b61f`) |
 | 7 | Mode routing | — | ✅ **Complete** | 63 | `ModeRouter.ts` (57 LOC pure function module, commit `8e16c5f`) |
-| 8 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
+| 8 | enrichInBackground | — | ✅ **Complete** | 107 | `BackgroundEnrichmentService.ts` (106 LOC, commit `ac7d3f2`) |
 | 9 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
 
-**MessageHandler removed:** ~489 LOC (1319→830) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~295 LOC | **Will stay:** ~185 LOC (constructor/boilerplate) + ~150 LOC (types/imports)
+**MessageHandler removed:** ~596 LOC (1319→723) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~220 LOC (validation) + ~170 LOC (streaming) | **Will stay:** ~163 LOC (constructor/boilerplate) + ~140 LOC (types/imports)
 
 ## Next Extraction Candidates (by risk)
 
@@ -167,13 +167,13 @@ Pick one for the next epic:
 | Priority | Module | Risk | LOC | Deps | Why This Order |
 |----------|--------|------|-----|------|----------------|
 | ~~A~~ | ~~Mode routing~~ | — | ~~60~~ | — | **Done** — extracted to `ModeRouter.ts` (commit `8e16c5f`) |
-| **B** | enrichInBackground | LOW | ~80 | fileStorage, intakeParser, fileRepo | Fire-and-forget, isolated. Removes 2 constructor deps (IFileStorage, IIntakeDocumentParser). Gets MH to ~750. |
-| **C** | Validation | MEDIUM | ~232 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~598. |
-| **D** | streamClaudeResponse | HIGH | ~187 | claudeClient, toolRegistry, consultToolLoopService | Core streaming. Tightly coupled to socket, abort handling, event emission. Gets MH to ~411. |
+| ~~B~~ | ~~enrichInBackground~~ | — | ~~107~~ | — | **Done** — extracted to `BackgroundEnrichmentService.ts` (commit `ac7d3f2`) |
+| **C** | Validation | MEDIUM | ~220 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~503. |
+| **D** | streamClaudeResponse | HIGH | ~170 | claudeClient, toolRegistry, consultToolLoopService | Core streaming. Tightly coupled to socket, abort handling, event emission. Gets MH to ~333. |
 | ~~E~~ | ~~Auto-summarization~~ | — | ~~156~~ | — | **Done** — removed (commit `5a6f8c4`) |
 | ~~F~~ | ~~Message persistence~~ | — | ~~57~~ | — | **Done** — inlined into ChatServer (commit `14fdbf5`) |
 
-**To reach 300 LOC:** Need B+C+D (~499 LOC removed, 830→~331). B is low risk. C is medium. D is high. Suggest B next, then C.
+**To reach 300 LOC:** Need C+D (~390 LOC removed, 723→~333). C is medium risk. D is high risk. Suggest C next.
 
 ---
 
@@ -234,83 +234,6 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 
 ---
 
-## enrichInBackground Extraction Plan (NEXT UP)
-
-### Audit Summary
-
-**Method:** `enrichInBackground` (MessageHandler.ts lines 751-830, ~80 LOC)
-**Risk:** LOW — fire-and-forget, no socket/event coupling, no return value consumed
-
-### Call Site (exactly 1)
-
-```
-ChatServer.ts line 334-336:
-  if (modeConfig.backgroundEnrich && hasAttachments) {
-    this.messageHandler.enrichInBackground(conversationId!, enrichedAttachments!.map(a => a.fileId))
-      .catch(e => console.error('[ChatServer] Enrichment failed:', e));
-  }
-```
-
-- Gated by `modeConfig.backgroundEnrich` — only `true` for assessment mode
-- Fire-and-forget with `.catch()` — no return value used by ChatServer
-- Runs in Step 7 (post-streaming), after Claude response is saved
-
-### Dependencies (3 — removes 2 from MessageHandler)
-
-| Dependency | Interface | Used For |
-|------------|-----------|----------|
-| `IFileRepository` | Interface | `tryStartParsing`, `findById`, `updateParseStatus`, `updateIntakeContext` |
-| `IFileStorage` | Interface | `retrieve(storagePath)` — read file buffer |
-| `IIntakeDocumentParser` | Interface | `parseForContext(buffer, metadata)` — extract vendor context |
-
-**After extraction:** IFileStorage and IIntakeDocumentParser removed from MessageHandler constructor (only used by this method).
-
-### Shared Constant: MIME_TYPE_MAP
-
-Defined at MessageHandler.ts line 56-62. Also independently defined in 4 other files:
-- `ScoringService.ts`
-- `FileContextBuilder.ts`
-- `IDocumentParser.ts`
-- `FileValidationService.ts`
-
-**Plan:** Move with `enrichInBackground` into `BackgroundEnrichmentService.ts`. Do NOT consolidate the 4 other copies — that's a separate cleanup task. Keep scope tight.
-
-### Test Coverage: ZERO on actual method
-
-- MessageHandler.test.ts: No tests for `enrichInBackground`
-- `ChatServer.modeSpecificBehavior.test.ts`: Has 6 tests but they test a **DUPLICATE standalone function** that reimplements the logic, NOT the actual MessageHandler method
-- **Action required:** Write proper unit tests for `BackgroundEnrichmentService` AFTER extraction (the method is moving, not changing logic — tests on the new service validate the move)
-
-### Hidden Bindings: NONE
-
-- Does NOT call any other MessageHandler methods
-- Does NOT read socket state
-- Does NOT emit events
-- Does NOT use ConversationService
-- Pure infrastructure: read file → parse → store context
-
-### Extraction Steps
-
-1. Create `BackgroundEnrichmentService.ts` in `src/infrastructure/websocket/handlers/` (or `services/`)
-   - Move `enrichInBackground` method + `MIME_TYPE_MAP` constant
-   - Constructor: `IFileRepository`, `IFileStorage`, `IIntakeDocumentParser`
-   - Single public method: `enrichInBackground(conversationId, fileIds)`
-2. Update ChatServer.ts to inject and call `BackgroundEnrichmentService` directly
-3. Remove method + MIME_TYPE_MAP + 2 constructor deps from MessageHandler
-4. Write unit tests for `BackgroundEnrichmentService`
-5. Update `ChatServer.modeSpecificBehavior.test.ts` — replace duplicate standalone function with import of real service
-6. Run full test suite
-7. Browser QA: assessment mode file upload (the ONLY path that triggers enrichment)
-8. Update this decomposition doc
-
-### LOC Impact
-
-- MessageHandler: ~830 → ~750 (remove ~80 LOC method + MIME_TYPE_MAP)
-- Constructor deps: 9 → 7 (remove IFileStorage, IIntakeDocumentParser)
-- New file: ~90 LOC (method + class boilerplate + MIME_TYPE_MAP)
-
----
-
 ## Notes for Future Sessions
 
 - Read this file FIRST when working on any MessageHandler extraction
@@ -321,8 +244,9 @@ Defined at MessageHandler.ts line 56-62. Also independently defined in 4 other f
 - Dead `modes/` strategy pattern is DELETED (commit `c854231`) — was ~950 LOC of never-wired code from Epic 28
 - Dead `shouldBypassClaude` method + `BypassClaudeResult` type DELETED (commit `7c0b61f`) — never called, ChatServer reads modeConfig directly
 - **Mode routing extraction COMPLETE** (commit `8e16c5f`) — `ModeRouter.ts` (57 LOC), 9 tests moved to `ModeRouter.test.ts`, browser QA passed (consult + assessment)
-- **enrichInBackground audit COMPLETE** — see extraction plan above
-- Target: get MessageHandler under 300 LOC (currently 830 — need to remove ~530 more)
+- **enrichInBackground extraction COMPLETE** (commit `ac7d3f2`) — `BackgroundEnrichmentService.ts` (106 LOC), 7 unit tests, browser QA passed. Removed IFileStorage + IIntakeDocumentParser from MessageHandler constructor (9→7 deps)
+- Target: get MessageHandler under 300 LOC (currently 723 — need to remove ~423 more)
+- **Next:** Validation extraction (C, MEDIUM risk, ~220 LOC) → gets MH to ~503
 
 ### handleSendMessage Pipeline Map (READ THIS)
 
