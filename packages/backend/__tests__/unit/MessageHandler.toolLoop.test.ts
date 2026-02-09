@@ -20,8 +20,6 @@ import {
 } from '../../src/infrastructure/websocket/handlers/MessageHandler.js';
 import type { IAuthenticatedSocket } from '../../src/infrastructure/websocket/ChatContext.js';
 import type { ConversationService } from '../../src/application/services/ConversationService.js';
-import type { IFileRepository, FileRecord } from '../../src/application/interfaces/IFileRepository.js';
-import type { RateLimiter } from '../../src/infrastructure/websocket/RateLimiter.js';
 import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
 import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
@@ -49,35 +47,6 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
   updateTitle: jest.fn(),
   updateTitleIfNotManuallyEdited: jest.fn(),
 } as unknown as jest.Mocked<ConversationService>);
-
-/**
- * Create a mock IFileRepository
- */
-const createMockFileRepository = (): jest.Mocked<IFileRepository> => ({
-  create: jest.fn(),
-  findById: jest.fn(),
-  findByIds: jest.fn(),
-  findByIdAndUser: jest.fn(),
-  findByIdAndConversation: jest.fn(),
-  updateIntakeContext: jest.fn(),
-  findByConversationWithContext: jest.fn(),
-  updateTextExcerpt: jest.fn(),
-  updateExcerptAndClassification: jest.fn(),
-  updateParseStatus: jest.fn(),
-  tryStartParsing: jest.fn(),
-  findByConversationWithExcerpt: jest.fn(),
-  deleteByConversationId: jest.fn(),
-} as unknown as jest.Mocked<IFileRepository>);
-
-/**
- * Create a mock RateLimiter
- */
-const createMockRateLimiter = (): jest.Mocked<RateLimiter> => ({
-  isRateLimited: jest.fn(),
-  getRemaining: jest.fn(),
-  getResetTime: jest.fn(),
-  reset: jest.fn(),
-} as unknown as jest.Mocked<RateLimiter>);
 
 /**
  * Create a mock FileContextBuilder
@@ -158,8 +127,6 @@ async function* createChunkGenerator(chunks: StreamChunk[]): AsyncGenerator<Stre
 describe('MessageHandler Tool Loop', () => {
   let handler: MessageHandler;
   let mockConversationService: jest.Mocked<ConversationService>;
-  let mockFileRepository: jest.Mocked<IFileRepository>;
-  let mockRateLimiter: jest.Mocked<RateLimiter>;
   let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
   let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
@@ -168,19 +135,14 @@ describe('MessageHandler Tool Loop', () => {
 
   beforeEach(() => {
     mockConversationService = createMockConversationService();
-    mockFileRepository = createMockFileRepository();
-    mockRateLimiter = createMockRateLimiter();
     mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
     mockToolRegistry = createMockToolRegistry();
     mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Create handler with ConsultToolLoopService
-    // Story 35.1.2: titleGenerationService removed (now in TitleUpdateService)
+    // Story 36.1.2: MessageHandler now has 5 params (no fileRepository/rateLimiter)
     handler = new MessageHandler(
       mockConversationService,
-      mockFileRepository,
-      mockRateLimiter,
       mockFileContextBuilder,
       mockClaudeClient,
       mockToolRegistry,
@@ -188,9 +150,6 @@ describe('MessageHandler Tool Loop', () => {
     );
 
     mockSocket = createMockSocket('user-123');
-
-    // Default: not rate limited
-    mockRateLimiter.isRateLimited.mockReturnValue(false);
 
     // Default: sendMessage returns a message
     mockConversationService.sendMessage.mockResolvedValue(createMockMessage());

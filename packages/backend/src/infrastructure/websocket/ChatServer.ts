@@ -38,7 +38,9 @@ import { ConversationHandler } from './handlers/ConversationHandler.js';
 import { ModeSwitchHandler } from './handlers/ModeSwitchHandler.js';
 import { ScoringHandler } from './handlers/ScoringHandler.js';
 import { QuestionnaireHandler } from './handlers/QuestionnaireHandler.js';
-import { MessageHandler, type SendMessagePayload } from './handlers/MessageHandler.js';
+import { MessageHandler } from './handlers/MessageHandler.js';
+import { SendMessageValidator } from './services/SendMessageValidator.js';
+import type { SendMessagePayload } from './types/SendMessage.js';
 import { getModeConfig } from './handlers/ModeRouter.js';
 import { ToolUseRegistry } from './ToolUseRegistry.js';
 import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/IToolUseHandler.js';
@@ -83,6 +85,7 @@ export class ChatServer {
   private readonly scoringHandler: ScoringHandler;
   private readonly questionnaireHandler: QuestionnaireHandler;
   private readonly messageHandler: MessageHandler;
+  private readonly validator: SendMessageValidator;
   private readonly toolRegistry: ToolUseRegistry;
   private readonly titleUpdateService: TitleUpdateService;
   private readonly backgroundEnrichmentService: BackgroundEnrichmentService;
@@ -163,11 +166,13 @@ export class ChatServer {
     // Create BackgroundEnrichmentService for assessment mode file enrichment
     this.backgroundEnrichmentService = new BackgroundEnrichmentService(fileRepository, fileStorage!, intakeParser!);
 
-    // Initialize MessageHandler with all dependencies for Story 28.11.2
-    // Story 34.1.3: Pass consultToolLoopService instead of toolRegistry
-    // Story 35.1.2: Removed titleGenerationService (now in TitleUpdateService)
+    // Story 36.1.2: Create validator for send_message validation (extracted from MessageHandler)
+    this.validator = new SendMessageValidator(conversationService, fileRepository, rateLimiter);
+
+    // Initialize MessageHandler with streaming/context dependencies only
+    // Story 36.1.2: Removed fileRepository and rateLimiter (now in SendMessageValidator)
     this.messageHandler = new MessageHandler(
-      conversationService, fileRepository, rateLimiter, fileContextBuilder, claudeClient,
+      conversationService, fileContextBuilder, claudeClient,
       this.toolRegistry, consultToolLoopService
     );
 
@@ -236,7 +241,7 @@ export class ChatServer {
    */
   private async handleSendMessage(socket: AuthenticatedSocket, payload: SendMessagePayload): Promise<void> {
     // Step 1: Validate
-    const validation = await this.messageHandler.validateSendMessage(socket as IAuthenticatedSocket, payload);
+    const validation = await this.validator.validateSendMessage(socket as IAuthenticatedSocket, payload);
     if (!validation.valid) {
       // Story 31.2: Emit file_processing_error when files are missing after retry
       if (validation.emitFileProcessingError && validation.conversationId) {

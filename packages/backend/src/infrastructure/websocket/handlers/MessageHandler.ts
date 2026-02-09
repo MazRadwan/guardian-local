@@ -1,100 +1,30 @@
 /**
- * MessageHandler - WebSocket handler for send_message validation and context building
+ * MessageHandler - WebSocket handler for file context building and Claude streaming
  *
- * Story 28.9.1: Extract MessageHandler.ts (send_message validation)
  * Story 28.9.2: Extract MessageHandler.ts (file context building)
- * Story 28.9.4: Extract MessageHandler.ts (mode-specific routing)
  * Story 28.9.5: Extract MessageHandler.ts (Claude streaming)
+ * Story 36.1.2: Removed validation (now in SendMessageValidator)
  *
  * ARCHITECTURE: Infrastructure layer only.
- * - Validates send_message payloads
- * - Rate limit checking with reset time
- * - Conversation ownership validation
- * - Attachment validation and enrichment
- * - File-only message support (placeholder text generation inlined to ChatServer)
  * - File context building for Claude prompts
- * - Mode-specific routing (consult/assessment/scoring)
  * - Claude streaming with abort handling
  *
  * CRITICAL BEHAVIORS TO PRESERVE:
- * 1. Support both `text` and `content` fields (payload.text || payload.content)
- * 2. Rate limiter uses isRateLimited(userId) and getResetTime(userId)
- * 3. conversationId MUST be from payload - NO fallback to socket.conversationId
- * 4. Must have text OR attachments (file-only messages allowed)
- * 5. Attachment validation via findByIdAndConversation
- * 6. Attachment ownership check (file.userId === socket.userId)
- * 7. Placeholder text generation moved to ChatServer (inlined)
- * 8. File context building accepts pre-validated enrichedAttachments
- * 9. Tools ONLY enabled in assessment mode (shouldUseTool = mode === 'assessment')
- * 10. Scoring mode bypasses Claude entirely - triggers triggerScoringOnSend instead
- * 11. Consult mode auto-summarizes empty file-only messages
- * 12. Assessment mode does background enrichment for files
- * 13. message_sent event emitted by ChatServer after saving user message
- * 14. assistant_done suppressed on abort (socket.data.abortRequested === true)
- * 15. Partial response saved to DB even on abort
+ * 1. File context building accepts pre-validated enrichedAttachments
+ * 2. Tools ONLY enabled in assessment mode (shouldUseTool = mode === 'assessment')
+ * 3. Consult mode auto-summarizes empty file-only messages
+ * 4. assistant_done suppressed on abort (socket.data.abortRequested === true)
+ * 5. Partial response saved to DB even on abort
  */
 
 import type { ConversationService } from '../../../application/services/ConversationService.js';
-import type { IFileRepository } from '../../../application/interfaces/IFileRepository.js';
 import type { IAuthenticatedSocket } from '../ChatContext.js';
-import type { RateLimiter } from '../RateLimiter.js';
-import type { MessageAttachment, MessageComponent } from '../../../domain/entities/Message.js';
+import type { MessageAttachment } from '../../../domain/entities/Message.js';
 import type { FileContextBuilder, FileContextResult } from '../context/FileContextBuilder.js';
 import type { IClaudeClient, ClaudeMessage, ToolUseBlock, ClaudeTool } from '../../../application/interfaces/IClaudeClient.js';
 import type { ImageContentBlock } from '../../ai/types/vision.js';
 import type { ToolUseRegistry } from '../ToolUseRegistry.js';
 import type { IConsultToolLoopService } from '../services/IConsultToolLoopService.js';
-
-/**
- * Send message payload from client
- * CRITICAL: Supports both `text` and `content` fields for backward compatibility
- */
-export interface SendMessagePayload {
-  /** Conversation ID (REQUIRED - no fallback to socket.conversationId) */
-  conversationId?: string;
-  /** Message text (preferred field name) */
-  text?: string;
-  /** Message text (backward compatibility) */
-  content?: string;
-  /** File attachments */
-  attachments?: Array<{ fileId: string }>;
-  /** UI components embedded in message */
-  components?: MessageComponent[];
-  /** Whether this is a regenerate request */
-  isRegenerate?: boolean;
-}
-
-/**
- * Validation error structure
- */
-export interface ValidationError {
-  /** Event name for error emission */
-  event: string;
-  /** Error message */
-  message: string;
-  /** Optional error code (e.g., RATE_LIMIT_EXCEEDED) */
-  code?: string;
-}
-
-/**
- * Validation result from validateSendMessage
- */
-export interface SendMessageValidationResult {
-  /** Whether validation passed */
-  valid: boolean;
-  /** Error details if validation failed */
-  error?: ValidationError;
-  /** Validated conversation ID */
-  conversationId?: string;
-  /** Extracted message text (from text or content field) */
-  messageText?: string;
-  /** Enriched attachments with server-side metadata */
-  enrichedAttachments?: MessageAttachment[];
-  /** Story 31.2: Whether to emit file_processing_error event instead of generic error */
-  emitFileProcessingError?: boolean;
-  /** Story 31.2: File IDs that are missing after retry */
-  missingFileIds?: string[];
-}
 
 /**
  * Story 28.9.5: Result of streamClaudeResponse
@@ -139,31 +69,16 @@ export interface StreamingOptions {
 }
 
 /**
- * MessageHandler - Validates send_message requests
+ * MessageHandler - File context building and Claude streaming
  *
- * Responsibilities:
- * 1. Validate payload structure and required fields
- * 2. Check user authentication
- * 3. Enforce rate limits
- * 4. Validate conversation ownership
- * 5. Validate and enrich file attachments
- * 6. Generate placeholder text for file-only messages
- *
- * Security:
- * - Rate limit check prevents message spam
- * - Ownership validation prevents cross-user access
- * - Attachment ownership validation prevents file access attacks
- * - Server-side metadata prevents client-provided file manipulation
- *
- * Error handling:
- * - Returns structured error with event name and message
- * - Rate limit errors include reset time and error code
+ * Story 36.1.2: Validation responsibility moved to SendMessageValidator.
+ * This handler now focuses on:
+ * 1. Building file context for Claude prompts
+ * 2. Streaming Claude responses with abort handling
  */
 export class MessageHandler {
   constructor(
     private readonly conversationService: ConversationService,
-    private readonly fileRepository: IFileRepository,
-    private readonly rateLimiter: RateLimiter,
     private readonly fileContextBuilder?: FileContextBuilder,
     private readonly claudeClient?: IClaudeClient,
     // Story 33.2.2: ToolUseRegistry for consult mode tool loop
@@ -171,287 +86,6 @@ export class MessageHandler {
     // Story 34.1.3: ConsultToolLoopService for consult mode tool execution
     private readonly consultToolLoopService?: IConsultToolLoopService
   ) {}
-
-  /**
-   * Validate send_message request
-   *
-   * CRITICAL BEHAVIORS TO PRESERVE:
-   * 1. Support both `text` and `content` fields (payload.text || payload.content)
-   * 2. Rate limiter uses isRateLimited(userId) and getResetTime(userId)
-   * 3. conversationId MUST be from payload - NO fallback to socket.conversationId
-   * 4. Must have text OR attachments (file-only messages allowed)
-   * 5. Attachment validation via findByIdAndConversation
-   * 6. Attachment ownership check (file.userId === socket.userId)
-   *
-   * @param socket - Authenticated socket
-   * @param payload - Send message payload
-   * @returns Validation result with error or enriched attachments
-   */
-  async validateSendMessage(
-    socket: IAuthenticatedSocket,
-    payload: SendMessagePayload
-  ): Promise<SendMessageValidationResult> {
-    const validateStartTime = Date.now();
-    console.log(`[TIMING] MessageHandler validateSendMessage START: ${validateStartTime} (conversationId: ${payload?.conversationId}, hasAttachments: ${!!(payload?.attachments?.length)})`);
-
-    // Validate payload is an object
-    if (!payload || typeof payload !== 'object') {
-      return {
-        valid: false,
-        error: { event: 'send_message', message: 'Invalid message payload' },
-      };
-    }
-
-    // Auth check - must have userId
-    if (!socket.userId) {
-      return {
-        valid: false,
-        error: { event: 'send_message', message: 'User not authenticated' },
-      };
-    }
-
-    // CRITICAL: conversationId MUST be provided by client - NO fallback to socket.conversationId
-    const conversationId = payload.conversationId;
-    if (!conversationId) {
-      return {
-        valid: false,
-        error: { event: 'send_message', message: 'Conversation ID required' },
-      };
-    }
-
-    // Support both text and content fields (prefer text for new clients)
-    const messageText = payload.text || payload.content;
-    const attachments = payload.attachments;
-
-    // Validate: must have text OR attachments (or both)
-    const hasAttachments = attachments && attachments.length > 0;
-    const hasText = messageText && typeof messageText === 'string' && messageText.trim().length > 0;
-
-    if (!hasText && !hasAttachments) {
-      return {
-        valid: false,
-        error: { event: 'send_message', message: 'Message text or attachments required' },
-      };
-    }
-
-    // Validate conversation ownership
-    try {
-      await this.validateConversationOwnership(conversationId, socket.userId);
-    } catch (error) {
-      return {
-        valid: false,
-        error: {
-          event: 'send_message',
-          message: error instanceof Error ? error.message : 'Unauthorized access',
-        },
-      };
-    }
-
-    // Rate limit check - MUST use isRateLimited() and getResetTime()
-    if (this.rateLimiter.isRateLimited(socket.userId)) {
-      const resetTime = this.rateLimiter.getResetTime(socket.userId);
-      return {
-        valid: false,
-        error: {
-          event: 'send_message',
-          message: `Rate limit exceeded. Please wait ${resetTime} seconds before sending more messages.`,
-          code: 'RATE_LIMIT_EXCEEDED',
-        },
-      };
-    }
-
-    // Validate and enrich attachments
-    let enrichedAttachments: MessageAttachment[] | undefined;
-    if (hasAttachments && attachments) {
-      const attachmentResult = await this.validateAndEnrichAttachments(
-        attachments,
-        conversationId,
-        socket.userId,
-        socket
-      );
-
-      if (!attachmentResult.valid) {
-        // Story 31.2: Pass through file_processing_error flag for special handling
-        if (attachmentResult.emitFileProcessingError) {
-          return {
-            valid: false,
-            error: attachmentResult.error,
-            emitFileProcessingError: true,
-            missingFileIds: attachmentResult.missingFileIds,
-            conversationId,
-          };
-        }
-        return {
-          valid: false,
-          error: attachmentResult.error,
-        };
-      }
-
-      enrichedAttachments = attachmentResult.attachments;
-    }
-
-    const validateEndTime = Date.now();
-    console.log(`[TIMING] MessageHandler validateSendMessage END: ${validateEndTime} (duration: ${validateEndTime - validateStartTime}ms, valid: true)`);
-
-    return {
-      valid: true,
-      conversationId,
-      messageText,
-      enrichedAttachments,
-    };
-  }
-
-  /**
-   * Validate and enrich attachments
-   *
-   * Story 31.2: Now includes file existence waiting for race condition handling.
-   * CRITICAL: Uses findByIdAndConversation for validation
-   * - First waits for file records to exist (race condition with file_attached)
-   * - Verifies file exists in the specified conversation
-   * - Verifies file ownership matches requesting user
-   * - Returns enriched attachments with server-side metadata (don't trust client)
-   *
-   * @param attachments - Attachment array with fileId from client
-   * @param conversationId - Conversation ID for file lookup
-   * @param userId - User ID for ownership validation
-   * @param socket - Socket for emitting file_processing_error if files missing
-   * @returns Validation result with enriched attachments or error
-   */
-  private async validateAndEnrichAttachments(
-    attachments: Array<{ fileId: string }>,
-    conversationId: string,
-    userId: string,
-    socket?: IAuthenticatedSocket
-  ): Promise<{
-    valid: boolean;
-    attachments?: MessageAttachment[];
-    error?: ValidationError;
-    emitFileProcessingError?: boolean;
-    missingFileIds?: string[];
-  }> {
-    // Story 31.2: Wait for file records before validation (race condition handling)
-    const fileIds = attachments.map(att => att.fileId);
-    const { found, missing } = await this.waitForFileRecords(fileIds);
-
-    if (missing.length > 0) {
-      console.warn(`[MessageHandler] Files missing after retry: ${missing.join(', ')}`);
-      // Signal to caller that file_processing_error should be emitted
-      return {
-        valid: false,
-        emitFileProcessingError: true,
-        missingFileIds: missing,
-        error: {
-          event: 'file_processing_error',
-          message: 'Some files are still processing. Please wait a moment and try again.',
-        },
-      };
-    }
-
-    const enriched: MessageAttachment[] = [];
-
-    for (const att of attachments) {
-      // Validate: file exists AND belongs to this conversation
-      const file = await this.fileRepository.findByIdAndConversation(att.fileId, conversationId);
-
-      if (!file) {
-        return {
-          valid: false,
-          error: {
-            event: 'send_message',
-            message: `Invalid attachment: file ${att.fileId} not found or not authorized`,
-          },
-        };
-      }
-
-      // Verify user owns the file
-      if (file.userId !== userId) {
-        return {
-          valid: false,
-          error: {
-            event: 'send_message',
-            message: 'Attachment not authorized',
-          },
-        };
-      }
-
-      // Enrich with server-side metadata (don't trust client)
-      enriched.push({
-        fileId: file.id,
-        filename: file.filename,
-        mimeType: file.mimeType,
-        size: file.size,
-      });
-    }
-
-    return { valid: true, attachments: enriched };
-  }
-
-  /**
-   * Validate conversation ownership
-   *
-   * Checks that:
-   * 1. Conversation exists
-   * 2. Conversation belongs to the specified user
-   *
-   * @param conversationId - Conversation to validate
-   * @param userId - Expected owner
-   * @throws Error if conversation not found
-   * @throws Error if conversation not owned by user
-   */
-  private async validateConversationOwnership(conversationId: string, userId: string): Promise<void> {
-    const conversation = await this.conversationService.getConversation(conversationId);
-    if (!conversation) {
-      throw new Error(`Conversation ${conversationId} not found`);
-    }
-    if (conversation.userId !== userId) {
-      throw new Error('You do not have access to this conversation');
-    }
-  }
-
-  /**
-   * Story 31.2.1: Wait for file records to exist in DB with retry
-   *
-   * Handles race condition where user sends message before file_attached completes.
-   * Uses heuristic polling with configurable timeout and interval.
-   *
-   * @param fileIds - Array of file IDs to check for existence
-   * @param maxWaitMs - Maximum time to wait for files (default: 2000ms)
-   * @param intervalMs - Polling interval (default: 100ms)
-   * @returns Object with found and missing file ID arrays
-   */
-  async waitForFileRecords(
-    fileIds: string[],
-    maxWaitMs: number = 2000,
-    intervalMs: number = 100
-  ): Promise<{ found: string[]; missing: string[] }> {
-    if (fileIds.length === 0) {
-      return { found: [], missing: [] };
-    }
-
-    const startTime = Date.now();
-    let found: string[] = [];
-    let missing: string[] = [...fileIds];
-
-    while (missing.length > 0 && (Date.now() - startTime) < maxWaitMs) {
-      // Check which files exist
-      const existingFiles = await this.fileRepository.findByIds(missing);
-      const existingIds = new Set(existingFiles.map(f => f.id));
-
-      found = fileIds.filter(id => existingIds.has(id) || found.includes(id));
-      missing = fileIds.filter(id => !found.includes(id));
-
-      if (missing.length > 0) {
-        console.log(`[MessageHandler] Waiting for file records: ${missing.length} missing, elapsed: ${Date.now() - startTime}ms`);
-        await new Promise(resolve => setTimeout(resolve, intervalMs));
-      }
-    }
-
-    if (missing.length > 0) {
-      console.warn(`[MessageHandler] Files still missing after ${maxWaitMs}ms: ${missing.join(', ')}`);
-    }
-
-    return { found, missing };
-  }
 
   /**
    * Build file context for Claude prompt
@@ -464,7 +98,7 @@ export class MessageHandler {
    * validated by validateSendMessage(). It does NOT re-validate.
    *
    * The validation responsibility (ownership, conversation membership) is
-   * handled in Story 28.9.1 via `findByIdAndConversation` in validateSendMessage().
+   * handled in SendMessageValidator via `findByIdAndConversation`.
    *
    * Context building scenarios:
    * 1. No FileContextBuilder configured - returns empty result
