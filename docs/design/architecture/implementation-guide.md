@@ -133,8 +133,15 @@ guardian-app/
 │   │       │   │   ├── StreamingHandler.ts
 │   │       │   │   ├── handlers/                 # Epic 28: Modular handlers
 │   │       │   │   │   ├── ConnectionHandler.ts  # Epic 30: Clears vision cache on disconnect
-│   │       │   │   │   ├── MessageHandler.ts     # Epic 30: Passes imageBlocks to Claude
+│   │       │   │   │   ├── ModeRouter.ts         # Epic 36: Mode config flags (replaces mode strategies)
 │   │       │   │   │   └── ...
+│   │       │   │   ├── services/                 # Epic 36: Send message pipeline
+│   │       │   │   │   ├── SendMessageOrchestrator.ts  # 7-step pipeline
+│   │       │   │   │   ├── SendMessageValidator.ts     # Validation + file readiness
+│   │       │   │   │   ├── ClaudeStreamingService.ts   # Claude API streaming + tool loop
+│   │       │   │   │   ├── ConsultToolLoopService.ts   # Web search tool loop (max 3 iterations)
+│   │       │   │   │   ├── TitleUpdateService.ts       # Title generation
+│   │       │   │   │   └── BackgroundEnrichmentService.ts # File enrichment
 │   │       │   │   └── context/                  # Epic 28: Context builders
 │   │       │   │       ├── FileContextBuilder.ts # Epic 30: buildWithImages() returns FileContextResult
 │   │       │   │       └── ConversationContextBuilder.ts
@@ -1262,7 +1269,7 @@ Used during document upload for extracting structured data:
 ```
 Upload Image → Database (files table)
                      ↓
-User Message → MessageHandler → FileContextBuilder.buildWithImages()
+User Message → SendMessageOrchestrator → FileContextBuilder.buildWithImages()
                                          ↓
                               VisionContentBuilder → S3 → Base64
                                          ↓
@@ -1279,7 +1286,7 @@ User Message → MessageHandler → FileContextBuilder.buildWithImages()
 |-----------|----------|---------|
 | VisionContentBuilder | `infrastructure/ai/VisionContentBuilder.ts` | Converts file → ImageContentBlock |
 | FileContextBuilder | `infrastructure/websocket/context/FileContextBuilder.ts` | Builds text + image context |
-| MessageHandler | `infrastructure/websocket/handlers/MessageHandler.ts` | Passes imageBlocks to Claude |
+| ClaudeStreamingService | `infrastructure/websocket/services/ClaudeStreamingService.ts` | Streams Claude response with imageBlocks support |
 
 **New Types (infrastructure/ai/types/):**
 
@@ -1448,9 +1455,9 @@ User Upload → S3 Storage → File Record (parseStatus: 'pending')
 | `detectedDocType` | varchar(20) | 'questionnaire' \| 'document' \| 'unknown' |
 | `detectedVendorName` | varchar(255) | Auto-detected vendor name |
 
-### MessageHandler Retry Logic
+### SendMessageValidator Retry Logic
 
-When user sends message with attachments, MessageHandler checks file readiness:
+When user sends message with attachments, SendMessageValidator checks file readiness:
 
 ```typescript
 // Retry with exponential backoff (100ms, 200ms, 400ms)

@@ -1,9 +1,15 @@
 # Guardian WebSocket Handler Architecture
 
+> **HISTORICAL DOCUMENT** — This file documents the MessageHandler.ts structure as it existed
+> BEFORE the Epic 34-36 decomposition. MessageHandler.ts was deleted in Epic 36 (Feb 2026)
+> and replaced by: SendMessageOrchestrator, SendMessageValidator, ClaudeStreamingService,
+> ConsultToolLoopService, TitleUpdateService, and BackgroundEnrichmentService.
+> See `architecture-latest.mmd` for the current architecture.
+
 **Version:** 1.0
 **Last Updated:** 2026-02-04
-**Status:** Pre-Refactor Documentation (Epic 34 Baseline)
-**Purpose:** Document current MessageHandler.ts structure BEFORE decomposition
+**Status:** ARCHIVED — Pre-Refactor Documentation (Epic 34 Baseline)
+**Purpose:** Document MessageHandler.ts structure BEFORE decomposition (historical reference)
 
 ---
 
