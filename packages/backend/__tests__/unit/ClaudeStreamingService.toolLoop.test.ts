@@ -1,10 +1,11 @@
 /**
- * Unit Tests for MessageHandler Consult Mode Tool Loop
+ * Unit Tests for ClaudeStreamingService Consult Mode Tool Loop
  *
  * Story 33.2.2: Consult Mode Tool Loop
  * Story 34.1.3: ConsultToolLoopService Delegation
+ * Story 36.2.3: Moved from MessageHandler.toolLoop.test.ts to ClaudeStreamingService
  *
- * After Epic 34, MessageHandler delegates tool loop execution to ConsultToolLoopService.
+ * After Epic 34, ClaudeStreamingService delegates tool loop execution to ConsultToolLoopService.
  * These tests verify:
  * 1. Tool loop gating conditions (mode, source, stopReason)
  * 2. Delegation to ConsultToolLoopService when conditions are met
@@ -13,16 +14,11 @@
  * 5. Result handling from service
  */
 
-import {
-  MessageHandler,
-  type StreamingOptions,
-  type StreamingResult,
-} from '../../src/infrastructure/websocket/handlers/MessageHandler.js';
+import { ClaudeStreamingService } from '../../src/infrastructure/websocket/services/ClaudeStreamingService.js';
+import type { StreamingOptions, StreamingResult } from '../../src/infrastructure/websocket/types/SendMessage.js';
 import type { IAuthenticatedSocket } from '../../src/infrastructure/websocket/ChatContext.js';
 import type { ConversationService } from '../../src/application/services/ConversationService.js';
-import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
-import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
-import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage } from '../../src/application/interfaces/IClaudeClient.js';
 import type { IConsultToolLoopService, ConsultToolLoopResult } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
@@ -49,16 +45,6 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
 } as unknown as jest.Mocked<ConversationService>);
 
 /**
- * Create a mock FileContextBuilder
- */
-const createMockFileContextBuilder = (): jest.Mocked<FileContextBuilder> => ({
-  build: jest.fn(),
-  buildWithImages: jest.fn().mockResolvedValue({ textContext: '', imageBlocks: [] }),
-  formatIntakeContextFile: jest.fn(),
-  formatTextExcerptFile: jest.fn(),
-} as unknown as jest.Mocked<FileContextBuilder>);
-
-/**
  * Create a mock ClaudeClient
  */
 const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
@@ -66,17 +52,6 @@ const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
   streamMessage: jest.fn(),
   continueWithToolResult: jest.fn(),
 } as unknown as jest.Mocked<IClaudeClient>);
-
-/**
- * Create a mock ToolUseRegistry
- */
-const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
-  register: jest.fn(),
-  getHandler: jest.fn(),
-  hasHandler: jest.fn(),
-  getRegisteredTools: jest.fn(),
-  dispatch: jest.fn(),
-} as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
  * Create a mock ConsultToolLoopService
@@ -124,28 +99,22 @@ async function* createChunkGenerator(chunks: StreamChunk[]): AsyncGenerator<Stre
   }
 }
 
-describe('MessageHandler Tool Loop', () => {
-  let handler: MessageHandler;
+describe('ClaudeStreamingService Tool Loop', () => {
+  let service: ClaudeStreamingService;
   let mockConversationService: jest.Mocked<ConversationService>;
-  let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
-  let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
   let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
     mockConversationService = createMockConversationService();
-    mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
-    mockToolRegistry = createMockToolRegistry();
     mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Story 36.1.2: MessageHandler now has 5 params (no fileRepository/rateLimiter)
-    handler = new MessageHandler(
-      mockConversationService,
-      mockFileContextBuilder,
+    // Story 36.2.3: ClaudeStreamingService constructor (claudeClient, conversationService, consultToolLoopService)
+    service = new ClaudeStreamingService(
       mockClaudeClient,
-      mockToolRegistry,
+      mockConversationService,
       mockConsultToolLoopService
     );
 
@@ -195,7 +164,7 @@ describe('MessageHandler Tool Loop', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(
+      const result = await service.streamClaudeResponse(
         mockSocket,
         'conv-1',
         [],
@@ -237,7 +206,7 @@ describe('MessageHandler Tool Loop', () => {
       const tools = [{ name: 'web_search', description: 'Search', input_schema: { type: 'object' as const, properties: {} } }];
       const messages: ClaudeMessage[] = [{ role: 'user', content: 'Search for HIPAA' }];
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', messages, 'system prompt', {
+      await service.streamClaudeResponse(mockSocket, 'conv-1', messages, 'system prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -271,7 +240,7 @@ describe('MessageHandler Tool Loop', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(
+      const result = await service.streamClaudeResponse(
         mockSocket,
         'conv-1',
         [],
@@ -305,7 +274,7 @@ describe('MessageHandler Tool Loop', () => {
         stopReason: 'end_turn',
       });
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -327,7 +296,7 @@ describe('MessageHandler Tool Loop', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(chunks));
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'assessment',
         source: 'user_input',
@@ -353,7 +322,7 @@ describe('MessageHandler Tool Loop', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(chunks));
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: false,
         mode: 'scoring',
         source: 'user_input',
@@ -378,7 +347,7 @@ describe('MessageHandler Tool Loop', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(chunks));
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'auto_summarize',
@@ -409,7 +378,7 @@ describe('MessageHandler Tool Loop', () => {
         stopReason: 'end_turn',
       });
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -427,7 +396,7 @@ describe('MessageHandler Tool Loop', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(chunks));
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -442,7 +411,7 @@ describe('MessageHandler Tool Loop', () => {
       ];
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(chunks));
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -474,7 +443,7 @@ describe('MessageHandler Tool Loop', () => {
         stopReason: 'end_turn',
       });
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -507,7 +476,7 @@ describe('MessageHandler Tool Loop', () => {
         stopReason: undefined,
       });
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',
@@ -537,7 +506,7 @@ describe('MessageHandler Tool Loop', () => {
         stopReason: 'end_turn',
       });
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', {
         enableTools: true,
         mode: 'consult',
         source: 'user_input',

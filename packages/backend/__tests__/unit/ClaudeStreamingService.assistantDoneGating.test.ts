@@ -1,7 +1,8 @@
 /**
- * Unit Tests for MessageHandler Assistant Done Gating
+ * Unit Tests for ClaudeStreamingService Assistant Done Gating
  *
  * Story 33.2.4: Assistant Done Gating
+ * Story 36.2.3: Moved from MessageHandler.assistantDoneGating.test.ts to ClaudeStreamingService
  *
  * Tests cover:
  * 1. assistant_done NOT emitted when stop_reason is 'tool_use' and mode is 'consult'
@@ -15,16 +16,11 @@
  * 9. Persisted message contains final response text (not pre-tool text)
  */
 
-import {
-  MessageHandler,
-  type StreamingOptions,
-  type StreamingResult,
-} from '../../src/infrastructure/websocket/handlers/MessageHandler.js';
+import { ClaudeStreamingService } from '../../src/infrastructure/websocket/services/ClaudeStreamingService.js';
+import type { StreamingOptions, StreamingResult } from '../../src/infrastructure/websocket/types/SendMessage.js';
 import type { IAuthenticatedSocket } from '../../src/infrastructure/websocket/ChatContext.js';
 import type { ConversationService } from '../../src/application/services/ConversationService.js';
-import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
-import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
-import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IClaudeClient, StreamChunk, ToolUseBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { IConsultToolLoopService } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
@@ -51,16 +47,6 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
 } as unknown as jest.Mocked<ConversationService>);
 
 /**
- * Create a mock FileContextBuilder
- */
-const createMockFileContextBuilder = (): jest.Mocked<FileContextBuilder> => ({
-  build: jest.fn(),
-  buildWithImages: jest.fn().mockResolvedValue({ textContext: '', imageBlocks: [] }),
-  formatIntakeContextFile: jest.fn(),
-  formatTextExcerptFile: jest.fn(),
-} as unknown as jest.Mocked<FileContextBuilder>);
-
-/**
  * Create a mock ClaudeClient
  */
 const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
@@ -68,17 +54,6 @@ const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
   streamMessage: jest.fn(),
   continueWithToolResult: jest.fn(),
 } as unknown as jest.Mocked<IClaudeClient>);
-
-/**
- * Create a mock ToolUseRegistry
- */
-const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
-  register: jest.fn(),
-  getHandler: jest.fn(),
-  hasHandler: jest.fn(),
-  getRegisteredTools: jest.fn(),
-  dispatch: jest.fn(),
-} as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
  * Create a mock ConsultToolLoopService
@@ -127,28 +102,22 @@ async function* createChunkGenerator(chunks: StreamChunk[]): AsyncGenerator<Stre
   }
 }
 
-describe('MessageHandler Assistant Done Gating', () => {
-  let handler: MessageHandler;
+describe('ClaudeStreamingService Assistant Done Gating', () => {
+  let service: ClaudeStreamingService;
   let mockConversationService: jest.Mocked<ConversationService>;
-  let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
-  let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
   let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
     mockConversationService = createMockConversationService();
-    mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
-    mockToolRegistry = createMockToolRegistry();
     mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Story 36.1.2: MessageHandler now has 5 params (no fileRepository/rateLimiter)
-    handler = new MessageHandler(
-      mockConversationService,
-      mockFileContextBuilder,
+    // Story 36.2.3: ClaudeStreamingService constructor (claudeClient, conversationService, consultToolLoopService)
+    service = new ClaudeStreamingService(
       mockClaudeClient,
-      mockToolRegistry,
+      mockConversationService,
       mockConsultToolLoopService
     );
 
@@ -228,7 +197,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(
+      await service.streamClaudeResponse(
         mockSocket,
         'conv-1',
         [],
@@ -288,7 +257,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Verify assistant_done was emitted
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
@@ -316,7 +285,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
         call => call[0] === 'assistant_done'
@@ -364,7 +333,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
         call => call[0] === 'assistant_done'
@@ -396,7 +365,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Assessment mode should emit assistant_done even with tool_use
       // (because tool loop is NOT executed for assessment mode)
@@ -404,9 +373,6 @@ describe('MessageHandler Assistant Done Gating', () => {
         call => call[0] === 'assistant_done'
       );
       expect(assistantDoneCalls).toHaveLength(1);
-
-      // Tool registry should NOT be called (assessment tools handled by ChatServer)
-      expect(mockToolRegistry.dispatch).not.toHaveBeenCalled();
     });
 
     it('should emit assistant_done normally in scoring mode', async () => {
@@ -422,7 +388,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
         call => call[0] === 'assistant_done'
@@ -473,7 +439,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Get all assistant_token emissions
       const tokenCalls = mockSocket.emit.mock.calls.filter(
@@ -483,7 +449,7 @@ describe('MessageHandler Assistant Done Gating', () => {
       // Should have tokens from BOTH first stream and second stream
       const tokenTexts = tokenCalls.map(call => (call[1] as { token: string }).token);
 
-      // First stream tokens (emitted by MessageHandler)
+      // First stream tokens (emitted by ClaudeStreamingService)
       expect(tokenTexts).toContain('Let me ');
       expect(tokenTexts).toContain('search ');
       expect(tokenTexts).toContain('for that.');
@@ -509,7 +475,7 @@ describe('MessageHandler Assistant Done Gating', () => {
       mockClaudeClient.streamMessage.mockReturnValue(createChunkGenerator(firstStreamChunks));
 
       // Story 34.1.4: ConsultToolLoopService handles message persistence
-      // MessageHandler should NOT call sendMessage when tool loop is triggered
+      // ClaudeStreamingService should NOT call sendMessage when tool loop is triggered
       mockConsultToolLoopService.execute.mockImplementation(async (options) => {
         options.socket.emit('assistant_done', {
           messageId: 'msg-123',
@@ -532,9 +498,9 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // MessageHandler should NOT call sendMessage when tool loop is delegated
+      // ClaudeStreamingService should NOT call sendMessage when tool loop is delegated
       // Message persistence is handled by ConsultToolLoopService
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
     });
@@ -575,9 +541,9 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // MessageHandler does not persist message when tool loop is delegated
+      // ClaudeStreamingService does not persist message when tool loop is delegated
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
 
       // Result includes the saved message ID from the service
@@ -622,9 +588,9 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // MessageHandler does not persist message when tool loop is delegated
+      // ClaudeStreamingService does not persist message when tool loop is delegated
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
 
       // Verify the result contains the final response (not pre-tool text)
@@ -647,7 +613,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Message should be persisted
       expect(mockConversationService.sendMessage).toHaveBeenCalledTimes(1);
@@ -684,7 +650,7 @@ describe('MessageHandler Assistant Done Gating', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Message should be persisted (assessment mode doesn't use tool loop)
       expect(mockConversationService.sendMessage).toHaveBeenCalledTimes(1);

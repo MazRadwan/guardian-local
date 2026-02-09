@@ -13,7 +13,8 @@
  * - ConnectionHandler: Auth middleware, connection/disconnect events
  * - ConversationHandler: get_conversations, start_new_conversation, delete_conversation, get_history
  * - ModeSwitchHandler: switch_mode event
- * - MessageHandler: send_message validation, streaming, enrichment
+ * - MessageHandler: file context building
+ * - ClaudeStreamingService: Claude API streaming with tool loop support
  * - TitleUpdateService: title generation (consult/assessment) and scoring title updates (Epic 35)
  * - ScoringHandler: scoring operations, vendor_selected event
  * - QuestionnaireHandler: generate_questionnaire, get_export_status events
@@ -47,6 +48,7 @@ import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/
 import { assessmentModeTools, consultModeTools } from '../ai/tools/index.js';
 import { WebSearchToolService } from '../../application/services/WebSearchToolService.js';
 import { ConsultToolLoopService } from './services/ConsultToolLoopService.js';
+import { ClaudeStreamingService } from './services/ClaudeStreamingService.js';
 import { TitleUpdateService } from './services/TitleUpdateService.js';
 import { BackgroundEnrichmentService } from './services/BackgroundEnrichmentService.js';
 import type { IJinaClient } from '../../application/interfaces/IJinaClient.js';
@@ -87,6 +89,7 @@ export class ChatServer {
   private readonly messageHandler: MessageHandler;
   private readonly validator: SendMessageValidator;
   private readonly toolRegistry: ToolUseRegistry;
+  private readonly streamingService: ClaudeStreamingService;
   private readonly titleUpdateService: TitleUpdateService;
   private readonly backgroundEnrichmentService: BackgroundEnrichmentService;
   private readonly webSearchEnabled: boolean;  // Epic 33: Track if web search is available
@@ -160,6 +163,9 @@ export class ChatServer {
       conversationService
     );
 
+    // Story 36.2.2: Create ClaudeStreamingService (extracted from MessageHandler)
+    this.streamingService = new ClaudeStreamingService(claudeClient, conversationService, consultToolLoopService);
+
     // Epic 35: Create TitleUpdateService for title generation (extracted from MessageHandler)
     this.titleUpdateService = new TitleUpdateService(conversationService, titleGenerationService);
 
@@ -169,12 +175,9 @@ export class ChatServer {
     // Story 36.1.2: Create validator for send_message validation (extracted from MessageHandler)
     this.validator = new SendMessageValidator(conversationService, fileRepository, rateLimiter);
 
-    // Initialize MessageHandler with streaming/context dependencies only
-    // Story 36.1.2: Removed fileRepository and rateLimiter (now in SendMessageValidator)
-    this.messageHandler = new MessageHandler(
-      conversationService, fileContextBuilder, claudeClient,
-      this.toolRegistry, consultToolLoopService
-    );
+    // Story 36.2.2: MessageHandler now only handles file context building
+    // Streaming moved to ClaudeStreamingService
+    this.messageHandler = new MessageHandler(fileContextBuilder);
 
     this.setupNamespace();
     this.startCleanupInterval();
@@ -322,7 +325,7 @@ export class ChatServer {
           ? (this.webSearchEnabled ? consultModeTools : undefined)  // Gate consult tools by handler presence
           : assessmentModeTools)
       : undefined;
-    const result = await this.messageHandler.streamClaudeResponse(socket as IAuthenticatedSocket, conversationId!, messages, enhancedPrompt, {
+    const result = await this.streamingService.streamClaudeResponse(socket as IAuthenticatedSocket, conversationId!, messages, enhancedPrompt, {
       enableTools: modeConfig.enableTools,
       tools,
       usePromptCache: promptCache?.usePromptCache || false,

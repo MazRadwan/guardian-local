@@ -1,7 +1,8 @@
 /**
- * Unit Tests for MessageHandler Assistant Done Gating - Edge Cases
+ * Unit Tests for ClaudeStreamingService Assistant Done Gating - Edge Cases
  *
  * Story 33.2.4: Assistant Done Gating
+ * Story 36.2.3: Moved from MessageHandler.assistantDoneGating.edgeCases.test.ts to ClaudeStreamingService
  *
  * Tests cover:
  * 1. Tool handler failure still results in assistant_done after error recovery
@@ -9,16 +10,11 @@
  * 3. Second stream failure handled gracefully
  */
 
-import {
-  MessageHandler,
-  type StreamingOptions,
-  type StreamingResult,
-} from '../../src/infrastructure/websocket/handlers/MessageHandler.js';
+import { ClaudeStreamingService } from '../../src/infrastructure/websocket/services/ClaudeStreamingService.js';
+import type { StreamingOptions, StreamingResult } from '../../src/infrastructure/websocket/types/SendMessage.js';
 import type { IAuthenticatedSocket } from '../../src/infrastructure/websocket/ChatContext.js';
 import type { ConversationService } from '../../src/application/services/ConversationService.js';
-import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
-import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
-import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IClaudeClient, StreamChunk, ToolUseBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { IConsultToolLoopService } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
@@ -45,16 +41,6 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
 } as unknown as jest.Mocked<ConversationService>);
 
 /**
- * Create a mock FileContextBuilder
- */
-const createMockFileContextBuilder = (): jest.Mocked<FileContextBuilder> => ({
-  build: jest.fn(),
-  buildWithImages: jest.fn().mockResolvedValue({ textContext: '', imageBlocks: [] }),
-  formatIntakeContextFile: jest.fn(),
-  formatTextExcerptFile: jest.fn(),
-} as unknown as jest.Mocked<FileContextBuilder>);
-
-/**
  * Create a mock ClaudeClient
  */
 const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
@@ -62,17 +48,6 @@ const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
   streamMessage: jest.fn(),
   continueWithToolResult: jest.fn(),
 } as unknown as jest.Mocked<IClaudeClient>);
-
-/**
- * Create a mock ToolUseRegistry
- */
-const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
-  register: jest.fn(),
-  getHandler: jest.fn(),
-  hasHandler: jest.fn(),
-  getRegisteredTools: jest.fn(),
-  dispatch: jest.fn(),
-} as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
  * Create a mock ConsultToolLoopService
@@ -123,35 +98,22 @@ async function* createChunkGenerator(chunks: StreamChunk[]): AsyncGenerator<Stre
   }
 }
 
-/**
- * Helper to create a generator that throws an error
- */
-async function* createErrorGenerator(error: Error): AsyncGenerator<StreamChunk> {
-  throw error;
-}
-
-describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
-  let handler: MessageHandler;
+describe('ClaudeStreamingService Assistant Done Gating - Edge Cases', () => {
+  let service: ClaudeStreamingService;
   let mockConversationService: jest.Mocked<ConversationService>;
-  let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
-  let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
   let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
     mockConversationService = createMockConversationService();
-    mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
-    mockToolRegistry = createMockToolRegistry();
     mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Story 36.1.2: MessageHandler now has 5 params (no fileRepository/rateLimiter)
-    handler = new MessageHandler(
-      mockConversationService,
-      mockFileContextBuilder,
+    // Story 36.2.3: ClaudeStreamingService constructor (claudeClient, conversationService, consultToolLoopService)
+    service = new ClaudeStreamingService(
       mockClaudeClient,
-      mockToolRegistry,
+      mockConversationService,
       mockConsultToolLoopService
     );
 
@@ -227,7 +189,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should emit assistant_done with the graceful error response
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
@@ -277,10 +239,10 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // ConsultToolLoopService handles message saving
-      // MessageHandler does not call sendMessage when tool loop is delegated
+      // ClaudeStreamingService does not call sendMessage when tool loop is delegated
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
 
       // Verify the result contains the graceful error response
@@ -325,7 +287,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Verify ConsultToolLoopService was called with the tool_use blocks
       expect(mockConsultToolLoopService.execute).toHaveBeenCalledWith(
@@ -377,7 +339,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should handle error gracefully (not throw)
       expect(result.fullResponse).toBe('');
@@ -436,7 +398,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should NOT emit assistant_done on complete failure
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
@@ -492,7 +454,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // ConsultToolLoopService should receive both tool_use blocks
       expect(mockConsultToolLoopService.execute).toHaveBeenCalledWith(
@@ -507,7 +469,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
       );
       expect(assistantDoneCalls).toHaveLength(1);
 
-      // MessageHandler should not save message (delegated to service)
+      // ClaudeStreamingService should not save message (delegated to service)
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
     });
 
@@ -556,7 +518,7 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should still complete successfully
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
@@ -611,9 +573,9 @@ describe('MessageHandler Assistant Done Gating - Edge Cases', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // MessageHandler does not save message when tool loop is delegated
+      // ClaudeStreamingService does not save message when tool loop is delegated
       expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
       expect(result.savedMessageId).toBeNull();
 

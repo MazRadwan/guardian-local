@@ -1,7 +1,8 @@
 /**
- * Unit Tests for MessageHandler Assistant Done Gating - Abort Scenarios
+ * Unit Tests for ClaudeStreamingService Assistant Done Gating - Abort Scenarios
  *
  * Story 33.2.4: Assistant Done Gating
+ * Story 36.2.3: Moved from MessageHandler.assistantDoneGating.abort.test.ts to ClaudeStreamingService
  *
  * Tests cover:
  * 1. Abort after tool_use but before follow-up does NOT save empty assistant message
@@ -10,16 +11,11 @@
  * 4. No orphaned messages in database after abort
  */
 
-import {
-  MessageHandler,
-  type StreamingOptions,
-  type StreamingResult,
-} from '../../src/infrastructure/websocket/handlers/MessageHandler.js';
+import { ClaudeStreamingService } from '../../src/infrastructure/websocket/services/ClaudeStreamingService.js';
+import type { StreamingOptions, StreamingResult } from '../../src/infrastructure/websocket/types/SendMessage.js';
 import type { IAuthenticatedSocket } from '../../src/infrastructure/websocket/ChatContext.js';
 import type { ConversationService } from '../../src/application/services/ConversationService.js';
-import type { FileContextBuilder } from '../../src/infrastructure/websocket/context/FileContextBuilder.js';
-import type { IClaudeClient, StreamChunk, ToolUseBlock, ClaudeMessage, ToolResultBlock } from '../../src/application/interfaces/IClaudeClient.js';
-import type { ToolUseRegistry } from '../../src/infrastructure/websocket/ToolUseRegistry.js';
+import type { IClaudeClient, StreamChunk, ToolUseBlock } from '../../src/application/interfaces/IClaudeClient.js';
 import type { IConsultToolLoopService } from '../../src/infrastructure/websocket/services/IConsultToolLoopService.js';
 import type { Message } from '../../src/domain/entities/Message.js';
 
@@ -46,16 +42,6 @@ const createMockConversationService = (): jest.Mocked<ConversationService> => ({
 } as unknown as jest.Mocked<ConversationService>);
 
 /**
- * Create a mock FileContextBuilder
- */
-const createMockFileContextBuilder = (): jest.Mocked<FileContextBuilder> => ({
-  build: jest.fn(),
-  buildWithImages: jest.fn().mockResolvedValue({ textContext: '', imageBlocks: [] }),
-  formatIntakeContextFile: jest.fn(),
-  formatTextExcerptFile: jest.fn(),
-} as unknown as jest.Mocked<FileContextBuilder>);
-
-/**
  * Create a mock ClaudeClient
  */
 const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
@@ -63,17 +49,6 @@ const createMockClaudeClient = (): jest.Mocked<IClaudeClient> => ({
   streamMessage: jest.fn(),
   continueWithToolResult: jest.fn(),
 } as unknown as jest.Mocked<IClaudeClient>);
-
-/**
- * Create a mock ToolUseRegistry
- */
-const createMockToolRegistry = (): jest.Mocked<ToolUseRegistry> => ({
-  register: jest.fn(),
-  getHandler: jest.fn(),
-  hasHandler: jest.fn(),
-  getRegisteredTools: jest.fn(),
-  dispatch: jest.fn(),
-} as unknown as jest.Mocked<ToolUseRegistry>);
 
 /**
  * Create a mock ConsultToolLoopService
@@ -116,7 +91,7 @@ const createMockSocket = (userId?: string, conversationId?: string): jest.Mocked
 } as unknown as jest.Mocked<IAuthenticatedSocket>);
 
 /**
- * Helper to create an async generator from chunks with abort support
+ * Helper to create an async generator from chunks
  */
 async function* createChunkGenerator(chunks: StreamChunk[]): AsyncGenerator<StreamChunk> {
   for (const chunk of chunks) {
@@ -142,28 +117,22 @@ function createChunkGeneratorWithAbort(
   })();
 }
 
-describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
-  let handler: MessageHandler;
+describe('ClaudeStreamingService Assistant Done Gating - Abort Scenarios', () => {
+  let service: ClaudeStreamingService;
   let mockConversationService: jest.Mocked<ConversationService>;
-  let mockFileContextBuilder: jest.Mocked<FileContextBuilder>;
   let mockClaudeClient: jest.Mocked<IClaudeClient>;
-  let mockToolRegistry: jest.Mocked<ToolUseRegistry>;
   let mockConsultToolLoopService: jest.Mocked<IConsultToolLoopService>;
   let mockSocket: jest.Mocked<IAuthenticatedSocket>;
 
   beforeEach(() => {
     mockConversationService = createMockConversationService();
-    mockFileContextBuilder = createMockFileContextBuilder();
     mockClaudeClient = createMockClaudeClient();
-    mockToolRegistry = createMockToolRegistry();
     mockConsultToolLoopService = createMockConsultToolLoopService();
 
-    // Story 36.1.2: MessageHandler now has 5 params (no fileRepository/rateLimiter)
-    handler = new MessageHandler(
-      mockConversationService,
-      mockFileContextBuilder,
+    // Story 36.2.3: ClaudeStreamingService constructor (claudeClient, conversationService, consultToolLoopService)
+    service = new ClaudeStreamingService(
       mockClaudeClient,
-      mockToolRegistry,
+      mockConversationService,
       mockConsultToolLoopService
     );
 
@@ -248,9 +217,9 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
-      // MessageHandler does not save assistant messages when tool loop is delegated
+      // ClaudeStreamingService does not save assistant messages when tool loop is delegated
       // ConsultToolLoopService handles abort without saving
       const assistantMessages = mockConversationService.sendMessage.mock.calls.filter(
         call => call[0].role === 'assistant'
@@ -309,7 +278,7 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should emit tool_status 'idle' (from ConsultToolLoopService mock)
       const toolStatusCalls = mockSocket.emit.mock.calls.filter(
@@ -355,7 +324,7 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should NOT emit assistant_done when aborted
       const assistantDoneCalls = mockSocket.emit.mock.calls.filter(
@@ -398,10 +367,10 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Story 34.1.4: ConsultToolLoopService handles partial response saving
-      // MessageHandler gets the result from the service
+      // ClaudeStreamingService gets the result from the service
       expect(result.fullResponse).toBe('Partial content');
       expect(result.savedMessageId).toBe('msg-partial');
     });
@@ -441,10 +410,10 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // The pre-tool text should NOT be saved as a message
-      // MessageHandler does not persist messages when tool loop is delegated
+      // ClaudeStreamingService does not persist messages when tool loop is delegated
       const sendMessageCalls = mockConversationService.sendMessage.mock.calls;
 
       // Verify no message was saved with the pre-tool text
@@ -473,7 +442,7 @@ describe('MessageHandler Assistant Done Gating - Abort Scenarios', () => {
         source: 'user_input',
       };
 
-      const result = await handler.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
+      const result = await service.streamClaudeResponse(mockSocket, 'conv-1', [], 'prompt', options);
 
       // Should be marked as aborted
       expect(result.wasAborted).toBe(true);
