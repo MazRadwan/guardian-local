@@ -234,6 +234,83 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 
 ---
 
+## enrichInBackground Extraction Plan (NEXT UP)
+
+### Audit Summary
+
+**Method:** `enrichInBackground` (MessageHandler.ts lines 751-830, ~80 LOC)
+**Risk:** LOW — fire-and-forget, no socket/event coupling, no return value consumed
+
+### Call Site (exactly 1)
+
+```
+ChatServer.ts line 334-336:
+  if (modeConfig.backgroundEnrich && hasAttachments) {
+    this.messageHandler.enrichInBackground(conversationId!, enrichedAttachments!.map(a => a.fileId))
+      .catch(e => console.error('[ChatServer] Enrichment failed:', e));
+  }
+```
+
+- Gated by `modeConfig.backgroundEnrich` — only `true` for assessment mode
+- Fire-and-forget with `.catch()` — no return value used by ChatServer
+- Runs in Step 7 (post-streaming), after Claude response is saved
+
+### Dependencies (3 — removes 2 from MessageHandler)
+
+| Dependency | Interface | Used For |
+|------------|-----------|----------|
+| `IFileRepository` | Interface | `tryStartParsing`, `findById`, `updateParseStatus`, `updateIntakeContext` |
+| `IFileStorage` | Interface | `retrieve(storagePath)` — read file buffer |
+| `IIntakeDocumentParser` | Interface | `parseForContext(buffer, metadata)` — extract vendor context |
+
+**After extraction:** IFileStorage and IIntakeDocumentParser removed from MessageHandler constructor (only used by this method).
+
+### Shared Constant: MIME_TYPE_MAP
+
+Defined at MessageHandler.ts line 56-62. Also independently defined in 4 other files:
+- `ScoringService.ts`
+- `FileContextBuilder.ts`
+- `IDocumentParser.ts`
+- `FileValidationService.ts`
+
+**Plan:** Move with `enrichInBackground` into `BackgroundEnrichmentService.ts`. Do NOT consolidate the 4 other copies — that's a separate cleanup task. Keep scope tight.
+
+### Test Coverage: ZERO on actual method
+
+- MessageHandler.test.ts: No tests for `enrichInBackground`
+- `ChatServer.modeSpecificBehavior.test.ts`: Has 6 tests but they test a **DUPLICATE standalone function** that reimplements the logic, NOT the actual MessageHandler method
+- **Action required:** Write proper unit tests for `BackgroundEnrichmentService` AFTER extraction (the method is moving, not changing logic — tests on the new service validate the move)
+
+### Hidden Bindings: NONE
+
+- Does NOT call any other MessageHandler methods
+- Does NOT read socket state
+- Does NOT emit events
+- Does NOT use ConversationService
+- Pure infrastructure: read file → parse → store context
+
+### Extraction Steps
+
+1. Create `BackgroundEnrichmentService.ts` in `src/infrastructure/websocket/handlers/` (or `services/`)
+   - Move `enrichInBackground` method + `MIME_TYPE_MAP` constant
+   - Constructor: `IFileRepository`, `IFileStorage`, `IIntakeDocumentParser`
+   - Single public method: `enrichInBackground(conversationId, fileIds)`
+2. Update ChatServer.ts to inject and call `BackgroundEnrichmentService` directly
+3. Remove method + MIME_TYPE_MAP + 2 constructor deps from MessageHandler
+4. Write unit tests for `BackgroundEnrichmentService`
+5. Update `ChatServer.modeSpecificBehavior.test.ts` — replace duplicate standalone function with import of real service
+6. Run full test suite
+7. Browser QA: assessment mode file upload (the ONLY path that triggers enrichment)
+8. Update this decomposition doc
+
+### LOC Impact
+
+- MessageHandler: ~830 → ~750 (remove ~80 LOC method + MIME_TYPE_MAP)
+- Constructor deps: 9 → 7 (remove IFileStorage, IIntakeDocumentParser)
+- New file: ~90 LOC (method + class boilerplate + MIME_TYPE_MAP)
+
+---
+
 ## Notes for Future Sessions
 
 - Read this file FIRST when working on any MessageHandler extraction
@@ -244,6 +321,7 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - Dead `modes/` strategy pattern is DELETED (commit `c854231`) — was ~950 LOC of never-wired code from Epic 28
 - Dead `shouldBypassClaude` method + `BypassClaudeResult` type DELETED (commit `7c0b61f`) — never called, ChatServer reads modeConfig directly
 - **Mode routing extraction COMPLETE** (commit `8e16c5f`) — `ModeRouter.ts` (57 LOC), 9 tests moved to `ModeRouter.test.ts`, browser QA passed (consult + assessment)
+- **enrichInBackground audit COMPLETE** — see extraction plan above
 - Target: get MessageHandler under 300 LOC (currently 830 — need to remove ~530 more)
 
 ### handleSendMessage Pipeline Map (READ THIS)
