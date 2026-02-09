@@ -11,7 +11,7 @@ Wire `SendMessageOrchestrator` into ChatServer, replace `handleSendMessage()` wi
 - [ ] `handleSendMessage()` method REMOVED from ChatServer
 - [ ] `MessageHandler` class no longer instantiated in ChatServer
 - [ ] `MessageHandler.ts` file DELETED
-- [ ] `buildFileContext` tests moved from MessageHandler.test.ts → new home (orchestrator test file or FileContextBuilder test file)
+- [ ] `buildFileContext` tests moved from MessageHandler.test.ts → `SendMessageOrchestrator.test.ts` (wrapper logic belongs with orchestrator)
 - [ ] ChatServer imports cleaned up (no more MessageHandler import)
 - [ ] ChatServer under 300 LOC
 - [ ] No TypeScript errors
@@ -103,15 +103,16 @@ After Sprint 1 removed validation tests and Sprint 2 removed streaming tests, on
 
 These tests verify:
 - No FileContextBuilder → empty result
-- No attachments → all conversation files
-- Empty attachments → all conversation files
-- Specific attachments → scoped file IDs
-- Mode gating for Vision API
+- No attachments → all conversation files (passes `undefined` for scopeToFileIds)
+- Empty attachments → all conversation files (passes `undefined`)
+- Mode gating for Vision API (consult + assessment only, not scoring)
 - Error handling
+
+**IMPORTANT:** Original tests for "specific attachments → scoped file IDs" must be ADAPTED, not moved as-is. The orchestrator always passes `undefined` for `scopeToFileIds` (ALL conversation files). Test should verify that even with attachments present, `undefined` is passed — not scoped IDs.
 
 **Move to:** `packages/backend/__tests__/unit/infrastructure/websocket/services/SendMessageOrchestrator.test.ts`
 
-These tests verify wrapper logic (mapping enrichedAttachments to fileIds, null-builder handling, mode gating) which is now inlined in the orchestrator. They belong with the orchestrator tests, not FileContextBuilder tests.
+These tests verify wrapper logic (null-builder handling, mode gating, always-undefined scoping) which is now inlined in the orchestrator. They belong with the orchestrator tests, not FileContextBuilder tests.
 
 After moving tests, DELETE `MessageHandler.test.ts`.
 

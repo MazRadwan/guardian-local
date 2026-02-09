@@ -114,7 +114,7 @@ SendMessageOrchestrator.ts (~150 LOC) — Pipeline orchestration
   │
   ├── Step 1: this.validator.validateSendMessage(socket, payload)
   ├── Step 2: Save user message + emit message_sent
-  ├── Step 3: this.contextBuilder.build(conversationId)
+  ├── Step 3: this.contextBuilder.build(conversationId, payload.isRegenerate)
   ├── Step 4: IF scoring → this.scoringHandler.triggerScoringOnSend() → RETURN
   ├── Step 5: this.fileContextBuilder.buildWithImages(conversationId, undefined, { mode })
   ├── Step 6: this.streamingService.streamClaudeResponse(socket, ...)

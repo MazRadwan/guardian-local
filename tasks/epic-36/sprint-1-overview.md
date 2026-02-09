@@ -43,9 +43,9 @@ FROM MessageHandler.ts:
 │   └── waitForFileRecords()            → SendMessageValidator.ts (keep public)
 │
 └── Constructor deps (3 of 7):
-    ├── ConversationService   → moves to validator
-    ├── IFileRepository       → moves to validator
-    └── RateLimiter           → moves to validator
+    ├── ConversationService   → ADDED to validator (also stays in MessageHandler for streaming until Sprint 2)
+    ├── IFileRepository       → moves to validator (removed from MessageHandler)
+    └── RateLimiter           → moves to validator (removed from MessageHandler)
 ```
 
 ## What Stays in MessageHandler (after this sprint)

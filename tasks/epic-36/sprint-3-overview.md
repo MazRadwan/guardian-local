@@ -33,7 +33,7 @@ FROM ChatServer.ts:
 └── handleSendMessage() (lines 237-345, ~108 LOC)
     ├── Step 1: validator.validateSendMessage()
     ├── Step 2: Save user message + emit message_sent
-    ├── Step 3: contextBuilder.build()
+    ├── Step 3: contextBuilder.build(conversationId, payload.isRegenerate)
     ├── Step 4: Scoring bypass → EARLY RETURN
     ├── Step 5: File context building (inline from MessageHandler.buildFileContext)
     ├── Step 6: streamingService.streamClaudeResponse()
@@ -46,19 +46,21 @@ FROM MessageHandler.ts (DELETED):
 ## Orchestrator Design
 
 ```typescript
+export interface SendMessageOrchestratorDeps {
+  validator: SendMessageValidator;
+  streamingService: ClaudeStreamingService;
+  conversationService: ConversationService;
+  contextBuilder: ConversationContextBuilder;
+  fileContextBuilder?: FileContextBuilder;  // Optional — orchestrator handles null guard
+  scoringHandler: ScoringHandler;
+  toolRegistry: ToolUseRegistry;
+  titleUpdateService: TitleUpdateService;
+  backgroundEnrichmentService: BackgroundEnrichmentService;
+  webSearchEnabled: boolean;
+}
+
 export class SendMessageOrchestrator {
-  constructor(
-    private readonly validator: SendMessageValidator,
-    private readonly streamingService: ClaudeStreamingService,
-    private readonly conversationService: ConversationService,
-    private readonly contextBuilder: ConversationContextBuilder,
-    private readonly fileContextBuilder: FileContextBuilder,
-    private readonly scoringHandler: ScoringHandler,
-    private readonly toolRegistry: ToolUseRegistry,
-    private readonly titleUpdateService: TitleUpdateService,
-    private readonly backgroundEnrichmentService: BackgroundEnrichmentService,
-    private readonly webSearchEnabled: boolean
-  ) {}
+  constructor(private readonly deps: SendMessageOrchestratorDeps) {}
 
   async execute(socket: IAuthenticatedSocket, payload: SendMessagePayload): Promise<void> {
     // Stateless — all request data flows through method args
@@ -67,13 +69,13 @@ export class SendMessageOrchestrator {
 }
 ```
 
-**Key:** Orchestrator is STATELESS. No request-scoped state stored on `this`.
+**Key:** Orchestrator is STATELESS. No request-scoped state stored on `this`. Uses deps interface (not positional params) per Codex recommendation.
 
 ## MEDIUM Risk Items
 
 - **Scoring bypass early return** — must prevent fall-through into streaming
 - **File context scoping** — pass `undefined` for scopeToFileIds (ALL conversation files), add comment
-- **11 dependencies** — large constructor, but each is injected once in ChatServer
+- **10 dependencies** — large deps interface, but each is injected once in ChatServer
 
 ## New Tests Required (Story 36.3.3)
 
@@ -103,10 +105,6 @@ Plus full browser QA of all 3 modes.
 All files under 300 LOC. Controllers control. Services serve.
 
 ---
-
-## NOTE
-
-Detailed story specs will be written after Sprint 2 is complete. Sprint 2 results may inform the orchestrator design, particularly around how streaming results flow back for post-streaming steps.
 
 ## Second Codex Review
 
