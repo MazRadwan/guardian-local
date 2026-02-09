@@ -53,7 +53,7 @@
 | Unit tests | After each story | `pnpm --filter @guardian/backend test:unit` |
 | Integration tests | After each sprint | `pnpm --filter @guardian/backend test:integration` |
 | Browser QA | After each sprint | All 3 modes + abort + regenerate |
-| Codex review | Before Sprint 3 execution | Second architectural review of orchestrator |
+| Codex review | After each sprint | Verify implementation matches spec, catch drift early |
 | LOC verification | After Sprint 3 | All new files under 300 LOC |
 | Decomposition doc | After Sprint 3 | Final status update |
 

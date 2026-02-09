@@ -106,10 +106,10 @@ All files under 300 LOC. Controllers control. Services serve.
 
 ---
 
-## Second Codex Review
+## Codex Review (Post-Sprint)
 
-Before executing Sprint 3, send the detailed story specs to Codex for a second review. Sprint 3 touches the most files and has the highest integration risk. Codex review should focus on:
-- Constructor wiring correctness
-- Step ordering preservation
-- Scoring bypass safety
+After Sprint 3 implementation, send to Codex for review (same as Sprints 1 and 2). Focus areas for this sprint:
+- Constructor wiring correctness (10 deps)
+- Step ordering preservation (7 steps)
+- Scoring bypass safety (early return)
 - Error handling completeness
