@@ -13,7 +13,7 @@ Wire `ClaudeStreamingService` into ChatServer and remove `streamClaudeResponse()
 - [ ] `StreamingResult` and `StreamingOptions` type definitions removed from MessageHandler
 - [ ] MessageHandler constructor loses `IClaudeClient` and `IConsultToolLoopService` params
 - [ ] MessageHandler constructor KEEPS `ConversationService` — NO WAIT: after validation extraction (Sprint 1), streaming extraction removes the last user of ConversationService in MessageHandler. Check if buildFileContext uses it. If not, remove it too.
-- [ ] `StreamingResult` and `StreamingOptions` imports in ChatServer updated to `types/SendMessage.ts`
+- [ ] Note: ChatServer does NOT import `StreamingResult`/`StreamingOptions` directly — it uses them implicitly via the streaming service return type. No ChatServer import change needed for these types.
 - [ ] No TypeScript errors
 
 ## Technical Approach
@@ -25,7 +25,8 @@ Wire `ClaudeStreamingService` into ChatServer and remove `streamClaudeResponse()
 Add import:
 ```typescript
 import { ClaudeStreamingService } from './services/ClaudeStreamingService.js';
-import type { StreamingResult, StreamingOptions } from './types/SendMessage.js';
+// Note: ChatServer does NOT need to import StreamingResult/StreamingOptions directly
+// It uses them implicitly through the streaming service return type
 ```
 
 In constructor, create streaming service:

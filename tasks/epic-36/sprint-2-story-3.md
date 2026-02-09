@@ -59,7 +59,7 @@ These 4 files test streaming behavior and need import + constructor updates:
 ### 3. Update remaining MessageHandler.test.ts
 
 After Sprint 1 removed validation tests and this sprint removes streaming tests, MessageHandler.test.ts should only contain:
-- `describe('buildFileContext')` tests (~20 tests, lines 1193-1468)
+- `describe('buildFileContext')` tests (~20 tests, lines 1193-1481)
 
 Update constructor in these remaining tests to match MessageHandler's new signature (1-2 params).
 

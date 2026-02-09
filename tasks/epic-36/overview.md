@@ -40,7 +40,7 @@
 
 | Story | Name | Agent |
 |-------|------|-------|
-| 36.3.1 | Create SendMessageOrchestrator with deps interface, lift 11-step pipeline | backend-agent |
+| 36.3.1 | Create SendMessageOrchestrator with deps interface, lift 7-step pipeline | backend-agent |
 | 36.3.2 | Wire into ChatServer, delete MessageHandler.ts, move buildFileContext tests | backend-agent |
 | 36.3.3 | Orchestrator tests (~25 cases) + full regression browser QA (9 scenarios, all modes) | backend-agent |
 

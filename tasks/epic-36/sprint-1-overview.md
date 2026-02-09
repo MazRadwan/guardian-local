@@ -54,11 +54,12 @@ FROM MessageHandler.ts:
 MessageHandler.ts (~393 LOC):
 ├── StreamingResult type        (stays — streaming concern)
 ├── StreamingOptions type       (stays — streaming concern)
-├── Constructor (4 params):     claudeClient, conversationService*, fileContextBuilder, consultToolLoopService
+├── Constructor (5 params):     conversationService*, fileContextBuilder, claudeClient, toolRegistry**, consultToolLoopService
 ├── buildFileContext()          (~61 LOC)
 └── streamClaudeResponse()     (~204 LOC)
 
 * ConversationService stays because streamClaudeResponse uses it to save messages
+** toolRegistry is DEAD (not referenced by any method) — remove in Sprint 2
 ```
 
 ## Critical Behaviors to Preserve

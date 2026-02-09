@@ -2,13 +2,13 @@
 
 ## Description
 
-Create `SendMessageOrchestrator` by lifting the `handleSendMessage()` pipeline from ChatServer. This is the 11-step orchestration pipeline that coordinates validation, message persistence, context building, streaming, and post-streaming work. Inline `buildFileContext()` from the remaining MessageHandler stub.
+Create `SendMessageOrchestrator` by lifting the `handleSendMessage()` pipeline from ChatServer. This is the 7-step orchestration pipeline that coordinates validation, message persistence, context building, streaming, and post-streaming work. Inline `buildFileContext()` from the remaining MessageHandler stub.
 
 ## Acceptance Criteria
 
 - [ ] `SendMessageOrchestrator.ts` created with `execute()` method
 - [ ] Constructor uses a `SendMessageOrchestratorDeps` interface (not positional params — Codex recommendation)
-- [ ] All 11 pipeline steps preserved in exact order
+- [ ] All 7 pipeline steps preserved in exact order (Steps 1-7 as documented in ChatServer)
 - [ ] Regenerate path preserved (skip save, delete old assistant message)
 - [ ] Placeholder text generation preserved: `[Uploaded file for analysis: ${filenames}]`
 - [ ] Scoring bypass preserved: requires `bypassClaude AND hasAttachments`
@@ -46,14 +46,14 @@ import type { SendMessagePayload } from '../types/SendMessage.js';
 import type { ImageContentBlock } from '../../ai/types/vision.js';
 import { getModeConfig } from '../handlers/ModeRouter.js';
 import { assessmentModeTools, consultModeTools } from '../../ai/tools/index.js';
-import { sanitizeErrorForClient } from '../../../utils/sanitize.js';
+// Note: sanitizeErrorForClient stays in ChatServer's outer try/catch, NOT in the orchestrator
 
 export interface SendMessageOrchestratorDeps {
   validator: SendMessageValidator;
   streamingService: ClaudeStreamingService;
   conversationService: ConversationService;
   contextBuilder: ConversationContextBuilder;
-  fileContextBuilder: FileContextBuilder;
+  fileContextBuilder?: FileContextBuilder;  // Optional — orchestrator handles null guard
   scoringHandler: ScoringHandler;
   toolRegistry: ToolUseRegistry;
   titleUpdateService: TitleUpdateService;
@@ -69,7 +69,7 @@ export class SendMessageOrchestrator {
   constructor(private readonly deps: SendMessageOrchestratorDeps) {}
 
   async execute(socket: IAuthenticatedSocket, payload: SendMessagePayload): Promise<void> {
-    // EXACT 11-step pipeline from ChatServer.handleSendMessage (lines 237-345)
+    // EXACT 7-step pipeline from ChatServer.handleSendMessage (lines 237-345)
     // See pipeline map below
   }
 }
@@ -86,7 +86,7 @@ Step 1: Validate
       socket.emit('file_processing_error', {
         conversationId: validation.conversationId,
         missingFileIds: validation.missingFileIds || [],
-        message: validation.error?.message || 'Some files are still processing...',
+        message: validation.error?.message || 'Some files are still processing. Please wait a moment and try again.',
       });
       return;
     }
@@ -229,7 +229,7 @@ None for this story — Story 36.3.3 covers testing.
 
 ## Definition of Done
 
-- [ ] Orchestrator created with all 11 steps
+- [ ] Orchestrator created with all 7 steps
 - [ ] Deps interface pattern used (not positional params)
 - [ ] All behaviors listed in pipeline map preserved
 - [ ] All traps avoided

@@ -109,9 +109,9 @@ These tests verify:
 - Mode gating for Vision API
 - Error handling
 
-**Move to:** `packages/backend/__tests__/unit/infrastructure/websocket/services/SendMessageOrchestrator.test.ts` as integration tests that test the file context path through the orchestrator. OR move to `FileContextBuilder.test.ts` since they're really testing FileContextBuilder delegation.
+**Move to:** `packages/backend/__tests__/unit/infrastructure/websocket/services/SendMessageOrchestrator.test.ts`
 
-**Recommended:** Move to a `FileContextBuilder.integration.test.ts` or fold into existing FileContextBuilder tests. The tests are about FileContextBuilder behavior, not orchestrator behavior. The orchestrator just calls `fileContextBuilder.buildWithImages()` directly.
+These tests verify wrapper logic (mapping enrichedAttachments to fileIds, null-builder handling, mode gating) which is now inlined in the orchestrator. They belong with the orchestrator tests, not FileContextBuilder tests.
 
 After moving tests, DELETE `MessageHandler.test.ts`.
 

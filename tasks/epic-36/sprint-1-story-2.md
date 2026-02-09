@@ -18,6 +18,7 @@ Wire `SendMessageValidator` into ChatServer and remove validation methods + type
 - [ ] `SendMessagePayload`, `ValidationError`, `SendMessageValidationResult` removed from MessageHandler
 - [ ] MessageHandler constructor loses `IFileRepository` and `RateLimiter` params
 - [ ] MessageHandler constructor KEEPS `ConversationService` (used by `streamClaudeResponse`)
+- [ ] MessageHandler constructor KEEPS `ToolUseRegistry` (dead param — remove in Sprint 2, keeping now to minimize changes)
 - [ ] `IFileRepository` and `RateLimiter` imports removed from MessageHandler
 - [ ] No TypeScript errors
 
@@ -100,7 +101,7 @@ constructor(
   private readonly consultToolLoopService?: IConsultToolLoopService
 ) {}
 
-// AFTER (5 params)
+// AFTER (5 params — toolRegistry is dead but kept for now, removed in Sprint 2)
 constructor(
   private readonly conversationService: ConversationService,
   private readonly fileContextBuilder?: FileContextBuilder,

@@ -13,7 +13,7 @@ MessageHandler.ts contains 3 services disguised as controller methods:
 2. **Streaming** (~204 LOC) — Claude streaming with abort handling and tool loop delegation
 3. **File context building** (~61 LOC) — thin delegation to FileContextBuilder
 
-ChatServer.ts (357 LOC, also over limit) contains `handleSendMessage()` — a 108-line, 11-step orchestration pipeline that should be its own service.
+ChatServer.ts (357 LOC, also over limit) contains `handleSendMessage()` — a 108-line, 7-step orchestration pipeline that should be its own service.
 
 Previous epics extracted the easy modules (tool loop, title gen, enrichment, mode routing). What remains has cross-mode bindings, security protocols, and optimized features from multiple refactor cycles.
 
@@ -58,7 +58,7 @@ Every extraction must be tested against ALL three mode paths.
 3. **`emitFileProcessingError` protocol** — 4-layer signaling chain: `waitForFileRecords` → `validateAndEnrichAttachments` → `validateSendMessage` → ChatServer error branch. Return shape must be preserved exactly.
 4. **Tool loop double-dispatch** — `streamClaudeResponse` returns empty `toolUseBlocks` when tool loop handles internally. If this breaks, ChatServer dispatches tools twice.
 5. **Abort semantics** — Save partial response on abort BUT suppress `assistant_done`. Both behaviors must stay coupled in the streaming service.
-6. **Scoring bypass early return** — Prevents steps 6-11 from executing. If orchestrator sequencing changes, scoring could fall through into streaming.
+6. **Scoring bypass early return** — Prevents steps 5-7 from executing. If orchestrator sequencing changes, scoring could fall through into streaming.
 7. **`conversationId` from payload not socket** — Explicit security decision. Never fall back to `socket.conversationId`.
 8. **Log prefixes** — Update from `[MessageHandler]` to new service names. Fix test assertions that match log strings.
 
