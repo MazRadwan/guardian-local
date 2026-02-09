@@ -1,8 +1,8 @@
 # Diagram Index - Auto-maintained by diagram-updater-agent
 # This file tracks all architecture diagrams and their validation status
 
-last_processed_commit: "4907916"
-last_updated: "2026-01-27"
+last_processed_commit: "9de57c4"
+last_updated: "2026-02-09"
 
 diagrams:
   - id: architecture-latest
@@ -21,17 +21,33 @@ diagrams:
       - overview
       - vision
       - extraction
+      - web-search
+      - tool-loop
+      - message-pipeline
     description: |
       Comprehensive flowchart showing Guardian's layered architecture:
-      Presentation (Next.js/React) → Hooks/State → WebSocket → Backend → Services → Domain → Data
+      Presentation (Next.js/React) -> Hooks/State -> WebSocket -> Backend -> Services -> Domain -> Data
       Includes AI pipeline with Claude integration.
       Epic 28 update: Backend layer now shows modular ChatServer architecture with
-      Handlers (Connection, Conversation, Message, ModeSwitch, Questionnaire, Scoring),
-      Mode Strategies (Assessment, Consult, Scoring), and Context Builders.
+      Handlers (Connection, Conversation, ModeSwitch, Questionnaire, Scoring)
+      and Context Builders.
       Epic 30 update: Added Vision API support - VisionContentBuilder converts images to
       ImageContentBlock, FileContextBuilder.buildWithImages() returns FileContextResult with
       imageBlocks, ClaudeClient.streamMessage() accepts imageBlocks parameter.
       Epic 31 update: Added async extraction infrastructure - BackgroundExtractor for
       fire-and-forget text extraction, decouples upload from extraction for parallel
-      file upload performance. MessageHandler has waitForFileRecords() retry logic.
-      Socket.IO pingTimeout/pingInterval increased for long-running operations.
+      file upload performance.
+      Epic 33 update: Added web search capability - WebSearchToolService handles web_search
+      tool calls via Jina AI Search and Reader APIs. JinaClient wraps external API with
+      retry logic. ToolUseRegistry dispatches to WebSearchToolService.
+      Epic 34 update: Extracted ConsultToolLoopService from MessageHandler. Handles consult
+      mode tool loop execution (max 3 iterations) with graceful degradation.
+      Epic 35 update: Extracted TitleUpdateService for fire-and-forget title generation
+      and scoring title updates.
+      Epic 36 update: Decomposed MessageHandler into SendMessageOrchestrator (7-step pipeline),
+      SendMessageValidator, ClaudeStreamingService, BackgroundEnrichmentService, and ModeRouter.
+      Removed ModeStrategies subgraph (AssessmentModeStrategy, ConsultModeStrategy,
+      ScoringModeStrategy) - dead code replaced by ModeRouter pure function.
+      Added MessagePipeline subgraph containing the new send message services.
+      ScoringHandler no longer uses StreamingHandler. StreamingHandler only used by
+      QuestionnaireHandler. Added Jina API to External subgraph.

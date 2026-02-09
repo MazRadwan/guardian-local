@@ -5,9 +5,15 @@
 # VALIDATED: 2026-01-27 - Paths verified against actual codebase
 # UPDATED: 2026-01-27 - Added Epic 31 Async Extraction (BackgroundExtractor, TextExtractionService)
 # UPDATED: 2026-01-26 - Added Epic 30 Vision API support (VisionContentBuilder, updated FileContextBuilder)
+# UPDATED: 2026-02-09 - Epic 33/34/35/36: MessageHandler decomposition, web search, tool loop, title extraction
+#   - REMOVED: MessageHandler (replaced by SendMessageOrchestrator pipeline)
+#   - REMOVED: AssessmentModeStrategy, ConsultModeStrategy, ScoringModeStrategy (dead code)
+#   - ADDED: SendMessageOrchestrator, SendMessageValidator, ClaudeStreamingService,
+#            ConsultToolLoopService, TitleUpdateService, BackgroundEnrichmentService,
+#            ModeRouter, WebSearchToolService, JinaClient, JinaAPI
 
 diagram: architecture-latest.mmd
-last_verified: "2026-01-27"
+last_verified: "2026-02-09"
 
 # Subgraph to directory mappings
 subgraphs:
@@ -206,7 +212,7 @@ nodes:
     paths: ["packages/backend/src/infrastructure/websocket/ChatServer.ts"]
     validation_strategy: pattern
     status: EXISTS
-    note: "Event emissions defined in ChatServer"
+    note: "Event emissions defined in ChatServer and handler services"
 
   # === Backend Layer ===
   ChatServer:
@@ -214,6 +220,7 @@ nodes:
     exports: ["ChatServer"]
     validation_strategy: export
     status: EXISTS
+    note: "Epic 36: No longer delegates to MessageHandler. Wires SendMessageOrchestrator pipeline."
 
   RateLimiter:
     paths: ["packages/backend/src/infrastructure/websocket/RateLimiter.ts"]
@@ -248,13 +255,6 @@ nodes:
     status: EXISTS
     note: "Handles conversation CRUD: create, list, delete, title generation"
 
-  MessageHandler:
-    paths: ["packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts"]
-    exports: ["MessageHandler"]
-    validation_strategy: export
-    status: EXISTS
-    note: "Core message processing, streaming, tool use orchestration. Epic 31: waitForFileRecords() retry logic for async extraction race condition"
-
   ModeSwitchHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeSwitchHandler.ts"]
     exports: ["ModeSwitchHandler"]
@@ -267,36 +267,64 @@ nodes:
     exports: ["QuestionnaireHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Questionnaire generation, export status, export_ready events"
+    note: "Questionnaire generation, export status, export_ready events. Only remaining StreamingHandler consumer."
 
   ScoringHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ScoringHandler.ts"]
     exports: ["ScoringHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Scoring workflow, vendor clarifications, scoring progress"
+    note: "Scoring workflow, vendor clarifications, scoring progress. No longer uses StreamingHandler."
 
-  # === Backend Layer - Mode Strategies (Epic 28) ===
-  AssessmentModeStrategy:
-    paths: ["packages/backend/src/infrastructure/websocket/modes/AssessmentModeStrategy.ts"]
-    exports: ["AssessmentModeStrategy"]
+  ModeRouter:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeRouter.ts"]
+    exports: ["getModeConfig", "ModeConfig"]
     validation_strategy: export
     status: EXISTS
-    note: "Implements IModeStrategy for assessment mode context building"
+    note: "Pure function module replacing mode strategy pattern. Returns config flags (enableTools, backgroundEnrich, bypassClaude) per mode."
 
-  ConsultModeStrategy:
-    paths: ["packages/backend/src/infrastructure/websocket/modes/ConsultModeStrategy.ts"]
-    exports: ["ConsultModeStrategy"]
+  # === Backend Layer - Send Message Pipeline (Epic 36) ===
+  SendMessageOrchestrator:
+    paths: ["packages/backend/src/infrastructure/websocket/services/SendMessageOrchestrator.ts"]
+    exports: ["SendMessageOrchestrator", "SendMessageOrchestratorDeps"]
     validation_strategy: export
     status: EXISTS
-    note: "Implements IModeStrategy for consult mode context building"
+    note: "Epic 36: Replaces MessageHandler. 7-step pipeline: validate, save, context, scoring bypass, file context, stream, post-stream."
 
-  ScoringModeStrategy:
-    paths: ["packages/backend/src/infrastructure/websocket/modes/ScoringModeStrategy.ts"]
-    exports: ["ScoringModeStrategy"]
+  SendMessageValidator:
+    paths: ["packages/backend/src/infrastructure/websocket/services/SendMessageValidator.ts"]
+    exports: ["SendMessageValidator"]
     validation_strategy: export
     status: EXISTS
-    note: "Implements IModeStrategy for scoring mode context building"
+    note: "Epic 36: Extracted validation from MessageHandler. Validates payload, conversation, file readiness."
+
+  ClaudeStreamingService:
+    paths: ["packages/backend/src/infrastructure/websocket/services/ClaudeStreamingService.ts"]
+    exports: ["ClaudeStreamingService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 36: Extracted streaming from MessageHandler. Claude API streaming with abort handling, tool loop delegation."
+
+  ConsultToolLoopService:
+    paths: ["packages/backend/src/infrastructure/websocket/services/ConsultToolLoopService.ts"]
+    exports: ["ConsultToolLoopService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 34: Tool loop execution for consult mode web search. Max 3 iterations, graceful degradation."
+
+  TitleUpdateService:
+    paths: ["packages/backend/src/infrastructure/websocket/services/TitleUpdateService.ts"]
+    exports: ["TitleUpdateService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 35: Title generation for consult/assessment modes, scoring title updates. Fire-and-forget."
+
+  BackgroundEnrichmentService:
+    paths: ["packages/backend/src/infrastructure/websocket/services/BackgroundEnrichmentService.ts"]
+    exports: ["BackgroundEnrichmentService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 36: File enrichment for assessment mode. Fire-and-forget after Claude response."
 
   # === Backend Layer - Context Builders (Epic 28) ===
   ConversationContextBuilder:
@@ -319,14 +347,14 @@ nodes:
     exports: ["StreamingHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Handles streaming responses from Claude to client"
+    note: "Simulated streaming for markdown content. Only used by QuestionnaireHandler (not MessageHandler or ScoringHandler since Epic 36)."
 
   ToolUseRegistry:
     paths: ["packages/backend/src/infrastructure/websocket/ToolUseRegistry.ts"]
     exports: ["ToolUseRegistry"]
     validation_strategy: export
     status: EXISTS
-    note: "Tracks tool use blocks during Claude streaming responses"
+    note: "Strategy pattern registry for tool handlers. Dispatches to WebSearchToolService (Epic 33) and QuestionnaireReadyService."
 
   # === Backend Layer - Extraction Infrastructure (Epic 31) ===
   BackgroundExtractor:
@@ -403,6 +431,13 @@ nodes:
     exports: ["ScoringExportService"]
     validation_strategy: export
     status: EXISTS
+
+  WebSearchToolService:
+    paths: ["packages/backend/src/application/services/WebSearchToolService.ts"]
+    exports: ["WebSearchToolService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 33: Handles web_search tool calls. Validates input, searches via Jina, reads top URLs, formats for Claude. Fail-soft behavior."
 
   # === Domain Layer ===
   User:
@@ -496,6 +531,14 @@ nodes:
     status: EXISTS
     note: "Located in infrastructure/rendering, not infrastructure/ai"
 
+  # === AI Layer - Epic 33 Jina Client ===
+  JinaClient:
+    paths: ["packages/backend/src/infrastructure/ai/JinaClient.ts"]
+    exports: ["JinaClient", "JINA_CONFIG"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 33: Wraps Jina AI Search and Reader APIs with retry logic, error handling, content truncation."
+
   # === Data Layer ===
   UserRepo:
     paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleUserRepository.ts"]
@@ -563,6 +606,12 @@ nodes:
     status: EXTERNAL
     note: "External Anthropic API - not in codebase"
 
+  JinaAPI:
+    paths: []
+    validation_strategy: skip
+    status: EXTERNAL
+    note: "External Jina AI API (Search + Reader) - not in codebase. Epic 33."
+
 # === Items in code but NOT in diagram (potential additions) ===
 not_in_diagram:
   # Items tracked but intentionally NOT in diagram (supporting/minor components)
@@ -592,6 +641,8 @@ not_in_diagram:
     - RecommendationBadge: "apps/web/src/components/chat/RecommendationBadge.tsx"
     - RotatingStatus: "apps/web/src/components/chat/RotatingStatus.tsx"
     - SkeletonMessage: "apps/web/src/components/chat/SkeletonMessage.tsx"
+    - LinkBadge: "apps/web/src/components/chat/LinkBadge.tsx"
+    - HoverCard: "apps/web/src/components/ui/hover-card.tsx"
 
   repositories:
     - DrizzleResponseRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts"
@@ -603,6 +654,7 @@ not_in_diagram:
     - ScoringPromptBuilder: "packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts"
     - ExportNarrativeGenerator: "packages/backend/src/infrastructure/ai/ExportNarrativeGenerator.ts"
     - DocumentParserService: "packages/backend/src/infrastructure/ai/DocumentParserService.ts"
+    - webSearchTool: "packages/backend/src/infrastructure/ai/tools/webSearchTool.ts"
 
   # Epic 30: Vision API types (infrastructure-level, not architecturally significant)
   ai_types:
@@ -617,10 +669,24 @@ not_in_diagram:
   interfaces:
     - IVisionContentBuilder: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
     - VisionFileDTO: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
+    - IConsultToolLoopService: "packages/backend/src/infrastructure/websocket/services/IConsultToolLoopService.ts"
+    - ITitleUpdateService: "packages/backend/src/infrastructure/websocket/services/ITitleUpdateService.ts"
+    - IJinaClient: "packages/backend/src/application/interfaces/IJinaClient.ts"
+    - IProgressEmitter: "packages/backend/src/application/interfaces/IProgressEmitter.ts"
+    - IWebSearchTool: "packages/backend/src/application/interfaces/IWebSearchTool.ts"
 
   # Epic 31: Background extraction interface
   extraction_interfaces:
     - IBackgroundExtractor: "packages/backend/src/application/interfaces/IBackgroundExtractor.ts"
+
+  # Epic 36: Types and utilities (not architecturally significant)
+  websocket_types:
+    - SendMessage: "packages/backend/src/infrastructure/websocket/types/SendMessage.ts"
+    - SocketProgressEmitter: "packages/backend/src/infrastructure/websocket/emitters/SocketProgressEmitter.ts"
+
+  # Epic 33: Config (not architecturally significant)
+  config:
+    - jinaConfig: "packages/backend/src/application/config/jinaConfig.ts"
 
 # Edge rules for relational validation
 edge_rules:

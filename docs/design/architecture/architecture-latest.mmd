@@ -30,7 +30,7 @@ flowchart TB
   subgraph WebSocket["WebSocket Layer (Socket.IO /chat)"]
     WSClient["WebSocketClient"]
     ClientEvents["Client emits:\nsend_message / start_new_conversation / switch_mode /\nget_history / get_conversations / delete_conversation /\nabort_stream / generate_questionnaire / get_export_status"]
-    ServerEvents["Server emits:\nmessage / assistant_token / assistant_done / generation_phase\nconnection_ready / history\nconversations_list / conversation_created\nconversation_title_updated / conversation_deleted\nconversation_mode_updated / stream_aborted\nquestionnaire_ready (with insert_index)\nexport_ready / export_status / export_status_not_found /\nexport_status_error / extraction_failed"]
+    ServerEvents["Server emits:\nmessage / assistant_token / assistant_done / generation_phase\nconnection_ready / history\nconversations_list / conversation_created\nconversation_title_updated / conversation_deleted\nconversation_mode_updated / stream_aborted\nquestionnaire_ready (with insert_index)\nexport_ready / export_status / export_status_not_found /\nexport_status_error / extraction_failed\ntool_status (searching/reading/idle)"]
   end
 
   subgraph Backend["Backend (Express 5 + Socket.IO)"]
@@ -40,16 +40,19 @@ flowchart TB
     subgraph Handlers["WebSocket Handlers"]
       ConnectionHandler["ConnectionHandler"]
       ConversationHandler["ConversationHandler"]
-      MessageHandler["MessageHandler"]
       ModeSwitchHandler["ModeSwitchHandler"]
       QuestionnaireHandler["QuestionnaireHandler"]
       ScoringHandler["ScoringHandler"]
+      ModeRouter["ModeRouter (mode config flags)"]
     end
 
-    subgraph ModeStrategies["Mode Strategies"]
-      AssessmentModeStrategy["AssessmentModeStrategy"]
-      ConsultModeStrategy["ConsultModeStrategy"]
-      ScoringModeStrategy["ScoringModeStrategy"]
+    subgraph MessagePipeline["Send Message Pipeline (Epic 36)"]
+      SendMessageOrchestrator["SendMessageOrchestrator\n(7-step pipeline)"]
+      SendMessageValidator["SendMessageValidator"]
+      ClaudeStreamingService["ClaudeStreamingService\n(Claude API streaming + abort)"]
+      ConsultToolLoopService["ConsultToolLoopService\n(web search tool loop, max 3 iterations)"]
+      TitleUpdateService["TitleUpdateService\n(title generation + scoring titles)"]
+      BackgroundEnrichmentService["BackgroundEnrichmentService\n(file enrichment)"]
     end
 
     subgraph ContextBuilders["Context Builders (Epic 30 Vision)"]
@@ -80,6 +83,7 @@ flowchart TB
     ExportService
     ScoringService["ScoringService"]
     ScoringExportService["ScoringExportService"]
+    WebSearchToolService["WebSearchToolService\n(Jina search + read)"]
   end
 
   subgraph Domain["Domain Entities"]
@@ -100,6 +104,7 @@ flowchart TB
     questionGenPrompt["questionGeneration prompt"]
     QuestionnaireSchemaAdapter
     questionnaireToMarkdown["questionnaireToMarkdown / Markdown converter"]
+    JinaClient["JinaClient\n(Jina Search + Reader APIs)"]
   end
 
   subgraph Data["Data Layer (Drizzle + PostgreSQL 17)"]
@@ -116,6 +121,7 @@ flowchart TB
 
   subgraph External["External"]
     ClaudeAPI["Anthropic Claude API"]
+    JinaAPI["Jina AI API\n(Search + Reader)"]
   end
 
   %% Presentation to Hooks
@@ -156,33 +162,53 @@ flowchart TB
   %% ChatServer to Handlers (Epic 28 modular architecture)
   ChatServer --> ConnectionHandler
   ChatServer --> ConversationHandler
-  ChatServer --> MessageHandler
   ChatServer --> ModeSwitchHandler
   ChatServer --> QuestionnaireHandler
   ChatServer --> ScoringHandler
 
-  %% Handlers use Mode Strategies
-  MessageHandler --> AssessmentModeStrategy
-  MessageHandler --> ConsultModeStrategy
-  MessageHandler --> ScoringModeStrategy
+  %% ChatServer to Send Message Pipeline (Epic 36)
+  ChatServer --> SendMessageOrchestrator
 
-  %% Handlers use Context Builders
-  MessageHandler --> ConversationContextBuilder
-  MessageHandler --> FileContextBuilder
+  %% SendMessageOrchestrator delegation chain
+  SendMessageOrchestrator --> SendMessageValidator
+  SendMessageOrchestrator --> ClaudeStreamingService
+  SendMessageOrchestrator --> ConversationContextBuilder
+  SendMessageOrchestrator --> FileContextBuilder
+  SendMessageOrchestrator --> ScoringHandler
+  SendMessageOrchestrator --> TitleUpdateService
+  SendMessageOrchestrator --> BackgroundEnrichmentService
+  SendMessageOrchestrator --> ModeRouter
+
+  %% ClaudeStreamingService delegation
+  ClaudeStreamingService --> ConsultToolLoopService
+  ClaudeStreamingService --> ConversationService
+
+  %% ConsultToolLoopService delegation
+  ConsultToolLoopService --> ToolUseRegistry
+  ConsultToolLoopService --> ConversationService
+
+  %% ToolUseRegistry to WebSearchToolService
+  ToolUseRegistry --> WebSearchToolService
+
+  %% WebSearchToolService to JinaClient
+  WebSearchToolService --> JinaClient
+
+  %% JinaClient to External
+  JinaClient --> JinaAPI
+
+  %% TitleUpdateService to ConversationService
+  TitleUpdateService --> ConversationService
+
+  %% QuestionnaireHandler uses StreamingHandler (only remaining consumer)
+  QuestionnaireHandler --> StreamingHandler
 
   %% Epic 30: Vision API Pipeline
   FileContextBuilder --> VisionContentBuilder
   ConnectionHandler --> VisionContentBuilder
 
-  %% Handlers use Utilities
-  MessageHandler --> StreamingHandler
-  ScoringHandler --> StreamingHandler
-  MessageHandler --> ToolUseRegistry
-
   %% Handlers to Services
   ConnectionHandler --> ConversationService
   ConversationHandler --> ConversationService
-  MessageHandler --> ConversationService
   QuestionnaireHandler --> QuestionnaireReadyService
   QuestionnaireHandler --> QuestionnaireGenerationService
   ScoringHandler --> ScoringService
@@ -194,6 +220,9 @@ flowchart TB
   %% ChatServer to AI
   ChatServer --> PromptCacheManager
   PromptCacheManager --> ClaudeClient
+
+  %% ClaudeStreamingService to AI
+  ClaudeStreamingService --> ClaudeClient
 
   %% HTTP Routes
   ChatServer --> HttpRoutes
