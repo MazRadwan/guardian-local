@@ -41,12 +41,6 @@
  * 3. NOT bypass Claude in assessment mode even with attachments
  * 4. NOT bypass Claude in consult mode
  *
- * shouldAutoSummarize (Story 28.9.4):
- * 1. Auto-summarize in consult mode with files and no text
- * 2. NOT auto-summarize in consult mode with text
- * 3. NOT auto-summarize in assessment mode
- * 4. NOT auto-summarize in scoring mode
- *
  * streamClaudeResponse (Story 28.9.5):
  * 1. Stream tokens to socket using async iterator
  * 2. NOT emit assistant_done when aborted
@@ -1513,7 +1507,6 @@ describe('MessageHandler', () => {
 
       expect(config.mode).toBe('consult');
       expect(config.enableTools).toBe(true);   // Epic 33: web_search tool in consult mode
-      expect(config.autoSummarize).toBe(true);
       expect(config.backgroundEnrich).toBe(false);
       expect(config.bypassClaude).toBe(false);
     });
@@ -1523,7 +1516,6 @@ describe('MessageHandler', () => {
 
       expect(config.mode).toBe('assessment');
       expect(config.enableTools).toBe(true);   // CRITICAL: ONLY assessment has tools
-      expect(config.autoSummarize).toBe(false);
       expect(config.backgroundEnrich).toBe(true);
       expect(config.bypassClaude).toBe(false);
     });
@@ -1533,7 +1525,6 @@ describe('MessageHandler', () => {
 
       expect(config.mode).toBe('scoring');
       expect(config.enableTools).toBe(false);  // No tools in scoring
-      expect(config.autoSummarize).toBe(false);
       expect(config.backgroundEnrich).toBe(false);
       expect(config.bypassClaude).toBe(true);  // Bypass Claude
     });
@@ -1543,7 +1534,6 @@ describe('MessageHandler', () => {
 
       expect(config.mode).toBe('consult');
       expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
-      expect(config.autoSummarize).toBe(true);
       expect(config.bypassClaude).toBe(false);
     });
 
@@ -1620,57 +1610,6 @@ describe('MessageHandler', () => {
   });
 
   /**
-   * Story 28.9.4: shouldAutoSummarize tests
-   *
-   * Tests auto-summarize logic for consult mode.
-   * CRITICAL: Auto-summarize only triggers in consult mode with files and no text.
-   */
-  describe('shouldAutoSummarize', () => {
-    it('should auto-summarize in consult mode with files and no text', () => {
-      const result = handler.shouldAutoSummarize('consult', false, true);
-
-      expect(result).toBe(true);
-    });
-
-    it('should NOT auto-summarize in consult mode with text', () => {
-      const result = handler.shouldAutoSummarize('consult', true, true);
-
-      expect(result).toBe(false);
-    });
-
-    it('should NOT auto-summarize in consult mode without files', () => {
-      const result = handler.shouldAutoSummarize('consult', false, false);
-
-      expect(result).toBe(false);
-    });
-
-    it('should NOT auto-summarize in consult mode with text and no files', () => {
-      const result = handler.shouldAutoSummarize('consult', true, false);
-
-      expect(result).toBe(false);
-    });
-
-    it('should NOT auto-summarize in assessment mode with files and no text', () => {
-      const result = handler.shouldAutoSummarize('assessment', false, true);
-
-      expect(result).toBe(false);
-    });
-
-    it('should NOT auto-summarize in scoring mode with files and no text', () => {
-      const result = handler.shouldAutoSummarize('scoring', false, true);
-
-      expect(result).toBe(false);
-    });
-
-    it('should NOT auto-summarize for unknown mode', () => {
-      const result = handler.shouldAutoSummarize('unknown', false, true);
-
-      // Unknown defaults to consult, which has autoSummarize: true
-      expect(result).toBe(true);
-    });
-  });
-
-  /**
    * Story 28.9.4: Integration tests for mode-specific routing
    *
    * Tests combinations of mode config with real scenarios.
@@ -1709,20 +1648,6 @@ describe('MessageHandler', () => {
       // Other modes with files -> no bypass
       expect(handler.shouldBypassClaude('consult', true).bypass).toBe(false);
       expect(handler.shouldBypassClaude('assessment', true).bypass).toBe(false);
-    });
-
-    it('should correctly identify auto-summarize pattern', () => {
-      // Matches the pattern from ChatServer.ts line 885:
-      // mode === 'consult' && enrichedAttachments && (!messageText || messageText.trim().length === 0)
-
-      // Consult with files and no text -> auto-summarize
-      expect(handler.shouldAutoSummarize('consult', false, true)).toBe(true);
-
-      // Consult with text -> no auto-summarize
-      expect(handler.shouldAutoSummarize('consult', true, true)).toBe(false);
-
-      // Assessment with files and no text -> no auto-summarize
-      expect(handler.shouldAutoSummarize('assessment', false, true)).toBe(false);
     });
 
     it('should correctly identify background enrichment pattern', () => {

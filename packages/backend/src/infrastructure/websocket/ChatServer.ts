@@ -290,13 +290,7 @@ export class ChatServer {
       return;
     }
 
-    // Step 5: Auto-summarize in consult mode
-    if (this.messageHandler.shouldAutoSummarize(mode, !!messageText, hasAttachments)) {
-      await this.messageHandler.autoSummarizeDocuments(socket as IAuthenticatedSocket, conversationId!, socket.userId!, enrichedAttachments!.map(a => a.fileId));
-      return;
-    }
-
-    // Step 6: Build enhanced prompt with file context (Epic 30 Sprint 3: now includes imageBlocks)
+    // Step 5: Build enhanced prompt with file context (Epic 30 Sprint 3: now includes imageBlocks)
     // Epic 30 Sprint 4 Story 30.4.3: Pass mode for Vision API gating (only consult gets imageBlocks)
     let enhancedPrompt = systemPrompt;
     let imageBlocks: import('../ai/types/vision.js').ImageContentBlock[] = [];
@@ -308,7 +302,7 @@ export class ChatServer {
       imageBlocks = fileContextResult.imageBlocks;
     }
 
-    // Step 7: Stream Claude response (Epic 30 Sprint 3: pass imageBlocks for Vision API)
+    // Step 6: Stream Claude response (Epic 30 Sprint 3: pass imageBlocks for Vision API)
     // Epic 33: Use mode-specific tool arrays (consult gets web_search, assessment gets questionnaire_ready)
     // Story 33.2.2: Pass mode and source for tool loop gating
     // Epic 33 Fix: Only pass consultModeTools if webSearchToolService is registered (prevents "Tool execution failed")
@@ -327,7 +321,7 @@ export class ChatServer {
       source: 'user_input',        // Story 33.2.2: User-initiated message triggers tool loop
     });
 
-    // Step 8: Post-streaming (tool use, enrichment, title generation)
+    // Step 7: Post-streaming (tool use, enrichment, title generation)
     if (!result.wasAborted) {
       for (const toolUse of result.toolUseBlocks) {
         const input: ToolUseInput = { toolName: toolUse.name, toolUseId: toolUse.id, input: toolUse.input };

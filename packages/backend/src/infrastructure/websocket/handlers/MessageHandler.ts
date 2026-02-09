@@ -127,8 +127,6 @@ export interface ModeConfig {
   mode: 'consult' | 'assessment' | 'scoring';
   /** Whether to enable Claude tools (ONLY true in assessment mode) */
   enableTools: boolean;
-  /** Whether to auto-summarize empty file-only messages (consult mode) */
-  autoSummarize: boolean;
   /** Whether to do background file enrichment (assessment mode) */
   backgroundEnrich: boolean;
   /** Whether to bypass Claude entirely and trigger scoring directly (scoring mode) */
@@ -587,7 +585,6 @@ export class MessageHandler {
         return {
           mode: 'assessment',
           enableTools: true,         // ONLY assessment mode has tools
-          autoSummarize: false,
           backgroundEnrich: true,    // Enrich files in background
           bypassClaude: false,
         };
@@ -596,7 +593,6 @@ export class MessageHandler {
         return {
           mode: 'scoring',
           enableTools: false,        // No tools in scoring
-          autoSummarize: false,
           backgroundEnrich: false,
           bypassClaude: true,        // Bypass Claude, trigger scoring directly
         };
@@ -606,7 +602,6 @@ export class MessageHandler {
         return {
           mode: 'consult',
           enableTools: true,         // Epic 33: Enable web_search tool in consult mode
-          autoSummarize: true,       // Auto-summarize empty file messages
           backgroundEnrich: false,
           bypassClaude: false,
         };
@@ -636,28 +631,6 @@ export class MessageHandler {
     }
 
     return { bypass: false };
-  }
-
-  /**
-   * Check if auto-summarize should trigger
-   *
-   * Story 28.9.4: Mode-specific routing
-   *
-   * CRITICAL: In consult mode, when user sends files without text,
-   * auto-generate a summary to kickstart the conversation.
-   *
-   * @param mode - The conversation mode
-   * @param hasText - Whether the message has text content
-   * @param hasAttachments - Whether the message has file attachments
-   * @returns Whether to auto-summarize the files
-   */
-  shouldAutoSummarize(
-    mode: string,
-    hasText: boolean,
-    hasAttachments: boolean
-  ): boolean {
-    const config = this.getModeConfig(mode);
-    return config.autoSummarize && !hasText && hasAttachments;
   }
 
   /**
@@ -951,135 +924,6 @@ export class MessageHandler {
         await this.fileRepository.updateParseStatus(fileId, 'failed').catch(() => {});
       }
     }
-  }
-
-  /**
-   * Story 28.11.2: Auto-summarize documents in Consult mode
-   *
-   * When user sends file(s) without a message in Consult mode,
-   * automatically generate a summary to kickstart the conversation.
-   *
-   * @param socket - Client socket to emit events to
-   * @param conversationId - Conversation containing the files
-   * @param userId - User who uploaded the files
-   * @param fileIds - File IDs to summarize
-   */
-  async autoSummarizeDocuments(
-    socket: IAuthenticatedSocket,
-    conversationId: string,
-    userId: string,
-    fileIds: string[]
-  ): Promise<void> {
-    try {
-      // Validate claudeClient is configured
-      if (!this.claudeClient) {
-        console.warn('[MessageHandler] Claude client not configured for auto-summarize');
-        socket.emit('message', {
-          role: 'assistant',
-          content: "I received your file but couldn't process it. Please try again.",
-          conversationId,
-        });
-        return;
-      }
-
-      // Build file context scoped to the specific files being summarized
-      // This prevents mixing unrelated documents from the conversation
-      const fileContext = this.fileContextBuilder
-        ? await this.fileContextBuilder.build(conversationId, fileIds)
-        : null;
-
-      if (!fileContext) {
-        // No context available - ask user to try again
-        socket.emit('message', {
-          role: 'assistant',
-          content: "I received your file but couldn't extract the content. Could you try uploading it again?",
-          conversationId,
-        });
-        return;
-      }
-
-      // Get file names for personalized response
-      const files = await Promise.all(
-        fileIds.map(id => this.fileRepository.findById(id))
-      );
-      const validFiles = files.filter(Boolean) as NonNullable<typeof files[number]>[];
-      const fileNames = validFiles.map(f => f.filename).join(', ');
-
-      // Build summarization prompt
-      const isSingleFile = fileIds.length === 1;
-      const fileLabel = isSingleFile
-        ? `a document (${fileNames})`
-        : `${fileIds.length} documents (${fileNames})`;
-      const systemPrompt = this.buildAutoSummarizePrompt(fileLabel);
-
-      // Get conversation messages (empty array is fine - we just need file context)
-      const messages: ClaudeMessage[] = [];
-
-      // Emit typing indicator
-      socket.emit('assistant_stream_start', { conversationId });
-
-      // Stream Claude response
-      let fullResponse = '';
-
-      for await (const chunk of this.claudeClient.streamMessage(messages, {
-        systemPrompt: `${systemPrompt}\n\n${fileContext}`,
-      })) {
-        if (!chunk.isComplete && chunk.content) {
-          fullResponse += chunk.content;
-          socket.emit('assistant_token', {
-            conversationId,
-            token: chunk.content,
-          });
-        }
-      }
-
-      // Save assistant response
-      const summaryMessage = await this.conversationService.sendMessage({
-        conversationId,
-        role: 'assistant',
-        content: { text: fullResponse },
-      });
-
-      // Emit stream complete
-      socket.emit('assistant_done', {
-        conversationId,
-        messageId: summaryMessage.id,
-        fullText: fullResponse,
-      });
-
-      console.log(`[MessageHandler] Auto-summarize complete (${fullResponse.length} chars)`);
-    } catch (error) {
-      console.error('[MessageHandler] Auto-summarize failed:', error);
-      socket.emit('message', {
-        role: 'assistant',
-        content: "I had trouble summarizing the document. What would you like to know about it?",
-        conversationId,
-      });
-    }
-  }
-
-  /**
-   * Story 28.11.2: Build system prompt for auto-summarization
-   *
-   * Creates a Guardian-style prompt that produces summaries focused on
-   * AI governance and vendor assessment relevance.
-   *
-   * @param fileLabel - Description of the file(s) being summarized
-   * @returns System prompt for Claude
-   */
-  private buildAutoSummarizePrompt(fileLabel: string): string {
-    return `You are Guardian, an AI assistant helping healthcare organizations assess AI vendors.
-
-The user has uploaded ${fileLabel} and wants to understand its contents.
-
-Please provide a helpful summary that:
-1. Identifies what type of document this is (security whitepaper, compliance cert, product doc, questionnaire, etc.)
-2. Highlights key points relevant to AI governance and vendor assessment
-3. Notes any security, privacy, or compliance information mentioned
-4. Ends with an invitation to ask follow-up questions
-
-Keep the summary concise (3-5 paragraphs) and focus on information relevant to vendor assessment.
-If the document appears to be a completed questionnaire, mention that it can be scored in Scoring mode.`;
   }
 
 }
