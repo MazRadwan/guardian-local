@@ -1,3 +1,4 @@
+
 # Story 33.1.1: Web Search Tool Definition
 
 ## Description
@@ -12,31 +13,22 @@ Create the `web_search` tool definition for Claude API. This tool enables consul
 - [ ] Input schema includes `query` (required string) and `max_results` (optional number, default 5, max 10)
 - [ ] Tool exported from `tools/index.ts` barrel file
 - [ ] Separate export for consult-mode tools (don't add to assessmentModeTools)
-- [ ] TypeScript types for tool input defined in application layer interface file
+- [ ] TypeScript types for tool input exported for service consumption
 
 ## Technical Approach
 
 Follow the existing pattern from `questionnaireReadyTool.ts`:
 
 1. Define tool with `name`, `description`, and `input_schema`
-2. **Define input type in application layer** (for clean architecture - application shouldn't import from infrastructure)
+2. Export typed interface for input parameters
 3. Add to barrel file with separate export for consult tools
 
-**IMPORTANT:** The `WebSearchInput` type must be defined in the application layer interface file, not in the tool definition file. This is because `WebSearchToolService` (application layer) needs to import this type, and application layer should not import from infrastructure layer.
-
 ```typescript
-// FILE 1: packages/backend/src/application/interfaces/IWebSearchTool.ts (NEW)
-// Application layer - types only
+// webSearchTool.ts
 export interface WebSearchInput {
   query: string;
   max_results?: number;
 }
-```
-
-```typescript
-// FILE 2: packages/backend/src/infrastructure/ai/tools/webSearchTool.ts (NEW)
-// Infrastructure layer - tool definition
-import type { ClaudeTool } from '../types';
 
 export const webSearchTool: ClaudeTool = {
   name: 'web_search',
@@ -72,8 +64,7 @@ export const consultModeTools: ClaudeTool[] = [webSearchTool];
 
 ## Files Touched
 
-- `packages/backend/src/application/interfaces/IWebSearchTool.ts` - CREATE: WebSearchInput type definition (application layer)
-- `packages/backend/src/infrastructure/ai/tools/webSearchTool.ts` - CREATE: Tool definition file (references IWebSearchTool for type)
+- `packages/backend/src/infrastructure/ai/tools/webSearchTool.ts` - CREATE: New tool definition file
 - `packages/backend/src/infrastructure/ai/tools/index.ts` - UPDATE: Add exports for webSearchTool and consultModeTools
 
 ## Tests Affected
@@ -87,13 +78,12 @@ No existing tests should break. This is a new isolated module.
 ## Tests Required
 
 - [ ] `packages/backend/__tests__/unit/webSearchTool.test.ts`
-  - Tool has correct name ('web_search')
-  - Tool has correct description (mentions citations, recent events)
-  - Input schema has 'query' in required array
-  - Input schema has query.type === 'string'
-  - Input schema has max_results.type === 'number' with min/max bounds
+  - Tool has correct name
+  - Tool has correct description
+  - Input schema validates query as required string
+  - Input schema validates max_results as optional number within bounds
   - consultModeTools array includes webSearchTool
-  - consultModeTools does NOT include assessmentModeTools items
+  - WebSearchInput type matches schema
 
 ## Definition of Done
 
