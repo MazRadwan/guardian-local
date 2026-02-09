@@ -13,7 +13,7 @@
  * - ConnectionHandler: Auth middleware, connection/disconnect events
  * - ConversationHandler: get_conversations, start_new_conversation, delete_conversation, get_history
  * - ModeSwitchHandler: switch_mode event
- * - MessageHandler: send_message validation, streaming, auto-summarize, enrichment
+ * - MessageHandler: send_message validation, streaming, enrichment
  * - TitleUpdateService: title generation (consult/assessment) and scoring title updates (Epic 35)
  * - ScoringHandler: scoring operations, vendor_selected event
  * - QuestionnaireHandler: generate_questionnaire, get_export_status events
@@ -39,6 +39,7 @@ import { ModeSwitchHandler } from './handlers/ModeSwitchHandler.js';
 import { ScoringHandler } from './handlers/ScoringHandler.js';
 import { QuestionnaireHandler } from './handlers/QuestionnaireHandler.js';
 import { MessageHandler, type SendMessagePayload } from './handlers/MessageHandler.js';
+import { getModeConfig } from './handlers/ModeRouter.js';
 import { ToolUseRegistry } from './ToolUseRegistry.js';
 import type { ToolUseInput, ToolUseContext } from '../../application/interfaces/IToolUseHandler.js';
 import { assessmentModeTools, consultModeTools } from '../ai/tools/index.js';
@@ -279,7 +280,7 @@ export class ChatServer {
 
     // Step 3: Get context and mode config
     const { messages, systemPrompt, promptCache, mode } = await this.contextBuilder.build(conversationId!, payload.isRegenerate);
-    const modeConfig = this.messageHandler.getModeConfig(mode);
+    const modeConfig = getModeConfig(mode);
 
     // Step 4: Scoring mode bypass
     if (modeConfig.bypassClaude && hasAttachments) {

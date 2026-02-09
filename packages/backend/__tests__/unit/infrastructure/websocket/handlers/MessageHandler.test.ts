@@ -3,7 +3,6 @@
  *
  * Story 28.9.1: Extract MessageHandler.ts (send_message validation)
  * Story 28.9.2: Extract MessageHandler.ts (file context building)
- * Story 28.9.4: Extract MessageHandler.ts (mode-specific routing)
  * Story 28.9.5: Extract MessageHandler.ts (Claude streaming)
  *
  * Tests cover:
@@ -29,12 +28,6 @@
  * 4. Scope to specific files when enrichedAttachments provided
  * 5. Extract fileIds from enrichedAttachments
  *
- * getModeConfig (Story 28.9.4):
- * 1. Return consult config with NO tools
- * 2. Return assessment config as ONLY mode with tools
- * 3. Return scoring config with Claude bypass
- * 4. Default to consult for unknown mode
- *
  * streamClaudeResponse (Story 28.9.5):
  * 1. Stream tokens to socket using async iterator
  * 2. NOT emit assistant_done when aborted
@@ -53,7 +46,6 @@ import {
   MessageHandler,
   type SendMessagePayload,
   type SendMessageValidationResult,
-  type ModeConfig,
   type StreamingResult,
   type StreamingOptions,
 } from '../../../../../src/infrastructure/websocket/handlers/MessageHandler.js';
@@ -1485,115 +1477,6 @@ describe('MessageHandler', () => {
         expect(result.imageBlocks).toHaveLength(1);
         expect(result.imageBlocks[0]).toEqual(mockImageBlock);
       });
-    });
-  });
-
-  /**
-   * Story 28.9.4: getModeConfig tests
-   *
-   * Tests mode-specific configuration for message processing.
-   * Epic 33: Consult mode now has tools enabled (web_search tool).
-   */
-  describe('getModeConfig', () => {
-    it('should return consult config with web_search tools enabled (Epic 33)', () => {
-      const config = handler.getModeConfig('consult');
-
-      expect(config.mode).toBe('consult');
-      expect(config.enableTools).toBe(true);   // Epic 33: web_search tool in consult mode
-      expect(config.backgroundEnrich).toBe(false);
-      expect(config.bypassClaude).toBe(false);
-    });
-
-    it('should return assessment config as ONLY mode with tools', () => {
-      const config = handler.getModeConfig('assessment');
-
-      expect(config.mode).toBe('assessment');
-      expect(config.enableTools).toBe(true);   // CRITICAL: ONLY assessment has tools
-      expect(config.backgroundEnrich).toBe(true);
-      expect(config.bypassClaude).toBe(false);
-    });
-
-    it('should return scoring config with Claude bypass', () => {
-      const config = handler.getModeConfig('scoring');
-
-      expect(config.mode).toBe('scoring');
-      expect(config.enableTools).toBe(false);  // No tools in scoring
-      expect(config.backgroundEnrich).toBe(false);
-      expect(config.bypassClaude).toBe(true);  // Bypass Claude
-    });
-
-    it('should default to consult for unknown mode', () => {
-      const config = handler.getModeConfig('unknown');
-
-      expect(config.mode).toBe('consult');
-      expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
-      expect(config.bypassClaude).toBe(false);
-    });
-
-    it('should default to consult for empty string mode', () => {
-      const config = handler.getModeConfig('');
-
-      expect(config.mode).toBe('consult');
-      expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
-    });
-
-    it('should be case-sensitive for mode names', () => {
-      const config = handler.getModeConfig('Assessment'); // Capital A
-
-      expect(config.mode).toBe('consult'); // Defaults to consult (unknown mode)
-      expect(config.enableTools).toBe(true);  // Epic 33: Consult mode has tools
-    });
-  });
-
-  /**
-   * Story 28.9.4: Integration tests for mode-specific routing
-   *
-   * Tests combinations of mode config with real scenarios.
-   */
-  describe('mode-specific routing integration', () => {
-    it('should correctly identify tool enablement pattern (Epic 33: consult now has tools)', () => {
-      // Epic 33: Both consult and assessment now have tools enabled
-      // consult -> web_search tool
-      // assessment -> questionnaire_ready tool
-
-      const consultConfig = handler.getModeConfig('consult');
-      const assessmentConfig = handler.getModeConfig('assessment');
-      const scoringConfig = handler.getModeConfig('scoring');
-
-      // Epic 33: Both consult and assessment have tools, only scoring doesn't
-      expect(consultConfig.enableTools).toBe(true);     // Epic 33: web_search tool
-      expect(assessmentConfig.enableTools).toBe(true);  // questionnaire_ready tool
-      expect(scoringConfig.enableTools).toBe(false);    // No tools in scoring
-
-      // Verify: enableTools is true for consult and assessment, false for scoring
-      expect(consultConfig.enableTools).toBe(consultConfig.mode !== 'scoring');
-      expect(assessmentConfig.enableTools).toBe(assessmentConfig.mode !== 'scoring');
-      expect(scoringConfig.enableTools).toBe(scoringConfig.mode !== 'scoring');
-    });
-
-    it('should correctly identify scoring bypass pattern', () => {
-      // Matches the pattern from ChatServer.ts:
-      // if (modeConfig.bypassClaude && hasAttachments)
-      const scoringConfig = handler.getModeConfig('scoring');
-      const consultConfig = handler.getModeConfig('consult');
-      const assessmentConfig = handler.getModeConfig('assessment');
-
-      expect(scoringConfig.bypassClaude).toBe(true);
-      expect(consultConfig.bypassClaude).toBe(false);
-      expect(assessmentConfig.bypassClaude).toBe(false);
-    });
-
-    it('should correctly identify background enrichment pattern', () => {
-      // Matches the pattern from ChatServer.ts line 858:
-      // if (mode === 'assessment' && enrichedAttachments && enrichedAttachments.length > 0)
-
-      const consultConfig = handler.getModeConfig('consult');
-      const assessmentConfig = handler.getModeConfig('assessment');
-      const scoringConfig = handler.getModeConfig('scoring');
-
-      expect(consultConfig.backgroundEnrich).toBe(false);
-      expect(assessmentConfig.backgroundEnrich).toBe(true);
-      expect(scoringConfig.backgroundEnrich).toBe(false);
     });
   });
 

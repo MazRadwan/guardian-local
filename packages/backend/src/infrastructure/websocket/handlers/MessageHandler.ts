@@ -113,27 +113,6 @@ export interface SendMessageValidationResult {
 }
 
 /**
- * Mode-specific configuration for message processing
- *
- * Story 28.9.4: Mode-specific routing logic
- *
- * CRITICAL TOOL ENABLEMENT RULES (from ChatServer.ts line 916):
- * - Tools are ONLY enabled in assessment mode (shouldUseTool = mode === 'assessment')
- * - Consult mode: NO tools, just conversation
- * - Scoring mode: NO tools, bypasses Claude entirely
- */
-export interface ModeConfig {
-  /** The conversation mode */
-  mode: 'consult' | 'assessment' | 'scoring';
-  /** Whether to enable Claude tools (ONLY true in assessment mode) */
-  enableTools: boolean;
-  /** Whether to do background file enrichment (assessment mode) */
-  backgroundEnrich: boolean;
-  /** Whether to bypass Claude entirely and trigger scoring directly (scoring mode) */
-  bypassClaude: boolean;
-}
-
-/**
  * Story 28.9.5: Result of streamClaudeResponse
  * Story 33.2.2: Extended with stopReason for tool loop detection
  *
@@ -553,48 +532,6 @@ export class MessageHandler {
     console.log(`[TIMING] MessageHandler buildFileContext END: ${buildContextEndTime} (duration: ${buildContextEndTime - buildContextStartTime}ms, textContextLength: ${result.textContext.length}, imageBlocksCount: ${result.imageBlocks.length})`);
 
     return result;
-  }
-
-  /**
-   * Get mode-specific configuration for message processing
-   *
-   * Story 28.9.4: Mode-specific routing logic
-   *
-   * CRITICAL BEHAVIORS TO PRESERVE (from ChatServer.ts):
-   * 1. Tools are ONLY enabled in assessment mode (shouldUseTool = mode === 'assessment')
-   * 2. Scoring mode bypasses Claude entirely - triggers triggerScoringOnSend instead
-   * 3. Assessment mode does background enrichment for files
-   *
-   * @param mode - The conversation mode
-   * @returns Mode-specific configuration
-   */
-  getModeConfig(mode: string): ModeConfig {
-    switch (mode) {
-      case 'assessment':
-        return {
-          mode: 'assessment',
-          enableTools: true,         // ONLY assessment mode has tools
-          backgroundEnrich: true,    // Enrich files in background
-          bypassClaude: false,
-        };
-
-      case 'scoring':
-        return {
-          mode: 'scoring',
-          enableTools: false,        // No tools in scoring
-          backgroundEnrich: false,
-          bypassClaude: true,        // Bypass Claude, trigger scoring directly
-        };
-
-      case 'consult':
-      default:
-        return {
-          mode: 'consult',
-          enableTools: true,         // Epic 33: Enable web_search tool in consult mode
-          backgroundEnrich: false,
-          bypassClaude: false,
-        };
-    }
   }
 
   /**

@@ -2,8 +2,8 @@
 
 **Status:** Active - spans multiple epics
 **File:** `packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts`
-**Current LOC:** 893 (limit: 300) — down from 1,319
-**Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline, dead modes/ cleanup — removed ~390 LOC from MessageHandler + 1,330 LOC dead code deleted
+**Current LOC:** 830 (limit: 300) — down from 1,319
+**Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline, dead modes/ cleanup, mode routing extraction, shouldBypassClaude dead code — removed ~453 LOC from MessageHandler + 1,330 LOC dead code deleted
 
 ---
 
@@ -75,7 +75,7 @@ The services bound into MessageHandler are tied to features that took weeks of r
 |---|---------------|---------|------------|-------------------|--------|
 | 1 | **Payload validation** | `validateSendMessage`, `validateAndEnrichAttachments`, `waitForFileRecords`, `validateConversationOwnership` | ~220 | ConversationService, IFileRepository, RateLimiter | **Remaining** |
 | 2 | **File context building** | `buildFileContext` | ~30 | FileContextBuilder | **Remaining** |
-| 3 | **Mode routing** | `getModeConfig`, `shouldBypassClaude` | ~60 | None (pure logic) | **Remaining** |
+| 3 | ~~**Mode routing**~~ | ~~`getModeConfig`~~ | ~~~60~~ | — | **Extracted** → `ModeRouter.ts` (pure function module) |
 | 4 | ~~**Claude streaming + tool loop**~~ | ~~`streamClaudeResponse`~~ | ~~~170~~ | — | **Extracted** → Epic 34 |
 | 5 | ~~**Message persistence + events**~~ | ~~`saveUserMessageAndEmit`~~ | ~~~30~~ | — | **Inlined** into ChatServer |
 | 6 | **Background enrichment** | `enrichInBackground` | ~75 | IFileStorage, IIntakeDocumentParser, IFileRepository | **Remaining** |
@@ -84,17 +84,17 @@ The services bound into MessageHandler are tied to features that took weeks of r
 
 **Types/interfaces at top:** ~200 LOC
 
-### What Remains in MessageHandler (929 LOC)
+### What Remains in MessageHandler (830 LOC)
 
 | Category | LOC | Extractable? |
 |----------|-----|-------------|
-| Types/interfaces/imports | ~180 | Partially (move to shared types file) |
+| Types/interfaces/imports | ~150 | Partially (move to shared types file) |
 | Payload validation | ~220 | Yes → `MessageValidator.ts` |
-| Mode routing | ~60 | Yes → `ModeRouter.ts` (pure functions) |
+| ~~Mode routing~~ | ~~—~~ | **Extracted** → `ModeRouter.ts` |
 | File context building | ~30 | Small, could stay or merge |
 | Claude streaming | ~170 | Partially extracted (tool loop out, streaming core remains) |
 | Background enrichment | ~75 | Yes → `BackgroundEnrichmentService.ts` |
-| Constructor + boilerplate | ~194 | Stays |
+| Constructor + boilerplate | ~185 | Stays |
 
 ---
 
@@ -105,7 +105,7 @@ The services bound into MessageHandler are tied to features that took weeks of r
 |--------|------|--------|
 | `enrichInBackground` | LOW | Only uses fileStorage + intakeParser + fileRepo. Nothing else calls these. Fire-and-forget. |
 | ~~Title generation~~ | ~~LOW~~ | ~~**DONE** — Epic 35~~ |
-| Mode routing | LOW | Pure functions, zero deps. Can extract to standalone module immediately. |
+| ~~Mode routing~~ | ~~LOW~~ | **DONE** — Extracted to `ModeRouter.ts` (57 LOC pure function module) |
 
 ### Moderate (shared deps but distinct flows)
 | Module | Risk | Reason |
