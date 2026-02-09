@@ -247,6 +247,55 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - **enrichInBackground extraction COMPLETE** (commit `ac7d3f2`) — `BackgroundEnrichmentService.ts` (106 LOC), 7 unit tests, browser QA passed. Removed IFileStorage + IIntakeDocumentParser from MessageHandler constructor (9→7 deps)
 - Target: get MessageHandler under 300 LOC (currently 723 — need to remove ~423 more)
 - **Next:** Validation extraction (C, MEDIUM risk, ~220 LOC) → gets MH to ~503
+- **enrichInBackground browser QA PASSED** — assessment mode file upload (DOCX questionnaire), backend logs confirmed: `[BackgroundEnrichment] Background enrichment completed for file 4a536516-...` (line 209 in server output). Full trace: upload stored (22ms extraction), mode=assessment confirmed, Claude streamed (7.6s), enrichment ran fire-and-forget post-streaming. No console errors.
+
+### Validation Extraction Audit (NEXT UP)
+
+**What it does:** Security boundary — the gauntlet every message passes through before anything downstream sees it.
+
+**4 methods, ~280 LOC (lines 190-454):**
+
+| Method | LOC | What It Does |
+|--------|-----|-------------|
+| `validateSendMessage` | ~112 | Main entry: payload structure, auth, conversationId, text-or-attachments check, ownership, rate limiting, attachment enrichment |
+| `validateAndEnrichAttachments` | ~67 | File security: waits for records (race condition), verifies file exists in conversation, ownership check, replaces client metadata with trusted server-side values |
+| `validateConversationOwnership` | ~8 | Simple guard: conversation exists + belongs to user |
+| `waitForFileRecords` | ~32 | Race condition handler: polls DB every 100ms for up to 2s waiting for file records to appear (Story 31.2) |
+
+**Dependencies (3 — clean):**
+- `ConversationService` — ownership check (`getConversation`)
+- `IFileRepository` — file validation (`findByIdAndConversation`, `findByIds`)
+- `RateLimiter` — rate limit check (`isRateLimited`, `getResetTime`)
+
+**ChatServer crossover — TYPE COUPLING is the real issue:**
+
+ChatServer (line 239-254) consumes every field from `SendMessageValidationResult`:
+
+| Field | ChatServer Usage |
+|-------|-----------------|
+| `valid` | Gates entire pipeline |
+| `error` | Emitted to client via `socket.emit('error')` |
+| `emitFileProcessingError` | Triggers special `file_processing_error` event (Story 31.2) |
+| `missingFileIds` | Passed to client in `file_processing_error` payload |
+| `conversationId` | Used in EVERY subsequent step (save, context, stream, enrich, title) |
+| `messageText` | Saved as user message content |
+| `enrichedAttachments` | Used by: message save, `message_sent` event, scoring handler, background enrichment, placeholder text |
+
+**Extraction approach — types need splitting:**
+- The 4 validation methods lift cleanly to `MessageValidator.ts` (3 deps, no socket coupling)
+- BUT types are currently defined in MessageHandler.ts and imported by ChatServer + test files
+- Types split into: validation types (`SendMessagePayload`, `SendMessageValidationResult`, `ValidationError`) → move with validator; streaming types (`StreamingOptions`, `StreamingResult`) → stay with MessageHandler
+- Import paths change in: ChatServer.ts, MessageHandler.ts, and all test files that reference these types
+
+**Test coverage:** Validation has strong coverage in `MessageHandler.test.ts` — tests for each validation path. These tests move with the extraction.
+
+**Feature paths affected:** ALL modes go through validation (consult, assessment, scoring). QA must cover:
+- Text message (consult)
+- File upload without text (placeholder generation — tested in ChatServer)
+- File upload with text (assessment)
+- Rate limiting
+- Invalid conversation / unauthorized access
+- Race condition: send before upload completes
 
 ### handleSendMessage Pipeline Map (READ THIS)
 
