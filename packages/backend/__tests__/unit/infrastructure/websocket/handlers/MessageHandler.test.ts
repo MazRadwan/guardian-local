@@ -22,10 +22,6 @@
  * 12. Validate conversation ownership (not found)
  * 13. Validate conversation ownership (wrong user)
  *
- * generatePlaceholderText:
- * 1. Generate placeholder for single file
- * 2. Generate placeholder for multiple files
- *
  * buildFileContext (Story 28.9.2):
  * 1. Return empty string when FileContextBuilder not configured
  * 2. Build context for all files when no attachments provided
@@ -59,10 +55,10 @@
  * 5. Reset abortRequested flag before streaming
  * 6. Save partial response on abort
  *
- * saveUserMessageAndEmit (Story 28.9.5):
- * 1. Save user message to database
- * 2. Emit message_sent event after saving
- * 3. Include attachments in message_sent event
+ * Note: generatePlaceholderText and saveUserMessageAndEmit tests removed -
+ * these methods were inlined into ChatServer (refactor/inline-message-persistence).
+ * Behavior is covered by integration tests in attachment-flow.test.ts and
+ * e2e tests in websocket-chat.test.ts.
  */
 
 import {
@@ -819,57 +815,6 @@ describe('MessageHandler', () => {
         expect(mockFileRepository.findByIds).not.toHaveBeenCalled();
         expect(mockFileRepository.findByIdAndConversation).not.toHaveBeenCalled();
       });
-    });
-  });
-
-  describe('generatePlaceholderText', () => {
-    it('should generate placeholder for single file', () => {
-      const attachments: MessageAttachment[] = [
-        { fileId: 'f1', filename: 'report.pdf', mimeType: 'application/pdf', size: 1024 },
-      ];
-
-      const text = handler.generatePlaceholderText(attachments);
-
-      expect(text).toBe('[Uploaded file for analysis: report.pdf]');
-    });
-
-    it('should generate placeholder for multiple files', () => {
-      const attachments: MessageAttachment[] = [
-        { fileId: 'f1', filename: 'report.pdf', mimeType: 'application/pdf', size: 1024 },
-        { fileId: 'f2', filename: 'data.xlsx', mimeType: 'application/xlsx', size: 2048 },
-      ];
-
-      const text = handler.generatePlaceholderText(attachments);
-
-      expect(text).toBe('[Uploaded file for analysis: report.pdf, data.xlsx]');
-    });
-
-    it('should handle three or more files', () => {
-      const attachments: MessageAttachment[] = [
-        { fileId: 'f1', filename: 'doc1.pdf', mimeType: 'application/pdf', size: 1024 },
-        { fileId: 'f2', filename: 'doc2.pdf', mimeType: 'application/pdf', size: 1024 },
-        { fileId: 'f3', filename: 'doc3.pdf', mimeType: 'application/pdf', size: 1024 },
-      ];
-
-      const text = handler.generatePlaceholderText(attachments);
-
-      expect(text).toBe('[Uploaded file for analysis: doc1.pdf, doc2.pdf, doc3.pdf]');
-    });
-
-    it('should preserve filenames with special characters', () => {
-      const attachments: MessageAttachment[] = [
-        { fileId: 'f1', filename: 'report (v2) - final.pdf', mimeType: 'application/pdf', size: 1024 },
-      ];
-
-      const text = handler.generatePlaceholderText(attachments);
-
-      expect(text).toBe('[Uploaded file for analysis: report (v2) - final.pdf]');
-    });
-
-    it('should handle empty array', () => {
-      const text = handler.generatePlaceholderText([]);
-
-      expect(text).toBe('[Uploaded file for analysis: ]');
     });
   });
 
@@ -2215,144 +2160,4 @@ describe('MessageHandler', () => {
     });
   });
 
-  /**
-   * Story 28.9.5: saveUserMessageAndEmit tests
-   *
-   * Tests user message saving with message_sent event emission.
-   * CRITICAL: message_sent event MUST be emitted after saving.
-   */
-  describe('saveUserMessageAndEmit', () => {
-    it('should save user message to database', async () => {
-      const savedMessage = createMockMessage({
-        id: 'user-msg-1',
-        role: 'user',
-        content: { text: 'Hello Guardian' },
-        conversationId: 'conv-1',
-        createdAt: new Date('2025-01-15T10:00:00Z'),
-      });
-      mockConversationService.sendMessage.mockResolvedValue(savedMessage);
-
-      const result = await handler.saveUserMessageAndEmit(
-        mockSocket,
-        'conv-1',
-        'Hello Guardian'
-      );
-
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
-        conversationId: 'conv-1',
-        role: 'user',
-        content: {
-          text: 'Hello Guardian',
-          components: undefined,
-        },
-        attachments: undefined,
-      });
-
-      expect(result.messageId).toBe('user-msg-1');
-    });
-
-    it('should emit message_sent event after saving', async () => {
-      const savedMessage = createMockMessage({
-        id: 'user-msg-2',
-        role: 'user',
-        content: { text: 'Test message' },
-        conversationId: 'conv-1',
-        createdAt: new Date('2025-01-15T10:00:00Z'),
-      });
-      mockConversationService.sendMessage.mockResolvedValue(savedMessage);
-
-      await handler.saveUserMessageAndEmit(
-        mockSocket,
-        'conv-1',
-        'Test message'
-      );
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('message_sent', {
-        messageId: 'user-msg-2',
-        conversationId: 'conv-1',
-        timestamp: savedMessage.createdAt,
-        attachments: undefined,
-      });
-    });
-
-    it('should include attachments in message_sent event', async () => {
-      const attachments: MessageAttachment[] = [
-        { fileId: 'file-1', filename: 'doc.pdf', mimeType: 'application/pdf', size: 1024 },
-        { fileId: 'file-2', filename: 'data.xlsx', mimeType: 'application/xlsx', size: 2048 },
-      ];
-
-      const savedMessage = createMockMessage({
-        id: 'msg-with-files',
-        role: 'user',
-        content: { text: 'Check these files' },
-        conversationId: 'conv-1',
-        createdAt: new Date('2025-01-15T10:00:00Z'),
-        attachments,
-      });
-      mockConversationService.sendMessage.mockResolvedValue(savedMessage);
-
-      await handler.saveUserMessageAndEmit(
-        mockSocket,
-        'conv-1',
-        'Check these files',
-        attachments
-      );
-
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
-        conversationId: 'conv-1',
-        role: 'user',
-        content: {
-          text: 'Check these files',
-          components: undefined,
-        },
-        attachments,
-      });
-
-      expect(mockSocket.emit).toHaveBeenCalledWith('message_sent', expect.objectContaining({
-        attachments,
-      }));
-    });
-
-    it('should include components in saved message', async () => {
-      const components: MessageComponent[] = [
-        { type: 'button', data: { label: 'Click me' } },
-      ];
-
-      const savedMessage = createMockMessage({
-        id: 'msg-with-components',
-        role: 'user',
-        content: { text: 'Message with button', components },
-      });
-      mockConversationService.sendMessage.mockResolvedValue(savedMessage);
-
-      await handler.saveUserMessageAndEmit(
-        mockSocket,
-        'conv-1',
-        'Message with button',
-        undefined,
-        components
-      );
-
-      expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
-        conversationId: 'conv-1',
-        role: 'user',
-        content: {
-          text: 'Message with button',
-          components,
-        },
-        attachments: undefined,
-      });
-    });
-
-    it('should propagate errors from sendMessage', async () => {
-      mockConversationService.sendMessage.mockRejectedValue(new Error('Database error'));
-
-      await expect(
-        handler.saveUserMessageAndEmit(mockSocket, 'conv-1', 'Test')
-      ).rejects.toThrow('Database error');
-
-      // message_sent should NOT have been emitted
-      expect(mockSocket.emit).not.toHaveBeenCalledWith('message_sent', expect.anything());
-    });
-  });
 });

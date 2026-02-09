@@ -252,9 +252,22 @@ export class ChatServer {
     // When isRegenerate is true, the user message already exists from the original send,
     // we're just requesting a different assistant response
     let finalText = messageText || '';
-    if (!finalText && hasAttachments) finalText = this.messageHandler.generatePlaceholderText(enrichedAttachments!);
+    if (!finalText && hasAttachments) {
+      finalText = `[Uploaded file for analysis: ${enrichedAttachments!.map(a => a.filename).join(', ')}]`;
+    }
     if (!payload.isRegenerate) {
-      await this.messageHandler.saveUserMessageAndEmit(socket as IAuthenticatedSocket, conversationId!, finalText, enrichedAttachments, payload.components);
+      const message = await this.conversationService.sendMessage({
+        conversationId: conversationId!,
+        role: 'user',
+        content: { text: finalText, components: payload.components },
+        attachments: enrichedAttachments,
+      });
+      (socket as IAuthenticatedSocket).emit('message_sent', {
+        messageId: message.id,
+        conversationId: message.conversationId,
+        timestamp: message.createdAt,
+        attachments: enrichedAttachments,
+      });
     } else {
       // Delete old assistant message so Claude gets clean context (no stale tool_use/tool_result)
       const history = await this.conversationService.getHistory(conversationId!, 1, 0);

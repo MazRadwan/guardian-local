@@ -11,7 +11,7 @@
  * - Rate limit checking with reset time
  * - Conversation ownership validation
  * - Attachment validation and enrichment
- * - File-only message support with placeholder text generation
+ * - File-only message support (placeholder text generation inlined to ChatServer)
  * - File context building for Claude prompts
  * - Mode-specific routing (consult/assessment/scoring)
  * - Claude streaming with abort handling
@@ -23,13 +23,13 @@
  * 4. Must have text OR attachments (file-only messages allowed)
  * 5. Attachment validation via findByIdAndConversation
  * 6. Attachment ownership check (file.userId === socket.userId)
- * 7. Placeholder text generation for file-only messages
+ * 7. Placeholder text generation moved to ChatServer (inlined)
  * 8. File context building accepts pre-validated enrichedAttachments
  * 9. Tools ONLY enabled in assessment mode (shouldUseTool = mode === 'assessment')
  * 10. Scoring mode bypasses Claude entirely - triggers triggerScoringOnSend instead
  * 11. Consult mode auto-summarizes empty file-only messages
  * 12. Assessment mode does background enrichment for files
- * 13. message_sent event MUST be emitted after saving user message
+ * 13. message_sent event emitted by ChatServer after saving user message
  * 14. assistant_done suppressed on abort (socket.data.abortRequested === true)
  * 15. Partial response saved to DB even on abort
  */
@@ -436,21 +436,6 @@ export class MessageHandler {
     }
 
     return { valid: true, attachments: enriched };
-  }
-
-  /**
-   * Generate placeholder text for file-only messages
-   *
-   * CRITICAL BEHAVIOR TO PRESERVE:
-   * When user sends files without text, generate placeholder text
-   * for Claude API (which requires non-empty content).
-   *
-   * @param attachments - Array of enriched attachments
-   * @returns Placeholder text describing the uploaded files
-   */
-  generatePlaceholderText(attachments: MessageAttachment[]): string {
-    const fileNames = attachments.map(a => a.filename).join(', ');
-    return `[Uploaded file for analysis: ${fileNames}]`;
   }
 
   /**
@@ -878,48 +863,6 @@ export class MessageHandler {
         stopReason: undefined,
       };
     }
-  }
-
-  /**
-   * Save user message and emit message_sent event
-   *
-   * Story 28.9.5: User message saving with event emission
-   *
-   * CRITICAL: message_sent event MUST be emitted after saving
-   *
-   * @param socket - Authenticated socket to emit events on
-   * @param conversationId - Conversation ID for the message
-   * @param messageText - User's message text
-   * @param attachments - Optional enriched attachments
-   * @param components - Optional UI components embedded in message
-   * @returns Object containing the saved message ID
-   */
-  async saveUserMessageAndEmit(
-    socket: IAuthenticatedSocket,
-    conversationId: string,
-    messageText: string,
-    attachments?: MessageAttachment[],
-    components?: MessageComponent[]
-  ): Promise<{ messageId: string }> {
-    const message = await this.conversationService.sendMessage({
-      conversationId,
-      role: 'user',
-      content: {
-        text: messageText,
-        components,
-      },
-      attachments,
-    });
-
-    // CRITICAL: Emit message_sent event
-    socket.emit('message_sent', {
-      messageId: message.id,
-      conversationId: message.conversationId,
-      timestamp: message.createdAt,
-      attachments,
-    });
-
-    return { messageId: message.id };
   }
 
   /**

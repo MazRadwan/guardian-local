@@ -2,7 +2,7 @@
 
 **Status:** Active - spans multiple epics
 **File:** `packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts`
-**Current LOC:** 1,142 (limit: 300) — down from 1,319
+**Current LOC:** 1,085 (limit: 300) — down from 1,319
 **Completed:** Epic 34 (tool loop), Epic 35 (title generation) — removed ~177 LOC so far
 
 ---
@@ -149,9 +149,9 @@ Used by 5 of 8 responsibilities. Cannot eliminate this dependency from extracted
 | 4 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
 | 5 | Auto-summarization | TBD | ⬜ Pending | ~100 | `AutoSummarizeService.ts` |
 | 6 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
-| 7 | Message persistence | TBD | ⬜ Pending | ~30 | stays or merges |
+| 7 | Message persistence | — | ✅ **Complete** | 57 | Inlined into ChatServer (no service needed) |
 
-**Total extracted:** ~478 LOC | **Remaining extractable:** ~505 LOC | **Will stay:** ~237 LOC (orchestration) + ~200 LOC (types)
+**Total extracted:** ~535 LOC | **Remaining extractable:** ~475 LOC | **Will stay:** ~237 LOC (orchestration) + ~200 LOC (types)
 
 ## Next Extraction Candidates (by risk)
 
@@ -163,7 +163,7 @@ Pick one for the next epic:
 | **B** | enrichInBackground | LOW | ~75 | fileStorage, intakeParser, fileRepo | Fire-and-forget, isolated. Removes 2 constructor deps (IFileStorage, IIntakeDocumentParser). Gets MH to ~987. |
 | **C** | Auto-summarization | MEDIUM | ~100 | claudeClient, fileContextBuilder, fileRepo, conversationService | Distinct flow but shares deps with streaming. Gets MH to ~887. |
 | **D** | Validation | MEDIUM | ~220 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~667. |
-| **E** | Message persistence | LOW | ~30 | conversationService | Tiny, could bundle with another extraction. |
+| ~~E~~ | ~~Message persistence~~ | ~~LOW~~ | ~~30~~ | — | **Done** — inlined into ChatServer |
 
 **Combo suggestion:** A+B together = ~155 LOC removed, 2 constructor deps eliminated, both LOW risk. Could be a single epic with 2 sprints.
 
@@ -224,4 +224,4 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - Read the Extraction Protocol section above BEFORE any new extraction
 - Regeneration bug is FIXED (Epic 34, commit d560f54)
 - Each extraction = its own epic with passing tests
-- Target: get MessageHandler under 300 LOC (currently 1,142 — need to remove ~842 more)
+- Target: get MessageHandler under 300 LOC (currently 1,085 — need to remove ~785 more)
