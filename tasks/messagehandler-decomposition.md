@@ -2,7 +2,7 @@
 
 **Status:** Active - spans multiple epics
 **File:** `packages/backend/src/infrastructure/websocket/handlers/MessageHandler.ts`
-**Current LOC:** 929 (limit: 300) — down from 1,319
+**Current LOC:** 893 (limit: 300) — down from 1,319
 **Completed:** Epic 34 (tool loop), Epic 35 (title generation), auto-summarize removal, message persistence inline, dead modes/ cleanup — removed ~390 LOC from MessageHandler + 1,330 LOC dead code deleted
 
 ---
@@ -153,11 +153,12 @@ Used by 5 of 8 responsibilities. Cannot eliminate this dependency from extracted
 | 3 | Message persistence | — | ✅ **Complete** | 57 | Inlined into ChatServer (commit `14fdbf5`) |
 | 4 | Auto-summarization | — | ✅ **Removed** | 156 | Dead code since birth — removed, not extracted (commit `5a6f8c4`) |
 | 5 | Dead `modes/` strategy pattern | — | ✅ **Deleted** | 1,330 | Never-wired Epic 28 dead code — 9 files deleted (commit `c854231`) |
-| 6 | Mode routing | TBD | ⬜ Pending | ~60 | `ModeRouter.ts` |
-| 7 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
-| 8 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
+| 6 | `shouldBypassClaude` dead method | — | ✅ **Deleted** | 36 | Never called — ChatServer reads `modeConfig.bypassClaude` directly (commit `7c0b61f`) |
+| 7 | Mode routing | TBD | ⬜ **Audit complete** | ~60 | `ModeRouter.ts` — audit found no hidden bindings, ready for extraction |
+| 8 | enrichInBackground | TBD | ⬜ Pending | ~75 | `BackgroundEnrichmentService.ts` |
+| 9 | Validation | TBD | ⬜ Pending | ~220 | `MessageValidator.ts` |
 
-**MessageHandler removed:** ~691 LOC (1319→929) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~355 LOC | **Will stay:** ~194 LOC (constructor/boilerplate) + ~180 LOC (types)
+**MessageHandler removed:** ~727 LOC (1319→893) | **Codebase dead code deleted:** 1,330 LOC | **Remaining extractable:** ~355 LOC | **Will stay:** ~194 LOC (constructor/boilerplate) + ~144 LOC (types, after BypassClaudeResult removal)
 
 ## Next Extraction Candidates (by risk)
 
@@ -165,9 +166,9 @@ Pick one for the next epic:
 
 | Priority | Module | Risk | LOC | Deps | Why This Order |
 |----------|--------|------|-----|------|----------------|
-| **A** | Mode routing | LOW | ~60 | None (pure functions) | Zero deps, zero risk, quick win. Gets MH to ~869. |
-| **B** | enrichInBackground | LOW | ~75 | fileStorage, intakeParser, fileRepo | Fire-and-forget, isolated. Removes 2 constructor deps (IFileStorage, IIntakeDocumentParser). Gets MH to ~854. |
-| **C** | Validation | MEDIUM | ~220 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~709. |
+| **A** | Mode routing | LOW | ~60 | None (pure functions) | **Audit complete.** Zero deps, zero risk. Design note: ChatServer also has inline `mode ===` checks (lines 297, 310) — cosmetic split, not a blocker. Gets MH to ~833. |
+| **B** | enrichInBackground | LOW | ~75 | fileStorage, intakeParser, fileRepo | Fire-and-forget, isolated. Removes 2 constructor deps (IFileStorage, IIntakeDocumentParser). Gets MH to ~818. |
+| **C** | Validation | MEDIUM | ~220 | conversationService, fileRepo, rateLimiter | Biggest LOC win but types/interfaces used across codebase. Gets MH to ~673. |
 | ~~D~~ | ~~Auto-summarization~~ | — | ~~156~~ | — | **Done** — removed (commit `5a6f8c4`) |
 | ~~E~~ | ~~Message persistence~~ | — | ~~57~~ | — | **Done** — inlined into ChatServer (commit `14fdbf5`) |
 
@@ -240,7 +241,9 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 - Regeneration bug is FIXED (Epic 34, commit d560f54)
 - Each extraction = its own epic with passing tests
 - Dead `modes/` strategy pattern is DELETED (commit `c854231`) — was ~950 LOC of never-wired code from Epic 28
-- Target: get MessageHandler under 300 LOC (currently 929 — need to remove ~629 more)
+- Dead `shouldBypassClaude` method + `BypassClaudeResult` type DELETED (commit `7c0b61f`) — never called, ChatServer reads modeConfig directly
+- **Mode routing audit COMPLETE** — no hidden bindings found, ready for extraction next session
+- Target: get MessageHandler under 300 LOC (currently 893 — need to remove ~593 more)
 
 ### handleSendMessage Pipeline Map (READ THIS)
 
