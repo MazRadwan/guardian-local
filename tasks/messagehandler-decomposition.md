@@ -34,6 +34,49 @@ The services bound into MessageHandler are tied to features that took weeks of r
 - v1 design: one tool call per query, continuation doesn't include tools
 - Search indicator position when text precedes tool_use (may be correct UX)
 
+### Auto-Summarize Bug: Empty Messages Array (Pre-existing)
+- **Location:** `MessageHandler.ts:1016` — `const messages: ClaudeMessage[] = [];`
+- **Error:** Claude API returns 400: `"messages: at least one message is required"`
+- **Impact:** File-only uploads in consult mode get NO automatic summary. The user sees the main streaming response instead (which falls through to Step 6-7 in the pipeline? **NO** — see below).
+
+**CRITICAL CONTEXT: Auto-summarize is NOT an isolated feature.**
+
+`autoSummarizeDocuments` is the **primary response path** for file-only uploads in consult mode. In `ChatServer.handleSendMessage`, the pipeline has branching paths:
+
+```
+handleSendMessage pipeline (ChatServer lines 248-344):
+  Step 1: Validate payload
+  Step 2: Save user message + emit message_sent
+  Step 3: Build context + get mode config
+  Step 4: IF scoring + attachments → scoring bypass → RETURN
+  Step 5: IF shouldAutoSummarize (consult + no text + has attachments) → autoSummarizeDocuments → RETURN
+  Step 6-7: Normal path: build file context, stream Claude response
+  Step 8: Post-streaming: tool dispatch, enrichment, title generation
+```
+
+**Step 5 has a `return` (ChatServer line 296).** When auto-summarize triggers, Steps 6-8 are SKIPPED entirely — no normal streaming, no tool dispatch, no background enrichment, no title generation.
+
+**The finely orchestrated upload pipeline:**
+1. File upload triggers background extraction (async, ~31ms for DOCX)
+2. `tryStartParsing()` atomic CAS prevents duplicate extraction
+3. User hits send → validation waits for extraction to complete (`waitForFileRecords`)
+4. Message saved to DB with placeholder text `[Uploaded file for analysis: filename]`
+5. `shouldAutoSummarize` returns true (consult + no text + has attachments)
+6. `autoSummarizeDocuments` is called — this IS the response for file-only uploads
+7. It builds file context (10K chars), constructs a summarization system prompt
+8. **BUG:** Passes `messages: []` to Claude API → 400 error → caught by `.catch()` → logged but user gets no response
+
+**Fix required:** Add a user message to the array:
+```typescript
+const messages: ClaudeMessage[] = [
+  { role: 'user', content: `Please summarize ${fileLabel}.` }
+];
+```
+
+**Why the audit missed this:** The blast radius audit for `saveUserMessageAndEmit` focused on the persistence and event emission paths. Auto-summarize was treated as a separate module (which it is structurally) but the audit did not trace the BRANCHING CONTROL FLOW in `handleSendMessage` to discover that auto-summarize is an alternative pipeline path, not an addon. The file-only upload path was never tested during browser QA because the bug prevented it from producing a visible regression — it failed silently via `.catch()`.
+
+**Lesson for future extractions:** Audit must trace not just dependency graphs but CONTROL FLOW BRANCHES in the orchestrator (`handleSendMessage`). Each `return` statement creates a distinct pipeline path that may skip downstream steps.
+
 ### Dead Code: `modes/` Strategy Pattern (Epic 28)
 - **Location:** `packages/backend/src/infrastructure/websocket/modes/`
 - **Files:** `IModeStrategy.ts`, `AssessmentModeStrategy.ts`, `ConsultModeStrategy.ts`, `ScoringModeStrategy.ts`, `ModeStrategyFactory.ts`, `index.ts` + 4 test files
@@ -204,7 +247,7 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 
 2. **Understand the feature bindings** — each module is tied to a user-facing feature that was carefully tuned:
    - `enrichInBackground` → doc upload/extract pipeline (assessment + scoring)
-   - `autoSummarizeDocuments` → context builder for questionnaire generation
+   - `autoSummarizeDocuments` → **PRIMARY response path** for file-only uploads in consult mode (not an addon — replaces normal streaming via `return` at Step 5)
    - `buildFileContext` → chat context when generating questions
    - `validateAndEnrichAttachments` → file upload flow across all modes
    - `getModeConfig` / `shouldBypassClaude` → scoring bypass, assessment tool routing
@@ -214,7 +257,16 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 
 4. **Audit existing test coverage for the target module** — identify what's actually tested vs what's assumed working. Coverage gaps = extraction risk. If a module has thin test coverage, write the missing tests BEFORE extracting (tests against the current working code become the regression safety net).
 
-**The two completed extractions (tool loop, title gen) were the easy ones** — isolated, fire-and-forget, single dependency. Everything remaining has cross-cutting feature dependencies. Do not assume the same level of ease.
+5. **Trace the orchestrator's control flow branches** — `ChatServer.handleSendMessage` is a branching pipeline with multiple `return` statements. Each branch creates a completely different execution path:
+   - Step 4: `bypassClaude` → scoring path (skips Claude entirely)
+   - Step 5: `shouldAutoSummarize` → auto-summarize path (skips normal streaming, enrichment, title gen)
+   - Step 6-8: Normal streaming path
+
+   A module that looks "isolated" may actually be the PRIMARY response handler for an entire user flow. Auto-summarize is not a fire-and-forget addon — it IS the response for file-only uploads in consult mode. **Any audit must map which user scenarios hit which branch**, not just which methods call which dependencies.
+
+6. **Test every distinct pipeline branch during browser QA** — the message persistence refactor passed QA for the normal streaming path (text messages, regenerate) but did not exercise the auto-summarize branch (file-only upload in consult mode). The auto-summarize bug was pre-existing but was only discovered because the QA happened to test file upload. **QA must cover all branches in the orchestrator, not just the happy path.**
+
+**The three completed extractions (tool loop, title gen, message persistence inline) were the easy ones** — isolated, fire-and-forget, single dependency. Everything remaining has cross-cutting feature dependencies. Do not assume the same level of ease.
 
 ---
 
@@ -222,6 +274,27 @@ The remaining modules are **battle-hardened production code**. Doc upload/extrac
 
 - Read this file FIRST when working on any MessageHandler extraction
 - Read the Extraction Protocol section above BEFORE any new extraction
+- **Read the "Auto-Summarize Bug" in Known Open Issues** — this is a pre-existing bug (empty messages array) that blocks file-only uploads in consult mode. Must be fixed before or during auto-summarize extraction.
 - Regeneration bug is FIXED (Epic 34, commit d560f54)
 - Each extraction = its own epic with passing tests
 - Target: get MessageHandler under 300 LOC (currently 1,085 — need to remove ~785 more)
+
+### handleSendMessage Pipeline Map (READ THIS)
+
+```
+ChatServer.handleSendMessage (lines 220-345):
+  ├─ Step 1: Validate payload (MessageHandler.validateSendMessage)
+  ├─ Step 2: Save user message + emit message_sent
+  ├─ Step 3: Build context + get mode config
+  ├─ Step 4: IF scoring + attachments → scoringHandler → RETURN
+  ├─ Step 5: IF consult + no text + attachments → autoSummarizeDocuments → RETURN
+  │          ⚠️ BUG: passes empty messages[] to Claude API → 400 error
+  ├─ Step 6: Build enhanced prompt with file context
+  ├─ Step 7: Stream Claude response (+ tool loop for consult/assessment)
+  └─ Step 8: Post-streaming
+      ├─ Tool dispatch (questionnaire_ready, web_search)
+      ├─ Background enrichment (assessment mode only)
+      └─ Title generation (all modes)
+```
+
+Each `RETURN` is a completely different user experience. Extraction of ANY module must verify which branches it participates in.
