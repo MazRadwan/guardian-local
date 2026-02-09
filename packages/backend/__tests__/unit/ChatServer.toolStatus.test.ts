@@ -3,20 +3,18 @@
  *
  * Story 33.3.1: Tool Status WebSocket Event
  *
- * V2 ARCHITECTURE CHANGE:
- * As of Epic 33 V2 multi-search implementation, status emissions are handled by
- * MessageHandler.executeConsultToolLoop(), NOT by WebSearchToolService.
+ * STATUS EMISSION BEHAVIOR:
+ * WebSearchToolService emits 'reading' status between Jina search and readUrls.
+ * ConsultToolLoopService emits 'searching' at start and 'idle' at end.
  *
- * This prevents duplicate/out-of-order status events when running multiple
- * search iterations. MessageHandler now emits:
- * - 'searching' at start of each iteration
- * - 'reading' after tool dispatch returns
- * - 'idle' when loop completes
+ * This provides intermediate status updates to prevent frontend timeout
+ * during long Jina operations.
  *
- * Tests now validate:
- * - WebSearchToolService does NOT emit status events directly
- * - Callback factory is still wired up (for potential future use)
- * - Search functionality works independently of status emission
+ * Tests validate:
+ * - WebSearchToolService emits 'reading' on successful search reaching readUrls
+ * - No 'reading' emission on early returns (validation errors, empty results, rate limits)
+ * - No 'reading' emission on errors before readUrls (search failures)
+ * - Callback factory properly routes emissions to Socket.IO
  */
 
 import { WebSearchToolService, StatusCallbackFactory } from '../../src/application/services/WebSearchToolService.js';
@@ -79,8 +77,8 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
     };
   });
 
-  describe('V2: WebSearchToolService does NOT emit status (MessageHandler handles it)', () => {
-    it('should NOT emit any status events directly', async () => {
+  describe('WebSearchToolService emits reading status between search and readUrls', () => {
+    it('should emit reading status (not searching or idle)', async () => {
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
       await service.handle(
@@ -92,11 +90,11 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // V2: WebSearchToolService no longer emits status - MessageHandler does
-      expect(emittedPayloads).toHaveLength(0);
+      // Should emit 'reading' status between search and readUrls
+      expect(emittedPayloads).toEqual([{ conversationId: 'conv-status-test', status: 'reading' }]);
     });
 
-    it('should still perform search successfully without emitting status', async () => {
+    it('should perform search successfully and emit reading status', async () => {
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
       const result = await service.handle(
@@ -112,11 +110,11 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
       expect(result.handled).toBe(true);
       expect(result.toolResult).toBeDefined();
       expect(mockJinaClient.search).toHaveBeenCalledWith('test query', 5);
-      // But no status emitted
-      expect(emittedPayloads).toHaveLength(0);
+      // Reading status emitted
+      expect(emittedPayloads).toEqual([{ conversationId: 'conv-status-test', status: 'reading' }]);
     });
 
-    it('should not emit status even on successful completion with read', async () => {
+    it('should emit reading status on successful completion with read', async () => {
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
       await service.handle(
@@ -128,11 +126,11 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // V2: No status emissions from WebSearchToolService
-      expect(emittedPayloads).toHaveLength(0);
+      // Reading status emitted between search and readUrls
+      expect(emittedPayloads).toEqual([{ conversationId: 'conv-status-test', status: 'reading' }]);
     });
 
-    it('should not emit status on error (MessageHandler handles errors)', async () => {
+    it('should not emit status on error before readUrls', async () => {
       mockJinaClient.search.mockRejectedValue(new Error('Network error'));
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
@@ -145,12 +143,12 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // V2: No status emissions, but error is returned in result
+      // Error happens before readUrls, so no 'reading' emission
       expect(emittedPayloads).toHaveLength(0);
       expect(result.toolResult?.content).toContain('Search failed');
     });
 
-    it('should not emit any sequence (V2: MessageHandler controls sequence)', async () => {
+    it('should emit reading status (not searching or idle)', async () => {
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
       await service.handle(
@@ -162,11 +160,11 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // V2: No status emissions from WebSearchToolService
-      expect(emittedPayloads).toHaveLength(0);
+      // Should only emit 'reading', not 'searching' or 'idle'
+      expect(emittedPayloads).toEqual([{ conversationId: 'conv-status-test', status: 'reading' }]);
     });
 
-    it('should not emit status when search returns empty', async () => {
+    it('should not emit status when search returns empty (early return before readUrls)', async () => {
       mockJinaClient.search.mockResolvedValue([]);
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
@@ -179,15 +177,14 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // V2: No status emissions
+      // Empty results return before readUrls, so no 'reading' emission
       expect(emittedPayloads).toHaveLength(0);
       expect(result.toolResult?.content).toContain('No results found');
     });
   });
 
-  describe('V2: callback factory still wired (for potential future use)', () => {
-    it('should accept callback factory in constructor', async () => {
-      // Callback factory is still wired up even though not currently used
+  describe('callback factory integration', () => {
+    it('should accept callback factory and emit reading status', async () => {
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
       await service.handle(
@@ -199,8 +196,8 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // Search works, no status emitted
-      expect(emittedPayloads).toHaveLength(0);
+      // Search works and emits reading status
+      expect(emittedPayloads).toEqual([{ conversationId: 'conv-status-test', status: 'reading' }]);
     });
 
     it('should work without callback factory', async () => {
@@ -245,8 +242,11 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         { ...baseContext, conversationId: 'conv-B' }
       );
 
-      // V2: No status emissions, but both searches work
-      expect(emittedPayloads).toHaveLength(0);
+      // Both searches emit reading status with correct conversationId
+      expect(emittedPayloads).toEqual([
+        { conversationId: 'conv-A', status: 'reading' },
+        { conversationId: 'conv-B', status: 'reading' }
+      ]);
       expect(result2.handled).toBe(true);
     });
 
@@ -326,7 +326,7 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
       expect(result.toolResult).toBeDefined();
     });
 
-    it('should not emit status on validation error (V2)', async () => {
+    it('should not emit status on validation error (returns before readUrls)', async () => {
       const service = new WebSearchToolService(mockJinaClient, createStatusCallback);
 
       const result = await service.handle(
@@ -338,19 +338,18 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         baseContext
       );
 
-      // V2: No status emissions, but validation error is returned
+      // Validation error returns before readUrls, so no 'reading' emission
       expect(emittedPayloads).toHaveLength(0);
       expect(result.toolResult?.content).toContain('query');
     });
   });
 
-  describe('V2: simulated ChatServer integration (status via MessageHandler)', () => {
+  describe('simulated ChatServer integration', () => {
     /**
-     * V2: WebSearchToolService no longer emits status directly.
-     * This test verifies the callback factory is still wired but unused.
-     * Status emissions now come from MessageHandler.executeConsultToolLoop().
+     * WebSearchToolService emits 'reading' status between search and readUrls.
+     * This test verifies the callback factory properly routes to Socket.IO emission.
      */
-    it('should NOT emit events from WebSearchToolService (V2)', async () => {
+    it('should emit reading status via ChatServer callback factory', async () => {
       // Simulate the io.of('/chat').emit call from ChatServer
       const socketIOEmissions: Array<{ event: string; payload: unknown }> = [];
 
@@ -375,11 +374,15 @@ describe('ChatServer Tool Status WebSocket Events (Story 33.3.1)', () => {
         { ...baseContext, conversationId: 'conv-socket-test' }
       );
 
-      // V2: No events emitted from WebSearchToolService
-      // Status events now come from MessageHandler.executeConsultToolLoop()
-      expect(socketIOEmissions).toHaveLength(0);
+      // Should emit reading status via ChatServer
+      expect(socketIOEmissions).toEqual([
+        {
+          event: 'tool_status',
+          payload: { conversationId: 'conv-socket-test', status: 'reading' }
+        }
+      ]);
 
-      // But search still works
+      // Search still works
       expect(result.handled).toBe(true);
       expect(result.toolResult).toBeDefined();
     });

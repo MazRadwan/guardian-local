@@ -89,11 +89,11 @@ export class WebSearchToolService implements IToolUseHandler {
       };
     }
 
-    // 3. Status callback (kept for potential future use, but not emitting here)
-    // V2: ConsultToolLoopService now manages status emissions for the multi-iteration loop
-    // Emitting here caused duplicate/out-of-order status events (searching → idle → reading)
+    // 3. Status callback for intermediate phase updates
+    // V2: ConsultToolLoopService manages boundary emissions (searching at start, idle at end).
+    // WebSearchToolService emits 'reading' between search and readUrls to keep frontend timeout alive.
     const onStatusChange = this.createStatusCallback?.(context.conversationId);
-    // onStatusChange?.('searching'); // Removed - ConsultToolLoopService emits this
+    // onStatusChange?.('searching'); // ConsultToolLoopService emits this at iteration start
 
     try {
       // 4. Parse and validate input
@@ -135,7 +135,10 @@ export class WebSearchToolService implements IToolUseHandler {
       }
 
       // 9. Read top URLs (fail-soft: partial failures OK)
-      // onStatusChange?.('reading'); // Removed - ConsultToolLoopService emits this after tool dispatch
+      // Emit 'reading' between search and readUrls to reset the frontend safety timeout.
+      // Without this, the gap from 'searching' to ConsultToolLoopService's 'reading' spans
+      // both Jina search (up to 60s) and readUrls (up to 30s), exceeding the frontend timeout.
+      onStatusChange?.('reading');
       const urls = searchResults.slice(0, JINA_CONFIG.MAX_URLS_TO_READ).map(r => r.url);
       const readResults = await this.jinaClient.readUrls(urls);
 
@@ -160,7 +163,7 @@ export class WebSearchToolService implements IToolUseHandler {
         },
       };
     } finally {
-      // onStatusChange?.('idle'); // Removed - ConsultToolLoopService emits idle when loop completes
+      // onStatusChange?.('idle'); // ConsultToolLoopService emits idle when loop completes
     }
   }
 

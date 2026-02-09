@@ -38,10 +38,12 @@ export interface QuestionnaireProgressState {
 export type ToolStatus = 'idle' | 'searching' | 'reading';
 
 /**
- * Epic 33.3.2: Tool status timeout constant (30 seconds)
- * Safety net to prevent stuck UI states
+ * Epic 33.3.2: Tool status timeout constant (60 seconds)
+ * Safety net to prevent stuck UI states.
+ * Must exceed the longest single Jina API call (SEARCH_TIMEOUT_MS = 60s)
+ * since tool_status events only fire at phase boundaries (searching → reading → idle).
  */
-export const TOOL_STATUS_TIMEOUT_MS = 30000;
+export const TOOL_STATUS_TIMEOUT_MS = 60000;
 
 // Re-export for convenience
 export { GENERATION_STEPS };
