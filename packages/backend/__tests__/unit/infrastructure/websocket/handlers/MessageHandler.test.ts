@@ -35,12 +35,6 @@
  * 3. Return scoring config with Claude bypass
  * 4. Default to consult for unknown mode
  *
- * shouldBypassClaude (Story 28.9.4):
- * 1. Bypass Claude in scoring mode with attachments
- * 2. NOT bypass Claude in scoring mode without attachments
- * 3. NOT bypass Claude in assessment mode even with attachments
- * 4. NOT bypass Claude in consult mode
- *
  * streamClaudeResponse (Story 28.9.5):
  * 1. Stream tokens to socket using async iterator
  * 2. NOT emit assistant_done when aborted
@@ -60,7 +54,6 @@ import {
   type SendMessagePayload,
   type SendMessageValidationResult,
   type ModeConfig,
-  type BypassClaudeResult,
   type StreamingResult,
   type StreamingOptions,
 } from '../../../../../src/infrastructure/websocket/handlers/MessageHandler.js';
@@ -1553,63 +1546,6 @@ describe('MessageHandler', () => {
   });
 
   /**
-   * Story 28.9.4: shouldBypassClaude tests
-   *
-   * Tests Claude bypass logic for scoring mode.
-   * CRITICAL: Scoring mode with attachments bypasses Claude entirely.
-   */
-  describe('shouldBypassClaude', () => {
-    it('should bypass Claude in scoring mode with attachments', () => {
-      const result = handler.shouldBypassClaude('scoring', true);
-
-      expect(result.bypass).toBe(true);
-      expect(result.reason).toBe('scoring');
-    });
-
-    it('should NOT bypass Claude in scoring mode without attachments', () => {
-      const result = handler.shouldBypassClaude('scoring', false);
-
-      expect(result.bypass).toBe(false);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('should NOT bypass Claude in assessment mode even with attachments', () => {
-      const result = handler.shouldBypassClaude('assessment', true);
-
-      expect(result.bypass).toBe(false);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('should NOT bypass Claude in assessment mode without attachments', () => {
-      const result = handler.shouldBypassClaude('assessment', false);
-
-      expect(result.bypass).toBe(false);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('should NOT bypass Claude in consult mode with attachments', () => {
-      const result = handler.shouldBypassClaude('consult', true);
-
-      expect(result.bypass).toBe(false);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('should NOT bypass Claude in consult mode without attachments', () => {
-      const result = handler.shouldBypassClaude('consult', false);
-
-      expect(result.bypass).toBe(false);
-      expect(result.reason).toBeUndefined();
-    });
-
-    it('should NOT bypass Claude for unknown mode', () => {
-      const result = handler.shouldBypassClaude('unknown', true);
-
-      expect(result.bypass).toBe(false);
-      expect(result.reason).toBeUndefined();
-    });
-  });
-
-  /**
    * Story 28.9.4: Integration tests for mode-specific routing
    *
    * Tests combinations of mode config with real scenarios.
@@ -1636,18 +1572,15 @@ describe('MessageHandler', () => {
     });
 
     it('should correctly identify scoring bypass pattern', () => {
-      // Matches the pattern from ChatServer.ts line 790:
-      // if (mode === 'scoring' && enrichedAttachments && enrichedAttachments.length > 0)
+      // Matches the pattern from ChatServer.ts:
+      // if (modeConfig.bypassClaude && hasAttachments)
+      const scoringConfig = handler.getModeConfig('scoring');
+      const consultConfig = handler.getModeConfig('consult');
+      const assessmentConfig = handler.getModeConfig('assessment');
 
-      // Scoring with files -> bypass
-      expect(handler.shouldBypassClaude('scoring', true).bypass).toBe(true);
-
-      // Scoring without files -> no bypass
-      expect(handler.shouldBypassClaude('scoring', false).bypass).toBe(false);
-
-      // Other modes with files -> no bypass
-      expect(handler.shouldBypassClaude('consult', true).bypass).toBe(false);
-      expect(handler.shouldBypassClaude('assessment', true).bypass).toBe(false);
+      expect(scoringConfig.bypassClaude).toBe(true);
+      expect(consultConfig.bypassClaude).toBe(false);
+      expect(assessmentConfig.bypassClaude).toBe(false);
     });
 
     it('should correctly identify background enrichment pattern', () => {

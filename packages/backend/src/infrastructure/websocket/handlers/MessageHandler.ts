@@ -134,16 +134,6 @@ export interface ModeConfig {
 }
 
 /**
- * Result of shouldBypassClaude check
- */
-export interface BypassClaudeResult {
-  /** Whether Claude should be bypassed */
-  bypass: boolean;
-  /** Reason for bypassing (if applicable) */
-  reason?: 'scoring';
-}
-
-/**
  * Story 28.9.5: Result of streamClaudeResponse
  * Story 33.2.2: Extended with stopReason for tool loop detection
  *
@@ -573,8 +563,7 @@ export class MessageHandler {
    * CRITICAL BEHAVIORS TO PRESERVE (from ChatServer.ts):
    * 1. Tools are ONLY enabled in assessment mode (shouldUseTool = mode === 'assessment')
    * 2. Scoring mode bypasses Claude entirely - triggers triggerScoringOnSend instead
-   * 3. Consult mode auto-summarizes empty file-only messages
-   * 4. Assessment mode does background enrichment for files
+   * 3. Assessment mode does background enrichment for files
    *
    * @param mode - The conversation mode
    * @returns Mode-specific configuration
@@ -606,31 +595,6 @@ export class MessageHandler {
           bypassClaude: false,
         };
     }
-  }
-
-  /**
-   * Check if Claude should be bypassed for this mode
-   *
-   * Story 28.9.4: Mode-specific routing
-   *
-   * CRITICAL: In scoring mode with attachments, we bypass Claude entirely
-   * and trigger scoring directly. This is the "trigger-on-send" pattern.
-   *
-   * @param mode - The conversation mode
-   * @param hasAttachments - Whether the message has file attachments
-   * @returns Whether to bypass Claude and the reason
-   */
-  shouldBypassClaude(
-    mode: string,
-    hasAttachments: boolean
-  ): BypassClaudeResult {
-    const config = this.getModeConfig(mode);
-
-    if (config.bypassClaude && hasAttachments) {
-      return { bypass: true, reason: 'scoring' };
-    }
-
-    return { bypass: false };
   }
 
   /**
