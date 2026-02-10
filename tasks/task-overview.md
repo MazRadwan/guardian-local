@@ -56,13 +56,16 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | Epic 15: Conversation Rename | - | 📋 Planned | - | See `tasks/epic-15/rename-conversation-plan.md` |
 | Epic 16: Document Parser | 6 stories | 🔄 In Progress | - | Single-file upload, parsing, attachments |
 | Epic 17: Multi-File Upload | 16 stories | 📋 Planned | - | See `tasks/epic-17/overview.md` |
-| Epic 34: Extract Consult Tool Loop | 4 stories | 🔄 In Progress | - | MessageHandler decomposition: tool loop extraction |
-| Epic 35: Extract Title Generation | 3 stories | ✅ Complete | - | MessageHandler decomposition: title service extraction |
-| Epic 36: MessageHandler Final Decomposition | 9 stories | 📋 Planned | - | Validation + streaming + orchestrator extraction, delete MessageHandler |
+| Epic 33: Consult Search Tool | 5 stories | ✅ Complete | 2026-02-04 | Jina web search, tool_status events, V2 multi-search |
+| Epic 34: Extract Consult Tool Loop | 4 stories | ✅ Complete | 2026-02-05 | ConsultToolLoopService extracted to infrastructure layer |
+| Epic 35: Extract Title Generation | 3 stories | ✅ Complete | 2026-02-06 | TitleUpdateService extracted from MessageHandler |
+| Epic 36: MessageHandler Final Decomposition | 9 stories | ✅ Complete | 2026-02-09 | 3 sprints: Validator + Streaming + Orchestrator. MessageHandler.ts deleted. |
 
-**Progress:** 14 of 19 epics complete (~74%), Epic 8 (Polish), Epic 15 (Rename), Epic 16 (Parser), Epic 17 (Multi-File), Epic 36 (Final Decomp) pending
+**Progress:** 18 of 20 epics complete (90%), Epic 8 (Polish), Epic 15 (Rename), Epic 16 (Parser), Epic 17 (Multi-File) pending
 
 **Critical Path:** Epic 1-7 ✅ → Epic 9-14 ✅ → Epic 16 (Parser) → Epic 17 (Multi-File) → Epic 8 (Polish)
+
+**Architecture Health:** All backend source files under 300 LOC. MessageHandler god module (1,142 LOC) fully decomposed. 1,964 tests passing.
 
 ### Active Sidequests
 
@@ -132,3 +135,4 @@ This document tracks ALL tasks, phases, and implementation steps for the Guardia
 | 1.5 | 2025-11-13 | code-reviewer | Epic 9 Story 9.1 complete after fixes. 36 new tests, 81.48% coverage for components/chat. |
 | 2.0 | 2025-12-11 | cleanup | Major update: Epics 9-14 marked complete, Epic 15 planned, sidequests complete, progress updated to 95%. |
 | 2.1 | 2025-12-18 | update | Added Epic 16 (Document Parser - in progress) and Epic 17 (Multi-File Upload - planned). Updated critical path. |
+| 3.0 | 2026-02-09 | update | Epics 33-36 complete. MessageHandler deleted. Architecture diagrams updated. 18/20 epics done (90%). tool_status timeout bug fixed. |
