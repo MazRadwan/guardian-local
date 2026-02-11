@@ -1,0 +1,1684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guardian ISO Compliance — Architecture & Implementation Report</title>
+<style>
+  :root {
+    --navy: #0f172a;
+    --navy-light: #1e293b;
+    --blue: #2563eb;
+    --blue-light: #dbeafe;
+    --green: #059669;
+    --green-light: #d1fae5;
+    --orange: #d97706;
+    --orange-light: #fef3c7;
+    --red: #dc2626;
+    --red-light: #fee2e2;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --gray-50: #f8fafc;
+    --gray-100: #f1f5f9;
+    --gray-200: #e2e8f0;
+    --gray-300: #cbd5e1;
+    --gray-400: #94a3b8;
+    --gray-500: #64748b;
+    --gray-600: #475569;
+    --gray-700: #334155;
+    --gray-800: #1e293b;
+    --gray-900: #0f172a;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+    --shadow-lg: 0 4px 12px rgba(0,0,0,0.1), 0 12px 32px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    color: var(--gray-800);
+    background: var(--gray-50);
+    line-height: 1.6;
+    font-size: 16px;
+  }
+
+  /* Navigation */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 260px;
+    height: 100vh;
+    background: var(--navy);
+    color: white;
+    padding: 24px 0;
+    overflow-y: auto;
+    z-index: 100;
+    border-right: 1px solid var(--navy-light);
+  }
+
+  nav .nav-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--gray-400);
+    padding: 0 20px;
+    margin-bottom: 16px;
+  }
+
+  nav a {
+    display: block;
+    color: var(--gray-300);
+    text-decoration: none;
+    padding: 8px 20px;
+    font-size: 14px;
+    border-left: 3px solid transparent;
+    transition: all 0.2s;
+  }
+
+  nav a:hover, nav a.active {
+    color: white;
+    background: rgba(255,255,255,0.05);
+    border-left-color: var(--blue);
+  }
+
+  nav a .nav-num {
+    color: var(--gray-500);
+    font-size: 12px;
+    margin-right: 6px;
+  }
+
+  /* Main Content */
+  main {
+    margin-left: 260px;
+    max-width: 960px;
+    padding: 0 48px 80px;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, var(--navy) 0%, #1a365d 100%);
+    color: white;
+    margin: 0 -48px;
+    padding: 64px 48px 48px;
+    margin-bottom: 48px;
+  }
+
+  .hero h1 {
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+
+  .hero .subtitle {
+    font-size: 18px;
+    color: var(--gray-300);
+    margin-bottom: 24px;
+  }
+
+  .hero-meta {
+    display: flex;
+    gap: 32px;
+    font-size: 14px;
+    color: var(--gray-400);
+  }
+
+  .hero-meta span { display: flex; align-items: center; gap: 6px; }
+
+  /* Sections */
+  section {
+    margin-bottom: 56px;
+    scroll-margin-top: 24px;
+  }
+
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--gray-200);
+    letter-spacing: -0.3px;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin: 24px 0 12px;
+  }
+
+  p { margin-bottom: 16px; color: var(--gray-600); }
+
+  /* Cards */
+  .card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .card-header {
+    font-weight: 600;
+    font-size: 16px;
+    color: var(--navy);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Comparison Layout */
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 20px 0;
+  }
+
+  .compare-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 24px;
+    border-top: 4px solid var(--gray-300);
+  }
+
+  .compare-card.current { border-top-color: var(--blue); }
+  .compare-card.proposed { border-top-color: var(--green); }
+  .compare-card.leadership { border-top-color: var(--purple); }
+  .compare-card.refined { border-top-color: var(--green); }
+  .compare-card.gap { border-top-color: var(--orange); }
+
+  .compare-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  .compare-card.current .compare-label { color: var(--blue); }
+  .compare-card.proposed .compare-label { color: var(--green); }
+  .compare-card.leadership .compare-label { color: var(--purple); }
+  .compare-card.refined .compare-label { color: var(--green); }
+  .compare-card.gap .compare-label { color: var(--orange); }
+
+  .compare-card h4 { font-size: 16px; color: var(--navy); margin-bottom: 8px; }
+  .compare-card p { font-size: 14px; margin-bottom: 8px; }
+  .compare-card ul { font-size: 14px; color: var(--gray-600); padding-left: 20px; }
+  .compare-card li { margin-bottom: 4px; }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 14px;
+  }
+
+  thead th {
+    background: var(--gray-100);
+    color: var(--gray-700);
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 2px solid var(--gray-200);
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--gray-100);
+    color: var(--gray-600);
+    vertical-align: top;
+  }
+
+  tbody tr:hover { background: var(--gray-50); }
+
+  /* Badges */
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .badge-strong { background: var(--green-light); color: var(--green); }
+  .badge-moderate { background: var(--blue-light); color: var(--blue); }
+  .badge-partial { background: var(--orange-light); color: var(--orange); }
+  .badge-weak { background: var(--red-light); color: var(--red); }
+  .badge-native { background: var(--purple-light); color: var(--purple); }
+  .badge-high { background: var(--green-light); color: var(--green); }
+  .badge-medium { background: var(--orange-light); color: var(--orange); }
+  .badge-low { background: var(--red-light); color: var(--red); }
+  .badge-new { background: var(--green-light); color: var(--green); }
+  .badge-unchanged { background: var(--gray-200); color: var(--gray-600); }
+  .badge-phase1 { background: var(--blue-light); color: var(--blue); }
+  .badge-phase2 { background: var(--purple-light); color: var(--purple); }
+
+  /* Callout */
+  .callout {
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin: 20px 0;
+    font-size: 15px;
+  }
+
+  .callout-info {
+    background: var(--blue-light);
+    border-left: 4px solid var(--blue);
+    color: var(--navy);
+  }
+
+  .callout-warning {
+    background: var(--orange-light);
+    border-left: 4px solid var(--orange);
+    color: #92400e;
+  }
+
+  .callout-success {
+    background: var(--green-light);
+    border-left: 4px solid var(--green);
+    color: #065f46;
+  }
+
+  .callout-danger {
+    background: var(--red-light);
+    border-left: 4px solid var(--red);
+    color: #991b1b;
+  }
+
+  .callout strong { display: block; margin-bottom: 4px; }
+
+  /* Diagrams */
+  .diagram-container {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 32px;
+    margin: 24px 0;
+    overflow-x: auto;
+  }
+
+  .diagram-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  /* SVG Styles */
+  svg text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  /* Flow Arrow */
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+  }
+
+  .flow-step {
+    background: white;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-700);
+    text-align: center;
+    min-width: 100px;
+  }
+
+  .flow-step.highlight {
+    border-color: var(--green);
+    background: var(--green-light);
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  .flow-step.new {
+    border-color: var(--green);
+    border-style: dashed;
+    background: var(--green-light);
+    color: var(--green);
+  }
+
+  .flow-connector { color: var(--gray-300); font-size: 20px; }
+
+  /* Report Mock */
+  .report-mock {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 28px 32px;
+    margin: 20px 0;
+    font-family: 'Georgia', serif;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .report-mock h4 {
+    font-size: 18px;
+    color: var(--navy);
+    margin-bottom: 4px;
+    font-family: -apple-system, sans-serif;
+  }
+
+  .report-mock .conf-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: -apple-system, sans-serif;
+    margin-bottom: 12px;
+  }
+
+  .report-mock .conf-badge.med {
+    background: var(--orange-light);
+    color: var(--orange);
+  }
+
+  .report-mock .conf-badge.hi {
+    background: var(--green-light);
+    color: var(--green);
+  }
+
+  .report-mock .narrative {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--gray-700);
+    margin-bottom: 16px;
+  }
+
+  .report-mock .iso-refs {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--gray-500);
+    border-top: 1px solid var(--gray-200);
+    padding-top: 12px;
+    margin-top: 12px;
+  }
+
+  .report-mock .iso-refs li { margin-bottom: 4px; }
+
+  .report-mock .evidence {
+    font-family: -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--gray-400);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* Timeline */
+  .timeline {
+    position: relative;
+    padding: 20px 0;
+  }
+
+  .timeline-track {
+    display: flex;
+    gap: 0;
+    margin: 24px 0 16px;
+  }
+
+  .timeline-phase {
+    flex: 1;
+    padding: 16px 20px;
+    border-radius: 8px;
+    text-align: center;
+    position: relative;
+  }
+
+  .timeline-phase.phase1 {
+    background: var(--blue-light);
+    border: 2px solid var(--blue);
+    margin-right: 8px;
+  }
+
+  .timeline-phase.prep {
+    background: var(--orange-light);
+    border: 2px solid var(--orange);
+    margin-right: 8px;
+  }
+
+  .timeline-phase.phase2 {
+    background: var(--purple-light);
+    border: 2px solid var(--purple);
+  }
+
+  .timeline-phase .phase-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .timeline-phase.phase1 .phase-label { color: var(--blue); }
+  .timeline-phase.prep .phase-label { color: var(--orange); }
+  .timeline-phase.phase2 .phase-label { color: var(--purple); }
+
+  .timeline-phase .phase-title { font-weight: 600; font-size: 14px; color: var(--navy); }
+  .timeline-phase .phase-time { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
+
+  .timeline-overlap {
+    font-size: 13px;
+    color: var(--gray-500);
+    text-align: center;
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* Key/Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+    font-size: 13px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--gray-600);
+  }
+
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+  }
+
+  /* Stat Grid */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin: 24px 0;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-top: 4px;
+  }
+
+  /* Print */
+  @media print {
+    nav { display: none; }
+    main { margin-left: 0; max-width: 100%; }
+    .hero { margin: 0; }
+    .card, .compare-card, .diagram-container { break-inside: avoid; }
+    section { break-before: auto; }
+  }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    nav { display: none; }
+    main { margin-left: 0; padding: 0 24px 60px; }
+    .hero { margin: 0 -24px; padding: 48px 24px 36px; }
+    .compare-grid { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-title">Contents</div>
+  <a href="#summary"><span class="nav-num">01</span> Executive Summary</a>
+  <a href="#current-state"><span class="nav-num">02</span> How Guardian Works Today</a>
+  <a href="#leadership-vision"><span class="nav-num">03</span> Leadership's Vision</a>
+  <a href="#our-approach"><span class="nav-num">04</span> How We're Addressing It</a>
+  <a href="#confidence"><span class="nav-num">05</span> Confidence Model</a>
+  <a href="#coverage"><span class="nav-num">06</span> ISO Coverage Map</a>
+  <a href="#architecture"><span class="nav-num">07</span> Architecture: Current vs Proposed</a>
+  <a href="#data-flow"><span class="nav-num">08</span> Data Flow</a>
+  <a href="#erd"><span class="nav-num">09</span> Entity Relationship Diagram</a>
+  <a href="#versioning"><span class="nav-num">10</span> Two-Level Versioning</a>
+  <a href="#report-preview"><span class="nav-num">11</span> Report Preview</a>
+  <a href="#messaging"><span class="nav-num">12</span> ISO Messaging Guidelines</a>
+  <a href="#timeline"><span class="nav-num">13</span> Delivery Timeline</a>
+  <a href="#decisions"><span class="nav-num">14</span> Key Decisions Summary</a>
+</nav>
+
+<!-- Main Content -->
+<main>
+
+<!-- Hero -->
+<div class="hero" id="top">
+  <h1>Guardian ISO Compliance</h1>
+  <div class="subtitle">Architecture & Implementation Report for Leadership</div>
+  <div class="hero-meta">
+    <span>February 2026</span>
+    <span>Status: Planning Complete</span>
+    <span>Version 1.0</span>
+  </div>
+</div>
+
+<!-- 01: Executive Summary -->
+<section id="summary">
+  <h2>01 &mdash; Executive Summary</h2>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-num">38</div>
+      <div class="stat-label">ISO 42001 Controls Mapped</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">10</div>
+      <div class="stat-label">Risk Dimensions Augmented</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">2</div>
+      <div class="stat-label">Delivery Phases</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">5&ndash;7</div>
+      <div class="stat-label">Days to Phase 1</div>
+    </div>
+  </div>
+
+  <p>Leadership requested three capabilities: <strong>ISO standards mapping</strong>, <strong>explainability</strong> (trace every score to specific evidence and standards), and <strong>confidence scoring</strong> (how reliable is each score). This report summarizes the architecture, design decisions, and phased implementation plan.</p>
+
+  <div class="callout callout-success">
+    <strong>Key outcome:</strong>
+    Phase 1 delivers ISO-traceable language in exported reports (PDF/Word) with zero changes to the existing scoring pipeline. This means no regression risk to the 4 months of prompt tuning, and immediate visible value for leadership.
+  </div>
+
+  <p>During discovery, we identified a significant finding: the proposed numeric confidence model (4 weighted signals producing a percentage) is not reliably achievable with current LLM technology. We've replaced it with a qualitative model (High / Medium / Low with evidence-based rationale) that is both more honest and more useful for decision-making.</p>
+</section>
+
+<!-- 02: Current State -->
+<section id="current-state">
+  <h2>02 &mdash; How Guardian Works Today</h2>
+
+  <p>Guardian currently scores vendors across <strong>10 risk dimensions</strong> using a proprietary rubric. The flow is straightforward:</p>
+
+  <div class="diagram-container">
+    <div class="diagram-title">Current Assessment &amp; Reporting Flow</div>
+    <svg viewBox="0 0 860 180" xmlns="http://www.w3.org/2000/svg">
+      <!-- Steps -->
+      <rect x="10" y="50" width="140" height="60" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="80" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">Assessor</text>
+      <text x="80" y="94" text-anchor="middle" font-size="11" fill="#64748b">Starts Assessment</text>
+
+      <path d="M155 80 L185 80" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="190" y="50" width="140" height="60" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="260" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">Questionnaire</text>
+      <text x="260" y="94" text-anchor="middle" font-size="11" fill="#64748b">78-126 Questions</text>
+
+      <path d="M335 80 L365 80" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="370" y="50" width="140" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="440" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">Claude Scoring</text>
+      <text x="440" y="94" text-anchor="middle" font-size="11" fill="#2563eb">10 Dimensions</text>
+
+      <path d="M515 80 L545 80" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="550" y="50" width="140" height="60" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="620" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">Export</text>
+      <text x="620" y="94" text-anchor="middle" font-size="11" fill="#64748b">PDF / Word</text>
+
+      <path d="M695 80 L725 80" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="730" y="50" width="120" height="60" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="790" y="76" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">Report</text>
+      <text x="790" y="94" text-anchor="middle" font-size="11" fill="#64748b">Scores + Narrative</text>
+
+      <!-- Labels -->
+      <text x="440" y="140" text-anchor="middle" font-size="12" fill="#94a3b8">Proprietary rubric &bull; No ISO references &bull; No confidence levels</text>
+      <text x="440" y="158" text-anchor="middle" font-size="12" fill="#94a3b8">Assessor can't answer: "Why this score?" or "How confident?"</text>
+
+      <defs>
+        <marker id="arrow-gray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#cbd5e1"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <h3>What Exists Today</h3>
+  <table>
+    <thead>
+      <tr><th>Capability</th><th>Status</th><th>Detail</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>10-dimension risk scoring</td><td><span class="badge badge-strong">Complete</span></td><td>Claude scores vendors using Guardian's proprietary rubric (tuned over 4 months)</td></tr>
+      <tr><td>Evidence references</td><td><span class="badge badge-strong">Complete</span></td><td>Scores link to specific Q&A pairs (section + question number + quote)</td></tr>
+      <tr><td>Narrative report</td><td><span class="badge badge-strong">Complete</span></td><td>Claude generates prose explanation for each dimension in export</td></tr>
+      <tr><td>PDF/Word export</td><td><span class="badge badge-strong">Complete</span></td><td>Full report with scores, narrative, and evidence references</td></tr>
+      <tr><td>ISO standard references</td><td><span class="badge badge-weak">Missing</span></td><td>No traceability to any international standard</td></tr>
+      <tr><td>Confidence scoring</td><td><span class="badge badge-weak">Missing</span></td><td>No indication of how reliable each score is</td></tr>
+      <tr><td>Explainability chain</td><td><span class="badge badge-partial">Partial</span></td><td>Evidence refs exist but no "why this score" linked to standards</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 03: Leadership Vision -->
+<section id="leadership-vision">
+  <h2>03 &mdash; Leadership's Vision</h2>
+
+  <p>Leadership outlined a clear vision for ISO integration. Here's what was requested and how our refined approach addresses each element:</p>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Leadership Asked For</div>
+      <h4>6 ISO Standards, Tiered</h4>
+      <p>Tier 1: ISO 42001 + 23894. Tier 2: 22989 + 23053. Tier 3: 42005 + 42006. "Don't boil the ocean."</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Our Approach</div>
+      <h4>Tiered, with 23894 as Gap-Filler</h4>
+      <p>Same tiers, but ISO 23894 is supplementary to 42001 (fills risk management gaps) rather than a standalone framework. Simplifies architecture and avoids duplication.</p>
+    </div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Leadership Asked For</div>
+      <h4>Confidence Scoring (Numeric %)</h4>
+      <p>4 weighted signals: Evidence Specificity (35%), Coverage Completeness (30%), Response Consistency (20%), Verifiability (15%). Output: percentage like "72%".</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Our Approach</div>
+      <h4>Qualitative Confidence (High / Medium / Low)</h4>
+      <p>Numeric model proven infeasible &mdash; Claude produces 10-15% variance on identical inputs and can't decompose correlated signals. Qualitative model with evidence-based rationale is more honest and more useful. <strong>See Section 05 for details.</strong></p>
+    </div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Leadership Asked For</div>
+      <h4>Explainability-to-Confidence Pipeline</h4>
+      <p>Score &rarr; ISO clause &rarr; threshold &rarr; evidence &rarr; confidence &rarr; rationale. The "missing middle layer."</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Our Approach</div>
+      <h4>Full Chain &mdash; Adopted As-Is</h4>
+      <p>This vision is exactly right. We build the complete explainability chain. The only change: confidence is qualitative (H/M/L + rationale) instead of a percentage.</p>
+    </div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Leadership Asked For</div>
+      <h4>5-Table Database Architecture</h4>
+      <p>compliance_frameworks, framework_versions, framework_controls, dimension_control_mappings, assessment_compliance_results.</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Our Approach</div>
+      <h4>6-Table with Criteria Versioning</h4>
+      <p>Same 5 tables, plus a new <code>interpretive_criteria</code> table. This enables correcting/improving Guardian's criteria without creating phantom ISO versions. <strong>See Section 10 for details.</strong></p>
+    </div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Leadership Asked For</div>
+      <h4>Framework Versioning</h4>
+      <p>Controls immutable per version. Old assessments keep their version reference.</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Our Approach</div>
+      <h4>Two-Level Versioning</h4>
+      <p>We separate the ISO standard version (42001:<strong>2023</strong>) from Guardian's criteria version (<strong>guardian-iso42001-v1.0</strong>). This means we can fix a typo in our interpretive criteria without pretending ISO published a new edition.</p>
+    </div>
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Leadership Asked For</div>
+      <h4>Interpretive Controls (IP Approach)</h4>
+      <p>Guardian's own language referencing ISO clause numbers. No verbatim reproduction. CSA Group licensing as parallel track.</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Our Approach</div>
+      <h4>Adopted As-Is + Messaging Guidelines</h4>
+      <p>Interpretive approach adopted exactly. We added strict messaging guidelines: Guardian uses "ISO-traceable" and "ISO-informed" language, never "ISO-compliant" or "ISO-certified." <strong>See Section 12.</strong></p>
+    </div>
+  </div>
+</section>
+
+<!-- 04: Our Approach -->
+<section id="our-approach">
+  <h2>04 &mdash; How We're Addressing Leadership's Plan</h2>
+
+  <h3>What We're Building (Summary)</h3>
+  <table>
+    <thead>
+      <tr><th>Requirement</th><th>Approach</th><th>Phase</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>ISO standards mapping</td><td>38 controls from ISO 42001 + supplementary ISO 23894 mapped to Guardian's 10 dimensions. Stored in DB, injected into prompts at runtime.</td><td><span class="badge badge-phase1">Phase 1</span></td></tr>
+      <tr><td>Explainability chain</td><td>Score &rarr; ISO clause reference &rarr; assessment threshold &rarr; vendor evidence &rarr; confidence level &rarr; natural language rationale</td><td><span class="badge badge-phase1">Phase 1</span></td></tr>
+      <tr><td>Confidence scoring</td><td>Qualitative: High / Medium / Low per dimension, with mandatory evidence-citing rationale string</td><td><span class="badge badge-phase1">Phase 1</span></td></tr>
+      <tr><td>Extensible architecture</td><td>DB-driven. Adding Tier 2 standard = seed script + human review. Zero code changes.</td><td><span class="badge badge-phase1">Phase 1</span></td></tr>
+      <tr><td>Version management</td><td>Two-level: ISO standard version + Guardian criteria version, independently tracked</td><td><span class="badge badge-phase1">Phase 1</span></td></tr>
+      <tr><td>Structured scoring data</td><td>ISO compliance results stored per-assessment, per-control in dedicated table</td><td><span class="badge badge-phase2">Phase 2</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Gaps We Discovered</h3>
+
+  <div class="callout callout-warning">
+    <strong>Two of 10 dimensions have weak or no ISO coverage.</strong>
+    ISO 42001 is industry-agnostic &mdash; it has no clinical/healthcare controls and minimal vendor viability controls. Rather than fabricate misleading mappings, these dimensions use Guardian's own healthcare-specific criteria and are clearly labeled as such in reports.
+  </div>
+
+  <div class="compare-grid">
+    <div class="compare-card gap">
+      <div class="compare-label">Coverage Gap</div>
+      <h4>Clinical Risk</h4>
+      <p>ISO 42001 contains no patient safety, clinical decision support, or healthcare workflow controls. This dimension relies entirely on Guardian's healthcare-specific criteria.</p>
+      <p><strong>Future:</strong> IEC 62304 / ISO 14971 supplementation possible in Tier 2/3.</p>
+    </div>
+    <div class="compare-card gap">
+      <div class="compare-label">Coverage Gap</div>
+      <h4>Vendor Viability</h4>
+      <p>Only 3 generic third-party controls exist in ISO 42001. No financial stability, lock-in risk, data portability, or exit strategy coverage.</p>
+      <p><strong>Future:</strong> ISO 27001 business continuity mapping possible in Tier 3+.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 05: Confidence Model -->
+<section id="confidence">
+  <h2>05 &mdash; Confidence Model: Why We Changed It</h2>
+
+  <p>This is the largest deviation from leadership's original proposal. Here's why.</p>
+
+  <div class="compare-grid">
+    <div class="compare-card leadership">
+      <div class="compare-label">Original Proposal</div>
+      <h4>4-Signal Weighted Formula</h4>
+      <ul>
+        <li>Evidence Specificity: 35%</li>
+        <li>Coverage Completeness: 30%</li>
+        <li>Response Consistency: 20%</li>
+        <li>Verifiability: 15%</li>
+      </ul>
+      <p style="margin-top: 12px;"><strong>Output:</strong> "72%" per dimension</p>
+    </div>
+    <div class="compare-card refined">
+      <div class="compare-label">Refined Approach</div>
+      <h4>Qualitative + Rationale</h4>
+      <ul>
+        <li><strong>High:</strong> Strong, verifiable evidence</li>
+        <li><strong>Medium:</strong> Partial evidence, some gaps</li>
+        <li><strong>Low:</strong> Vague or contradictory claims</li>
+      </ul>
+      <p style="margin-top: 12px;"><strong>Output:</strong> "Medium" + evidence-based explanation</p>
+    </div>
+  </div>
+
+  <h3>Why the Numeric Model Doesn't Work</h3>
+
+  <div class="card">
+    <div class="card-header">Finding 1: Variance Is Too High</div>
+    <p>When scoring identical vendor responses multiple times, Claude produces 10&ndash;15% different confidence values each run. A vendor might get "72%" one time and "58%" the next. A number that varies by 15% on the same input isn't a measurement &mdash; it's noise.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Finding 2: The 4 Signals Are Correlated, Not Independent</div>
+    <p>The formula treats specificity, coverage, consistency, and verifiability as independent inputs. They aren't. A vendor that gives vague answers (low specificity) also has low verifiability and low coverage. Claude can't decompose these into separate measurements because they're fundamentally entangled.</p>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Finding 3: Claude Can't Count Coverage</div>
+    <p>"Coverage Completeness" requires counting what percentage of relevant ISO controls were addressed by vendor responses. This requires cross-referencing 20+ Q&A pairs against 30+ controls &mdash; a counting task that LLMs perform unreliably.</p>
+  </div>
+
+  <div class="callout callout-info">
+    <strong>The qualitative model is more useful for decision-making.</strong>
+    Leadership doesn't need "72% vs 68%." They need to know: "Is this score backed by solid evidence, or are we working with vague claims?" High / Medium / Low with a clear rationale answers that question directly.
+  </div>
+
+  <h3>Compliance Safeguard</h3>
+  <p>The rationale string is <strong>mandatory</strong>, not optional. Every confidence level must cite the specific evidence and ISO references that justify it. A bare "Medium" with no explanation is rejected by the system. This ensures the qualitative model maintains audit defensibility.</p>
+</section>
+
+<!-- 06: Coverage Map -->
+<section id="coverage">
+  <h2>06 &mdash; ISO Coverage Across 10 Dimensions</h2>
+
+  <p>Not all of Guardian's risk dimensions have equal ISO coverage. This map shows how ISO 42001 + 23894 map to each dimension:</p>
+
+  <div class="diagram-container">
+    <div class="diagram-title">Dimension-to-ISO Coverage Heatmap</div>
+    <svg viewBox="0 0 840 420" xmlns="http://www.w3.org/2000/svg">
+      <!-- Header -->
+      <text x="200" y="24" font-size="12" font-weight="600" fill="#64748b" text-anchor="end">GUARDIAN DIMENSION</text>
+      <text x="360" y="24" font-size="12" font-weight="600" fill="#64748b" text-anchor="middle">ISO COVERAGE</text>
+      <text x="620" y="24" font-size="12" font-weight="600" fill="#64748b" text-anchor="start">KEY CONTROLS</text>
+      <line x1="10" y1="32" x2="830" y2="32" stroke="#e2e8f0" stroke-width="1"/>
+
+      <!-- Row 1: Data Governance -->
+      <text x="200" y="60" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Data Governance</text>
+      <rect x="240" y="44" width="240" height="22" rx="4" fill="#d1fae5"/>
+      <rect x="240" y="44" width="228" height="22" rx="4" fill="#059669" opacity="0.85"/>
+      <text x="360" y="59" font-size="11" font-weight="600" fill="white" text-anchor="middle">STRONG</text>
+      <text x="620" y="60" font-size="12" fill="#64748b" text-anchor="start">A.7.2-A.7.6, A.4.3</text>
+
+      <!-- Row 2: AI Model Risk -->
+      <text x="200" y="98" font-size="14" font-weight="600" fill="#334155" text-anchor="end">AI Model Risk</text>
+      <rect x="240" y="82" width="240" height="22" rx="4" fill="#d1fae5"/>
+      <rect x="240" y="82" width="228" height="22" rx="4" fill="#059669" opacity="0.85"/>
+      <text x="360" y="97" font-size="11" font-weight="600" fill="white" text-anchor="middle">STRONG</text>
+      <text x="620" y="98" font-size="12" fill="#64748b" text-anchor="start">A.6.2.2-A.6.2.4</text>
+
+      <!-- Row 3: Ethical & Social -->
+      <text x="200" y="136" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Ethical &amp; Social</text>
+      <rect x="240" y="120" width="240" height="22" rx="4" fill="#d1fae5"/>
+      <rect x="240" y="120" width="228" height="22" rx="4" fill="#059669" opacity="0.85"/>
+      <text x="360" y="135" font-size="11" font-weight="600" fill="white" text-anchor="middle">STRONG</text>
+      <text x="620" y="136" font-size="12" fill="#64748b" text-anchor="start">A.5.4, A.5.5, C.2.1, C.2.5</text>
+
+      <!-- Row 4: Operational Risk -->
+      <text x="200" y="174" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Operational Risk</text>
+      <rect x="240" y="158" width="240" height="22" rx="4" fill="#d1fae5"/>
+      <rect x="240" y="158" width="228" height="22" rx="4" fill="#059669" opacity="0.85"/>
+      <text x="360" y="173" font-size="11" font-weight="600" fill="white" text-anchor="middle">STRONG</text>
+      <text x="620" y="174" font-size="12" fill="#64748b" text-anchor="start">A.6.2.6, A.6.2.8, A.8.4</text>
+
+      <!-- Row 5: Security -->
+      <text x="200" y="212" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Security &amp; Access</text>
+      <rect x="240" y="196" width="240" height="22" rx="4" fill="#dbeafe"/>
+      <rect x="240" y="196" width="160" height="22" rx="4" fill="#2563eb" opacity="0.8"/>
+      <text x="320" y="211" font-size="11" font-weight="600" fill="white" text-anchor="middle">MODERATE</text>
+      <text x="620" y="212" font-size="12" fill="#64748b" text-anchor="start">A.4.5, C.2.10</text>
+
+      <!-- Row 6: Integration -->
+      <text x="200" y="250" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Integration Risk</text>
+      <rect x="240" y="234" width="240" height="22" rx="4" fill="#dbeafe"/>
+      <rect x="240" y="234" width="160" height="22" rx="4" fill="#2563eb" opacity="0.8"/>
+      <text x="320" y="249" font-size="11" font-weight="600" fill="white" text-anchor="middle">MODERATE</text>
+      <text x="620" y="250" font-size="12" fill="#64748b" text-anchor="start">A.6.2.5, A.6.2.6</text>
+
+      <!-- Row 7: Regulatory -->
+      <text x="200" y="288" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Regulatory &amp; Compliance</text>
+      <rect x="240" y="272" width="240" height="22" rx="4" fill="#dbeafe"/>
+      <rect x="240" y="272" width="160" height="22" rx="4" fill="#2563eb" opacity="0.8"/>
+      <text x="320" y="287" font-size="11" font-weight="600" fill="white" text-anchor="middle">MODERATE</text>
+      <text x="620" y="288" font-size="12" fill="#64748b" text-anchor="start">A.2.2-A.2.4, A.5.2</text>
+
+      <!-- Row 8: Change Mgmt -->
+      <text x="200" y="326" font-size="14" font-weight="600" fill="#334155" text-anchor="end">Change Management</text>
+      <rect x="240" y="310" width="240" height="22" rx="4" fill="#dbeafe"/>
+      <rect x="240" y="310" width="160" height="22" rx="4" fill="#2563eb" opacity="0.8"/>
+      <text x="320" y="325" font-size="11" font-weight="600" fill="white" text-anchor="middle">MODERATE</text>
+      <text x="620" y="326" font-size="12" fill="#64748b" text-anchor="start">A.6.2.5, A.6.2.7, A.4.6</text>
+
+      <!-- Row 9: Clinical Risk -->
+      <rect x="10" y="340" width="820" height="38" rx="0" fill="#fef3c7" opacity="0.3"/>
+      <text x="200" y="364" font-size="14" font-weight="600" fill="#92400e" text-anchor="end">Clinical Risk</text>
+      <rect x="240" y="348" width="240" height="22" rx="4" fill="#fef3c7"/>
+      <rect x="240" y="348" width="80" height="22" rx="4" fill="#d97706" opacity="0.8"/>
+      <text x="280" y="363" font-size="11" font-weight="600" fill="white" text-anchor="middle">PARTIAL</text>
+      <text x="620" y="364" font-size="12" fill="#92400e" text-anchor="start">Guardian-native (healthcare-specific)</text>
+
+      <!-- Row 10: Vendor Viability -->
+      <rect x="10" y="378" width="820" height="38" rx="0" fill="#fee2e2" opacity="0.3"/>
+      <text x="200" y="402" font-size="14" font-weight="600" fill="#991b1b" text-anchor="end">Vendor Viability</text>
+      <rect x="240" y="386" width="240" height="22" rx="4" fill="#fee2e2"/>
+      <rect x="240" y="386" width="48" height="22" rx="4" fill="#dc2626" opacity="0.8"/>
+      <text x="264" y="401" font-size="11" font-weight="600" fill="white" text-anchor="middle">WEAK</text>
+      <text x="620" y="402" font-size="12" fill="#991b1b" text-anchor="start">Guardian-native (vendor assessment-specific)</text>
+    </svg>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#059669"></div> Strong (3+ controls, detailed)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2563eb"></div> Moderate (2+ controls, general)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> Partial (industry-agnostic only)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div> Weak (minimal controls)</div>
+  </div>
+
+  <p style="margin-top: 12px;">The highlighted rows (Clinical Risk, Vendor Viability) are clearly labeled in reports as <em>"assessed using Guardian healthcare-specific criteria"</em> rather than falsely attributed to ISO standards. This is an honest representation that maintains credibility.</p>
+</section>
+
+<!-- 07: Architecture -->
+<section id="architecture">
+  <h2>07 &mdash; Architecture: Current vs Proposed</h2>
+
+  <h3>Current Architecture</h3>
+  <div class="diagram-container">
+    <div class="diagram-title">Current Scoring &amp; Export Architecture</div>
+    <svg viewBox="0 0 840 300" xmlns="http://www.w3.org/2000/svg">
+      <!-- Scoring Pipeline -->
+      <text x="420" y="20" text-anchor="middle" font-size="13" font-weight="600" fill="#2563eb">SCORING PIPELINE</text>
+
+      <rect x="30" y="35" width="160" height="50" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="110" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">Scoring Prompt</text>
+      <text x="110" y="72" text-anchor="middle" font-size="10" fill="#2563eb">Rubric + Vendor Data</text>
+
+      <path d="M195 60 L230 60" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+      <rect x="235" y="35" width="130" height="50" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="300" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">Claude</text>
+      <text x="300" y="72" text-anchor="middle" font-size="10" fill="#2563eb">Score + Narrative</text>
+
+      <path d="M370 60 L405 60" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+      <rect x="410" y="35" width="130" height="50" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="475" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">Validator</text>
+      <text x="475" y="72" text-anchor="middle" font-size="10" fill="#2563eb">Sanitize + Store</text>
+
+      <path d="M545 60 L580 60" stroke="#2563eb" stroke-width="2" marker-end="url(#arrow-blue)"/>
+
+      <rect x="585" y="35" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="650" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Database</text>
+      <text x="650" y="72" text-anchor="middle" font-size="10" fill="#64748b">dimension_scores</text>
+
+      <!-- Export Pipeline -->
+      <text x="420" y="130" text-anchor="middle" font-size="13" font-weight="600" fill="#64748b">EXPORT PIPELINE</text>
+
+      <rect x="30" y="145" width="160" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="110" y="166" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Export Prompt</text>
+      <text x="110" y="182" text-anchor="middle" font-size="10" fill="#64748b">Score Data + Template</text>
+
+      <path d="M195 170 L230 170" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="235" y="145" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="300" y="166" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Claude</text>
+      <text x="300" y="182" text-anchor="middle" font-size="10" fill="#64748b">Narrative Only</text>
+
+      <path d="M370 170 L405 170" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="410" y="145" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="475" y="166" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Formatter</text>
+      <text x="475" y="182" text-anchor="middle" font-size="10" fill="#64748b">formatDimensionScore</text>
+
+      <path d="M545 170 L580 170" stroke="#cbd5e1" stroke-width="2" marker-end="url(#arrow-gray)"/>
+
+      <rect x="585" y="145" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="650" y="166" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">PDF / Word</text>
+      <text x="650" y="182" text-anchor="middle" font-size="10" fill="#64748b">Report Output</text>
+
+      <!-- Annotation -->
+      <text x="420" y="240" text-anchor="middle" font-size="13" fill="#94a3b8">Two separate pipelines &mdash; scoring and export are independent.</text>
+      <text x="420" y="258" text-anchor="middle" font-size="13" fill="#94a3b8">Phase 1 only touches the export pipeline (bottom row).</text>
+      <text x="420" y="276" text-anchor="middle" font-size="13" font-weight="600" fill="#059669">Zero risk to scoring pipeline = zero regression risk.</text>
+
+      <defs>
+        <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+
+  <h3>Proposed Architecture (Phase 1)</h3>
+  <div class="diagram-container">
+    <div class="diagram-title">Phase 1 &mdash; ISO-Aware Export (Scoring Pipeline Untouched)</div>
+    <svg viewBox="0 0 840 340" xmlns="http://www.w3.org/2000/svg">
+      <!-- Scoring Pipeline (unchanged) -->
+      <text x="420" y="20" text-anchor="middle" font-size="13" font-weight="600" fill="#94a3b8">SCORING PIPELINE (UNCHANGED)</text>
+
+      <rect x="30" y="35" width="160" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+      <text x="110" y="56" text-anchor="middle" font-size="12" fill="#94a3b8">Scoring Prompt</text>
+      <text x="110" y="72" text-anchor="middle" font-size="10" fill="#cbd5e1">No changes</text>
+
+      <path d="M195 60 L230 60" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+
+      <rect x="235" y="35" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+      <text x="300" y="56" text-anchor="middle" font-size="12" fill="#94a3b8">Claude</text>
+      <text x="300" y="72" text-anchor="middle" font-size="10" fill="#cbd5e1">No changes</text>
+
+      <path d="M370 60 L405 60" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+
+      <rect x="410" y="35" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+      <text x="475" y="56" text-anchor="middle" font-size="12" fill="#94a3b8">Validator</text>
+      <text x="475" y="72" text-anchor="middle" font-size="10" fill="#cbd5e1">No changes</text>
+
+      <path d="M545 60 L580 60" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="4"/>
+
+      <rect x="585" y="35" width="130" height="50" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="650" y="56" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">Database</text>
+      <text x="650" y="72" text-anchor="middle" font-size="10" fill="#64748b">dimension_scores</text>
+
+      <!-- New ISO DB -->
+      <rect x="585" y="110" width="130" height="60" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="650" y="133" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">ISO Controls</text>
+      <text x="650" y="149" text-anchor="middle" font-size="10" fill="#059669">New Tables</text>
+      <text x="650" y="163" text-anchor="middle" font-size="10" fill="#059669">(6 tables)</text>
+
+      <!-- Export Pipeline (modified) -->
+      <text x="420" y="210" text-anchor="middle" font-size="13" font-weight="600" fill="#059669">EXPORT PIPELINE (ENHANCED)</text>
+
+      <rect x="30" y="225" width="160" height="50" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="110" y="246" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">Export Prompt</text>
+      <text x="110" y="262" text-anchor="middle" font-size="10" fill="#059669">+ ISO Controls Context</text>
+
+      <!-- Arrow from ISO DB to Export Prompt -->
+      <path d="M585 150 Q420 150 280 225" stroke="#059669" stroke-width="2" fill="none" stroke-dasharray="6" marker-end="url(#arrow-green)"/>
+      <text x="400" y="175" text-anchor="middle" font-size="10" font-weight="600" fill="#059669">Inject relevant controls</text>
+
+      <path d="M195 250 L230 250" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+      <rect x="235" y="225" width="130" height="50" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="300" y="246" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">Claude</text>
+      <text x="300" y="262" text-anchor="middle" font-size="10" fill="#059669">+ ISO Refs + Confidence</text>
+
+      <path d="M370 250 L405 250" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+      <rect x="410" y="225" width="130" height="50" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="475" y="246" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">Formatter</text>
+      <text x="475" y="262" text-anchor="middle" font-size="10" fill="#059669">+ ISO Section</text>
+
+      <path d="M545 250 L580 250" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+      <rect x="585" y="225" width="130" height="50" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="650" y="246" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">PDF / Word</text>
+      <text x="650" y="262" text-anchor="middle" font-size="10" fill="#059669">+ ISO Report Section</text>
+
+      <!-- DB feeds existing scores to export -->
+      <path d="M650 87 L650 108" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <text x="420" y="310" text-anchor="middle" font-size="13" font-weight="600" fill="#059669">Green = new or modified components. Dashed = unchanged.</text>
+
+      <defs>
+        <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#059669"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+</section>
+
+<!-- 08: Data Flow -->
+<section id="data-flow">
+  <h2>08 &mdash; Data Flow</h2>
+
+  <h3>Phase 1: How ISO Data Reaches the Report</h3>
+
+  <div class="diagram-container">
+    <div class="diagram-title">Phase 1 Data Flow &mdash; ISO Controls to Report</div>
+    <svg viewBox="0 0 840 440" xmlns="http://www.w3.org/2000/svg">
+      <!-- Seed layer -->
+      <text x="100" y="28" font-size="11" font-weight="700" fill="#64748b" text-anchor="middle">SEED (ONE-TIME)</text>
+      <rect x="20" y="38" width="160" height="40" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="2"/>
+      <text x="100" y="63" text-anchor="middle" font-size="12" font-weight="600" fill="#5b21b6">Seed Script</text>
+
+      <path d="M100 78 L100 108" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrow-purple)"/>
+
+      <!-- DB layer -->
+      <text x="100" y="106" font-size="11" font-weight="700" fill="#64748b" text-anchor="middle">DATABASE</text>
+      <rect x="20" y="112" width="160" height="100" rx="6" fill="white" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="100" y="134" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">compliance_frameworks</text>
+      <text x="100" y="152" text-anchor="middle" font-size="11" fill="#64748b">framework_versions</text>
+      <text x="100" y="170" text-anchor="middle" font-size="11" fill="#64748b">framework_controls</text>
+      <text x="100" y="188" text-anchor="middle" font-size="11" fill="#64748b">interpretive_criteria</text>
+      <text x="100" y="206" text-anchor="middle" font-size="11" fill="#64748b">dimension_control_mappings</text>
+
+      <!-- Query -->
+      <path d="M180 162 L260 162" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+      <text x="220" y="152" text-anchor="middle" font-size="10" fill="#059669">Query by</text>
+      <text x="220" y="164" text-anchor="middle" font-size="10" fill="#059669">dimension</text>
+
+      <!-- Control retrieval -->
+      <rect x="265" y="138" width="170" height="50" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="350" y="158" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">ISO Control Retrieval</text>
+      <text x="350" y="174" text-anchor="middle" font-size="10" fill="#059669">~30 mapped controls</text>
+
+      <!-- Split into system/user -->
+      <path d="M435 150 L480 120" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+      <path d="M435 170 L480 200" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+      <!-- System prompt -->
+      <rect x="485" y="95" width="170" height="50" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="570" y="116" text-anchor="middle" font-size="12" font-weight="600" fill="#1e40af">System Prompt</text>
+      <text x="570" y="132" text-anchor="middle" font-size="10" fill="#2563eb">Static catalog (cached)</text>
+
+      <!-- User prompt -->
+      <rect x="485" y="175" width="170" height="50" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+      <text x="570" y="196" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">User Prompt</text>
+      <text x="570" y="212" text-anchor="middle" font-size="10" fill="#d97706">Per-assessment context</text>
+
+      <!-- Existing scores feed in -->
+      <rect x="485" y="250" width="170" height="40" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+      <text x="570" y="275" text-anchor="middle" font-size="12" font-weight="500" fill="#64748b">Existing Score Data</text>
+
+      <!-- Arrow from existing DB -->
+      <path d="M100 212 L100 270 L485 270" stroke="#cbd5e1" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+
+      <!-- All feed into Claude -->
+      <path d="M655 120 L700 180" stroke="#2563eb" stroke-width="1.5"/>
+      <path d="M655 200 L700 200" stroke="#d97706" stroke-width="1.5"/>
+      <path d="M655 270 L700 220" stroke="#cbd5e1" stroke-width="1.5"/>
+
+      <rect x="700" y="170" width="120" height="60" rx="8" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="760" y="195" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">Claude</text>
+      <text x="760" y="212" text-anchor="middle" font-size="10" fill="#059669">Export Narrative</text>
+
+      <!-- Claude outputs -->
+      <path d="M760 230 L760 280" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+      <rect x="680" y="285" width="140" height="50" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="750" y="306" text-anchor="middle" font-size="12" font-weight="600" fill="#065f46">Enhanced Narrative</text>
+      <text x="750" y="322" text-anchor="middle" font-size="10" fill="#059669">+ ISO + Confidence</text>
+
+      <!-- To report -->
+      <path d="M750 335 L750 370" stroke="#059669" stroke-width="2" marker-end="url(#arrow-green)"/>
+
+      <rect x="680" y="375" width="140" height="45" rx="6" fill="#059669" stroke="#059669" stroke-width="2"/>
+      <text x="750" y="402" text-anchor="middle" font-size="13" font-weight="700" fill="white">PDF / Word</text>
+
+      <defs>
+        <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M 0 0 L 10 5 L 0 10 z" fill="#7c3aed"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+</section>
+
+<!-- 09: ERD -->
+<section id="erd">
+  <h2>09 &mdash; Entity Relationship Diagram</h2>
+
+  <p>The schema adds 6 new tables (green) alongside existing tables (gray). Existing tables are not modified in Phase 1.</p>
+
+  <div class="diagram-container" style="padding: 24px;">
+    <div class="diagram-title">Database Schema &mdash; Existing + New ISO Tables</div>
+    <svg viewBox="0 0 860 680" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- ============ EXISTING TABLES (Gray) ============ -->
+
+      <!-- assessments -->
+      <rect x="20" y="20" width="220" height="130" rx="6" fill="white" stroke="#94a3b8" stroke-width="2"/>
+      <rect x="20" y="20" width="220" height="30" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+      <text x="130" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">assessments</text>
+      <text x="30" y="68" font-size="11" fill="#64748b">PK  id</text>
+      <text x="30" y="84" font-size="11" fill="#64748b">    user_id</text>
+      <text x="30" y="100" font-size="11" fill="#64748b">    vendor_name</text>
+      <text x="30" y="116" font-size="11" fill="#64748b">    status</text>
+      <text x="30" y="132" font-size="11" fill="#64748b">    solution_type</text>
+      <text x="30" y="148" font-size="11" fill="#94a3b8">    ... (existing)</text>
+      <text x="205" y="148" font-size="9" fill="#94a3b8" text-anchor="end">EXISTING</text>
+
+      <!-- assessment_results -->
+      <rect x="20" y="180" width="220" height="120" rx="6" fill="white" stroke="#94a3b8" stroke-width="2"/>
+      <rect x="20" y="180" width="220" height="30" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+      <text x="130" y="200" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">assessment_results</text>
+      <text x="30" y="228" font-size="11" fill="#64748b">PK  id</text>
+      <text x="30" y="244" font-size="11" fill="#64748b">FK  assessment_id</text>
+      <text x="30" y="260" font-size="11" fill="#64748b">    rubric_version</text>
+      <text x="30" y="276" font-size="11" fill="#64748b">    raw_tool_payload (jsonb)</text>
+      <text x="30" y="292" font-size="11" fill="#94a3b8">    ... (existing)</text>
+      <text x="205" y="292" font-size="9" fill="#94a3b8" text-anchor="end">EXISTING</text>
+
+      <!-- dimension_scores -->
+      <rect x="20" y="330" width="220" height="140" rx="6" fill="white" stroke="#94a3b8" stroke-width="2"/>
+      <rect x="20" y="330" width="220" height="30" rx="6" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+      <text x="130" y="350" text-anchor="middle" font-size="13" font-weight="700" fill="#475569">dimension_scores</text>
+      <text x="30" y="378" font-size="11" fill="#64748b">PK  id</text>
+      <text x="30" y="394" font-size="11" fill="#64748b">FK  result_id</text>
+      <text x="30" y="410" font-size="11" fill="#64748b">    dimension</text>
+      <text x="30" y="426" font-size="11" fill="#64748b">    score</text>
+      <text x="30" y="442" font-size="11" fill="#64748b">    findings (jsonb)</text>
+      <text x="30" y="458" font-size="11" fill="#059669" font-weight="600">    &bull; confidence: {level, rationale}</text>
+      <text x="205" y="458" font-size="9" fill="#059669" text-anchor="end">PHASE 1</text>
+      <text x="205" y="464" font-size="9" fill="#94a3b8" text-anchor="end">EXISTING TABLE</text>
+
+      <!-- Relationship: assessments -> assessment_results -->
+      <path d="M130 150 L130 180" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="138" y="168" font-size="9" fill="#94a3b8">1:N</text>
+
+      <!-- Relationship: assessment_results -> dimension_scores -->
+      <path d="M130 300 L130 330" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="138" y="318" font-size="9" fill="#94a3b8">1:N</text>
+
+      <!-- ============ NEW TABLES (Green) ============ -->
+
+      <!-- compliance_frameworks -->
+      <rect x="340" y="20" width="220" height="100" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <rect x="340" y="20" width="220" height="30" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="450" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">compliance_frameworks</text>
+      <text x="350" y="68" font-size="11" fill="#065f46">PK  id</text>
+      <text x="350" y="84" font-size="11" fill="#065f46">    name</text>
+      <text x="350" y="100" font-size="11" fill="#065f46">    description</text>
+      <text x="525" y="112" font-size="9" fill="#059669" text-anchor="end">NEW</text>
+
+      <!-- framework_versions -->
+      <rect x="340" y="150" width="220" height="120" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <rect x="340" y="150" width="220" height="30" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="450" y="170" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">framework_versions</text>
+      <text x="350" y="198" font-size="11" fill="#065f46">PK  id</text>
+      <text x="350" y="214" font-size="11" fill="#065f46">FK  framework_id</text>
+      <text x="350" y="230" font-size="11" fill="#065f46">    version_label ("2023")</text>
+      <text x="350" y="246" font-size="11" fill="#065f46">    status (active|deprecated)</text>
+      <text x="525" y="262" font-size="9" fill="#059669" text-anchor="end">NEW</text>
+
+      <!-- framework_controls -->
+      <rect x="340" y="300" width="220" height="110" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <rect x="340" y="300" width="220" height="30" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="450" y="320" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">framework_controls</text>
+      <text x="350" y="348" font-size="11" fill="#065f46">PK  id</text>
+      <text x="350" y="364" font-size="11" fill="#065f46">FK  version_id</text>
+      <text x="350" y="380" font-size="11" fill="#065f46">    clause_ref ("A.6.2.6")</text>
+      <text x="350" y="396" font-size="11" fill="#065f46">    domain, title</text>
+      <text x="525" y="402" font-size="9" fill="#059669" text-anchor="end">NEW</text>
+
+      <!-- interpretive_criteria -->
+      <rect x="620" y="300" width="220" height="140" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <rect x="620" y="300" width="220" height="30" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="730" y="320" text-anchor="middle" font-size="13" font-weight="700" fill="#065f46">interpretive_criteria</text>
+      <text x="630" y="348" font-size="11" fill="#065f46">PK  id</text>
+      <text x="630" y="364" font-size="11" fill="#065f46">FK  control_id</text>
+      <text x="630" y="380" font-size="11" fill="#065f46">    criteria_version</text>
+      <text x="630" y="396" font-size="11" fill="#065f46">    criteria_text</text>
+      <text x="630" y="412" font-size="11" fill="#065f46">    review_status</text>
+      <text x="630" y="428" font-size="11" fill="#065f46">    approved_by, approved_at</text>
+      <text x="805" y="432" font-size="9" fill="#059669" text-anchor="end">NEW</text>
+
+      <!-- dimension_control_mappings -->
+      <rect x="340" y="440" width="220" height="100" rx="6" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <rect x="340" y="440" width="220" height="30" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="450" y="460" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">dimension_control_mappings</text>
+      <text x="350" y="488" font-size="11" fill="#065f46">PK  id</text>
+      <text x="350" y="504" font-size="11" fill="#065f46">FK  control_id</text>
+      <text x="350" y="520" font-size="11" fill="#065f46">    dimension, relevance_weight</text>
+      <text x="525" y="532" font-size="9" fill="#059669" text-anchor="end">NEW</text>
+
+      <!-- assessment_compliance_results (Phase 2) -->
+      <rect x="620" y="500" width="220" height="140" rx="6" fill="#faf5ff" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6"/>
+      <rect x="620" y="500" width="220" height="30" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="2" stroke-dasharray="6"/>
+      <text x="730" y="518" text-anchor="middle" font-size="11" font-weight="700" fill="#5b21b6">assessment_compliance_results</text>
+      <text x="630" y="548" font-size="11" fill="#7c3aed">PK  id</text>
+      <text x="630" y="564" font-size="11" fill="#7c3aed">FK  assessment_id</text>
+      <text x="630" y="580" font-size="11" fill="#7c3aed">FK  framework_version_id</text>
+      <text x="630" y="596" font-size="11" fill="#7c3aed">FK  control_id</text>
+      <text x="630" y="612" font-size="11" fill="#7c3aed">    criteria_version</text>
+      <text x="630" y="628" font-size="11" fill="#7c3aed">    finding, evidence_refs</text>
+      <text x="805" y="632" font-size="9" fill="#7c3aed" text-anchor="end">PHASE 2</text>
+
+      <!-- ============ RELATIONSHIPS ============ -->
+
+      <!-- frameworks -> versions -->
+      <path d="M450 120 L450 150" stroke="#059669" stroke-width="1.5"/>
+      <circle cx="450" cy="120" r="3" fill="#059669"/>
+      <text x="458" y="138" font-size="9" fill="#059669">1:N</text>
+
+      <!-- versions -> controls -->
+      <path d="M450 270 L450 300" stroke="#059669" stroke-width="1.5"/>
+      <circle cx="450" cy="270" r="3" fill="#059669"/>
+      <text x="458" y="288" font-size="9" fill="#059669">1:N</text>
+
+      <!-- controls -> interpretive_criteria -->
+      <path d="M560 360 L620 360" stroke="#059669" stroke-width="1.5"/>
+      <circle cx="560" cy="360" r="3" fill="#059669"/>
+      <text x="590" y="352" font-size="9" fill="#059669">1:N</text>
+
+      <!-- controls -> mappings -->
+      <path d="M450 410 L450 440" stroke="#059669" stroke-width="1.5"/>
+      <circle cx="450" cy="410" r="3" fill="#059669"/>
+      <text x="458" y="428" font-size="9" fill="#059669">1:N</text>
+
+      <!-- assessments -> compliance_results (Phase 2) -->
+      <path d="M240 85 Q300 85 620 560" stroke="#7c3aed" stroke-width="1.5" fill="none" stroke-dasharray="6"/>
+      <text x="405" y="420" font-size="9" fill="#7c3aed" transform="rotate(-35 405 420)">Phase 2: assessment_id</text>
+
+      <!-- controls -> compliance_results (Phase 2) -->
+      <path d="M500 410 Q580 480 620 550" stroke="#7c3aed" stroke-width="1" fill="none" stroke-dasharray="4"/>
+
+      <!-- Legend -->
+      <rect x="20" y="520" width="240" height="120" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="36" y="544" font-size="12" font-weight="700" fill="#334155">LEGEND</text>
+
+      <rect x="36" y="556" width="14" height="14" rx="2" fill="white" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="58" y="568" font-size="11" fill="#64748b">Existing table (unchanged)</text>
+
+      <rect x="36" y="578" width="14" height="14" rx="2" fill="#ecfdf5" stroke="#059669" stroke-width="1.5"/>
+      <text x="58" y="590" font-size="11" fill="#065f46">New table (Phase 1)</text>
+
+      <rect x="36" y="600" width="14" height="14" rx="2" fill="#faf5ff" stroke="#7c3aed" stroke-width="1.5" stroke-dasharray="3"/>
+      <text x="58" y="612" font-size="11" fill="#5b21b6">New table (Phase 2)</text>
+
+      <rect x="36" y="622" width="14" height="14" rx="2" fill="white" stroke="#059669" stroke-width="1.5"/>
+      <text x="58" y="634" font-size="11" fill="#059669">Phase 1 addition to existing table</text>
+    </svg>
+  </div>
+
+  <h3>Key Schema Decisions</h3>
+  <table>
+    <thead>
+      <tr><th>Decision</th><th>Rationale</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>interpretive_criteria</code> is separate from <code>framework_controls</code></td><td>Allows correcting Guardian's criteria without creating phantom ISO version releases</td></tr>
+      <tr><td><code>review_status</code> on criteria</td><td>Human review workflow &mdash; Claude generates criteria, human approves before production use</td></tr>
+      <tr><td>Confidence in <code>findings</code> JSONB (Phase 1)</td><td>Zero schema migration &mdash; uses existing flexible column. Phase 2 may promote to dedicated column</td></tr>
+      <tr><td><code>assessment_compliance_results</code> is Phase 2 only</td><td>Phase 1 delivers value without per-control structured data</td></tr>
+      <tr><td><code>dimension_control_mappings</code> filters prompt injection</td><td>All 38 controls stored, only ~30 dimension-mapped ones sent to Claude</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 10: Versioning -->
+<section id="versioning">
+  <h2>10 &mdash; Two-Level Versioning</h2>
+
+  <p>Leadership proposed framework versioning (controls immutable per version). We refined this into a two-level model to handle a practical problem: what happens when we need to fix a typo in our interpretive criteria?</p>
+
+  <div class="diagram-container">
+    <div class="diagram-title">Two-Level Versioning Model</div>
+    <svg viewBox="0 0 840 300" xmlns="http://www.w3.org/2000/svg">
+      <!-- Level 1 -->
+      <text x="210" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#1e40af">LEVEL 1: ISO Standard Version</text>
+      <text x="210" y="48" text-anchor="middle" font-size="12" fill="#64748b">External, immutable, controlled by ISO</text>
+
+      <rect x="40" y="60" width="160" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+      <text x="120" y="86" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">ISO 42001:2023</text>
+      <text x="120" y="104" text-anchor="middle" font-size="11" fill="#2563eb">38 controls</text>
+
+      <rect x="220" y="60" width="160" height="60" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2" stroke-dasharray="6"/>
+      <text x="300" y="86" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">ISO 42001:202x</text>
+      <text x="300" y="104" text-anchor="middle" font-size="11" fill="#2563eb">Future edition</text>
+
+      <text x="200" y="90" text-anchor="middle" font-size="18" fill="#cbd5e1">&rarr;</text>
+
+      <!-- Level 2 -->
+      <text x="210" y="165" text-anchor="middle" font-size="14" font-weight="700" fill="#065f46">LEVEL 2: Guardian Criteria Version</text>
+      <text x="210" y="183" text-anchor="middle" font-size="12" fill="#64748b">Internal, controlled by Guardian team</text>
+
+      <rect x="20" y="195" width="120" height="50" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="80" y="216" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">v1.0</text>
+      <text x="80" y="232" text-anchor="middle" font-size="10" fill="#059669">Initial release</text>
+
+      <text x="150" y="220" text-anchor="middle" font-size="14" fill="#cbd5e1">&rarr;</text>
+
+      <rect x="160" y="195" width="120" height="50" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="220" y="216" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">v1.1</text>
+      <text x="220" y="232" text-anchor="middle" font-size="10" fill="#059669">Fix typo in A.6.2.6</text>
+
+      <text x="290" y="220" text-anchor="middle" font-size="14" fill="#cbd5e1">&rarr;</text>
+
+      <rect x="300" y="195" width="120" height="50" rx="6" fill="#d1fae5" stroke="#059669" stroke-width="2"/>
+      <text x="360" y="216" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">v2.0</text>
+      <text x="360" y="232" text-anchor="middle" font-size="10" fill="#059669">Major criteria update</text>
+
+      <!-- Connection lines -->
+      <path d="M120 120 L80 195" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4"/>
+      <path d="M120 120 L220 195" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4"/>
+      <path d="M120 120 L360 195" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4"/>
+
+      <!-- Right side: Example -->
+      <rect x="500" y="50" width="320" height="230" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+      <text x="660" y="78" text-anchor="middle" font-size="13" font-weight="700" fill="#334155">PRACTICAL EXAMPLE</text>
+
+      <text x="520" y="108" font-size="12" fill="#64748b">Assessment #1 (January):</text>
+      <text x="520" y="128" font-size="12" fill="#334155" font-weight="500">  ISO 42001:2023, criteria v1.0</text>
+
+      <text x="520" y="158" font-size="12" fill="#64748b">We find a typo in our criteria for A.6.2.6</text>
+      <text x="520" y="178" font-size="12" fill="#059669" font-weight="500">  &rarr; Publish criteria v1.1 (ISO version unchanged)</text>
+
+      <text x="520" y="208" font-size="12" fill="#64748b">Assessment #2 (February):</text>
+      <text x="520" y="228" font-size="12" fill="#334155" font-weight="500">  ISO 42001:2023, criteria v1.1</text>
+
+      <text x="520" y="258" font-size="12" fill="#64748b">Assessment #1 keeps its v1.0 reference.</text>
+      <text x="520" y="272" font-size="12" font-weight="600" fill="#065f46">Both assessments are valid and auditable.</text>
+    </svg>
+  </div>
+</section>
+
+<!-- 11: Report Preview -->
+<section id="report-preview">
+  <h2>11 &mdash; What the Report Will Look Like</h2>
+
+  <p>Here's a preview of how ISO references, confidence levels, and explainability appear in the exported report:</p>
+
+  <h3>ISO-Mapped Dimension</h3>
+  <div class="report-mock">
+    <h4>Data Governance: 3/5</h4>
+    <span class="conf-badge med">Assessment Confidence: Medium</span>
+    <div class="narrative">
+      Score reflects partial alignment with ISO 42001 A.6.2.6 (data quality management for AI systems) and ISO 23894 6.3 (risk treatment). Vendor demonstrates systematic encryption protocols (AES-256 at rest, TLS 1.3 in transit) but lacks independent audit verification. No evidence of structured data lineage or bias detection processes. Confidence is medium due to absence of third-party validation.
+    </div>
+    <div class="iso-refs">
+      <strong>ISO Standards Alignment:</strong>
+      <ul>
+        <li>ISO 42001 A.6.2.6 &mdash; Data quality management: <strong>Partial</strong></li>
+        <li>ISO 42001 A.6.2.7 &mdash; Data provenance: <strong>Not evidenced</strong></li>
+        <li>ISO 23894 6.3 &mdash; Risk treatment: <strong>Addressed</strong></li>
+      </ul>
+    </div>
+    <div class="evidence">Evidence: Q12 (encryption protocols), Q15 (data handling), Q23 (audit processes)</div>
+  </div>
+
+  <h3>Guardian-Native Dimension (No ISO Mapping)</h3>
+  <div class="report-mock">
+    <h4>Clinical Risk: 4/5</h4>
+    <span class="conf-badge hi">Assessment Confidence: High</span>
+    <div class="narrative">
+      Assessed using Guardian healthcare-specific criteria (no ISO mapping available for clinical risk in current framework scope). Vendor demonstrates robust clinical validation protocols with evidence of IRB review, pilot study results, and documented safety monitoring procedures. Clear escalation pathways and incident response procedures are in place.
+    </div>
+    <div class="evidence">Evidence: Q8 (clinical validation), Q14 (safety protocols), Q31 (incident response)</div>
+  </div>
+</section>
+
+<!-- 12: Messaging -->
+<section id="messaging">
+  <h2>12 &mdash; ISO Messaging Guidelines</h2>
+
+  <p>Guardian is not a certification body. Precise language protects our credibility and avoids legal exposure.</p>
+
+  <div class="compare-grid">
+    <div class="compare-card proposed">
+      <div class="compare-label">Approved Language</div>
+      <h4>Use These Terms</h4>
+      <ul>
+        <li><strong>"ISO-traceable"</strong> &mdash; our criteria reference ISO clauses</li>
+        <li><strong>"ISO-informed"</strong> &mdash; scoring considers ISO controls</li>
+        <li><strong>"maps to ISO 42001 A.x.x.x"</strong> &mdash; specific reference</li>
+        <li><strong>"aligned with"</strong> &mdash; directional, not absolute</li>
+      </ul>
+    </div>
+    <div class="compare-card" style="border-top-color: var(--red);">
+      <div class="compare-label" style="color: var(--red);">Prohibited Language</div>
+      <h4>Never Use These Terms</h4>
+      <ul>
+        <li><strong>"ISO-compliant"</strong> &mdash; implies certification we can't grant</li>
+        <li><strong>"ISO-certified"</strong> &mdash; only certification bodies certify</li>
+        <li><strong>"meets ISO requirements"</strong> &mdash; implies conformity assessment</li>
+        <li><strong>"ISO score"</strong> &mdash; no such concept exists</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-danger">
+    <strong>Why this matters:</strong>
+    A single "ISO-compliant" in a report could undermine Guardian's credibility with auditors and create liability. These guidelines are enforced in prompt instructions, report templates, and will be automatically linted in Phase 2.
+  </div>
+</section>
+
+<!-- 13: Timeline -->
+<section id="timeline">
+  <h2>13 &mdash; Delivery Timeline</h2>
+
+  <div class="timeline">
+    <div class="timeline-track">
+      <div class="timeline-phase phase1">
+        <div class="phase-label">Phase 1</div>
+        <div class="phase-title">ISO-Aware Export</div>
+        <div class="phase-time">5&ndash;7 days</div>
+      </div>
+      <div class="timeline-phase prep">
+        <div class="phase-label">Phase 2 Prep</div>
+        <div class="phase-title">Technical Debt</div>
+        <div class="phase-time">5&ndash;7 days</div>
+      </div>
+      <div class="timeline-phase phase2">
+        <div class="phase-label">Phase 2</div>
+        <div class="phase-title">Structured ISO Scoring</div>
+        <div class="phase-time">TBD</div>
+      </div>
+    </div>
+    <div class="timeline-overlap">Phase 2 Prep can run in parallel with Phase 1 &mdash; total ~2 weeks to first ISO reports</div>
+  </div>
+
+  <h3>Phase 1: ISO-Aware Export Narrative</h3>
+  <div class="card">
+    <p><strong>Delivers:</strong> ISO-traceable language in PDF/Word reports with confidence levels</p>
+    <table>
+      <thead><tr><th>What</th><th>Detail</th></tr></thead>
+      <tbody>
+        <tr><td>DB tables + seeding</td><td>6 new tables, seed ISO 42001 + 23894 interpretive controls</td></tr>
+        <tr><td>Export prompt update</td><td>Inject relevant ISO controls into narrative generation</td></tr>
+        <tr><td>Report templates</td><td>ISO references, confidence badges, Guardian-native labels</td></tr>
+        <tr><td>Prerequisites</td><td><strong>None.</strong> Can start immediately.</td></tr>
+        <tr><td>Risk to existing system</td><td><strong>Zero.</strong> Scoring pipeline is untouched.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Phase 2 Prerequisites</h3>
+  <div class="card">
+    <p><strong>Purpose:</strong> Resolve technical debt before modifying the scoring pipeline</p>
+    <table>
+      <thead><tr><th>#</th><th>Item</th><th>Effort</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>P2-1</td><td>Fix raw payload provenance</td><td>~1 day</td><td>Store Claude's true output before validation sanitization</td></tr>
+        <tr><td>P2-2</td><td>Tighten findings validation</td><td>~1 day</td><td>Validate JSONB structure before storing new ISO fields</td></tr>
+        <tr><td>P2-3</td><td>Refactor ScoringService</td><td>~1-2 days</td><td>Split 535-line file before adding ISO logic</td></tr>
+        <tr><td>P2-4</td><td>Regression test baseline</td><td>~2-3 days</td><td>5 golden sample assessments to detect scoring drift</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Phase 2: Structured ISO Scoring Data</h3>
+  <div class="card">
+    <p><strong>Delivers:</strong> ISO compliance data stored per-assessment, per-control. Queryable, auditable, structured.</p>
+    <p>Requires separate planning session after Phase 1 ships and Phase 2 prep completes.</p>
+  </div>
+</section>
+
+<!-- 14: Decisions -->
+<section id="decisions">
+  <h2>14 &mdash; Key Decisions Summary</h2>
+
+  <p>16 design decisions were debated by a 7-person expert council. All reached consensus. Here are the most impactful ones:</p>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>Decision</th><th>Outcome</th><th>Impact</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>D-5</strong></td>
+        <td>Confidence model</td>
+        <td>Qualitative (H/M/L + rationale) replaces numeric (4-signal weighted %)</td>
+        <td><span class="badge badge-low">Major PRD change</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-13</strong></td>
+        <td>Phased delivery</td>
+        <td>Phase 1 (export narrative) ships independently before Phase 2 (scoring pipeline)</td>
+        <td><span class="badge badge-high">De-risks delivery</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-2</strong></td>
+        <td>Control scope</td>
+        <td>All 38 in database, ~30 dimension-mapped ones in prompts</td>
+        <td><span class="badge badge-medium">Reduces prompt noise</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-16</strong></td>
+        <td>ISO messaging</td>
+        <td>"ISO-traceable" required, "ISO-compliant" prohibited</td>
+        <td><span class="badge badge-high">Legal protection</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-3/4</strong></td>
+        <td>Coverage gaps</td>
+        <td>Clinical Risk + Vendor Viability stay Guardian-native (honest labeling)</td>
+        <td><span class="badge badge-medium">Maintains credibility</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-8</strong></td>
+        <td>ISO 23894 role</td>
+        <td>Gap-filler for 42001, not a standalone framework</td>
+        <td><span class="badge badge-high">Simplifies architecture</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-1</strong></td>
+        <td>Prompt architecture</td>
+        <td>Static catalog in system prompt (cached), per-assessment data in user prompt</td>
+        <td><span class="badge badge-medium">Performance optimized</span></td>
+      </tr>
+      <tr>
+        <td><strong>D-7</strong></td>
+        <td>Question generation</td>
+        <td>No changes &mdash; stays assessment-focused, not ISO-focused</td>
+        <td><span class="badge badge-high">Preserves UX</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-info">
+    <strong>Full consensus details:</strong>
+    The complete decision log with all 7 experts' positions, rationale, and dissent records is available in <code>iso-design-council-consensus.md</code>.
+  </div>
+</section>
+
+</main>
+
+<!-- Smooth scrolling + active nav -->
+<script>
+document.querySelectorAll('nav a').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+
+// Active nav highlighting
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+      const activeLink = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+      if (activeLink) activeLink.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+
+document.querySelectorAll('section').forEach(section => observer.observe(section));
+</script>
+
+</body>
+</html>
