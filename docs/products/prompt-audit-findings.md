@@ -201,5 +201,43 @@ FORMATTING_GUIDELINES (~42 lines)
 
 ---
 
+## Changes Applied (2026-02-10)
+
+### Branch: `feat/prompt-scoring-hardening`
+
+**guardian-prompt.md (gitignored, disk-only changes):**
+- PART III Report Templates (lines 600-817, 217 lines) → replaced with 9-line lean summary. Verified: report pipelines are fully isolated, use their own prompts.
+- PART II Scoring Rubric (lines 256-597, 341 lines) → replaced with ~30-line lean summary. Rating scales moved to scoringPrompt.ts.
+- PART VII First Use Guidance (lines 928-975, 47 lines) → removed. User docs, not AI instructions.
+- Closing Identity Statement (lines 977-991, 15 lines) → removed. Duplicate of opening.
+- YAML Header Metadata (lines 4-11, 8 lines) → removed. Unused at runtime.
+- Decorative Footer + Version Block (lines 995-1016, 21 lines) → removed.
+- **Result: 1,221 → 612 lines (50% reduction)**
+
+**scoringPrompt.ts (committed):**
+- Added detailed rating scales for Privacy Risk, Security Risk, Technical Credibility, Operational Excellence (4 dimensions)
+- Clinical Risk was already fully detailed — untouched
+- Added NLHS minimum acceptable standards (ITIL4 Level 3, NIST CSF Tier 2, 24/7 support)
+- 219 → 348 lines (prompt template file, TypeScript logic is only ~50 lines)
+
+**ScoringPayloadValidator (committed, in progress):**
+- Adding soft validation (warnings, not rejections) for sub-score values against allowed rubric values
+- Backwards compatible — existing scoring without sub-scores still passes
+
+### Still In Progress
+- Task #10: Sub-score validation in ScoringPayloadValidator (background agent running)
+- Task #13: Run full test suite after all changes
+
+### Scoring Pipeline Safety Audit Results
+- All 10 dimensions scored in ONE Claude call (not per-dimension)
+- Rating scales added symmetrically to all 4 missing dimensions to prevent attention bias
+- Tool schema enforces 0-100 range but NOT specific sub-score values
+- Validation being added as soft enforcement (warnings) first
+- Token budget safe: 7,100+ tokens headroom for response
+- Prompt caching still works (system prompt cached with ephemeral control)
+
+---
+
 *Generated from 3-agent prompt audit on 2026-02-10.*
 *Reconciled conflicting findings between agents (Agent 2 incorrectly marked guardian-prompt.md as "deprecated" — it IS loaded at runtime via .env config).*
+*Updated 2026-02-10 with changes applied and scoring hardening status.*

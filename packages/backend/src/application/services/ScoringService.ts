@@ -216,6 +216,14 @@ export class ScoringService implements IScoringService {
         throw new Error(`Invalid scoring payload: ${validationResult.errors.join(', ')}`);
       }
 
+      // Log sub-score warnings (soft validation — does not reject payload)
+      if (validationResult.warnings.length > 0) {
+        console.warn(
+          `[ScoringService] Sub-score validation warnings for assessment ${assessmentId}:`,
+          validationResult.warnings
+        );
+      }
+
       // 10. Store scores
       onProgress({ status: 'validating', message: 'Storing assessment results...' });
       await this.storeScores(
