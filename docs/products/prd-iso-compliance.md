@@ -1,8 +1,8 @@
 # PRD: ISO Compliance Framework, Explainability & Confidence Scoring
 
-**Status:** Revised Draft
+**Status:** Approved
 **Author:** Guardian Team
-**Date:** 2026-02-10
+**Date:** 2026-02-10 (revised 2026-02-12)
 **Stakeholders:** Leadership, Product, Engineering
 **Inputs:** Discovery findings (`iso-discovery-findings.md`), Design council consensus (`iso-design-council-consensus.md`)
 
@@ -154,11 +154,11 @@ Two of Guardian's 10 risk dimensions have weak or no ISO coverage:
 
 These dimensions are explicitly labeled as "assessed using Guardian healthcare-specific criteria" in reports. IEC 62304 / ISO 14971 supplementation for Clinical Risk is deferred to Tier 2/3.
 
-### Prompt Complexity
-- 7 prompt files in the system (main, scoring, question gen, export narrative, intake extraction, scoring extraction, question generation)
-- Phase 1 touches only export narrative prompt
-- Phase 2 touches scoring prompt + tool schema
-- 40KB main prompt has been tuned over 4 months — high regression risk
+### Prompt System (Hardened 2026-02-10)
+- 6 isolated prompt pipelines: chat (consult/assessment/scoring), scoring, export narrative, question gen, intake extraction, scoring extraction
+- `guardian-prompt.md` trimmed from 1,221 → 612 lines (50% reduction). Affects chat only — scoring/export pipelines are fully isolated
+- `scoringPrompt.ts` hardened with detailed rating scales for all 5 scored dimensions + NLHS minimum standards
+- Sub-score validation added to `ScoringPayloadValidator` (soft warnings, backwards compatible)
 - Prompt changes must be iterative with regression testing at each step
 
 ### Prompt Architecture for ISO Context
@@ -179,12 +179,19 @@ These dimensions are explicitly labeled as "assessed using Guardian healthcare-s
 
 ### Why Qualitative, Not Numeric
 
-The original proposal used a 4-signal weighted formula producing numeric percentages. Design council analysis demonstrated this is infeasible:
+The original proposal used a 4-signal weighted formula producing numeric percentages. Design council analysis and experimental validation demonstrated this is infeasible:
 
+**Design council findings:**
 - Claude produces 10-15% variance on repeated scoring of identical inputs
 - The 4 proposed signals (specificity, coverage, consistency, verifiability) are **correlated, not independent** — Claude cannot decompose them reliably
 - Claude cannot reliably "count" coverage percentage or detect subtle contradictions across 20+ Q&A pairs
 - Numeric confidence (e.g., "72%") creates false precision when the underlying measurement varies by 15% each run
+
+**Experimental validation (2026-02-12):**
+- Built standalone experiment testing deterministic TypeScript heuristics (coverage counting, verifiability pattern matching, specificity scoring) against Claude's independent confidence assessment
+- **Result: Pearson r = 0.287 (weak correlation).** Heuristics measure surface features (word counts, keyword matches) while Claude evaluates semantic meaning. Heuristics scored "we use AES-256, AWS EC2" high; Claude scored it low because it also detected "API key stored in browser localStorage" as disqualifying
+- **Deterministic heuristics conclusively rejected** as a replacement for Claude's qualitative assessment
+- Coverage completeness (pure SQL counting) remains viable as a supplementary signal but not as a primary confidence mechanism
 
 ### Adopted Model: Qualitative Assessment Confidence
 
@@ -347,61 +354,44 @@ assessment_compliance_results  (Phase 2)
 | Epic 8 (Integration & Polish) | Pending | May overlap with report template changes |
 | Leadership: Report format expectations | Awaiting | Using UX designer's proposed format until feedback received |
 | Leadership: ISO licensing decision | In exploration | Non-blocking (interpretive approach works without license) |
-| Phase 2 prerequisites (P2-1 through P2-4) | Not started | Must complete before Phase 2 starts (can overlap with Phase 1) |
+| Prompt hardening (D-12, rating scales) | Complete | Sub-score validation and rating scales merged to main |
+| ScoringService split (D-15) | Not started | Folded into epic delivery |
+| rawToolPayload provenance (D-10) | Not started | Folded into epic delivery |
 
 ---
 
-## 12. Delivery Phases
+## 12. Delivery
 
-### Phase 1: ISO-Aware Export Narrative (Ship First)
+### Single Epic: ISO Compliance, Explainability & Confidence
 
-**Scope:** Add ISO traceability and confidence to exported reports. Zero changes to the scoring pipeline.
-
-| Component | Change | Files Affected |
-|-----------|--------|----------------|
-| DB tables + seeding | New tables: `compliance_frameworks`, `framework_versions`, `framework_controls`, `interpretive_criteria`, `dimension_control_mappings` | Schema migration + seed script |
-| Export narrative prompt | Inject relevant ISO controls into narrative generation context | `exportNarrativePrompt.ts` |
-| Score formatting | Include ISO context when building dimension data for export | `formatDimensionScore()` |
-| PDF/Word templates | Render ISO references, confidence badges, Guardian-native labels | Template files |
-| ISO messaging | Enforce approved language in prompt instructions and templates | Prompt + template text |
-
-**What Phase 1 does NOT touch:**
-- `ScoringService.ts` (scoring pipeline)
-- `scoringComplete.ts` (tool schema)
-- `ScoringPayloadValidator.ts` (validation)
-- `scoring/types.ts` (domain types)
-- Question generation prompts
-- Main system prompt (`guardian-prompt.md`)
-
-**Prerequisites:** None. Can start immediately.
-
-### Phase 2 Prerequisites (Between Phase 1 and Phase 2)
-
-These must be completed before Phase 2 begins. Can overlap with Phase 1 development.
-
-| # | Item | Effort | Description |
-|---|------|--------|-------------|
-| P2-1 | Fix `rawToolPayload` provenance | ~1 day | Add true raw column storing Claude's output pre-validation |
-| P2-2 | Tighten `findings` JSONB validation | ~1 day | Add schema validation to `ScoringPayloadValidator` for `findings` internals |
-| P2-3 | Split `ScoringService.ts` | ~1-2 days | Extract `scoreWithClaude` + `storeScores` (currently 535 LOC, over 300 limit) |
-| P2-4 | Regression test baseline | ~2-3 days | Golden sample test suite: 5 assessments scored and stored as expected output |
-
-### Phase 2: Structured ISO Scoring Data (Separate Epic)
-
-**Scope:** Integrate ISO compliance into the scoring pipeline itself. Structured data stored per assessment per control.
+**Decision:** DB foundation and export/scoring enrichment ship together — they need each other to deliver value. The original Phase 1/Phase 2 split is collapsed into one epic.
 
 | Component | Change |
 |-----------|--------|
-| Scoring tool schema | Add ISO fields to `scoringComplete.ts` tool definition |
-| Payload validator | Validate ISO fields in scoring output |
+| DB tables + seeding | New tables: `compliance_frameworks`, `framework_versions`, `framework_controls`, `interpretive_criteria`, `dimension_control_mappings`, `assessment_compliance_results` |
+| Seed script | Tier 1 ISO 42001 + 23894 interpretive criteria (Claude-generated, human-reviewed) |
+| Scoring tool schema | Add ISO + confidence fields to `scoringComplete.ts` tool definition |
+| Scoring prompt | Inject relevant ISO controls into scoring context (static catalog in system prompt, per-assessment applicability in user prompt) |
+| Payload validator | Validate ISO + confidence fields in scoring output |
 | Domain types | Add ISO types to `types.ts` |
-| Scoring prompt | Inject ISO controls into scoring context (system + user prompt split) |
-| DB storage | Populate `assessment_compliance_results` table |
+| Export narrative prompt | Inject ISO controls + confidence into narrative generation context |
+| PDF/Word templates | Render ISO references, confidence badges, Guardian-native labels |
+| ISO messaging | Enforce "ISO-traceable" language in prompts and templates |
+| `rawToolPayload` provenance | Add true raw column storing Claude's output pre-validation (D-10) |
+| `ScoringService.ts` split | Extract concerns to stay under 300 LOC (D-15) |
 | maxTokens | Assess and increase if needed (8000 → 10000) |
 
-**Prerequisites:** P2-1 through P2-4 complete.
+**Already completed (prompt hardening, merged to main):**
+- Sub-score validation in `ScoringPayloadValidator` (D-12 — soft warnings, backwards compatible)
+- Rating scales for all 5 scored dimensions in `scoringPrompt.ts`
+- `guardian-prompt.md` trimmed 50% (more headroom for ISO context in chat)
 
-### Phase 3: Extensibility Validation
+**Not in scope:**
+- Question generation (unchanged)
+- Main system prompt (`guardian-prompt.md`) — not modified for ISO
+- Tier 2/3 standards (validated via SC-3 extensibility test only)
+
+### Post-Epic: Extensibility Validation
 
 - Seed Tier 2 standard (ISO 22989) with zero code changes (validates SC-3)
 - Version update workflow test
@@ -434,25 +424,15 @@ Guardian is NOT a certification body. All ISO references in reports, UI, and doc
 
 ## 14. Test Strategy
 
-### Phase 1 Tests
 | Type | What | Coverage |
 |------|------|----------|
-| Unit | ISO control retrieval, prompt injection logic, template rendering | Export pipeline components |
-| Integration | Export pipeline end-to-end with ISO context | Full export flow |
+| Unit | ISO control retrieval, prompt injection logic, template rendering, confidence validation | DB layer, scoring pipeline, export pipeline |
+| Integration | Scoring pipeline end-to-end with ISO context, export pipeline with ISO enrichment | Full scoring + export flows |
 | Snapshot | Report output format stability | Catch unintended format changes |
-| Manual | Generated ISO narrative accuracy | Human spot-check of 5 reports |
-
-### Phase 2 Prerequisite Tests
-| Type | What | Purpose |
-|------|------|---------|
-| Golden sample baseline | 5 assessments scored + stored as expected output | Regression detection |
-| A/B comparison | Pre-ISO vs post-ISO scoring on same inputs | Quality validation |
+| Golden sample baseline | 5 assessments scored before and after ISO changes | Regression detection (SC-6) |
 | Confidence stability | Same input scored 5x, verify H/M/L consistency | Model reliability |
-
-### Scope Fence
-- Phase 1 tests: export pipeline ONLY
-- Phase 2 prep tests: regression baseline + scoring consistency
-- Phase 2 tests: full scoring pipeline with ISO + confidence
+| Manual | Generated ISO narrative accuracy, messaging compliance | Human spot-check of 5 reports (SC-8) |
+| Extensibility | Seed Tier 2 standard with zero code changes | Validates SC-3 |
 
 ---
 
@@ -462,3 +442,4 @@ Guardian is NOT a certification body. All ISO references in reports, UI, and doc
 |---------|------|---------|
 | 0.1 | 2026-02-10 | Initial draft from leadership requirements |
 | 0.2 | 2026-02-10 | Major revision incorporating design council consensus (16 decisions). Rewrote confidence model (qualitative replaces numeric). Added two-level versioning, ISO messaging guidelines (D-16), coverage gaps, phased delivery structure, test strategy. Updated schema for interpretive criteria versioning. |
+| 1.0 | 2026-02-12 | **Approved.** Collapsed Phase 1/2 into single epic (DB + scoring + export ship together). Added experimental validation of deterministic heuristics (r=0.287, rejected). Updated prompt system status (hardening complete). Folded D-10, D-15 prerequisites into epic. Marked D-12 complete. |
