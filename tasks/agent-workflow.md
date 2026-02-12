@@ -1,798 +1,203 @@
 # Guardian Agent Workflow
 
-**Version:** 3.0
-**Last Updated:** 2025-01-13
+**Version:** 5.0
+**Last Updated:** 2026-02-10
 
 ---
 
-## Overview
+## Orchestration Model
 
-Guardian development uses **specialized sub-agents** with **automated code review** for quality assurance.
+Main agent is the **orchestrator**. Delegates all work. Never implements directly.
 
-**Workflow:** Specialist builds → Code reviewer (Opus) reviews → User approves → Next story
+```
+Audit team → /claude-plan (or /spec-design) → /claude-implement (per batch) → Swarm + Codex → User Review → Next batch
+```
+
+### Skills vs Workflow Rules
+
+Skills (`/claude-plan`, `/claude-implement`, `/claude-delegate`) handle execution mechanics — creating specs, batching stories, running test+review loops.
+
+Workflow rules add quality gates the skills don't have:
+
+| Gate | When | What |
+|------|------|------|
+| **Pre-planning audit team** | Before plan-agent creates specs | Reads codebase, produces verified facts specs are built on |
+| **Post-batch team swarm** | After skill's per-story code-review | Team of specialists reviews batch (mesh communication) |
+| **Codex gate** | After team swarm, before user review | External review catches what internal agents miss |
+
+Skills and workflow rules don't conflict — skills execute, workflow rules wrap quality gates around execution.
 
 ---
 
-## Sub-Agents
+## Agent Roster
 
-### Specialist Agents
-
-| Agent | Scope | When to Use | Model |
-|-------|-------|-------------|-------|
-| `setup-agent` | Project setup, database, Docker | Infrastructure tasks | Sonnet |
-| `auth-agent` | Authentication, user management | Auth-related features | Sonnet |
-| `backend-agent` | Express, WebSocket, Drizzle, APIs | Any backend implementation | Opus |
-| `frontend-agent` | React, Next.js, UI components | Any frontend implementation | Sonnet |
-| `assessment-agent` | Vendor/assessment management | Assessment domain features | Sonnet |
-| `question-gen-agent` | Question generation (Claude) | Questionnaire features | Sonnet |
-| `export-agent` | PDF, Word, Excel export | Export functionality | Sonnet |
-| `ui-ux-agent` | UI/UX polish, layouts, styling | UI improvements | Sonnet |
-
-### Review Agents (Opus)
-
-| Agent | Scope | When Invoked | Model |
-|-------|-------|--------------|-------|
-| `code-reviewer` | Story-level review: architecture, security, tests, quality | After EACH story | Opus |
-| `final-reviewer` | Epic-level deep audit: codebase-wide quality, completeness, security, regressions | After ALL stories complete | Opus |
-
-**Key Difference:**
-- `code-reviewer`: Quick review of story changes (~5-10 min). Approves or requests fixes.
-- `final-reviewer`: Thorough, skeptical deep dive (~45-60 min). NOT a rubber stamp. Must find improvement opportunities.
-
-### Bug-Fix Agent (Sonnet)
+### Specialists
 
 | Agent | Scope | Model |
 |-------|-------|-------|
-| `bug-fix-agent` | Fix bugs from previous implementations, refine based on feedback | Sonnet |
+| `backend-agent` | Express, WebSocket, Drizzle, APIs | Opus |
+| `frontend-agent` | React, Next.js, UI components | Sonnet |
+| `export-agent` | PDF, Word, Excel export | Sonnet |
+| `question-gen-agent` | Question generation (Claude) | Sonnet |
+| `assessment-agent` | Vendor/assessment management | Sonnet |
+| `ui-ux-agent` | UI/UX polish, layouts, styling | Sonnet |
+| `setup-agent` | Project setup, database, Docker | Sonnet |
+| `auth-agent` | Authentication, user management | Sonnet |
+| `bug-fix-agent` | Fix bugs, refine based on feedback | Sonnet |
+
+### Reviewers (Opus)
+
+| Agent | When | Duration |
+|-------|------|----------|
+| `code-reviewer` | After EACH story | ~5-10 min |
+| `final-reviewer` | After ALL stories in epic | ~45-60 min, NOT a rubber stamp |
+
+---
+
+## Story Lifecycle
+
+1. **Specialist reads story specs** from epic file
+2. **Implements** feature + tests
+3. **Runs tests** — must pass
+4. **Code-reviewer** reviews → approves or requests fixes
+5. **Iterate** until approved, then next story
+6. **After each batch** → swarm review → Codex gate → summary to user, WAIT for approval
+7. **Epic complete** → final-reviewer deep audit
+
+### Review Outputs
+- `.claude/review-approved.md` or `.claude/review-feedback.md` (per story)
+- `.claude/final-review-epic-{N}.md` (per epic)
+
+---
+
+## Parallel Agents vs Agent Teams
+
+### Decision: Do agents need each other's output?
+
+**NO → Parallel agents (Task tool, no team).** Cheaper, simpler, no coordination overhead.
+- 3 independent file audits (each reads different files, reports back)
+- Frontend + backend stories that touch different files
+- Running tests while another agent researches a question
+- Multiple Explore agents searching different areas of the codebase
+
+**YES → Agent team (TeamCreate).** Agents communicate, share findings, build on each other's work.
+- Source-auditor finds facts → fixers need those facts to implement correctly
+- Spec reviewer finds a schema conflict → implementation agent needs to know before coding
+- Security reviewer finds auth gap → other reviewers need to check if their areas are affected
+- Code reviewer rejects a fix → fixer needs the feedback to iterate (without orchestrator relay)
+
+### The Test
+
+Ask: "If Agent A discovers something unexpected, does Agent B need to know immediately?"
+- Yes → team (mesh communication)
+- No → parallel agents (independent, report to orchestrator)
+
+### Right-Sizing Teams
+
+| Size | When |
+|------|------|
+| **Single agent** | 1 file, 1 clear task, no cross-referencing |
+| **Team of 2** | Fix + review cycle on a single artifact |
+| **Team of 3-4** | Knowledge pipeline (audit → fix → review) or specialist review panel |
+| **Team of 5+** | Large cross-cutting reviews or multi-file refactors only |
+
+**Principle:** Teams add value when one agent's output improves another agent's work.
+
+### Knowledge Pipeline Pattern
+
+Upstream agent produces facts, downstream agents consume them.
+
+```
+source-auditor → fixers (parallel) → reviewers (parallel)
+```
+
+**Rules:**
+- Spawn upstream FIRST, wait for output, THEN spawn downstream
+- Source agent shares verified facts — downstream works from facts, not assumptions
+- Reviewers cross-reference fixes against source, not just story text
+
+**Anti-pattern:** Spawning all agents simultaneously with "wait for X" in prompt.
+
+### Pre-Planning Audit Team
+
+Deploy BEFORE writing any overview/sprints/stories. Reads actual codebase, produces verified facts that specs are built on.
+
+**Composition (Guardian-specific):**
+- **Cascade chain auditor** — traces tool schema → validator → DB → types → export → narrative prompt → template
+- **File boundary auditor** — checks file collisions between stories, 300 LOC limits, layer boundary violations
+- **Pattern verifier** — confirms specs don't assume things that don't exist or miss things that do
+
+**Refine based on what gets caught.** If Codex consistently catches type mismatches, add a types auditor.
+
+### Batching
+
+Orchestrator analyzes stories and groups into parallel batches based on:
+- **No file conflicts** — stories in a batch touch different files
+- **No dependency chains** — no story in the batch blocks another
+- Batch size varies (2, 3, 4+ stories) depending on the epic structure
+
+### Post-Batch Review Gate
+
+Deploy AFTER each parallel batch completes, before Codex and user review.
+
+```
+Batch of N parallel stories (per-story code-reviewer each)
+  → Team swarm review (specialists in mesh)
+  → Codex gate (batch-level)
+  → User approval
+  → Next batch
+```
+
+**Swarm reviewers** cover different angles of the batch (architecture, security, test coverage, consistency). Each has ONE focus. They share findings with each other (mesh, not hub-and-spoke).
+
+### Fix Cycle Pattern
+
+```
+1. source-auditor reads files, shares facts
+2. fixers edit in parallel (different files)
+3. reviewers verify against source facts
+```
+
+### Sequencing Rules
+
+- Upstream before downstream — never spawn consumers before producer finishes
+- Independent tasks in parallel — different files with no shared deps
+- Reviewers AFTER fixers — don't review work that hasn't happened yet
+- Shut down completed agents promptly — don't leave idle agents running
+
+### Communication Rules
+
+- Mesh over hub-and-spoke — specialists share findings with each other
+- Source agent shares verified facts — downstream agents work from facts, not assumptions
+- Team lead orchestrates sequencing — doesn't do the actual work
+
+---
+
+## Bug-Fix Workflow
+
+1. Bug-fix agent reads implementation log (if exists) or git history
+2. Investigates root cause
+3. Fixes with tests, all tests pass
+4. Code-reviewer reviews the fix
+5. Commit with `fix:` prefix
 
 ---
 
 ## Implementation Logs (Optional)
 
-**Purpose:** Preserve context and design decisions for future sessions.
-
 **Location:** `/tasks/implementation-logs/epic-X-[name].md`
 
-**When to update (recommended):**
-- After completing a story
-- After code review approval
-- When fixing bugs
-- When session is ending mid-epic
-
-**What to document:**
-- What was implemented
-- Files modified
-- Tests added
-- Design decisions and rationale
-- Known issues or technical debt
-- Links to commits
-
-**Template:** `/tasks/implementation-logs/_TEMPLATE.md`
-
-**Note:** Implementation logs are optional but helpful for:
-- Session handoffs (if work is interrupted)
-- Bug-fix agent context
-- Understanding "why" decisions were made
+Preserve context for session handoffs, bug-fix agent context, and design rationale.
 
 **Source of Truth Hierarchy:**
 1. Git history (what code exists)
 2. task-overview.md (what's next)
-3. Implementation logs (design rationale, context)
-
----
-
-## Workflow Steps
-
-### Overview: Story-Level Iteration with 3-Story User Checkpoints
-
-**Pattern:**
-```
-Main Agent → Specialist (3 stories) → Code Review (per story) → User Review (every 3 stories) → Next batch
-```
-
-**Key Principles:**
-1. **Main agent delegates** to specialist (never does work directly)
-2. **Specialist reviews after EACH story** (not batched)
-3. **User reviews every 3 stories** (manual quality gate)
-
----
-
-### Step 1: Main Agent Delegates to Specialist
-
-**Main agent identifies work** (e.g., "Epic 9 Stories 9.1-9.3")
-
-**Delegation command:**
-```
-Task(subagent_type: "ui-ux-agent",
-     prompt: "Complete Stories 9.1-9.3.
-             After EACH story: invoke code-reviewer, iterate until approved.
-             After all 3 stories: provide summary for user manual review.")
-```
-
-**What happens:**
-- Main agent hands off to specialist
-- Specialist reads epic file (`tasks/epic-9-ui-ux-upgrade.md`)
-- Specialist begins Story 9.1
-
-**Anti-Pattern (WRONG):**
-```
-❌ Main agent writes Sidebar.tsx directly
-❌ Main agent implements stories (should delegate to specialist)
-```
-
----
-
-### Step 2: Specialist Builds Story (Per Story)
-
-**For EACH story** (e.g., Story 9.1):
-
-1. **Specialist reads story specs** from epic file
-2. **Implements feature** (creates/modifies files)
-3. **Writes tests** (unit + integration as needed)
-4. **Runs tests** (`npm test`)
-5. **Self-reviews** against Definition of Done checklist
-
-**Then proceeds to Step 3** (code review)
-
----
-
-### Step 3: Specialist Invokes Code Reviewer (Per Story)
-
-**After EACH story completion**, specialist invokes code-reviewer:
-
-```
-Story 9.1 complete
-  → Task(subagent_type: "code-reviewer",
-         prompt: "Review Story 9.1 (Sidebar component).
-                 Files changed: Sidebar.tsx, chatStore.ts, layout.tsx
-                 Focus: Component structure, state management, responsive design")
-```
-
-**What happens:**
-- Code-reviewer (Opus) analyzes changes
-- Checks: architecture, tests, security, quality
-- Runs test suite
-- Generates review report
-
-**Output:** One of:
-- `.claude/review-approved.md` (✅ all checks passed)
-- `.claude/review-feedback.md` (❌ issues found)
-
----
-
-### Step 4: Specialist Iterates on Feedback (If Needed)
-
-**If issues found:**
-1. Specialist reads `.claude/review-feedback.md`
-2. Fixes each documented issue
-3. Re-invokes code-reviewer for same story
-4. Repeats until approved
-
-**If approved:**
-1. Specialist moves to next story (e.g., Story 9.2)
-2. Repeats Steps 2-4 for each subsequent story
-
-**Critical:** Do NOT batch stories before review. Review after EACH story.
-
----
-
-### Step 5: Specialist Provides 3-Story Summary
-
-**After Stories 9.1, 9.2, 9.3 all approved:**
-
-Specialist creates summary for user:
-
-```markdown
-## Stories 9.1-9.3 Complete - Summary for Manual Review
-
-**Stories Completed:**
-- ✅ Story 9.1: Sidebar skeleton
-- ✅ Story 9.2: Three-panel layout
-- ✅ Story 9.3: Sidebar state persistence
-
-**Files Created:**
-- apps/web/src/components/chat/Sidebar.tsx
-- apps/web/src/components/chat/__tests__/Sidebar.test.tsx
-
-**Files Modified:**
-- apps/web/src/stores/chatStore.ts
-- apps/web/src/app/(dashboard)/layout.tsx
-
-**Tests:**
-- 18 new tests written
-- All tests passing (102 → 120 tests)
-- Coverage: 78% (maintained)
-
-**Known Issues:**
-- None
-
-**Next Batch:** Stories 9.4-9.6 (Composer component)
-
-**Awaiting your approval to proceed.**
-```
-
-Specialist **WAITS** for user response.
-
----
-
-### Step 6: User Manual Review & Approval
-
-**User reviews summary:**
-- Check files make sense
-- Verify tests passing
-- Visual inspection (optional)
-- Approve or request changes
-
-**If approved:**
-```
-USER: "Approved. Continue with Stories 9.4-9.6."
-```
-
-**If changes needed:**
-```
-USER: "Change X in Sidebar.tsx, then re-review Story 9.1"
-```
-
----
-
-### Step 7: Repeat for Next Batch
-
-Main agent (or specialist continues):
-```
-Stories 9.4-9.6
-  → Same process (build → review per story → 3-story summary → user approval)
-
-Stories 9.7-9.9
-  → Same process
-
-... until all stories complete
-```
-
----
-
-### Step 8: Final Deep Review (Epic Completion)
-
-**When ALL stories in an epic are complete**, invoke the **final-reviewer agent** for a comprehensive codebase audit.
-
-**THIS IS NOT A RUBBER STAMP.** The final review is a thorough, skeptical deep dive.
-
-**Invocation:**
-```
-Task(subagent_type: "final-reviewer",
-     model: "opus",
-     prompt: "Perform final deep review for Epic 9 (UI/UX Upgrade).
-              All 25 stories are complete.
-              This is NOT a rubber stamp - be thorough and skeptical.
-              Return specific recommendations if issues found.")
-```
-
-**What Final Reviewer Does:**
-
-1. **Codebase Audit (not just changed files)**
-   - Reviews ALL files touched by the epic
-   - Checks for patterns that emerge across files
-   - Looks for inconsistencies between components
-   - Verifies the implementation matches the original epic goals
-
-2. **Code Quality Deep Dive**
-   - TypeScript strictness (any types, missing types)
-   - Error handling patterns (consistent across codebase?)
-   - Code duplication (copy-paste patterns?)
-   - Naming consistency (same concept named differently?)
-   - Dead code (unused exports, unreachable branches)
-
-3. **Completeness Check**
-   - All acceptance criteria met (per story)?
-   - All edge cases handled?
-   - All error states have UI feedback?
-   - Loading states implemented?
-   - Empty states handled?
-
-4. **Security Audit**
-   - Authentication checks on all protected routes
-   - Authorization (user can only access their data)
-   - Input validation (XSS, injection)
-   - Secrets handling (no hardcoded keys)
-   - CORS configuration
-   - Rate limiting in place
-
-5. **Regression Analysis**
-   - Run FULL test suite (unit + integration + e2e)
-   - Compare coverage before/after epic
-   - Check for tests that were disabled or skipped
-   - Verify existing functionality still works
-   - Check for breaking changes to APIs
-
-6. **Architecture Coherence**
-   - Layer boundaries respected?
-   - Dependency direction correct?
-   - No circular dependencies introduced?
-   - Consistent patterns across similar components?
-
-**Extended Thinking Required:**
-
-The final reviewer MUST use extended thinking to reason through:
-- "What could go wrong with this implementation?"
-- "What edge cases might be missed?"
-- "Are there security implications I haven't considered?"
-- "Does this implementation align with the system design?"
-- "What would a malicious user try to do?"
-
-**Output: Detailed Recommendations**
-
-The final reviewer creates: `.claude/final-review-epic-{N}.md`
-
-```markdown
-# Final Deep Review: Epic 9 (UI/UX Upgrade)
-
-**Reviewer:** final-reviewer (Opus)
-**Date:** 2025-01-17
-**Status:** RECOMMENDATIONS PENDING | APPROVED
-
----
-
-## Executive Summary
-
-[2-3 paragraph assessment of the epic implementation]
-
----
-
-## Code Quality Assessment
-
-### Strengths
-- [What was done well]
-
-### Issues Found
-
-#### Critical (Must Fix Before Merge)
-| Issue | Location | Description | Recommendation |
-|-------|----------|-------------|----------------|
-| Missing auth check | Sidebar.tsx:45 | User data fetched without auth verification | Add useAuth() check before fetch |
-
-#### Important (Should Fix)
-| Issue | Location | Description | Recommendation |
-|-------|----------|-------------|----------------|
-
-#### Minor (Consider Fixing)
-| Issue | Location | Description | Recommendation |
-|-------|----------|-------------|----------------|
-
----
-
-## Completeness Assessment
-
-| Story | Acceptance Criteria | Met? | Notes |
-|-------|---------------------|------|-------|
-| 9.1 | Sidebar renders | ✅ | |
-| 9.1 | Collapse state persists | ⚠️ | Works but localStorage key could conflict |
-
----
-
-## Security Assessment
-
-| Check | Status | Notes |
-|-------|--------|-------|
-| Auth on protected routes | ✅ | All routes check useAuth |
-| XSS prevention | ✅ | React escaping used |
-| CSRF protection | ⚠️ | Not applicable (JWT auth) |
-| Rate limiting | ❌ | Missing on new endpoints |
-
----
-
-## Regression Analysis
-
-| Metric | Before Epic | After Epic | Status |
-|--------|-------------|------------|--------|
-| Unit tests | 120 | 145 | ✅ +25 |
-| Integration tests | 30 | 35 | ✅ +5 |
-| E2E tests | 12 | 15 | ✅ +3 |
-| Coverage | 78% | 76% | ⚠️ -2% |
-| Skipped tests | 0 | 2 | ⚠️ NEW |
-
-**Skipped Tests Analysis:**
-- `Sidebar.test.tsx:45` - Skipped "resize handler" - WHY?
-- `chatStore.test.ts:120` - Skipped "persistence edge case" - WHY?
-
----
-
-## Architecture Coherence
-
-| Check | Status | Notes |
-|-------|--------|-------|
-| Layer boundaries | ✅ | Domain has no infra imports |
-| Dependency direction | ✅ | Correct flow |
-| Circular deps | ✅ | None detected |
-| Pattern consistency | ⚠️ | Two different state patterns used |
-
----
-
-## Recommendations
-
-### Must Address (Blocking)
-1. **Add rate limiting to /api/sidebar/preferences** - Currently unlimited, could be abused
-2. **Fix auth check in ConversationList.tsx:78** - Fetches conversations without auth guard
-
-### Should Address (Non-Blocking)
-3. **Unify state management pattern** - Sidebar uses local state, MessageList uses Zustand
-4. **Increase test coverage** - Coverage dropped 2%, add tests for new hooks
-5. **Enable skipped tests or document why** - 2 tests skipped without explanation
-
-### Consider (Future Improvement)
-6. **Extract common patterns** - Three components have similar loading/error handling
-7. **Add storybook stories** - Would help with visual regression testing
-
----
-
-## Verdict
-
-**Status:** RECOMMENDATIONS PENDING
-
-**Blocking Issues:** 2
-**Non-Blocking Issues:** 3
-**Suggestions:** 2
-
-**Next Steps:**
-1. Specialist fixes blocking issues (1, 2)
-2. Re-invoke final-reviewer for re-review
-3. Non-blocking issues can be addressed in follow-up PR
-
----
-
-**This review is NOT a rubber stamp.** Issues must be addressed or explicitly acknowledged by user before proceeding.
-```
-
-**After Final Review:**
-
-- If **RECOMMENDATIONS PENDING**: Specialist fixes blocking issues, then re-invoke final-reviewer
-- If **APPROVED**: User may mark epic as complete in task-overview.md
-- Non-blocking issues become tech debt items (add to backlog)
-
-**Critical:** The final reviewer hands back specific, actionable recommendations. It does NOT just say "looks good" - it finds things to improve.
-
----
-
-## Example Workflow
-
-### Example: Epic 9 Stories 9.1-9.3 (Story-Level Review Pattern)
-
-```
-USER: "Complete Epic 9 Stories 9.1-9.3"
-
-MAIN AGENT: Delegating to ui-ux-agent...
-  → Task(ui-ux-agent, "Complete Stories 9.1-9.3 with per-story code review")
-
----
-
-UI-UX-AGENT: Starting Story 9.1 (Sidebar skeleton)...
-  → Creates Sidebar.tsx
-  → Updates chatStore.ts with sidebar state
-  → Updates layout.tsx for three-panel layout
-  → Runs tests (all pass)
-  → Self-review complete
-
-UI-UX-AGENT: Story 9.1 complete. Invoking code-reviewer...
-  → Task(code-reviewer, "Review Story 9.1: Sidebar.tsx, chatStore.ts, layout.tsx")
-
-CODE-REVIEWER (Opus): Reviewing Story 9.1...
-  ✅ Architecture: Component structure good
-  ✅ Tests: Would like tests for Sidebar component
-  ✅ TypeScript: Clean types
-  ⚠️ Missing: No tests for Sidebar.tsx
-
-CODE-REVIEWER: Minor issue - Need Sidebar.test.tsx
-
-UI-UX-AGENT: Adding tests for Sidebar...
-  → Creates __tests__/Sidebar.test.tsx
-  → Runs tests (all pass)
-
-UI-UX-AGENT: Tests added. Re-invoking code-reviewer...
-  → Task(code-reviewer, "Re-review Story 9.1 with new tests")
-
-CODE-REVIEWER: ✅ APPROVED. Story 9.1 complete.
-
----
-
-UI-UX-AGENT: Moving to Story 9.2...
-  → [builds Story 9.2]
-  → [invokes code-reviewer]
-  → [approved first try]
-
-UI-UX-AGENT: Moving to Story 9.3...
-  → [builds Story 9.3]
-  → [invokes code-reviewer]
-  → [approved first try]
-
----
-
-UI-UX-AGENT: Stories 9.1-9.3 complete. Generating summary...
-
-## Stories 9.1-9.3 Complete - Manual Review Required
-
-**Stories:**
-- ✅ 9.1: Sidebar skeleton
-- ✅ 9.2: [Story 9.2 description]
-- ✅ 9.3: [Story 9.3 description]
-
-**Files:** [lists files]
-**Tests:** 18 new, all passing
-**Coverage:** 78%
-
-**Awaiting your approval to proceed to Stories 9.4-9.6.**
-
----
-
-USER: [Reviews summary]
-
-USER: "Approved. Continue with Stories 9.4-9.6."
-
-MAIN AGENT: Invoking ui-ux-agent for next batch...
-  → Task(ui-ux-agent, "Complete Stories 9.4-9.6...")
-
-[Process repeats for Stories 9.4-9.6, then 9.7-9.9, etc.]
-```
-
----
-
-## Fix Documentation Pattern
-
-**When code review finds issues:**
-
-1. **Code-reviewer creates:** `.claude/review-feedback.md` with issues list
-2. **User invokes specialist** with: "Fix issues in review-feedback.md"
-3. **Specialist reads review**, fixes issues
-4. **Specialist documents fixes** in EPIC summary:
-
-```markdown
-## Fixes Applied
-
-**Issue 1: JWT Hardcoded Secret**
-- File: JWTProvider.ts:18-30
-- Problem: Had fallback to 'guardian-secret-key'
-- Fix: Added env check, throws error if JWT_SECRET missing (except test env)
-- Result: Secure - no hardcoded production secrets
-
-**Issue 2: Integration Tests Missing**
-- Problem: No tests for DrizzleConversationRepository
-- Status: SKIPPED
-- Reason: Database connection pooling issues causing test hangs. Deferred to prevent blocking progress. Unit tests (86% coverage) validate logic.
-```
-
-5. **Code-reviewer re-reviews:**
-   - Reads EPIC summary "Fixes Applied" section
-   - Verifies documented fixes match actual code changes
-   - Checks rationale for skipped fixes is reasonable
-   - If matches: APPROVED
-   - If doesn't match: Flag as issue
-
-**Why this pattern:**
-- Fixes documented (traceability)
-- Skipped fixes explained (context preserved)
-- Git commits alone don't explain "why"
-- Code-reviewer can verify fixes match documentation
+3. Implementation logs (design rationale)
 
 ---
 
 ## Manual Intervention Points
 
-**You decide:**
-- ✅ When to invoke each specialist
-- ✅ Whether to fix issues or override
-- ✅ When to move to next epic
-- ✅ When to stop and iterate
+You decide: when to invoke specialists, whether to fix or override, when to move to next epic, when to stop.
 
 **Agents execute, you orchestrate.**
-
----
-
-## Review Bypass (Emergency)
-
-If you need to bypass code review (not recommended):
-
-```
-/agents modify code-reviewer --disable
-```
-
-**Restore:**
-```
-/agents modify code-reviewer --enable
-```
-
-**Use sparingly.** Code review catches bugs early.
-
----
-
-## Parallel Execution
-
-**Some epics can run in parallel** (see mvp-tasks.md dependency diagram):
-
-**After Epic 3 complete:**
-```
-USER: "Use frontend-agent to complete Epic 4"
-      (in one session)
-
-USER: "Use assessment-agent to complete Epic 5"
-      (in different session/parallel)
-```
-
-Both agents work simultaneously. Code reviewer reviews each independently.
-
----
-
-## Bug-Fix Agent Workflow
-
-**When to use bug-fix agent:**
-- User reports a bug in completed epic
-- External LLM identifies an issue
-- Code review finds critical bug
-- Integration tests fail after merge
-- Refining implementation based on feedback
-
-**Workflow:**
-
-### Step 1: Invoke Bug-Fix Agent
-```
-USER: "Use bug-fix agent to fix [issue description] in Epic X"
-```
-
-### Step 2: Agent Investigates
-- Reads implementation log (if exists) for Epic X
-- Falls back to git history if no log
-- Uses Grep/Read to investigate code
-- Identifies root cause
-
-### Step 3: Agent Fixes with Tests
-- Implements fix
-- Adds/updates tests
-- Ensures all tests pass
-
-### Step 4: Automatic Code Review
-- SubagentStop hook triggers
-- Code reviewer reviews the fix
-- Checks: no regressions, tests adequate, fix is correct
-
-### Step 5: Agent Documents (Optional)
-If implementation log exists:
-- Adds bug fix section to log
-- Documents issue, root cause, solution
-- Links to commits
-
-### Step 6: Commit
-- Clear commit message with "fix:" prefix
-- References issue if applicable
-
-**Example:**
-
-```
-USER: "Use bug-fix agent to fix: Login endpoint returns 500 instead of 401 for invalid credentials (Epic 2)"
-
-[bug-fix-agent works...]
-
-bug-fix-agent:
-✅ Bug fixed in Epic 2
-Issue: AuthController error handling
-Root cause: Error middleware not catching AuthenticationError
-Solution: Updated error middleware to map AuthenticationError → 401
-Tests: Added test for invalid credentials → 401
-Files: AuthController.ts, error.middleware.ts
-Commits: abc1234 - fix(epic-2): Return 401 for invalid credentials
-Implementation log updated: tasks/implementation-logs/epic-2-auth.md
-
-[SubagentStop hook triggers]
-
-code-reviewer: ✅ APPROVED
-- Fix addresses root cause
-- Test coverage adequate
-- No regressions introduced
-```
-
-**Benefits:**
-- Context-aware fixes (reads implementation logs)
-- Systematic documentation (updates logs)
-- Quality assurance (code review)
-- Preserves design decisions
-
----
-
-## Tips for Success
-
-### 1. **One Epic at a Time (Recommended)**
-Finish Epic 1 → Review → Epic 2 → Review → etc.
-
-**Pros:** Easier to debug, clear progress
-**Cons:** Slower (no parallelism)
-
-### 2. **Parallel When Possible**
-After Epic 3, run Epic 4 + Epic 5 in parallel
-
-**Pros:** Faster overall
-**Cons:** More complexity if both have issues
-
-### 3. **Trust the Code Reviewer**
-If Opus finds issues, they're usually real. Fix them.
-
-### 4. **Document Overrides**
-If you override a code review warning, document why in commit message or review file.
-
----
-
-## Troubleshooting
-
-### Problem: Code reviewer is too strict
-
-**Solution:** Edit `.claude/agents/code-reviewer.md` to adjust thresholds (e.g., lower coverage requirement to 60%)
-
-### Problem: Specialist agent goes off-rails
-
-**Solution:** Edit specialist agent prompt to be more explicit about constraints
-
-### Problem: Review takes too long
-
-**Solution:** Code reviewer uses Opus (thorough but slower). This is intentional for quality. Be patient.
-
-### Problem: Circular issues (fix creates new issues)
-
-**Solution:** Manually review, might indicate architectural problem. Discuss with team.
-
----
-
-## Success Metrics
-
-**Quality indicators:**
-- ✅ All epics pass code review on first try (good agent prompts)
-- ✅ Test coverage > 75% consistently
-- ✅ Zero security issues found
-- ✅ < 2 iterations per epic (specialist → review → fix → approve)
-
-**If you're iterating >3 times per epic:** Agent prompts need improvement.
-
----
-
-## Files
-
-**Agent definitions:**
-- `.claude/agents/setup-agent.md` - Infrastructure setup
-- `.claude/agents/auth-agent.md` - Authentication features
-- `.claude/agents/login-agent.md` - Login UI
-- `.claude/agents/backend-agent.md` - Backend (Express, WebSocket, DB)
-- `.claude/agents/frontend-agent.md` - Frontend (React, Next.js)
-- `.claude/agents/assessment-agent.md` - Assessment domain
-- `.claude/agents/question-gen-agent.md` - Question generation
-- `.claude/agents/export-agent.md` - Export functionality
-- `.claude/agents/ui-ux-agent.md` - UI/UX improvements
-- `.claude/agents/code-reviewer.md` - Story-level code review (Opus)
-- `.claude/agents/final-reviewer.md` - Epic-level deep review (Opus) - NOT a rubber stamp
-- `.claude/agents/bug-fix-agent.md` - Bug fixes
-
-**Review outputs:**
-- `.claude/review-approved.md` (ephemeral, created per story review)
-- `.claude/review-feedback.md` (ephemeral, created per story review)
-- `.claude/final-review-epic-{N}.md` (persistent, created after final deep review)
-
-**Task tracking:**
-- `tasks/task-overview.md` - High-level epic status
-- `tasks/mvp-tasks.md` - Epic 1-8 story definitions
-- `tasks/epic-9-ui-ux-upgrade.md` - Epic 9 story definitions (25 stories) ⭐ NEW
-- `tasks/roadmap.md` - Feature roadmap (all phases)
-
-**Implementation logs (optional):**
-- `tasks/implementation-logs/epic-X-[name].md` - Context and design decisions
-- `tasks/implementation-logs/_TEMPLATE.md` - Template for new logs
-
----
-
-## Document History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2025-01-04 | Initial agent workflow documentation - 7 specialist agents (Sonnet) + 1 code reviewer (Opus). Manual approval checkpoints between stories. |
-| 2.0 | 2025-01-12 | Added bug-fix agent workflow. Added implementation logs (optional context preservation). Updated source of truth hierarchy. |
-| 3.0 | 2025-01-13 | **MAJOR UPDATE:** Added ui-ux-agent (Epic 9). Clarified story-level code review pattern (review after EACH story, not batched). Added 3-story user manual review checkpoints. Updated example workflow to show correct delegation: Main Agent → Specialist → Code Review (per story) → User Review (every 3 stories). |
-| 4.0 | 2026-01-17 | **MAJOR UPDATE:** Added final-reviewer agent for epic-level deep review. This is NOT a rubber stamp - thorough codebase audit checking quality, completeness, security, regressions. Added Step 8 (Final Deep Review) to workflow. Final reviewer must document thinking process and provide actionable recommendations. |
-
----
-
-**This workflow ensures quality without slowing you down.**
-
-Specialist agents (Sonnet) build fast. Code reviewer (Opus) catches issues. You make final decisions.
-
-**Next:** Invoke `setup-agent` to begin Epic 1.
