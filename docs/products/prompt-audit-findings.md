@@ -220,19 +220,18 @@ FORMATTING_GUIDELINES (~42 lines)
 - Added NLHS minimum acceptable standards (ITIL4 Level 3, NIST CSF Tier 2, 24/7 support)
 - 219 → 348 lines (prompt template file, TypeScript logic is only ~50 lines)
 
-**ScoringPayloadValidator (committed, in progress):**
-- Adding soft validation (warnings, not rejections) for sub-score values against allowed rubric values
+**ScoringPayloadValidator (committed):**
+- Soft validation (warnings, not rejections) for sub-score values against allowed rubric values
+- New `subScoreRules.ts` (86 LOC) defines allowed sub-score names and point values per dimension
 - Backwards compatible — existing scoring without sub-scores still passes
 
-### Still In Progress
-- Task #10: Sub-score validation in ScoringPayloadValidator (background agent running)
-- Task #13: Run full test suite after all changes
+**All tasks complete.** 1,994 tests passing across 91 suites. Merged to main as `e079b6b`.
 
 ### Scoring Pipeline Safety Audit Results
 - All 10 dimensions scored in ONE Claude call (not per-dimension)
 - Rating scales added symmetrically to all 4 missing dimensions to prevent attention bias
 - Tool schema enforces 0-100 range but NOT specific sub-score values
-- Validation being added as soft enforcement (warnings) first
+- Sub-score validation added as soft enforcement (warnings)
 - Token budget safe: 7,100+ tokens headroom for response
 - Prompt caching still works (system prompt cached with ephemeral control)
 
@@ -240,4 +239,4 @@ FORMATTING_GUIDELINES (~42 lines)
 
 *Generated from 3-agent prompt audit on 2026-02-10.*
 *Reconciled conflicting findings between agents (Agent 2 incorrectly marked guardian-prompt.md as "deprecated" — it IS loaded at runtime via .env config).*
-*Updated 2026-02-10 with changes applied and scoring hardening status.*
+*Updated 2026-02-12: All prompt hardening complete and merged to main.*
