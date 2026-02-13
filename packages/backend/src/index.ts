@@ -65,6 +65,9 @@ import { VisionContentBuilder } from './infrastructure/ai/VisionContentBuilder.j
 import { createFileStorage } from './infrastructure/storage/index.js';
 import { FileValidationService } from './application/services/FileValidationService.js';
 import { ScoringService } from './application/services/ScoringService.js';
+import { ScoringStorageService } from './application/services/ScoringStorageService.js';
+import { ScoringLLMService } from './application/services/ScoringLLMService.js';
+import { ScoringQueryService } from './application/services/ScoringQueryService.js';
 import { ScoringPayloadValidator } from './domain/scoring/ScoringPayloadValidator.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 import { TextExtractionService } from './infrastructure/extraction/TextExtractionService.js';
@@ -210,23 +213,33 @@ const vendorValidationService = new VendorValidationService(fileRepo);
 // Story 28.11.1: Initialize TitleGenerationService for LLM-based title generation
 const titleGenerationService = new TitleGenerationService(ANTHROPIC_API_KEY);
 
-// Initialize scoring components (Epic 15, Epic 20: added transactionRunner, Epic 22: added conversationRepo)
+// Initialize scoring components (Epic 15, Epic 20, Epic 22, Epic 37: split into sub-services)
 const scoringPromptBuilder = new ScoringPromptBuilder();
 const scoringPayloadValidator = new ScoringPayloadValidator();
 const transactionRunner = new DrizzleTransactionRunner();
-const scoringService = new ScoringService(
+const scoringStorageService = new ScoringStorageService(
   responseRepo,
   dimensionScoreRepo,
+  assessmentResultRepo,
+  transactionRunner,
+  claudeClient           // ILLMClient for modelId in storeScores
+);
+const scoringLLMService = new ScoringLLMService(claudeClient, scoringPromptBuilder);
+const scoringQueryService = new ScoringQueryService(
+  assessmentResultRepo,
+  dimensionScoreRepo,
+  conversationRepo       // Epic 22: IConversationRepository for scoring rehydration
+);
+const scoringService = new ScoringService(
   assessmentResultRepo,
   assessmentRepo,
   fileRepo,
   fileStorage,
   documentParserService, // IScoringDocumentParser
-  claudeClient,          // ILLMClient - ClaudeClient implements this
-  scoringPromptBuilder,
   scoringPayloadValidator,
-  transactionRunner,     // ITransactionRunner for atomic score storage
-  conversationRepo       // Epic 22: IConversationRepository for scoring rehydration
+  scoringStorageService,
+  scoringLLMService,
+  scoringQueryService
 );
 
 // Initialize controllers

@@ -15,6 +15,7 @@ import { DrizzleConversationRepository } from '../../src/infrastructure/database
 import { DrizzleAssessmentResultRepository } from '../../src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.js'
 import { DrizzleDimensionScoreRepository } from '../../src/infrastructure/database/repositories/DrizzleDimensionScoreRepository.js'
 import { ScoringService } from '../../src/application/services/ScoringService.js'
+import { ScoringQueryService } from '../../src/application/services/ScoringQueryService.js'
 import { ScoringPayloadValidator } from '../../src/domain/scoring/ScoringPayloadValidator.js'
 import { randomUUID } from 'crypto'
 import * as schema from '../../src/infrastructure/database/schema/index.js'
@@ -42,22 +43,26 @@ describe('Scoring Rehydration Integration (Epic 22.1.1)', () => {
     assessmentResultRepo = new DrizzleAssessmentResultRepository()
     dimensionScoreRepo = new DrizzleDimensionScoreRepository()
 
+    // Epic 37: Create ScoringQueryService with real repos for rehydration testing
+    const queryService = new ScoringQueryService(
+      assessmentResultRepo,
+      dimensionScoreRepo,
+      conversationRepo
+    )
+
     // Create a minimal ScoringService with only rehydration dependencies
     // Other dependencies are mocked as they're not needed for rehydration
     const validator = new ScoringPayloadValidator()
     scoringService = new ScoringService(
-      {} as any, // responseRepo - not needed
-      dimensionScoreRepo,
       assessmentResultRepo,
       {} as any, // assessmentRepo - not needed
       {} as any, // fileRepo - not needed
       {} as any, // fileStorage - not needed
       {} as any, // documentParser - not needed
-      {} as any, // llmClient - not needed
-      {} as any, // promptBuilder - not needed
       validator,
-      {} as any, // transactionRunner - not needed
-      conversationRepo
+      {} as any, // storageService - not needed for rehydration
+      {} as any, // llmService - not needed for rehydration
+      queryService
     )
   })
 
