@@ -1,4 +1,5 @@
 import { SolutionType } from '../../domain/scoring/rubric.js';
+import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
 /**
  * Port for prompt building - application layer abstraction
@@ -16,11 +17,12 @@ import { SolutionType } from '../../domain/scoring/rubric.js';
 export interface IPromptBuilder {
   /**
    * Build the scoring system prompt with rubric
-   * Implementation should use PromptCacheManager.ensureCached('scoring')
+   * Accepts optional ISO catalog controls for inclusion in static prompt.
    *
-   * @returns System prompt with rubric criteria (cacheable)
+   * @param isoControls - Full ISO control catalog (cacheable, same across assessments)
+   * @returns System prompt with rubric criteria
    */
-  buildScoringSystemPrompt(): string;
+  buildScoringSystemPrompt(isoControls?: ISOControlForPrompt[]): string;
 
   /**
    * Build user prompt with vendor responses
@@ -28,47 +30,32 @@ export interface IPromptBuilder {
    *
    * IMPORTANT: solutionType is REQUIRED - it determines composite score weights.
    *
-   * @param params - Vendor info, solution type, and questionnaire responses
+   * @param params - Vendor info, solution type, questionnaire responses, and optional ISO controls
    * @returns User prompt with responses and weighting instructions
    */
   buildScoringUserPrompt(params: {
     vendorName: string;
     solutionName: string;
-    solutionType: SolutionType; // REQUIRED for correct weighting
+    solutionType: SolutionType;
     responses: Array<{
       sectionNumber: number;
       questionNumber: number;
       questionText: string;
       responseText: string;
     }>;
+    isoControls?: ISOControlForPrompt[];
   }): string;
-}
 
-/**
- * Infrastructure implementation notes:
- *
- * The existing PromptCacheManager API is:
- *   ensureCached(mode: ConversationMode, options?): PromptCacheEntry
- *
- * Where PromptCacheEntry = {
- *   systemPrompt: string;
- *   usePromptCache: boolean;
- *   cachedPromptId?: string;
- *   ...
- * }
- *
- * Implementation:
- *
- * class ScoringPromptBuilder implements IPromptBuilder {
- *   constructor(private cacheManager: PromptCacheManager) {}
- *
- *   buildScoringSystemPrompt(): string {
- *     // Use existing ensureCached API with 'scoring' mode
- *     const entry = this.cacheManager.ensureCached('scoring');
- *     return entry.systemPrompt;
- *   }
- *
- *   // When making Claude API call, check entry.usePromptCache
- *   // and set cache_control accordingly
- * }
- */
+  /**
+   * Optional: Fetch the full ISO control catalog for system prompt injection.
+   * Implemented by ScoringPromptBuilder when ISOControlRetrievalService is available.
+   * Called by ScoringLLMService through the interface -- no concrete dependency needed.
+   */
+  fetchISOCatalog?(): Promise<ISOControlForPrompt[]>;
+
+  /**
+   * Optional: Fetch applicable ISO controls for specific dimensions.
+   * Called by ScoringLLMService through the interface.
+   */
+  fetchApplicableControls?(dimensions: string[]): Promise<ISOControlForPrompt[]>;
+}

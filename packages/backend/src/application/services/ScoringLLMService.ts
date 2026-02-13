@@ -1,11 +1,10 @@
 /**
  * ScoringLLMService - LLM orchestration for scoring
  *
- * Extracted from ScoringService.scoreWithClaude() (lines 352-418) for
- * single responsibility. Handles prompt building, LLM streaming, and
- * tool payload extraction.
+ * Extracted from ScoringService.scoreWithClaude() for single responsibility.
+ * Handles prompt building, LLM streaming, and tool payload extraction.
  *
- * Zero behavioral change from original method.
+ * Epic 37: Added ISO control injection via IPromptBuilder optional methods.
  */
 
 import { ILLMClient } from '../interfaces/ILLMClient.js';
@@ -13,13 +12,18 @@ import { IPromptBuilder } from '../interfaces/IPromptBuilder.js';
 import { scoringCompleteTool } from '../../domain/scoring/tools/scoringComplete.js';
 import { SolutionType } from '../../domain/scoring/rubric.js';
 import { ScoringParseResult } from '../interfaces/IScoringDocumentParser.js';
+import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
-/**
- * Result of LLM scoring - narrative text + structured tool payload
- */
+/** Result of LLM scoring - narrative text + structured tool payload */
 export interface ScoreWithClaudeResult {
   narrativeReport: string;
   payload: unknown;
+}
+
+/** Optional ISO control data passed to scoreWithClaude */
+export interface ISOScoringOptions {
+  catalogControls: ISOControlForPrompt[];
+  applicableControls: ISOControlForPrompt[];
 }
 
 /**
@@ -28,6 +32,7 @@ export interface ScoreWithClaudeResult {
  * - Streams LLM response via ILLMClient port
  * - Extracts scoring_complete tool payload
  * - Handles abort signal
+ * - Proxies ISO data fetching through IPromptBuilder (Epic 37)
  */
 export class ScoringLLMService {
   constructor(
@@ -37,16 +42,31 @@ export class ScoringLLMService {
 
   /**
    * Proxy to ILLMClient.getModelId() for report data provenance.
-   * ScoringService needs this for ScoringReportData.modelId.
    */
   getModelId(): string {
     return this.llmClient.getModelId();
   }
 
   /**
+   * Proxy: Fetch the full ISO control catalog via IPromptBuilder.
+   * ScoringService calls this to get ISO data without depending on infrastructure.
+   */
+  async fetchISOCatalog(): Promise<ISOControlForPrompt[]> {
+    return this.promptBuilder.fetchISOCatalog?.() ?? Promise.resolve([]);
+  }
+
+  /**
+   * Proxy: Fetch applicable ISO controls for specific dimensions via IPromptBuilder.
+   */
+  async fetchApplicableControls(dimensions: string[]): Promise<ISOControlForPrompt[]> {
+    return this.promptBuilder.fetchApplicableControls?.(dimensions) ?? Promise.resolve([]);
+  }
+
+  /**
    * Send responses to Claude for scoring
    *
    * NOTE: Uses ports (ILLMClient, IPromptBuilder) - no infrastructure imports
+   * Epic 37: Accepts optional isoOptions to inject ISO controls into prompts
    */
   async scoreWithClaude(
     parseResult: ScoringParseResult,
@@ -54,20 +74,24 @@ export class ScoringLLMService {
     solutionName: string,
     solutionType: SolutionType,
     abortSignal: AbortSignal,
-    onMessage: (message: string) => void
+    onMessage: (message: string) => void,
+    isoOptions?: ISOScoringOptions
   ): Promise<ScoreWithClaudeResult> {
     // Build prompts using port (not infrastructure import)
-    const systemPrompt = this.promptBuilder.buildScoringSystemPrompt();
+    const systemPrompt = this.promptBuilder.buildScoringSystemPrompt(
+      isoOptions?.catalogControls
+    );
     const userPrompt = this.promptBuilder.buildScoringUserPrompt({
       vendorName,
       solutionName,
-      solutionType, // CRITICAL: Determines composite score weights
+      solutionType,
       responses: parseResult.responses.map(r => ({
         sectionNumber: r.sectionNumber,
         questionNumber: r.questionNumber,
         questionText: r.questionText,
         responseText: r.responseText,
       })),
+      isoControls: isoOptions?.applicableControls,
     });
 
     // Call LLM via port (not ClaudeClient directly)
@@ -78,21 +102,14 @@ export class ScoringLLMService {
       systemPrompt,
       userPrompt,
       tools: [scoringCompleteTool],
-      // CRITICAL: Force Claude to use the scoring_complete tool
-      // Without this, Claude may write narrative but skip calling the tool
       tool_choice: { type: 'any' },
-      // Enable prompt caching for the large scoring rubric system prompt
-      // Reduces input token costs by 30-50% for repeated scoring requests
       usePromptCache: true,
-      // Scoring output includes 10 dimensions with findings, executive summary,
-      // and key findings. 8K tokens provides headroom for comprehensive analysis.
-      maxTokens: 8000,
-      // Use temperature 0 for deterministic, reproducible scoring output
+      // Epic 37: Increased from 8000 to 10000 for ISO enrichment headroom
+      maxTokens: 10000,
       temperature: 0,
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;
-        // Emit progress updates periodically
         if (narrativeReport.length % 500 === 0) {
           onMessage('Generating risk assessment...');
         }
@@ -105,7 +122,6 @@ export class ScoringLLMService {
     });
 
     // P2 Fix: Check if abort caused the missing tool payload
-    // When user aborts mid-stream, streamWithTool exits early before tool fires
     if (!toolPayload) {
       if (abortSignal.aborted) {
         throw new Error('Scoring aborted');

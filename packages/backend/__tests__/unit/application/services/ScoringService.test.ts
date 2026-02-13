@@ -196,6 +196,8 @@ describe('ScoringService', () => {
         payload: validPayload,
       }),
       getModelId: jest.fn().mockReturnValue('claude-3-5-sonnet-20241022'),
+      fetchISOCatalog: jest.fn().mockResolvedValue([]),
+      fetchApplicableControls: jest.fn().mockResolvedValue([]),
     } as unknown as jest.Mocked<ScoringLLMService>
 
     // Epic 37: Mock ScoringQueryService (replaces inline getResultForConversation)
@@ -305,7 +307,47 @@ describe('ScoringService', () => {
           'Test Solution',
           'clinical_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          { catalogControls: [], applicableControls: [] }
+        )
+      })
+
+      it('should fetch ISO catalog before scoring (Epic 37)', async () => {
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockLLMService.fetchISOCatalog).toHaveBeenCalledTimes(1)
+      })
+
+      it('should pass catalog as both catalogControls and applicableControls (Epic 37)', async () => {
+        const mockCatalog = [{ clauseRef: 'A.6.1' }]
+        mockLLMService.fetchISOCatalog.mockResolvedValue(mockCatalog as any)
+
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.any(String),
+          expect.any(String),
+          expect.any(String),
+          expect.any(AbortSignal),
+          expect.any(Function),
+          { catalogControls: mockCatalog, applicableControls: mockCatalog }
+        )
+      })
+
+      it('should gracefully degrade when ISO fetch fails (Epic 37)', async () => {
+        mockLLMService.fetchISOCatalog.mockRejectedValue(new Error('DB error'))
+
+        const result = await service.score(defaultInput, jest.fn())
+        expect(result.success).toBe(true)
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.any(String),
+          expect.any(String),
+          expect.any(String),
+          expect.any(AbortSignal),
+          expect.any(Function),
+          { catalogControls: [], applicableControls: [] }
         )
       })
 
@@ -565,7 +607,8 @@ describe('ScoringService', () => {
           'Clinical AI Tool',
           'clinical_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -591,7 +634,8 @@ describe('ScoringService', () => {
           'Admin AI Tool',
           'administrative_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -617,7 +661,8 @@ describe('ScoringService', () => {
           'Patient Portal',
           'patient_facing',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -643,7 +688,8 @@ describe('ScoringService', () => {
           'Unknown Tool',
           'clinical_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -669,7 +715,8 @@ describe('ScoringService', () => {
           'Unknown Tool',
           'clinical_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -695,7 +742,8 @@ describe('ScoringService', () => {
           'Clinical Tool',
           'clinical_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -723,7 +771,8 @@ describe('ScoringService', () => {
           'Unknown Tool',
           'clinical_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -752,7 +801,8 @@ describe('ScoringService', () => {
           'Admin Tool',
           'administrative_ai',
           expect.any(AbortSignal),
-          expect.any(Function)
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
     })

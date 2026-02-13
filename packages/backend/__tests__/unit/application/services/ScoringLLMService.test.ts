@@ -19,7 +19,7 @@ import type { SolutionType } from '../../../../src/domain/scoring/rubric.js';
 describe('ScoringLLMService', () => {
   let service: ScoringLLMService;
   let mockLLMClient: jest.Mocked<ILLMClient>;
-  let mockPromptBuilder: jest.Mocked<IPromptBuilder>;
+  let mockPromptBuilder: jest.Mocked<Required<IPromptBuilder>>;
 
   const testVendorName = 'TestVendor';
   const testSolutionName = 'TestSolution';
@@ -86,7 +86,9 @@ describe('ScoringLLMService', () => {
     mockPromptBuilder = {
       buildScoringSystemPrompt: jest.fn().mockReturnValue('system prompt text'),
       buildScoringUserPrompt: jest.fn().mockReturnValue('user prompt text'),
-    } as jest.Mocked<IPromptBuilder>;
+      fetchISOCatalog: jest.fn().mockResolvedValue([]),
+      fetchApplicableControls: jest.fn().mockResolvedValue([]),
+    } as jest.Mocked<Required<IPromptBuilder>>;
 
     service = new ScoringLLMService(mockLLMClient, mockPromptBuilder);
   });
@@ -148,6 +150,7 @@ describe('ScoringLLMService', () => {
             responseText: 'We comply with PIPEDA.',
           },
         ],
+        isoControls: undefined,
       });
     });
 
@@ -177,7 +180,7 @@ describe('ScoringLLMService', () => {
       expect(callArgs.tools[0].name).toBe('scoring_complete');
       expect(callArgs.tool_choice).toEqual({ type: 'any' });
       expect(callArgs.usePromptCache).toBe(true);
-      expect(callArgs.maxTokens).toBe(8000);
+      expect(callArgs.maxTokens).toBe(10000);
       expect(callArgs.temperature).toBe(0);
       expect(callArgs.abortSignal).toBe(abortController.signal);
       expect(callArgs.onTextDelta).toBeDefined();
@@ -327,6 +330,94 @@ describe('ScoringLLMService', () => {
 
       // Should still get the correct payload
       expect(result.payload).toEqual(mockToolPayload);
+    });
+
+    it('should pass ISO controls to prompt builder when isoOptions provided', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const catalogControls = [{ clauseRef: 'A.6.1', domain: 'Data', title: 'Data governance', framework: 'ISO/IEC 42001', criteriaText: 'Test', dimensions: [], relevanceWeight: 1 }];
+      const applicableControls = [{ clauseRef: 'A.6.2', domain: 'Data', title: 'Data quality', framework: 'ISO/IEC 42001', criteriaText: 'Test', dimensions: [], relevanceWeight: 1 }];
+
+      const abortController = new AbortController();
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn(),
+        { catalogControls, applicableControls }
+      );
+
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith(catalogControls);
+      expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({ isoControls: applicableControls })
+      );
+    });
+
+    it('should work without isoOptions (backwards compatible)', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const result = await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      expect(result.payload).toEqual(mockToolPayload);
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe('fetchISOCatalog', () => {
+    it('should delegate to promptBuilder.fetchISOCatalog()', async () => {
+      const controls = [{ clauseRef: 'A.6.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeight: 1 }];
+      mockPromptBuilder.fetchISOCatalog.mockResolvedValue(controls as any);
+
+      const result = await service.fetchISOCatalog();
+      expect(result).toEqual(controls);
+      expect(mockPromptBuilder.fetchISOCatalog).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return empty array when fetchISOCatalog is not available', async () => {
+      const builderWithoutISO = {
+        buildScoringSystemPrompt: jest.fn().mockReturnValue('prompt'),
+        buildScoringUserPrompt: jest.fn().mockReturnValue('prompt'),
+      } as jest.Mocked<IPromptBuilder>;
+      const svc = new ScoringLLMService(mockLLMClient, builderWithoutISO);
+
+      const result = await svc.fetchISOCatalog();
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('fetchApplicableControls', () => {
+    it('should delegate to promptBuilder.fetchApplicableControls()', async () => {
+      const controls = [{ clauseRef: 'A.7.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeight: 1 }];
+      mockPromptBuilder.fetchApplicableControls.mockResolvedValue(controls as any);
+
+      const result = await service.fetchApplicableControls(['privacy_risk']);
+      expect(result).toEqual(controls);
+      expect(mockPromptBuilder.fetchApplicableControls).toHaveBeenCalledWith(['privacy_risk']);
+    });
+
+    it('should return empty array when fetchApplicableControls is not available', async () => {
+      const builderWithoutISO = {
+        buildScoringSystemPrompt: jest.fn().mockReturnValue('prompt'),
+        buildScoringUserPrompt: jest.fn().mockReturnValue('prompt'),
+      } as jest.Mocked<IPromptBuilder>;
+      const svc = new ScoringLLMService(mockLLMClient, builderWithoutISO);
+
+      const result = await svc.fetchApplicableControls(['privacy_risk']);
+      expect(result).toEqual([]);
     });
   });
 });

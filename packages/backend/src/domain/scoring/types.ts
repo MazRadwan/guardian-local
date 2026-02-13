@@ -5,6 +5,7 @@
  */
 
 import { RiskDimension } from '../types/QuestionnaireSchema'
+import type { AssessmentConfidence, ISOClauseReference } from '../compliance/types.js'
 
 /**
  * Risk rating levels
@@ -37,6 +38,9 @@ export interface DimensionScoreData {
       questionNumber: number
       quote: string
     }>
+    // ISO enrichment (Epic 37)
+    assessmentConfidence?: AssessmentConfidence
+    isoClauseReferences?: ISOClauseReference[]
   }
 }
 

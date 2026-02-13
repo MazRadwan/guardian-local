@@ -188,15 +188,26 @@ export class ScoringService implements IScoringService {
       // Note: vendor already fetched via findByIdWithVendor (Story 20.3.4)
       const solutionType = this.storageService.determineSolutionType(assessment);
 
-      // 8. Score with Claude (delegated to ScoringLLMService)
+      // 8. Fetch ISO controls via ScoringLLMService (Epic 37: ISO enrichment)
+      // Graceful degradation: ISO enrichment is optional — fallback to empty arrays on failure
       onProgress({ status: 'scoring', message: 'Analyzing scoring...' });
+      let catalogControls: import('../../domain/compliance/types.js').ISOControlForPrompt[] = [];
+      try {
+        catalogControls = await this.llmService.fetchISOCatalog();
+      } catch {
+        // ISO enrichment failure is non-critical — baseline scoring still runs
+      }
+
+      // 9. Score with Claude (delegated to ScoringLLMService)
+      // Note: applicableControls = catalogControls when all dimensions apply (avoids duplicate fetch/tokens)
       const { narrativeReport, payload } = await this.llmService.scoreWithClaude(
         parseResult,
         vendor.name,
         assessment.solutionName || 'Unknown Solution',
         solutionType,
         abortController.signal,
-        (message) => onProgress({ status: 'scoring', message })
+        (message) => onProgress({ status: 'scoring', message }),
+        { catalogControls, applicableControls: catalogControls }
       );
 
       if (abortController.signal.aborted) {

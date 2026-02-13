@@ -166,7 +166,7 @@ describe('ScoringPayloadValidator', () => {
       expect(result.warnings).toHaveLength(0);
     });
 
-    it('should accept payload with valid sub-scores and produce no warnings', () => {
+    it('should accept payload with valid sub-scores and confidence, and produce no warnings', () => {
       const payload = createValidPayload();
       // clinical_risk is the first dimension
       const clinicalIdx = payload.dimensionScores.findIndex(
@@ -184,6 +184,10 @@ describe('ScoringPayloadValidator', () => {
         keyRisks: ['Retrospective only'],
         mitigations: [],
         evidenceRefs: [],
+        assessmentConfidence: {
+          level: 'high',
+          rationale: 'Strong evidence from retrospective analysis and regulatory submissions.',
+        },
       };
 
       const result = validator.validate(payload);
@@ -303,6 +307,10 @@ describe('ScoringPayloadValidator', () => {
         keyRisks: [],
         mitigations: [],
         evidenceRefs: [],
+        assessmentConfidence: {
+          level: 'medium',
+          rationale: 'Partial vendor documentation provided for capability assessment.',
+        },
       };
 
       const result = validator.validate(payload);
@@ -363,11 +371,254 @@ describe('ScoringPayloadValidator', () => {
         keyRisks: ['Some risk'],
         mitigations: [],
         evidenceRefs: [],
+        assessmentConfidence: {
+          level: 'low',
+          rationale: 'Limited documentation available for clinical risk assessment.',
+        },
       };
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
       expect(result.warnings).toHaveLength(0);
+    });
+  });
+
+  describe('confidence validation (soft warnings, Epic 37)', () => {
+    it('should produce warning when assessmentConfidence missing from findings', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'privacy_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        keyRisks: [],
+        mitigations: [],
+        evidenceRefs: [],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('missing assessmentConfidence')
+      );
+    });
+
+    it('should produce no confidence warning when valid assessmentConfidence present', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'privacy_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        keyRisks: [],
+        mitigations: [],
+        evidenceRefs: [],
+        assessmentConfidence: {
+          level: 'high',
+          rationale: 'Strong evidence from privacy impact assessments and PIPEDA compliance documentation.',
+        },
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      const privacyWarnings = result.warnings.filter(w => w.includes('privacy_risk') && w.includes('Confidence'));
+      expect(privacyWarnings).toHaveLength(0);
+    });
+
+    it('should produce warning for invalid confidence level', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'security_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'very_high',
+          rationale: 'This is a sufficiently long rationale for testing purposes.',
+        },
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('assessmentConfidence.level must be one of')
+      );
+    });
+
+    it('should produce warning for short confidence rationale', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'security_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'medium',
+          rationale: 'Too short.',
+        },
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('rationale must be at least 20 characters')
+      );
+    });
+
+    it('should NOT reject payload for confidence issues (soft warnings only)', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'privacy_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'invalid_level',
+          rationale: 'x',
+        },
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings.length).toBeGreaterThan(0);
+      expect(result.errors).toHaveLength(0);
+    });
+  });
+
+  describe('ISO clause reference validation (soft warnings, Epic 37)', () => {
+    it('should produce no warning for valid isoClauseReferences', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'privacy_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'high',
+          rationale: 'Strong evidence from privacy documentation provided by vendor.',
+        },
+        isoClauseReferences: [
+          {
+            clauseRef: 'A.8.4',
+            title: 'Privacy impact assessment',
+            framework: 'ISO/IEC 42001',
+            status: 'aligned',
+          },
+        ],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      const isoWarnings = result.warnings.filter(w => w.includes('isoClauseReferences'));
+      expect(isoWarnings).toHaveLength(0);
+    });
+
+    it('should produce warning for invalid ISO status', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'security_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'medium',
+          rationale: 'Moderate evidence from vendor security documentation provided.',
+        },
+        isoClauseReferences: [
+          {
+            clauseRef: 'A.6.2.6',
+            title: 'Data quality management',
+            framework: 'ISO/IEC 42001',
+            status: 'invalid_status',
+          },
+        ],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('isoClauseReferences[0].status must be one of')
+      );
+    });
+
+    it('should produce warning for empty clauseRef', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'security_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'medium',
+          rationale: 'Moderate evidence from vendor security documentation provided.',
+        },
+        isoClauseReferences: [
+          { clauseRef: '', title: 'Control', framework: 'ISO/IEC 42001', status: 'aligned' },
+        ],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('isoClauseReferences[0].clauseRef is required')
+      );
+    });
+
+    it('should produce warning for empty title', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'security_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'medium',
+          rationale: 'Moderate evidence from vendor security documentation provided.',
+        },
+        isoClauseReferences: [
+          { clauseRef: 'A.6.2', title: '', framework: 'ISO/IEC 42001', status: 'aligned' },
+        ],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('isoClauseReferences[0].title is required')
+      );
+    });
+
+    it('should produce warning for empty framework', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'security_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'medium',
+          rationale: 'Moderate evidence from vendor security documentation provided.',
+        },
+        isoClauseReferences: [
+          { clauseRef: 'A.6.2', title: 'Control', framework: '', status: 'aligned' },
+        ],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('isoClauseReferences[0].framework is required')
+      );
+    });
+
+    it('should produce no warning when isoClauseReferences not present', () => {
+      const payload = createValidPayload();
+      // No findings at all -- completely backwards compatible
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      const isoWarnings = result.warnings.filter(w => w.includes('isoClauseReferences'));
+      expect(isoWarnings).toHaveLength(0);
+    });
+
+    it('should NOT reject payload for ISO reference issues (soft warnings only)', () => {
+      const payload = createValidPayload();
+      const idx = payload.dimensionScores.findIndex((d: any) => d.dimension === 'privacy_risk');
+      (payload.dimensionScores[idx] as any).findings = {
+        subScores: [],
+        assessmentConfidence: {
+          level: 'high',
+          rationale: 'Strong evidence from multiple vendor documents and certifications.',
+        },
+        isoClauseReferences: [
+          { clauseRef: '', title: '', framework: '', status: 'bad' },
+        ],
+      };
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+      // Should have multiple ISO warnings
+      const isoWarnings = result.warnings.filter(w => w.includes('isoClauseReferences'));
+      expect(isoWarnings.length).toBeGreaterThanOrEqual(3);
     });
   });
 });

@@ -84,6 +84,96 @@ describe('Scoring Contract Test', () => {
     expect(validator.validate(createPayloadWithScore(schemaMax + 1)).valid).toBe(false);
   });
 
+  it('should have assessmentConfidence in findings schema', () => {
+    const findingsSchema = schema.properties.dimensionScores.items.properties.findings;
+    expect(findingsSchema.properties).toHaveProperty('assessmentConfidence');
+    expect(findingsSchema.properties.assessmentConfidence.properties.level.enum).toEqual(['high', 'medium', 'low']);
+    expect(findingsSchema.properties.assessmentConfidence.required).toEqual(['level', 'rationale']);
+  });
+
+  it('should have isoClauseReferences in findings schema', () => {
+    const findingsSchema = schema.properties.dimensionScores.items.properties.findings;
+    expect(findingsSchema.properties).toHaveProperty('isoClauseReferences');
+    const isoRefSchema = findingsSchema.properties.isoClauseReferences.items;
+    expect(isoRefSchema.required).toEqual(['clauseRef', 'title', 'framework', 'status']);
+    expect(isoRefSchema.properties.status.enum).toEqual(['aligned', 'partial', 'not_evidenced', 'not_applicable']);
+  });
+
+  it('should accept payload with assessmentConfidence (backwards compatible)', () => {
+    const payload = {
+      compositeScore: 50,
+      recommendation: 'conditional',
+      overallRiskRating: 'medium',
+      executiveSummary: 'This is a test summary for the assessment.',
+      dimensionScores: ALL_DIMENSIONS.map(d => ({
+        dimension: d,
+        score: 50,
+        riskRating: 'medium',
+        findings: {
+          subScores: [],
+          keyRisks: [],
+          mitigations: [],
+          evidenceRefs: [],
+          assessmentConfidence: {
+            level: 'high',
+            rationale: 'Strong evidence from vendor documentation provided.',
+          },
+        },
+      })),
+    };
+
+    const result = validator.validate(payload);
+    expect(result.valid).toBe(true);
+  });
+
+  it('should accept payload with isoClauseReferences (backwards compatible)', () => {
+    const payload = {
+      compositeScore: 50,
+      recommendation: 'conditional',
+      overallRiskRating: 'medium',
+      executiveSummary: 'This is a test summary for the assessment.',
+      dimensionScores: ALL_DIMENSIONS.map(d => ({
+        dimension: d,
+        score: 50,
+        riskRating: 'medium',
+        findings: {
+          subScores: [],
+          keyRisks: [],
+          mitigations: [],
+          evidenceRefs: [],
+          assessmentConfidence: {
+            level: 'medium',
+            rationale: 'Partial evidence from vendor documentation provided.',
+          },
+          isoClauseReferences: [
+            { clauseRef: 'A.6.2.6', title: 'Data quality', framework: 'ISO/IEC 42001', status: 'aligned' },
+          ],
+        },
+      })),
+    };
+
+    const result = validator.validate(payload);
+    expect(result.valid).toBe(true);
+  });
+
+  it('should accept payload without new ISO fields (backwards compatible)', () => {
+    // This is the original test - minimal payload without any ISO fields
+    const payload = {
+      compositeScore: 50,
+      recommendation: 'conditional',
+      overallRiskRating: 'medium',
+      executiveSummary: 'This is a test summary for the assessment.',
+      dimensionScores: ALL_DIMENSIONS.map(d => ({
+        dimension: d,
+        score: 50,
+        riskRating: 'medium',
+      })),
+    };
+
+    const result = validator.validate(payload);
+    expect(result.valid).toBe(true);
+  });
+
   // Helper functions
   function createPayloadWithRecommendation(recommendation: string) {
     return {

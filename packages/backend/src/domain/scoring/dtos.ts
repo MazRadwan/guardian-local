@@ -1,4 +1,5 @@
 import { RiskRating, Recommendation } from './types'
+import type { AssessmentConfidence, ISOClauseReference } from '../compliance/types.js'
 
 /**
  * Domain DTO for extracted response (no Drizzle dependency)
@@ -46,6 +47,9 @@ export interface DimensionScoreDTO {
     keyRisks: string[]
     mitigations: string[]
     evidenceRefs: Array<{ sectionNumber: number; questionNumber: number; quote: string }>
+    // ISO enrichment (Epic 37)
+    assessmentConfidence?: AssessmentConfidence
+    isoClauseReferences?: ISOClauseReference[]
   }
   createdAt: Date
 }

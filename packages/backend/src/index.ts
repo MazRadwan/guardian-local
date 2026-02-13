@@ -120,6 +120,17 @@ const responseRepo = new DrizzleResponseRepository();
 const dimensionScoreRepo = new DrizzleDimensionScoreRepository();
 const assessmentResultRepo = new DrizzleAssessmentResultRepository();
 
+// ISO compliance repositories (Epic 37)
+import { DrizzleDimensionControlMappingRepository } from './infrastructure/database/repositories/DrizzleDimensionControlMappingRepository.js';
+import { DrizzleInterpretiveCriteriaRepository } from './infrastructure/database/repositories/DrizzleInterpretiveCriteriaRepository.js';
+import { ISOControlRetrievalService } from './application/services/ISOControlRetrievalService.js';
+const dimensionControlMappingRepo = new DrizzleDimensionControlMappingRepository();
+const interpretiveCriteriaRepo = new DrizzleInterpretiveCriteriaRepository();
+const isoControlRetrievalService = new ISOControlRetrievalService(
+  dimensionControlMappingRepo,
+  interpretiveCriteriaRepo
+);
+
 // Initialize providers
 const jwtProvider = new JWTProvider(JWT_SECRET);
 
@@ -214,7 +225,7 @@ const vendorValidationService = new VendorValidationService(fileRepo);
 const titleGenerationService = new TitleGenerationService(ANTHROPIC_API_KEY);
 
 // Initialize scoring components (Epic 15, Epic 20, Epic 22, Epic 37: split into sub-services)
-const scoringPromptBuilder = new ScoringPromptBuilder();
+const scoringPromptBuilder = new ScoringPromptBuilder(isoControlRetrievalService);
 const scoringPayloadValidator = new ScoringPayloadValidator();
 const transactionRunner = new DrizzleTransactionRunner();
 const scoringStorageService = new ScoringStorageService(
