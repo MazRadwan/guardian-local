@@ -16,7 +16,7 @@ Per the PRD prompt architecture:
 - [ ] Applicability section includes: relevant controls for the assessed dimensions
 - [ ] ISO messaging compliance: uses "ISO-traceable" / "ISO-informed" language only
 - [ ] No prohibited terms: "ISO-compliant", "ISO-certified", "meets ISO requirements", "ISO score"
-- [ ] Guardian-native dimensions noted: "Clinical Risk, Vendor Viability, Ethical Considerations, and Sustainability use Guardian healthcare-specific criteria (no ISO mapping)"
+- [ ] Guardian-native dimensions noted: "Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability use Guardian healthcare-specific criteria (no ISO mapping)"
 - [ ] Under 150 LOC
 - [ ] No TypeScript errors
 
@@ -48,7 +48,7 @@ These are Guardian's interpretive criteria referencing ISO clause numbers.
 
 **IMPORTANT:** Use "ISO-traceable" or "ISO-informed" language. Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements".
 
-**Guardian-Native Dimensions:** Clinical Risk, Vendor Viability, Ethical Considerations, and Sustainability are assessed using Guardian healthcare-specific criteria (no ISO mapping available in current framework scope).
+**Guardian-Native Dimensions:** Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability are assessed using Guardian healthcare-specific criteria (no ISO mapping available in current framework scope).
 
 ### Controls by Domain\n\n`;
 
@@ -142,6 +142,9 @@ Consider these ISO-traceable controls when scoring the relevant dimensions:\n\n`
   - Test `buildISOApplicabilitySection(controls, dimensions)` lists controls with dimensions
   - Test `buildISOApplicabilitySection(controls, ['clinical_risk', 'ethical_considerations'])` includes Guardian-native note
   - Test messaging compliance: no "ISO-compliant", "ISO-certified", "meets ISO requirements"
+- [ ] `packages/backend/__tests__/integration/iso-seed-to-prompt.test.ts` (Sprint 5 exit criteria)
+  - Integration test: seed script loads data -> ISOControlRetrievalService retrieves controls -> prompt builder formats output
+  - Verifies the full seed-to-prompt path works end-to-end with real DB data
 
 ## Definition of Done
 

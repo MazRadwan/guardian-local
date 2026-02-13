@@ -25,7 +25,7 @@ This is the integration sprint. All the pieces exist (database, entities, repos,
 |-------|------|-------|--------------|
 | **37.6.1** | Update scoringComplete tool schema | Add assessmentConfidence + isoClauseReferences to tool | None |
 | **37.6.2** | Update scoring types + DTOs | Add ISO fields to DimensionScoreData findings type | 37.6.1 |
-| **37.6.3** | Update ScoringPayloadValidator | Add ISO + confidence validation via delegated validators | 37.6.1, 37.6.2 |
+| **37.6.3** | Update ScoringPayloadValidator | Add ISO + confidence validation via delegated validators | 37.6.1 |
 | **37.6.4** | Update ScoringPromptBuilder + scoringPrompt | Inject ISO catalog into system prompt, applicability into user prompt | None |
 | **37.6.5** | Wire into ScoringService + DI container | Connect ISO services, increase maxTokens, update DI | 37.6.1-37.6.4 |
 

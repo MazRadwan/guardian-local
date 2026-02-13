@@ -45,6 +45,7 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
     |          | ScoringService.ts (READ ONLY for copy)            |                    |
     +----------+---------------------------------------------------+--------------------+
     | 37.1.3   | ScoringService.ts (MODIFY - remove methods)       | 37.1.1, 37.1.2     |
+    |          | ScoringQueryService.ts (NEW - extracted query)     |                    |
     |          | ScoringLLMService.ts (MODIFY - add getModelId)    |                    |
     |          | index.ts (DI container)                           |                    |
     |          | ScoringService.test.ts (update imports)            |                    |
@@ -115,6 +116,7 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
 |                                                                        |
 |   FILES:                                                               |
 |   - ScoringService.ts (MODIFY - remove extracted methods)              |
+|   - ScoringQueryService.ts (NEW - extracted getResultForConversation)  |
 |   - ScoringLLMService.ts (MODIFY - add getModelId)                     |
 |   - index.ts (MODIFY - update DI wiring)                               |
 |   - ScoringService.test.ts (MODIFY - update imports)                   |
@@ -149,7 +151,7 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
 ## Exit Criteria
 
 Sprint 1 is complete when:
-- [ ] `ScoringService.ts` is under 300 LOC (target: ~220 LOC)
+- [ ] `ScoringService.ts` is under 300 LOC (target: ~280 LOC)
 - [ ] `scoringPrompt.ts` is under 300 LOC (target: ~280 LOC after ISO placeholder)
 - [ ] `ScoringPayloadValidator.ts` is under 300 LOC (target: ~180 LOC)
 - [ ] All 3 new service files exist and compile

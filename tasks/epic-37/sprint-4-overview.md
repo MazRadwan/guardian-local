@@ -10,7 +10,7 @@
 
 ## Context
 
-Create 5 repository pairs (interface + Drizzle implementation) for the ISO compliance tables. Follows the existing pattern from `IDimensionScoreRepository` + `DrizzleDimensionScoreRepository`. Each repository handles CRUD for one or two related tables. The `assessment_compliance_results` table does not need a repository yet (Phase 2 only) but can share one with another story if needed.
+Create 4 repository pairs (interface + Drizzle implementation) for the ISO compliance tables. Follows the existing pattern from `IDimensionScoreRepository` + `DrizzleDimensionScoreRepository`. Each repository handles CRUD for one or two related tables. The `assessment_compliance_results` table does not need a repository yet (Phase 2 only) but can share one with another story if needed.
 
 ---
 

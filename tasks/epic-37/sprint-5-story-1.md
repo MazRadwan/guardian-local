@@ -4,7 +4,7 @@
 
 Create a seed script that populates the ISO compliance tables with Tier 1 data: ISO 42001:2023 (38 Annex A controls, 9 domains) and ISO 23894:2023 (supplementary risk management guidance). The script creates frameworks, versions, controls, interpretive criteria (Guardian's own language), and dimension-to-control mappings.
 
-Per the PRD, interpretive criteria are written in Guardian's own language referencing ISO clause numbers (not verbatim ISO text). Criteria are seeded with `reviewStatus: 'draft'` to be approved via human review workflow.
+Per the PRD, interpretive criteria are written in Guardian's own language referencing ISO clause numbers (not verbatim ISO text). Seed data ships with `reviewStatus: 'approved'` because it is curated by the Guardian team and intended to be immediately usable by the `ISOControlRetrievalService` (which only returns approved criteria). A human review workflow exists for future community-contributed criteria, which would start as `'draft'`.
 
 ## Acceptance Criteria
 
@@ -13,7 +13,7 @@ Per the PRD, interpretive criteria are written in Guardian's own language refere
 - [ ] Creates 2 compliance frameworks: "ISO/IEC 42001" and "ISO/IEC 23894"
 - [ ] Creates version entries: "2023" for each
 - [ ] Creates ~38 controls for ISO 42001 (Annex A) + supplementary controls from 23894
-- [ ] Creates interpretive criteria for each control (Guardian's language, `reviewStatus: 'draft'`)
+- [ ] Creates interpretive criteria for each control (Guardian's language, `reviewStatus: 'approved'`)
 - [ ] Creates dimension-control mappings (~30 controls mapped to dimensions)
 - [ ] `clinical_risk`, `vendor_capability`, `ethical_considerations`, and `sustainability` have ZERO mappings (Guardian-native dimensions)
 - [ ] Criteria version tagged as `guardian-iso42001-v1.0`
@@ -105,7 +105,7 @@ async function seedTier1() {
   // ... similar pattern
 
   // 3. Create controls in batch
-  // 4. Create interpretive criteria (reviewStatus: 'draft')
+  // 4. Create interpretive criteria (reviewStatus: 'approved' — curated seed data)
   // 5. Create dimension mappings
 
   console.log('Tier 1 seed complete.');
@@ -118,7 +118,7 @@ seedTier1().catch(console.error);
 
 - **Idempotent**: Check `findByName` before creating frameworks. Check `findByClauseRef` before creating controls. Skip if already exists.
 - **Guardian-native dimensions**: `clinical_risk`, `vendor_capability`, `ethical_considerations`, and `sustainability` must have ZERO dimension-control mappings. These get "Guardian healthcare-specific criteria" label.
-- **Criteria are DRAFT**: All criteria start as `reviewStatus: 'draft'`. Human review approves them before production use.
+- **Criteria are PRE-APPROVED**: Seed data ships as `reviewStatus: 'approved'` because it is curated by the Guardian team. This ensures the `ISOControlRetrievalService.findApprovedByVersion()` path works immediately. Future community-contributed criteria would start as `'draft'` and go through the human review workflow.
 - **Copyright compliance**: Criteria text is written in Guardian's language, referencing clause numbers but NOT reproducing ISO verbatim text.
 
 ## Files Touched
@@ -145,7 +145,7 @@ seedTier1().catch(console.error);
   - Test vendor_capability has zero mappings
   - Test regulatory_compliance has multiple mappings
   - Test criteria version is `guardian-iso42001-v1.0`
-  - Test all criteria have `reviewStatus: 'draft'`
+  - Test all criteria have `reviewStatus: 'approved'`
 
 ## Definition of Done
 

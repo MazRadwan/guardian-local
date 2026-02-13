@@ -8,7 +8,7 @@ Add ISO clause reference validation and confidence validation to `ScoringPayload
 
 - [ ] `ScoringPayloadValidator` delegates confidence validation to `ScoringConfidenceValidator`
 - [ ] ISO clause reference validation added as soft warnings
-- [ ] ISO validation checks: `clauseRef` is non-empty string, `status` is valid enum, `framework` is non-empty
+- [ ] ISO validation checks: `clauseRef` is non-empty string, `title` is non-empty string, `status` is valid enum, `framework` is non-empty
 - [ ] All ISO + confidence warnings are soft (do NOT reject the payload)
 - [ ] `ScoringPayloadValidator.ts` stays under 250 LOC
 - [ ] All existing tests pass (backwards compatible)
@@ -75,6 +75,9 @@ private validateISOReferences(dimensionScores: unknown[]): string[] {
       if (typeof ref.clauseRef !== 'string' || ref.clauseRef.trim().length === 0) {
         warnings.push(`${prefix}: isoClauseReferences[${j}].clauseRef is required`);
       }
+      if (typeof ref.title !== 'string' || ref.title.trim().length === 0) {
+        warnings.push(`${prefix}: isoClauseReferences[${j}].title is required`);
+      }
       if (typeof ref.status !== 'string' || !VALID_STATUSES.includes(ref.status)) {
         warnings.push(
           `${prefix}: isoClauseReferences[${j}].status must be one of [${VALID_STATUSES.join(', ')}]`
@@ -95,8 +98,8 @@ private validateISOReferences(dimensionScores: unknown[]): string[] {
 Current `ScoringPayloadValidator.ts` (after Sprint 1 extraction): ~196 LOC
 - Add import + instance: +3 LOC
 - Add confidence delegation: +5 LOC
-- Add `validateISOReferences()`: +40 LOC
-- Total: ~244 LOC (under 300 LOC limit)
+- Add `validateISOReferences()`: +43 LOC
+- Total: ~247 LOC (under 300 LOC limit)
 
 ## Files Touched
 
@@ -121,6 +124,7 @@ Current `ScoringPayloadValidator.ts` (after Sprint 1 extraction): ~196 LOC
   - Test: payload with valid isoClauseReferences produces no warning
   - Test: payload with invalid ISO status produces warning
   - Test: payload with empty clauseRef produces warning
+  - Test: payload with empty title produces warning
   - Test: payload without new fields still valid (backwards compatible)
   - Test: all ISO/confidence warnings are in `warnings` array, not `errors`
 

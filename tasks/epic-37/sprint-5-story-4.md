@@ -9,7 +9,7 @@ The confidence validator checks that each dimension's `assessmentConfidence` has
 ## Acceptance Criteria
 
 - [ ] `ScoringConfidenceValidator.ts` created in `domain/scoring/`
-- [ ] `validateConfidence()` method validates `assessmentConfidence` per dimension
+- [ ] `validateAllConfidence()` method validates `assessmentConfidence` across all dimensions
 - [ ] Validates `level` is one of: `'high'`, `'medium'`, `'low'`
 - [ ] Validates `rationale` is a non-empty string (minimum 20 characters)
 - [ ] Returns warnings (soft validation, same as sub-score pattern)

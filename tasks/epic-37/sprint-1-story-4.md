@@ -110,11 +110,12 @@ These extractions go into a new `scoringPrompt.helpers.ts` file (~50 LOC):
 - `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.iso.ts` - CREATE (~30 LOC)
 - `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.helpers.ts` - CREATE (~50 LOC, extracted helper functions)
 - `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.ts` - MODIFY (add imports, delegate to helpers + ISO calls)
+- `packages/backend/__tests__/unit/infrastructure/ai/prompts/scoringPrompt.test.ts` - CREATE (~60 LOC, prompt stability regression tests)
 
 ## Tests Affected
 
 - `packages/backend/__tests__/unit/domain/scoring/scoringContract.test.ts` - Should still pass since prompt output is unchanged (empty strings appended)
-- No other tests directly test `scoringPrompt.ts` functions (they test via ScoringPromptBuilder which delegates)
+- Note: `scoringContract.test.ts` validates tool schema vs payload validator, NOT prompt output. The regression tests below directly validate prompt stability.
 
 ## Agent Assignment
 
@@ -126,7 +127,13 @@ These extractions go into a new `scoringPrompt.helpers.ts` file (~50 LOC):
   - Test `buildISOCatalogSection()` returns empty string
   - Test `buildISOApplicabilitySection()` returns empty string
   - Test `buildISOApplicabilitySection()` accepts optional dimensions array
-- [ ] Verify existing `scoringContract.test.ts` still passes (prompt content unchanged)
+- [ ] `packages/backend/__tests__/unit/infrastructure/ai/prompts/scoringPrompt.test.ts` (prompt stability regression)
+  - Test `buildScoringSystemPrompt()` output contains all 10 dimension headings (no content lost during extraction)
+  - Test `buildScoringSystemPrompt()` output contains disqualifying factors section
+  - Test `buildScoringSystemPrompt()` output contains output format instructions
+  - Test `buildScoringUserPrompt()` output contains vendor info, responses, and composite score weighting
+  - These tests verify the no-behavior-change claim and guard against regressions from helper extraction
+- [ ] Verify existing `scoringContract.test.ts` still passes (schema/validator alignment unchanged)
 
 ## Definition of Done
 

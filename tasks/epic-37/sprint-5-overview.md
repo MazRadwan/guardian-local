@@ -33,6 +33,7 @@ With the database, domain, and repository layers complete, this sprint builds th
     | Story    | Files Touched                                         | Conflicts          |
     +----------+-------------------------------------------------------+--------------------+
     | 37.5.1   | scripts/seed-iso-tier1.ts (NEW)                       | None               |
+    |          | scripts/data/iso42001-controls.ts (NEW)                |                    |
     | 37.5.2   | application/services/ISOControlRetrievalService.ts    | 37.5.3             |
     |          | (NEW)                                                 |                    |
     | 37.5.3   | infrastructure/ai/prompts/scoringPrompt.iso.ts        | None               |
@@ -112,5 +113,5 @@ Sprint 5 is complete when:
 - [ ] ISO prompt builder generates catalog and applicability sections from DB data
 - [ ] ScoringConfidenceValidator validates H/M/L + rationale fields
 - [ ] Unit tests for all 4 stories
-- [ ] Integration test: seed script -> retrieval service -> prompt builder end-to-end
+- [ ] Integration test: seed script -> retrieval service -> prompt builder end-to-end (owned by Story 37.5.3, which depends on all upstream stories and can verify the full path)
 - [ ] No TypeScript errors

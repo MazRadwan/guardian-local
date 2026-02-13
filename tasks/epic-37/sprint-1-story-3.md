@@ -2,7 +2,15 @@
 
 ## Description
 
-Now that `ScoringStorageService` (37.1.1) and `ScoringLLMService` (37.1.2) exist, update `ScoringService.ts` to delegate to them instead of containing the logic inline. Remove the extracted methods, update the constructor, and update the DI container in `index.ts`. Target: ScoringService drops from 542 LOC to ~220 LOC.
+Now that `ScoringStorageService` (37.1.1) and `ScoringLLMService` (37.1.2) exist, update `ScoringService.ts` to delegate to them instead of containing the logic inline. Remove the extracted methods, move `getResultForConversation()` to a new `ScoringQueryService`, update the constructor, and update the DI container in `index.ts`. Target: ScoringService drops from 542 LOC to ~280 LOC.
+
+**LOC Analysis (verified against source):**
+- Current: 542 LOC total
+- Remove 5 methods (lines 280-474): -195 LOC → 347 LOC
+- Remove `getResultForConversation()` (lines 488-541): -54 LOC → 293 LOC
+- Remove unused imports (~6 lines), add new imports (~2 lines): -4 LOC → ~289 LOC
+- Constructor shrinks (12→9 params): ~-5 LOC → ~284 LOC
+- Final target: **~280 LOC** (comfortably under 300)
 
 ## Acceptance Criteria
 
@@ -12,8 +20,9 @@ Now that `ScoringStorageService` (37.1.1) and `ScoringLLMService` (37.1.2) exist
 - [ ] `ScoringService.ts` delegates `determineSolutionType` to `ScoringStorageService`
 - [ ] `ScoringService.ts` delegates `scoreWithClaude` to `ScoringLLMService`
 - [ ] 5 private methods removed from ScoringService
-- [ ] Constructor updated: add `ScoringStorageService`, `ScoringLLMService`; remove `ITransactionRunner` (moved to storage service)
-- [ ] `ScoringService.ts` is under 300 LOC (target: ~220)
+- [ ] Constructor updated: add `ScoringStorageService`, `ScoringLLMService`, `ScoringQueryService`; remove `ITransactionRunner`, `dimensionScoreRepo`, `conversationRepo` (moved to query/storage services)
+- [ ] `getResultForConversation()` extracted to `ScoringQueryService` (ScoringService delegates)
+- [ ] `ScoringService.ts` is under 300 LOC (target: ~280)
 - [ ] `index.ts` DI container updated to construct and inject new services
 - [ ] All existing tests pass (zero regressions)
 - [ ] No behavioral change (pure refactor)
@@ -42,19 +51,18 @@ constructor(
 )
 ```
 
-New constructor (10 params — keeps `dimensionScoreRepo` for `getResultForConversation()`, see Section 4):
+New constructor (9 params — `getResultForConversation()` moved to `ScoringQueryService`, see Section 4):
 ```typescript
 constructor(
   private assessmentResultRepo: IAssessmentResultRepository,
   private assessmentRepo: IAssessmentRepository,
-  private dimensionScoreRepo: IDimensionScoreRepository,  // KEEP for getResultForConversation
   private fileRepo: IFileRepository,
   private fileStorage: IFileStorage,
   private documentParser: IScoringDocumentParser,
   private validator: ScoringPayloadValidator,
   private storageService: ScoringStorageService,
   private llmService: ScoringLLMService,
-  private conversationRepo?: IConversationRepository
+  private queryService: ScoringQueryService
 )
 ```
 
@@ -98,27 +106,47 @@ Delete these methods from ScoringService:
 - `scoreWithClaude()` (lines 352-418)
 - `storeScores()` (lines 425-474)
 
-### 4. Keep `getResultForConversation()`
+### 4. Extract `getResultForConversation()` to ScoringQueryService
 
-This method (lines 488-541) stays in ScoringService because it uses `conversationRepo`, `assessmentResultRepo`, and `dimensionScoreRepo` directly. However, `dimensionScoreRepo` needs to remain accessible. Two options:
+This method (lines 488-541, ~54 LOC) uses `conversationRepo`, `assessmentResultRepo`, and `dimensionScoreRepo` — all read-only query logic. Extract to a new `ScoringQueryService` to bring ScoringService under 300 LOC.
 
-**Option A (preferred)**: Keep `dimensionScoreRepo` in constructor for `getResultForConversation()`.
-**Option B**: Move `getResultForConversation` to a separate service.
+**File:** `packages/backend/src/application/services/ScoringQueryService.ts` (~70 LOC)
 
-Choose Option A for minimal change. Updated constructor becomes 10 params:
+```typescript
+export class ScoringQueryService {
+  constructor(
+    private assessmentResultRepo: IAssessmentResultRepository,
+    private dimensionScoreRepo: IDimensionScoreRepository,
+    private conversationRepo?: IConversationRepository
+  ) {}
+
+  async getResultForConversation(conversationId: string): Promise<ScoringRehydrationResult | null> {
+    // Exact logic from ScoringService.getResultForConversation()
+    // Uses conversationRepo to find assessment, dimensionScoreRepo for scores
+  }
+}
+```
+
+Updated ScoringService constructor becomes 9 params:
 ```typescript
 constructor(
   private assessmentResultRepo: IAssessmentResultRepository,
   private assessmentRepo: IAssessmentRepository,
-  private dimensionScoreRepo: IDimensionScoreRepository,  // KEEP for getResultForConversation
   private fileRepo: IFileRepository,
   private fileStorage: IFileStorage,
   private documentParser: IScoringDocumentParser,
   private validator: ScoringPayloadValidator,
   private storageService: ScoringStorageService,
   private llmService: ScoringLLMService,
-  private conversationRepo?: IConversationRepository
+  private queryService: ScoringQueryService
 )
+```
+
+`getResultForConversation()` calls in callers (ChatServer, etc.) change from `scoringService.getResultForConversation()` to `scoringQueryService.getResultForConversation()`, or ScoringService can delegate:
+```typescript
+async getResultForConversation(conversationId: string) {
+  return this.queryService.getResultForConversation(conversationId);
+}
 ```
 
 ### 5. Update DI Container
@@ -138,10 +166,13 @@ const scoringStorageService = new ScoringStorageService(
   responseRepo, dimensionScoreRepo, assessmentResultRepo, transactionRunner, claudeClient
 );
 const scoringLLMService = new ScoringLLMService(claudeClient, scoringPromptBuilder);
+const scoringQueryService = new ScoringQueryService(
+  assessmentResultRepo, dimensionScoreRepo, conversationRepo
+);
 const scoringService = new ScoringService(
-  assessmentResultRepo, assessmentRepo, dimensionScoreRepo,
+  assessmentResultRepo, assessmentRepo,
   fileRepo, fileStorage, documentParserService, scoringPayloadValidator,
-  scoringStorageService, scoringLLMService, conversationRepo
+  scoringStorageService, scoringLLMService, scoringQueryService
 );
 ```
 
@@ -168,17 +199,18 @@ Then in ScoringService, use `this.llmService.getModelId()` for the report data.
 
 ## Files Touched
 
-- `packages/backend/src/application/services/ScoringService.ts` - MODIFY (remove 5 methods, update constructor, update delegation calls)
+- `packages/backend/src/application/services/ScoringService.ts` - MODIFY (remove 5 methods + getResultForConversation, update constructor, update delegation calls)
+- `packages/backend/src/application/services/ScoringQueryService.ts` - CREATE (~70 LOC, extracted getResultForConversation)
 - `packages/backend/src/application/services/ScoringLLMService.ts` - MODIFY (add `getModelId()` proxy method)
 - `packages/backend/src/index.ts` - MODIFY (update DI wiring, ~lines 214-230)
-- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - MODIFY (update constructor mocks from 12 to 10 params, mock ScoringStorageService + ScoringLLMService)
-- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - MODIFY (update ScoringService constructor call from 12 to 10 params)
-- `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - MODIFY (update ScoringService constructor call from 12 to 10 params)
+- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - MODIFY (update constructor mocks from 12 to 9 params, mock ScoringStorageService + ScoringLLMService + ScoringQueryService)
+- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - MODIFY (update ScoringService constructor call from 12 to 9 params)
+- `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - MODIFY (update ScoringService constructor call from 12 to 9 params)
 
 ## Tests Affected
 
-- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - Constructor signature changed. Must update mock setup to provide `ScoringStorageService` and `ScoringLLMService` instead of individual repos/services. All test assertions should still pass since behavior is unchanged.
-- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - Constructs `new ScoringService(...)` directly. Constructor signature change from 12→10 params WILL break this test. MUST update.
+- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - Constructor signature changed. Must update mock setup to provide `ScoringStorageService`, `ScoringLLMService`, and `ScoringQueryService` instead of individual repos/services. All test assertions should still pass since behavior is unchanged.
+- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - Constructs `new ScoringService(...)` directly. Constructor signature change from 12→9 params WILL break this test. MUST update.
 - `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - Constructs `new ScoringService(...)` directly. Constructor signature change WILL break this test. MUST update.
 
 ## Agent Assignment
@@ -199,8 +231,8 @@ Then in ScoringService, use `this.llmService.getModelId()` for the report data.
 ## Definition of Done
 
 - [ ] ScoringService.ts is under 300 LOC
-- [ ] Constructor reduced from 12 to 10 params
-- [ ] 5 methods removed, replaced with service delegation
+- [ ] Constructor reduced from 12 to 9 params
+- [ ] 5 methods + getResultForConversation removed, replaced with service delegation
 - [ ] DI container updated in index.ts
 - [ ] All existing tests pass
 - [ ] No TypeScript errors
