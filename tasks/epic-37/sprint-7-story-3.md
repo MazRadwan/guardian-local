@@ -25,7 +25,7 @@ Per PRD Section 13:
 ```typescript
 import { buildScoringSystemPrompt, buildScoringUserPrompt } from '../../../../../src/infrastructure/ai/prompts/scoringPrompt';
 import { buildISOCatalogSection, buildISOApplicabilitySection } from '../../../../../src/infrastructure/ai/prompts/scoringPrompt.iso';
-import type { ISOControlForPrompt } from '../../../../../src/application/services/ISOControlRetrievalService';
+import type { ISOControlForPrompt } from '../../../../../src/domain/compliance/types';
 
 const PROHIBITED_TERMS = [
   'ISO-compliant',

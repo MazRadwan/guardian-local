@@ -6,8 +6,8 @@ Create domain entities for `ComplianceFramework` and `FrameworkVersion`. These f
 
 ## Acceptance Criteria
 
-- [ ] `ComplianceFramework.ts` created in `domain/entities/`
-- [ ] `FrameworkVersion.ts` created in `domain/entities/`
+- [ ] `ComplianceFramework.ts` created in `domain/compliance/`
+- [ ] `FrameworkVersion.ts` created in `domain/compliance/`
 - [ ] Both have `create()` static factory for new instances
 - [ ] Both have `fromPersistence()` static factory for DB hydration
 - [ ] `ComplianceFramework.create()` validates `name` is non-empty
@@ -20,10 +20,10 @@ Create domain entities for `ComplianceFramework` and `FrameworkVersion`. These f
 
 ### 1. ComplianceFramework Entity
 
-**File:** `packages/backend/src/domain/entities/ComplianceFramework.ts`
+**File:** `packages/backend/src/domain/compliance/ComplianceFramework.ts`
 
 ```typescript
-import { ComplianceFrameworkDTO, CreateComplianceFrameworkDTO } from '../compliance/dtos.js';
+import { ComplianceFrameworkDTO, CreateComplianceFrameworkDTO } from './dtos.js';
 
 export class ComplianceFramework {
   private constructor(
@@ -61,11 +61,11 @@ export class ComplianceFramework {
 
 ### 2. FrameworkVersion Entity
 
-**File:** `packages/backend/src/domain/entities/FrameworkVersion.ts`
+**File:** `packages/backend/src/domain/compliance/FrameworkVersion.ts`
 
 ```typescript
-import { FrameworkVersionDTO, CreateFrameworkVersionDTO } from '../compliance/dtos.js';
-import { FrameworkStatus } from '../compliance/types.js';
+import { FrameworkVersionDTO, CreateFrameworkVersionDTO } from './dtos.js';
+import { FrameworkStatus } from './types.js';
 
 export class FrameworkVersion {
   private constructor(
@@ -117,8 +117,8 @@ export class FrameworkVersion {
 
 ## Files Touched
 
-- `packages/backend/src/domain/entities/ComplianceFramework.ts` - CREATE (~50 LOC)
-- `packages/backend/src/domain/entities/FrameworkVersion.ts` - CREATE (~70 LOC)
+- `packages/backend/src/domain/compliance/ComplianceFramework.ts` - CREATE (~50 LOC)
+- `packages/backend/src/domain/compliance/FrameworkVersion.ts` - CREATE (~70 LOC)
 
 ## Tests Affected
 
@@ -130,12 +130,12 @@ export class FrameworkVersion {
 
 ## Tests Required
 
-- [ ] `packages/backend/__tests__/unit/domain/entities/ComplianceFramework.test.ts`
+- [ ] `packages/backend/__tests__/unit/domain/compliance/ComplianceFramework.test.ts`
   - Test `create()` with valid data
   - Test `create()` throws on empty name
   - Test `fromPersistence()` hydrates correctly
   - Test getters return expected values
-- [ ] `packages/backend/__tests__/unit/domain/entities/FrameworkVersion.test.ts`
+- [ ] `packages/backend/__tests__/unit/domain/compliance/FrameworkVersion.test.ts`
   - Test `create()` with valid data (defaults status to 'active')
   - Test `create()` throws on empty frameworkId
   - Test `create()` throws on empty versionLabel

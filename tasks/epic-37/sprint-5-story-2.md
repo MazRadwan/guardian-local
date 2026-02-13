@@ -24,19 +24,10 @@ import { IDimensionControlMappingRepository, MappingWithControlDTO }
   from '../interfaces/IDimensionControlMappingRepository.js';
 import { IInterpretiveCriteriaRepository } from '../interfaces/IInterpretiveCriteriaRepository.js';
 
-/**
- * Control with its interpretive criteria, ready for prompt injection.
- */
-export interface ISOControlForPrompt {
-  clauseRef: string;
-  domain: string;
-  title: string;
-  framework: string;       // Inferred from clause ref pattern or stored
-  criteriaText: string;     // Guardian's interpretive criteria
-  assessmentGuidance?: string;
-  dimensions: string[];     // Which dimensions this control maps to
-  relevanceWeight: number;
-}
+import { ISOControlForPrompt } from '../../domain/compliance/types.js';
+
+// Re-export for convenience (consumers can import from either location)
+export type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
 export class ISOControlRetrievalService {
   constructor(

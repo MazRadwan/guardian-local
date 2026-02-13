@@ -8,7 +8,7 @@ Create the TypeScript types and DTOs for the ISO compliance domain. These types 
 
 - [ ] `domain/compliance/types.ts` created with all ISO-related type definitions
 - [ ] `domain/compliance/dtos.ts` created with DTOs for all 6 ISO entities
-- [ ] Types include: `FrameworkStatus`, `ReviewStatus`, `AssessmentConfidenceLevel`, `AssessmentConfidence`, `ISOClauseReference`
+- [ ] Types include: `FrameworkStatus`, `ReviewStatus`, `AssessmentConfidenceLevel`, `AssessmentConfidence`, `ISOClauseReference`, `ISOControlForPrompt`
 - [ ] DTOs include: `ComplianceFrameworkDTO`, `FrameworkVersionDTO`, `FrameworkControlDTO`, `InterpretiveCriteriaDTO`, `DimensionControlMappingDTO`, `AssessmentComplianceResultDTO`
 - [ ] Create DTOs for each entity (for repository insert operations)
 - [ ] Both files under 150 LOC each
@@ -73,6 +73,21 @@ export interface ISOClauseReference {
 export interface GuardianNativeLabel {
   isGuardianNative: true;
   label: string;  // "Assessed using Guardian healthcare-specific criteria"
+}
+
+/**
+ * Control with its interpretive criteria, ready for prompt injection.
+ * Shared type consumed by ISOControlRetrievalService and prompt builders.
+ */
+export interface ISOControlForPrompt {
+  clauseRef: string;
+  domain: string;
+  title: string;
+  framework: string;
+  criteriaText: string;
+  assessmentGuidance?: string;
+  dimensions: string[];
+  relevanceWeight: number;
 }
 ```
 

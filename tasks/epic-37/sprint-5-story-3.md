@@ -29,7 +29,7 @@ Per the PRD prompt architecture:
 Replace placeholder functions. The functions now accept pre-fetched control data (the service layer fetches; the prompt layer formats):
 
 ```typescript
-import { ISOControlForPrompt } from '../../../application/services/ISOControlRetrievalService.js';
+import { ISOControlForPrompt } from '../../../domain/compliance/types.js';
 
 /**
  * Build the static ISO control catalog for the system prompt.
@@ -38,7 +38,7 @@ import { ISOControlForPrompt } from '../../../application/services/ISOControlRet
  * @param controls - All mapped ISO controls with criteria (from ISOControlRetrievalService.getFullCatalog())
  * @returns Formatted prompt section for system prompt
  */
-export function buildISOCatalogSection(controls: ISOControlForPrompt[]): string {
+export function buildISOCatalogSection(controls: ISOControlForPrompt[] = []): string {
   if (controls.length === 0) return '';
 
   let section = `## ISO Standards Reference Catalog
@@ -84,7 +84,7 @@ These are Guardian's interpretive criteria referencing ISO clause numbers.
  * @returns Formatted prompt section for user prompt
  */
 export function buildISOApplicabilitySection(
-  controls: ISOControlForPrompt[],
+  controls: ISOControlForPrompt[] = [],
   dimensions?: string[]
 ): string {
   if (controls.length === 0) return '';
@@ -113,6 +113,7 @@ Consider these ISO-traceable controls when scoring the relevant dimensions:\n\n`
 ### 2. Key Design Decisions
 
 - **Data flow**: Service fetches -> prompt function formats. The prompt functions are pure formatters that take data as input. This avoids database calls in the prompt layer.
+- **Backwards compatibility**: The `controls` parameter defaults to `[]` so Sprint 1 callers that call with no args still work. This prevents a build break between Sprint 5 and Sprint 6.
 - **Cacheability**: The system prompt catalog is the same for all assessments using the same criteria version. The user prompt section varies per assessment.
 - **Messaging compliance**: Every ISO reference uses "ISO-traceable" / "ISO-informed" per PRD Section 13.
 - **Guardian-native callout**: Explicit note about clinical_risk, vendor_capability, ethical_considerations, and sustainability having no ISO mapping.

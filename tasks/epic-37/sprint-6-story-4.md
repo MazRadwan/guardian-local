@@ -25,7 +25,7 @@ Update the `ScoringPromptBuilder` and `IPromptBuilder` interface to support ISO 
 The interface methods stay synchronous for the basic case, but the builder can pre-fetch ISO data before building. Add optional ISO data parameters:
 
 ```typescript
-import { ISOControlForPrompt } from '../../application/services/ISOControlRetrievalService.js';
+import { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
 export interface IPromptBuilder {
   buildScoringSystemPrompt(isoControls?: ISOControlForPrompt[]): string;
@@ -45,7 +45,7 @@ export interface IPromptBuilder {
 
 Update `buildScoringSystemPrompt()` to accept and append ISO catalog:
 ```typescript
-import { ISOControlForPrompt } from '../../../application/services/ISOControlRetrievalService.js';
+import { ISOControlForPrompt } from '../../../domain/compliance/types.js';
 import { buildISOCatalogSection } from './scoringPrompt.iso.js';
 
 export function buildScoringSystemPrompt(isoControls?: ISOControlForPrompt[]): string {

@@ -36,8 +36,8 @@ Create domain entities and value objects for the ISO compliance tables. These fo
     | 37.3.1   | domain/compliance/types.ts (NEW)                   | None               |
     |          | domain/compliance/dtos.ts (NEW)                    |                    |
     +----------+----------------------------------------------------+--------------------+
-    | 37.3.2   | domain/entities/ComplianceFramework.ts (NEW)       | None               |
-    |          | domain/entities/FrameworkVersion.ts (NEW)           |                    |
+    | 37.3.2   | domain/compliance/ComplianceFramework.ts (NEW)     | None               |
+    |          | domain/compliance/FrameworkVersion.ts (NEW)         |                    |
     +----------+----------------------------------------------------+--------------------+
     | 37.3.3   | domain/compliance/FrameworkControl.ts (NEW)        | None               |
     +----------+----------------------------------------------------+--------------------+

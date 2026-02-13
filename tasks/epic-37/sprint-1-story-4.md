@@ -82,21 +82,34 @@ const isoApplicability = buildISOApplicabilitySection();
 const isoSection = isoApplicability ? `\n\n${isoApplicability}` : '';
 ```
 
-### 3. LOC Impact
+### 3. LOC Reduction Plan (348 → under 300)
 
-Current `scoringPrompt.ts`: 348 LOC
-- Extract ~20 LOC of future ISO logic to placeholder file
-- Add ~5 LOC of imports + calls
-- Net reduction: ~15 LOC (to ~333 LOC)
+Current `scoringPrompt.ts`: 348 LOC. Target: under 300 LOC.
 
-**NOTE**: The 348 LOC includes the template literal string which is dense. The real reduction comes from the fact that when ISO content is added in Sprint 6, it goes into `scoringPrompt.iso.ts` instead of `scoringPrompt.ts`. The file split prevents future growth.
+**Step 1: Extract ISO placeholder** (~-15 LOC net after import+calls)
+- Move future ISO logic to `scoringPrompt.iso.ts`
+- Result: ~333 LOC (still over 300)
 
-If `scoringPrompt.ts` is still marginally over 300 LOC, extract the `buildScoringUserPrompt` helper logic (weight formatting, response formatting) into inline helper functions in the same file to reduce nesting depth. Alternatively, extract the disqualifying factors list building and dimension list building into small helper functions at the bottom of the file.
+**Step 2: Extract helper functions** (~-40 LOC)
+These extractions go into a new `scoringPrompt.helpers.ts` file (~50 LOC):
+
+1. **`buildDimensionList()`** — Extract the dimension list builder (lines 23-29, ~7 LOC) that creates the numbered dimension list string
+2. **`buildDisqualifyingList()`** — Extract the disqualifying factors list builder (lines ~31-45, ~15 LOC)
+3. **`formatResponsesForPrompt()`** — Extract the response formatting loop from `buildScoringUserPrompt()` (lines ~319-340, ~20 LOC) that formats vendor responses into the prompt string
+
+**Step 3: Verify**
+- `scoringPrompt.ts` should land at ~293 LOC (under 300)
+- `scoringPrompt.helpers.ts` should be ~50 LOC
+- `scoringPrompt.iso.ts` should be ~30 LOC
+- All 3 files well under limits
+
+**MANDATORY**: The implementer MUST achieve under 300 LOC for `scoringPrompt.ts`. The Step 2 extractions are required, not optional. If different functions are extracted instead, that's fine as long as the file ends under 300 LOC.
 
 ## Files Touched
 
 - `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.iso.ts` - CREATE (~30 LOC)
-- `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.ts` - MODIFY (add import, add ISO section calls)
+- `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.helpers.ts` - CREATE (~50 LOC, extracted helper functions)
+- `packages/backend/src/infrastructure/ai/prompts/scoringPrompt.ts` - MODIFY (add imports, delegate to helpers + ISO calls)
 
 ## Tests Affected
 
@@ -119,7 +132,7 @@ If `scoringPrompt.ts` is still marginally over 300 LOC, extract the `buildScorin
 
 - [ ] `scoringPrompt.iso.ts` created with placeholder functions
 - [ ] `scoringPrompt.ts` imports and calls ISO functions
-- [ ] `scoringPrompt.ts` is under 300 LOC (or established clear split point for Sprint 6)
+- [ ] `scoringPrompt.ts` is under 300 LOC (MANDATORY — extract helpers if needed)
 - [ ] No behavioral change (prompt output identical)
 - [ ] Unit tests written and passing
 - [ ] No TypeScript errors
