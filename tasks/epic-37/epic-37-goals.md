@@ -68,7 +68,7 @@ These were resolved through design council, experiment, and user approval:
 | Confidence naming | `assessmentConfidence` (not `confidence`) | Avoids conflict with `extractionConfidence` |
 | ISO messaging | "ISO-traceable" / "ISO-informed" only | No "compliant" / "certified" language |
 | Prompt approach | Static catalog (system prompt) + dynamic applicability (user prompt) | Enables prompt caching |
-| Coverage gaps | Clinical Risk + Vendor Viability = Guardian-native (no ISO mapping) | ISO 42001 has no clinical controls |
+| Coverage gaps | Clinical Risk + Vendor Capability = Guardian-native (no ISO mapping) | ISO 42001 has no clinical controls |
 
 ## Success Criteria
 

@@ -496,14 +496,16 @@ Existing tests that may break:
 
 1. **Runs in main context** - Can spawn subagents via Task tool
 2. **Per-sprint review loops** - Each sprint gets MANDATORY Opus↔GPT loop
-3. **Deep analysis required** - GPT must search codebase, verify files
-4. **Spec final pass is mandatory** - Catches cross-sprint issues
-5. **QA sections for frontend** - Every frontend story needs QA Verification
-6. **Parallel planning included** - Plan-agent creates phases upfront
-7. **Log all GPT exchanges** - Audit trail in .review-log.md
-8. **Respect 7 round limit** - GPT gets final say after that
-9. **No Opus fallback** - Clean exit on GPT errors, resume when fixed
-10. **Checkpoint frequently** - Update state after each review round
+3. **Codex reviews are SYNC — one sprint at a time, SEQUENTIAL** - NEVER launch parallel Codex reviews across sprints. Later sprints need earlier sprint context. Codex is a sync quality gate, not a parallel processor.
+4. **Deep analysis required** - GPT must search codebase, verify files
+5. **Spec final pass is mandatory** - Catches cross-sprint issues
+6. **QA sections for frontend** - Every frontend story needs QA Verification
+7. **Parallel planning included** - Plan-agent creates phases upfront
+8. **Log all GPT exchanges** - Audit trail in .review-log.md
+9. **Respect 7 round limit** - GPT gets final say after that
+10. **No Opus fallback** - Clean exit on GPT errors, resume when fixed
+11. **Checkpoint frequently** - Update state after each review round
+12. **Low context = slow down, not speed up** - If context is running low, hand off cleanly or go one sprint at a time. Never panic-launch async to "finish faster"
 
 ---
 

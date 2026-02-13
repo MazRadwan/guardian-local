@@ -20,7 +20,7 @@ With the database, domain, and repository layers complete, this sprint builds th
 |-------|------|-------|--------------|
 | **37.5.1** | Tier 1 seed script | Seed ISO 42001 + 23894 controls + criteria + dimension mappings | None |
 | **37.5.2** | ISOControlRetrievalService | Service to query ISO controls by dimension | None |
-| **37.5.3** | ISO prompt builder (scoringPrompt.iso.ts) | Build ISO catalog + applicability prompt sections from DB | 37.5.2 |
+| **37.5.3** | ISO prompt builder (scoringPrompt.iso.ts) | Build ISO catalog + applicability prompt sections from DB | 37.5.1, 37.5.2 |
 | **37.5.4** | ScoringConfidenceValidator | Validate assessmentConfidence fields in scoring output | None |
 
 ---
@@ -74,7 +74,7 @@ With the database, domain, and repository layers complete, this sprint builds th
 ```
 +------------------------------------------------------------------------+
 |                     PHASE 2 - SEQUENTIAL                               |
-|              (Uses ISOControlRetrievalService from Phase 1)            |
+|         (Uses ISOControlRetrievalService + seed data from Phase 1)     |
 +------------------------------------------------------------------------+
 |   37.5.3                                                               |
 |   ISO Prompt Builder                                                   |
@@ -82,6 +82,7 @@ With the database, domain, and repository layers complete, this sprint builds th
 |   FILES:                                                               |
 |   - infrastructure/ai/prompts/scoringPrompt.iso.ts (MODIFY)           |
 |                                                                        |
+|   MUST wait for 37.5.1 (seed data needed for integration test)        |
 |   MUST wait for 37.5.2 (uses ISOControlRetrievalService interface)    |
 |                                                                        |
 |   backend-agent                                                        |
@@ -89,7 +90,7 @@ With the database, domain, and repository layers complete, this sprint builds th
 ```
 
 **Stories:** 37.5.3
-**Dependencies:** 37.5.2
+**Dependencies:** 37.5.1, 37.5.2
 **Review:** After complete (Sprint done)
 
 ---

@@ -22,7 +22,7 @@ Update the `ScoringPromptBuilder` and `IPromptBuilder` interface to support ISO 
 
 **File:** `packages/backend/src/application/interfaces/IPromptBuilder.ts`
 
-The interface methods stay synchronous for the basic case, but the builder can pre-fetch ISO data before building. Add optional ISO data parameters:
+The interface methods stay synchronous for prompt building, but add optional async ISO data fetching methods. This allows `ScoringLLMService` (application layer) to call ISO fetch methods through the `IPromptBuilder` interface instead of depending on the concrete `ScoringPromptBuilder` (infrastructure). Add optional ISO data parameters to build methods, and optional async fetch methods:
 
 ```typescript
 import { ISOControlForPrompt } from '../../domain/compliance/types.js';
@@ -36,8 +36,18 @@ export interface IPromptBuilder {
     responses: Array<{...}>;
     isoControls?: ISOControlForPrompt[];  // Per-assessment applicable controls
   }): string;
+
+  /**
+   * Optional ISO data fetching (implemented by ScoringPromptBuilder when ISOControlRetrievalService is available).
+   * These are optional interface methods so that non-ISO-aware implementations don't need them.
+   * ScoringLLMService calls these through the interface -- no concrete infrastructure dependency needed.
+   */
+  fetchISOCatalog?(): Promise<ISOControlForPrompt[]>;
+  fetchApplicableControls?(dimensions: string[]): Promise<ISOControlForPrompt[]>;
 }
 ```
+
+**Clean architecture note:** By putting `fetchISOCatalog()` and `fetchApplicableControls()` on `IPromptBuilder` (application interface), the application layer (`ScoringLLMService`) never depends on the concrete `ScoringPromptBuilder` (infrastructure). ISO data flows: `ScoringService` -> `ScoringLLMService` -> `IPromptBuilder.fetchISO*()` -> (resolved by `ScoringPromptBuilder` at runtime).
 
 ### 2. Update scoringPrompt.ts Functions
 
@@ -103,7 +113,7 @@ For EACH ISO-mapped dimension, include isoClauseReferences listing relevant clau
 - "not_evidenced": No evidence provided for this control
 - "not_applicable": Control is not relevant to this assessment
 
-For Clinical Risk, Vendor Viability, Ethical Considerations, and Sustainability: these are Guardian-native dimensions with no ISO mapping. Set isoClauseReferences to an empty array [] for these dimensions.
+For Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability: these are Guardian-native dimensions with no ISO mapping. Set isoClauseReferences to an empty array [] for these dimensions.
 
 ## ISO Messaging Rules
 - Use "ISO-traceable" or "ISO-informed" language
@@ -133,14 +143,18 @@ export class ScoringPromptBuilder implements IPromptBuilder {
   }
 
   /**
-   * Pre-fetch ISO controls for prompt building.
-   * Called by ScoringService before building prompts.
+   * Implements IPromptBuilder.fetchISOCatalog() (optional interface method).
+   * Called by ScoringLLMService through IPromptBuilder interface -- NOT by ScoringService directly.
+   * This keeps the clean architecture boundary: application layer -> IPromptBuilder (interface) -> infrastructure.
    */
   async fetchISOCatalog(): Promise<ISOControlForPrompt[]> {
     if (!this.isoService) return [];
     return this.isoService.getFullCatalog();
   }
 
+  /**
+   * Implements IPromptBuilder.fetchApplicableControls() (optional interface method).
+   */
   async fetchApplicableControls(dimensions: string[]): Promise<ISOControlForPrompt[]> {
     if (!this.isoService) return [];
     return this.isoService.getApplicableControls(dimensions);

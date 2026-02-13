@@ -2,15 +2,17 @@
 
 ## Description
 
-The final integration story: wire the ISO services into the scoring pipeline. `ScoringService.score()` now fetches ISO controls before scoring, passes them to the prompt builder, and the LLM service uses the enriched prompts. Also increase `maxTokens` from 8000 to 10000 to accommodate the larger ISO-enriched output.
+The final integration story: wire the ISO services into the scoring pipeline. `ScoringService.score()` fetches ISO controls via `ScoringLLMService` proxy methods (which delegate to `IPromptBuilder`), then passes them to `scoreWithClaude()`. The `ScoringService` constructor is unchanged from 37.1.3 (9 params) -- ISO data flows through `ScoringLLMService` -> `IPromptBuilder` interface, preserving clean architecture. Also increase `maxTokens` from 8000 to 10000 to accommodate the larger ISO-enriched output.
 
 ## Acceptance Criteria
 
 - [ ] `ScoringService.score()` fetches ISO catalog and applicable controls before scoring
 - [ ] ISO controls passed to `ScoringLLMService.scoreWithClaude()` which passes them to prompt builder
 - [ ] `ScoringLLMService` `maxTokens` increased from 8000 to 10000
-- [ ] `ScoringPromptBuilder` receives `ISOControlRetrievalService` via DI
+- [ ] `ScoringPromptBuilder` receives `ISOControlRetrievalService` via DI (configured in 37.6.4)
+- [ ] `ScoringLLMService` exposes `fetchISOCatalog()` and `fetchApplicableControls()` proxy methods (delegating to its `IPromptBuilder`)
 - [ ] DI container in `index.ts` constructs and injects ISO repositories + services
+- [ ] `ScoringService` constructor unchanged from 37.1.3 (9 params, no new deps)
 - [ ] All existing tests pass
 - [ ] No TypeScript errors
 
@@ -20,9 +22,21 @@ The final integration story: wire the ISO services into the scoring pipeline. `S
 
 **File:** `packages/backend/src/application/services/ScoringLLMService.ts`
 
-Update `scoreWithClaude()` to accept and pass ISO controls:
+Update `scoreWithClaude()` to accept and pass ISO controls. Also add `fetchISOCatalog()` and `fetchApplicableControls()` proxy methods so `ScoringService` can fetch ISO data through `ScoringLLMService` without needing a direct dependency on `ScoringPromptBuilder`:
 
 ```typescript
+// Proxy methods: ScoringService calls these to fetch ISO data.
+// Uses optional IPromptBuilder interface methods (added in 37.6.4).
+// This keeps ISO data flowing through ScoringLLMService -> IPromptBuilder (interface)
+// rather than injecting ScoringPromptBuilder (infrastructure) directly into ScoringService.
+async fetchISOCatalog(): Promise<ISOControlForPrompt[]> {
+  return this.promptBuilder.fetchISOCatalog?.() ?? Promise.resolve([]);
+}
+
+async fetchApplicableControls(dimensions: string[]): Promise<ISOControlForPrompt[]> {
+  return this.promptBuilder.fetchApplicableControls?.(dimensions) ?? Promise.resolve([]);
+}
+
 async scoreWithClaude(
   parseResult: ScoringParseResult,
   vendorName: string,
@@ -60,21 +74,29 @@ async scoreWithClaude(
 
 **File:** `packages/backend/src/application/services/ScoringService.ts`
 
-Add ISO control fetching before the scoring call. Add `ScoringPromptBuilder` (typed for ISO methods) to constructor:
+Add ISO control fetching before the scoring call. The `ScoringLLMService` already holds `IPromptBuilder` (which has `fetchISOCatalog()` and `fetchApplicableControls()` after 37.6.4). No new constructor params needed on `ScoringService` -- ISO data flows through the existing `ScoringLLMService`:
 
 ```typescript
+// ScoringService constructor is UNCHANGED from 37.1.3 (9 params):
 constructor(
-  // ... existing params ...
-  private promptBuilder: ScoringPromptBuilder,  // Add for ISO data fetching
-) {}
+  private assessmentResultRepo: IAssessmentResultRepository,
+  private assessmentRepo: IAssessmentRepository,
+  private fileRepo: IFileRepository,
+  private fileStorage: IFileStorage,
+  private documentParser: IScoringDocumentParser,
+  private validator: ScoringPayloadValidator,
+  private storageService: ScoringStorageService,
+  private llmService: ScoringLLMService,
+  private queryService: ScoringQueryService
+)
 
 async score(...) {
   // ... existing auth, parsing, validation gates ...
 
-  // NEW: Fetch ISO controls for prompt enrichment
+  // NEW: Fetch ISO controls via ScoringLLMService (which delegates to IPromptBuilder)
   const [catalogControls, applicableControls] = await Promise.all([
-    this.promptBuilder.fetchISOCatalog(),
-    this.promptBuilder.fetchApplicableControls(ALL_DIMENSIONS as string[]),
+    this.llmService.fetchISOCatalog(),
+    this.llmService.fetchApplicableControls(ALL_DIMENSIONS as string[]),
   ]);
 
   // Score with Claude (now with ISO context)
@@ -99,7 +121,7 @@ async score(...) {
 
 **File:** `packages/backend/src/index.ts`
 
-Add ISO repository + service construction:
+Add ISO repository + service construction. The `ScoringService` constructor is **unchanged** from 37.1.3 (9 params). ISO data flows through `ScoringPromptBuilder` -> `ScoringLLMService`, not through `ScoringService` directly:
 
 ```typescript
 import { DrizzleComplianceFrameworkRepository } from './infrastructure/database/repositories/DrizzleComplianceFrameworkRepository.js';
@@ -123,16 +145,15 @@ const isoControlRetrievalService = new ISOControlRetrievalService(
 // Update ScoringPromptBuilder to include ISO service
 const scoringPromptBuilder = new ScoringPromptBuilder(isoControlRetrievalService);
 
-// ScoringLLMService (already created in Sprint 1)
+// ScoringLLMService (already created in Sprint 1, now with ISO-aware prompt builder)
 const scoringLLMService = new ScoringLLMService(claudeClient, scoringPromptBuilder);
 
-// Update ScoringService constructor (add promptBuilder for ISO fetching)
+// ScoringService constructor unchanged from 37.1.3 (9 params)
+// ISO data flows through ScoringLLMService -> ScoringPromptBuilder, NOT through ScoringService
 const scoringService = new ScoringService(
-  assessmentResultRepo, assessmentRepo, dimensionScoreRepo,
+  assessmentResultRepo, assessmentRepo,
   fileRepo, fileStorage, documentParserService, scoringPayloadValidator,
-  scoringStorageService, scoringLLMService,
-  scoringPromptBuilder,  // NEW: for ISO data fetching
-  conversationRepo
+  scoringStorageService, scoringLLMService, scoringQueryService
 );
 ```
 
@@ -145,15 +166,15 @@ const scoringService = new ScoringService(
 
 ## Files Touched
 
-- `packages/backend/src/application/services/ScoringService.ts` - MODIFY (add ISO fetching, add promptBuilder param)
-- `packages/backend/src/application/services/ScoringLLMService.ts` - MODIFY (accept ISO data, change maxTokens to 10000)
+- `packages/backend/src/application/services/ScoringService.ts` - MODIFY (add ISO fetching via llmService, NO constructor change)
+- `packages/backend/src/application/services/ScoringLLMService.ts` - MODIFY (accept ISO data, add fetchISO proxy methods, change maxTokens to 10000)
 - `packages/backend/src/index.ts` - MODIFY (construct ISO repos + services, update DI wiring)
 
 ## Tests Affected
 
-- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - Constructor change (add promptBuilder). Must update mock setup.
-- `packages/backend/__tests__/unit/application/services/ScoringLLMService.test.ts` - `scoreWithClaude` signature change (optional isoOptions). Existing tests should pass since param is optional.
-- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - If constructs ScoringService directly, needs constructor update.
+- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - No constructor change. Add tests for ISO fetching via `llmService.fetchISOCatalog()` / `fetchApplicableControls()`.
+- `packages/backend/__tests__/unit/application/services/ScoringLLMService.test.ts` - `scoreWithClaude` signature change (optional isoOptions). Existing tests should pass since param is optional. Add tests for `fetchISOCatalog()` / `fetchApplicableControls()` proxy methods.
+- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - No constructor change needed. ScoringService constructor is unchanged from 37.1.3.
 
 ## Agent Assignment
 

@@ -4,6 +4,8 @@
 
 Replace the placeholder functions in `scoringPrompt.iso.ts` (created in Sprint 1, Story 37.1.4) with real implementations that build ISO prompt sections from database data via the `ISOControlRetrievalService`.
 
+**Dependencies:** 37.5.1 (seed data for integration tests) and 37.5.2 (ISOControlRetrievalService interface).
+
 Per the PRD prompt architecture:
 - **System prompt** (cacheable): Static ISO control catalog (~30 dimension-mapped controls)
 - **User prompt** (dynamic): Per-assessment applicable controls based on dimensions being scored

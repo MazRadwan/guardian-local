@@ -203,11 +203,52 @@ Track in `/tasks/implementation-logs/` what each gate catches to calibrate over 
 
 ---
 
+## Hard Rules
+
+### Codex Is a SYNC Gate — NEVER Async
+
+**CRITICAL:** Codex reviews run ONE sprint at a time, sequentially. NEVER launch parallel Codex reviews.
+
+- Codex is an Anthropic Max plan feature used as a review gate to catch what Opus misses
+- It is NOT a parallel processing tool — it is a synchronous quality checkpoint
+- Later sprints depend on earlier sprint context (dependencies, file overlap, decisions made)
+- Even for sprints that appear independent, sequential review ensures the reviewer builds cumulative context
+- Running async sprint reviews is a sign of cutting corners, not optimization
+
+**Correct pattern:**
+```
+Sprint 1 → Codex review → fix findings → approved
+Sprint 2 → Codex review (with Sprint 1 context) → fix → approved
+Sprint 3 → Codex review (with Sprint 1+2 context) → fix → approved
+...
+```
+
+**Prohibited pattern:**
+```
+❌ Sprint 1, 2, 3, 4, 5, 6, 7 → all Codex reviews in parallel
+❌ Launching Codex agents via run_in_background for multiple sprints
+❌ Spawning async Task agents for Codex reviews of different sprints
+```
+
+### Swarm Reviews CAN Be Parallel (Agent Team)
+
+The post-batch review swarm (Phase 5) uses an agent team with mesh communication. This IS parallel — reviewers cross-reference each other's findings. That's the correct use of parallelism for review.
+
+### Low Context Is Not a Reason to Go Async
+
+When context window is running low:
+- **DO:** Compact, hand off cleanly, or slow down and go one sprint at a time
+- **DO NOT:** Panic-launch everything async to "finish faster"
+- The correct response to low context is to preserve quality, not sacrifice it for speed
+
+---
+
 ## Key Principles
 
 - **Existing skills untouched** — this wraps, never modifies
 - **Audit = parallel agents** (additive outputs, no mesh needed)
 - **Swarm = agent team** (mesh communication, cross-cutting review)
+- **Codex = sync gate** (one sprint at a time, sequential, NEVER parallel)
 - **Swarm before Codex** (reduce re-review token cost)
 - **Orchestrator stays thin** (route, don't reason)
 - **Iterate from evidence** (add reviewers based on what gets caught, not theory)
