@@ -42,11 +42,12 @@ constructor(
 )
 ```
 
-New constructor (9 params):
+New constructor (10 params — keeps `dimensionScoreRepo` for `getResultForConversation()`, see Section 4):
 ```typescript
 constructor(
   private assessmentResultRepo: IAssessmentResultRepository,
   private assessmentRepo: IAssessmentRepository,
+  private dimensionScoreRepo: IDimensionScoreRepository,  // KEEP for getResultForConversation
   private fileRepo: IFileRepository,
   private fileStorage: IFileStorage,
   private documentParser: IScoringDocumentParser,
@@ -170,6 +171,7 @@ Then in ScoringService, use `this.llmService.getModelId()` for the report data.
 - `packages/backend/src/application/services/ScoringService.ts` - MODIFY (remove 5 methods, update constructor, update delegation calls)
 - `packages/backend/src/application/services/ScoringLLMService.ts` - MODIFY (add `getModelId()` proxy method)
 - `packages/backend/src/index.ts` - MODIFY (update DI wiring, ~lines 214-230)
+- `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - MODIFY (update constructor mocks from 12 to 10 params, mock ScoringStorageService + ScoringLLMService)
 - `packages/backend/__tests__/integration/scoring-trigger.test.ts` - MODIFY (update ScoringService constructor call from 12 to 10 params)
 - `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - MODIFY (update ScoringService constructor call from 12 to 10 params)
 

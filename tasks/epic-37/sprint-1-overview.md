@@ -57,7 +57,6 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
     +----------+---------------------------------------------------+--------------------+
     | 37.1.5   | SubScoreValidator.ts (NEW)                        | None               |
     |          | ScoringPayloadValidator.ts (MODIFY - delegate)     |                    |
-    |          | ScoringPayloadValidator.test.ts (update imports)    |                    |
     +----------+---------------------------------------------------+--------------------+
 ```
 
