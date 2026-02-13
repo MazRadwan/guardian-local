@@ -65,5 +65,5 @@ export interface ISOControlForPrompt {
   criteriaText: string
   assessmentGuidance?: string
   dimensions: RiskDimension[]
-  relevanceWeight: number
+  relevanceWeights: Record<string, number>
 }

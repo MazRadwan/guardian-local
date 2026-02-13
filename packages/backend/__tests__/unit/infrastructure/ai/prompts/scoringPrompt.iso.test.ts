@@ -15,7 +15,7 @@ function makeControl(overrides: Partial<ISOControlForPrompt> = {}): ISOControlFo
     criteriaText: 'Organization has established an AI policy.',
     assessmentGuidance: 'Look for documented AI governance policy.',
     dimensions: ['regulatory_compliance'],
-    relevanceWeight: 0.8,
+    relevanceWeights: { regulatory_compliance: 0.8 },
     ...overrides,
   }
 }

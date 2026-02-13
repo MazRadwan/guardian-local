@@ -337,8 +337,8 @@ describe('ScoringLLMService', () => {
         options.onToolUse?.('scoring_complete', mockToolPayload);
       });
 
-      const catalogControls = [{ clauseRef: 'A.6.1', domain: 'Data', title: 'Data governance', framework: 'ISO/IEC 42001', criteriaText: 'Test', dimensions: [], relevanceWeight: 1 }];
-      const applicableControls = [{ clauseRef: 'A.6.2', domain: 'Data', title: 'Data quality', framework: 'ISO/IEC 42001', criteriaText: 'Test', dimensions: [], relevanceWeight: 1 }];
+      const catalogControls = [{ clauseRef: 'A.6.1', domain: 'Data', title: 'Data governance', framework: 'ISO/IEC 42001', criteriaText: 'Test', dimensions: [], relevanceWeights: {} }];
+      const applicableControls = [{ clauseRef: 'A.6.2', domain: 'Data', title: 'Data quality', framework: 'ISO/IEC 42001', criteriaText: 'Test', dimensions: [], relevanceWeights: {} }];
 
       const abortController = new AbortController();
       await service.scoreWithClaude(
@@ -379,7 +379,7 @@ describe('ScoringLLMService', () => {
 
   describe('fetchISOCatalog', () => {
     it('should delegate to promptBuilder.fetchISOCatalog()', async () => {
-      const controls = [{ clauseRef: 'A.6.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeight: 1 }];
+      const controls = [{ clauseRef: 'A.6.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeights: {} }];
       mockPromptBuilder.fetchISOCatalog.mockResolvedValue(controls as any);
 
       const result = await service.fetchISOCatalog();
@@ -401,7 +401,7 @@ describe('ScoringLLMService', () => {
 
   describe('fetchApplicableControls', () => {
     it('should delegate to promptBuilder.fetchApplicableControls()', async () => {
-      const controls = [{ clauseRef: 'A.7.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeight: 1 }];
+      const controls = [{ clauseRef: 'A.7.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeights: {} }];
       mockPromptBuilder.fetchApplicableControls.mockResolvedValue(controls as any);
 
       const result = await service.fetchApplicableControls(['privacy_risk']);

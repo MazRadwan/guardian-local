@@ -20,6 +20,7 @@ export interface MappingWithControlDTO extends DimensionControlMappingDTO {
 
 export interface IDimensionControlMappingRepository {
   findByDimension(dimension: string): Promise<MappingWithControlDTO[]>
+  findByDimensions(dimensions: string[]): Promise<MappingWithControlDTO[]>
   findAllMappings(): Promise<MappingWithControlDTO[]>
   create(data: CreateDimensionControlMappingDTO): Promise<DimensionControlMappingDTO>
   createBatch(data: CreateDimensionControlMappingDTO[]): Promise<DimensionControlMappingDTO[]>

@@ -69,7 +69,7 @@ describe('ISOControlRetrievalService', () => {
       clauseRef: 'A.4.2',
       domain: 'Context of the organization',
       title: 'AI policy',
-      relevanceWeight: 0.8,
+      relevanceWeight: 0.6,
     }),
     makeMappingDTO({
       controlId: 'ctrl-2',
@@ -104,6 +104,7 @@ describe('ISOControlRetrievalService', () => {
   beforeEach(() => {
     mockMappingRepo = {
       findByDimension: jest.fn(),
+      findByDimensions: jest.fn(),
       findAllMappings: jest.fn(),
       create: jest.fn(),
       createBatch: jest.fn(),
@@ -144,11 +145,27 @@ describe('ISOControlRetrievalService', () => {
   })
 
   describe('getApplicableControls', () => {
+    it('should call findByDimensions with all dimensions in a single batch query', async () => {
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0], mappings[1]])
+
+      await service.getApplicableControls([
+        'regulatory_compliance',
+        'operational_excellence',
+      ])
+
+      // Verify single batch call instead of N+1 per-dimension calls
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(1)
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledWith([
+        'regulatory_compliance',
+        'operational_excellence',
+      ])
+      // findByDimension should NOT be called
+      expect(mockMappingRepo.findByDimension).not.toHaveBeenCalled()
+    })
+
     it('should dedupe controls across dimensions', async () => {
       // ctrl-1 appears in both regulatory_compliance and operational_excellence
-      mockMappingRepo.findByDimension.mockImplementation(async (dim) => {
-        return mappings.filter((m) => m.dimension === dim)
-      })
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0], mappings[1]])
 
       const result = await service.getApplicableControls([
         'regulatory_compliance',
@@ -163,6 +180,7 @@ describe('ISOControlRetrievalService', () => {
     })
 
     it('should return empty for empty dimensions array', async () => {
+      mockMappingRepo.findByDimensions.mockResolvedValue([])
       mockCriteriaRepo.findApprovedByVersion.mockResolvedValue([])
       const result = await service.getApplicableControls([])
       expect(result).toEqual([])
@@ -240,6 +258,46 @@ describe('ISOControlRetrievalService', () => {
       expect(result[0].dimensions).toContain('regulatory_compliance')
       expect(result[0].dimensions).toContain('operational_excellence')
       expect(result[0].dimensions).toHaveLength(2)
+    })
+  })
+
+  describe('relevanceWeights per dimension (H2 fix)', () => {
+    it('should preserve per-dimension weights when a control maps to multiple dimensions', async () => {
+      // ctrl-1 has weight 0.8 for regulatory_compliance, 0.6 for operational_excellence
+      mockMappingRepo.findAllMappings.mockResolvedValue([mappings[0], mappings[1]])
+
+      const result = await service.getFullCatalog()
+      expect(result).toHaveLength(1)
+      expect(result[0].relevanceWeights).toEqual({
+        regulatory_compliance: 0.8,
+        operational_excellence: 0.6,
+      })
+    })
+
+    it('should preserve single weight when control maps to one dimension', async () => {
+      mockMappingRepo.findAllMappings.mockResolvedValue([mappings[2]]) // ctrl-2
+
+      const result = await service.getFullCatalog()
+      expect(result).toHaveLength(1)
+      expect(result[0].relevanceWeights).toEqual({
+        regulatory_compliance: 0.9,
+      })
+    })
+
+    it('should not silently drop different weights for same control across dimensions', async () => {
+      // This is the exact scenario the H2 bug manifested:
+      // ctrl-1 appears with weight 0.8 (regulatory_compliance) and 0.6 (operational_excellence)
+      // Old code would keep only 0.8 and silently discard 0.6
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0], mappings[1]])
+
+      const result = await service.getApplicableControls([
+        'regulatory_compliance',
+        'operational_excellence',
+      ])
+
+      const ctrl1 = result.find((r) => r.clauseRef === 'A.4.2')!
+      expect(ctrl1.relevanceWeights['regulatory_compliance']).toBe(0.8)
+      expect(ctrl1.relevanceWeights['operational_excellence']).toBe(0.6)
     })
   })
 })

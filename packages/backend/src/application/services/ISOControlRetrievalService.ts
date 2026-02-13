@@ -37,13 +37,10 @@ export class ISOControlRetrievalService {
   /**
    * Get controls applicable to specific dimensions (user prompt).
    * Returns deduped controls that map to any of the given dimensions.
+   * Uses a single batch query instead of one query per dimension.
    */
   async getApplicableControls(dimensions: string[]): Promise<ISOControlForPrompt[]> {
-    const allMappings: MappingWithControlDTO[] = []
-    for (const dim of dimensions) {
-      const dimMappings = await this.mappingRepo.findByDimension(dim)
-      allMappings.push(...dimMappings)
-    }
+    const allMappings = await this.mappingRepo.findByDimensions(dimensions)
     return this.buildControlList(allMappings)
   }
 
@@ -57,17 +54,18 @@ export class ISOControlRetrievalService {
 
   /**
    * Build deduped control list with interpretive criteria attached.
+   * Preserves per-dimension weights (fixes H2: weight dedup bug).
    */
   private async buildControlList(
     mappings: MappingWithControlDTO[]
   ): Promise<ISOControlForPrompt[]> {
-    // Dedupe by control ID
+    // Dedupe by control ID, preserving per-dimension weights
     const controlMap = new Map<
       string,
       {
         control: MappingWithControlDTO['control']
         dimensions: string[]
-        weight: number
+        weights: Record<string, number>
       }
     >()
 
@@ -77,11 +75,12 @@ export class ISOControlRetrievalService {
         if (!existing.dimensions.includes(m.dimension)) {
           existing.dimensions.push(m.dimension)
         }
+        existing.weights[m.dimension] = m.relevanceWeight
       } else {
         controlMap.set(m.controlId, {
           control: m.control,
           dimensions: [m.dimension],
-          weight: m.relevanceWeight,
+          weights: { [m.dimension]: m.relevanceWeight },
         })
       }
     }
@@ -103,7 +102,7 @@ export class ISOControlRetrievalService {
         criteriaText: criteria?.criteriaText ?? '',
         assessmentGuidance: criteria?.assessmentGuidance,
         dimensions: entry.dimensions as RiskDimension[],
-        relevanceWeight: entry.weight,
+        relevanceWeights: entry.weights,
       })
     }
 

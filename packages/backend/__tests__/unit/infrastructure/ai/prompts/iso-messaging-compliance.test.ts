@@ -55,7 +55,7 @@ const sampleControls: ISOControlForPrompt[] = [
     criteriaText: 'Organization implements systematic data quality processes.',
     assessmentGuidance: 'Evaluate data quality processes and governance.',
     dimensions: ['regulatory_compliance'],
-    relevanceWeight: 1.0,
+    relevanceWeights: { regulatory_compliance: 1.0 },
   },
   {
     clauseRef: '6.3',
@@ -64,7 +64,7 @@ const sampleControls: ISOControlForPrompt[] = [
     framework: 'ISO/IEC 23894',
     criteriaText: 'Organization applies systematic risk treatment.',
     dimensions: ['regulatory_compliance', 'operational_excellence'],
-    relevanceWeight: 1.0,
+    relevanceWeights: { regulatory_compliance: 1.0 },
   },
   {
     clauseRef: 'A.5.4',
@@ -73,7 +73,7 @@ const sampleControls: ISOControlForPrompt[] = [
     framework: 'ISO/IEC 42001',
     criteriaText: 'Organization maintains comprehensive AI system inventory.',
     dimensions: ['operational_excellence'],
-    relevanceWeight: 0.8,
+    relevanceWeights: { operational_excellence: 0.8 },
   },
 ]
 

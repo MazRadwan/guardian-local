@@ -5,7 +5,7 @@
  * Handles dimension_control_mappings with joins to framework_controls.
  */
 
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '../client.js'
 import { dimensionControlMappings } from '../schema/dimensionControlMappings.js'
 import { frameworkControls } from '../schema/frameworkControls.js'
@@ -32,6 +32,20 @@ export class DrizzleDimensionControlMappingRepository
         eq(dimensionControlMappings.controlId, frameworkControls.id)
       )
       .where(eq(dimensionControlMappings.dimension, dimension))
+
+    return rows.map((row) => this.toMappingWithControl(row))
+  }
+
+  async findByDimensions(dimensions: string[]): Promise<MappingWithControlDTO[]> {
+    if (dimensions.length === 0) return []
+    const rows = await db
+      .select()
+      .from(dimensionControlMappings)
+      .innerJoin(
+        frameworkControls,
+        eq(dimensionControlMappings.controlId, frameworkControls.id)
+      )
+      .where(inArray(dimensionControlMappings.dimension, dimensions))
 
     return rows.map((row) => this.toMappingWithControl(row))
   }
