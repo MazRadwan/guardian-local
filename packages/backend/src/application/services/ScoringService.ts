@@ -13,6 +13,7 @@ import { ScoringError, ScoringErrorCode, UnauthorizedError } from '../../domain/
 import { ScoringStorageService } from './ScoringStorageService.js';
 import { ScoringLLMService } from './ScoringLLMService.js';
 import { ScoringQueryService } from './ScoringQueryService.js';
+import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
 // Re-export for backward compatibility
 export { ScoringError, UnauthorizedError };
@@ -191,11 +192,12 @@ export class ScoringService implements IScoringService {
       // 8. Fetch ISO controls via ScoringLLMService (Epic 37: ISO enrichment)
       // Graceful degradation: ISO enrichment is optional — fallback to empty arrays on failure
       onProgress({ status: 'scoring', message: 'Analyzing scoring...' });
-      let catalogControls: import('../../domain/compliance/types.js').ISOControlForPrompt[] = [];
+      let catalogControls: ISOControlForPrompt[] = [];
       try {
         catalogControls = await this.llmService.fetchISOCatalog();
-      } catch {
+      } catch (err) {
         // ISO enrichment failure is non-critical — baseline scoring still runs
+        console.warn('[ScoringService] ISO catalog fetch failed, proceeding without ISO enrichment:', err);
       }
 
       // 9. Score with Claude (delegated to ScoringLLMService)
