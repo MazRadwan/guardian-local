@@ -170,12 +170,14 @@ Then in ScoringService, use `this.llmService.getModelId()` for the report data.
 - `packages/backend/src/application/services/ScoringService.ts` - MODIFY (remove 5 methods, update constructor, update delegation calls)
 - `packages/backend/src/application/services/ScoringLLMService.ts` - MODIFY (add `getModelId()` proxy method)
 - `packages/backend/src/index.ts` - MODIFY (update DI wiring, ~lines 214-230)
+- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - MODIFY (update ScoringService constructor call from 12 to 10 params)
+- `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - MODIFY (update ScoringService constructor call from 12 to 10 params)
 
 ## Tests Affected
 
 - `packages/backend/__tests__/unit/application/services/ScoringService.test.ts` - Constructor signature changed. Must update mock setup to provide `ScoringStorageService` and `ScoringLLMService` instead of individual repos/services. All test assertions should still pass since behavior is unchanged.
-- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - If it constructs ScoringService directly, constructor signature must match. Otherwise no change.
-- `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - Uses `getResultForConversation()` which stays. May need constructor update if it instantiates ScoringService.
+- `packages/backend/__tests__/integration/scoring-trigger.test.ts` - Constructs `new ScoringService(...)` directly. Constructor signature change from 12→10 params WILL break this test. MUST update.
+- `packages/backend/__tests__/integration/scoring-rehydration.test.ts` - Constructs `new ScoringService(...)` directly. Constructor signature change WILL break this test. MUST update.
 
 ## Agent Assignment
 
@@ -189,6 +191,8 @@ Then in ScoringService, use `this.llmService.getModelId()` for the report data.
 - [ ] Add test: `score()` delegates to `llmService.scoreWithClaude()`
 - [ ] Add test: `score()` delegates to `storageService.storeScores()`
 - [ ] Add test: report data uses `llmService.getModelId()`
+- [ ] Update constructor calls in `scoring-trigger.test.ts` and `scoring-rehydration.test.ts`
+- [ ] Verify all integration tests pass with updated constructor
 
 ## Definition of Done
 

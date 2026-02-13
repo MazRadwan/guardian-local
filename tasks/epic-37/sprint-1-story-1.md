@@ -6,7 +6,7 @@ Extract the storage-related helper methods from `ScoringService.ts` (542 LOC) in
 
 ## Acceptance Criteria
 
-- [ ] `ScoringStorageService.ts` created with 3 methods extracted from ScoringService
+- [ ] `ScoringStorageService.ts` created with 4 methods extracted from ScoringService
 - [ ] `storeResponses()` is exact logic from ScoringService lines 280-301
 - [ ] `storeScores()` is exact logic from ScoringService lines 425-474
 - [ ] `deriveDocumentType()` is exact logic from ScoringService lines 307-313

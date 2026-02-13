@@ -141,7 +141,7 @@ New `SubScoreValidator.ts`: ~100 LOC
   - Test `validateAllSubScores()` warns on invalid sub-score value
   - Test `validateAllSubScores()` warns on sub-score sum mismatch
   - Test `validateAllSubScores()` skips dimensions without rules
-  - Test `validateDimensionSubScores()` tolerance check (within +/-2)
+  - Test tolerance check (within +/-2) via `validateAllSubScores()` (validateDimensionSubScores is private — test indirectly through the public API)
 - [ ] Verify all existing `ScoringPayloadValidator.test.ts` tests pass unchanged
 
 ## Definition of Done

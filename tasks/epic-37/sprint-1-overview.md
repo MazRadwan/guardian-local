@@ -45,11 +45,14 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
     |          | ScoringService.ts (READ ONLY for copy)            |                    |
     +----------+---------------------------------------------------+--------------------+
     | 37.1.3   | ScoringService.ts (MODIFY - remove methods)       | 37.1.1, 37.1.2     |
-    |          | IScoringService.ts (no change)                    |                    |
+    |          | ScoringLLMService.ts (MODIFY - add getModelId)    |                    |
     |          | index.ts (DI container)                           |                    |
     |          | ScoringService.test.ts (update imports)            |                    |
+    |          | scoring-trigger.test.ts (update constructor)       |                    |
+    |          | scoring-rehydration.test.ts (update constructor)   |                    |
     +----------+---------------------------------------------------+--------------------+
     | 37.1.4   | scoringPrompt.iso.ts (NEW)                        | None               |
+    |          | scoringPrompt.helpers.ts (NEW)                     |                    |
     |          | scoringPrompt.ts (MODIFY - add import+call)        |                    |
     +----------+---------------------------------------------------+--------------------+
     | 37.1.5   | SubScoreValidator.ts (NEW)                        | None               |
@@ -76,6 +79,8 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
 |   FILES:               |   FILES:               |   FILES:             |
 |   ScoringStorage-      |   ScoringLLM-          |   scoringPrompt-     |
 |   Service.ts (NEW)     |   Service.ts (NEW)     |   .iso.ts (NEW)      |
+|                        |                        |   scoringPrompt-     |
+|                        |                        |   .helpers.ts (NEW)  |
 |                        |                        |   scoringPrompt.ts   |
 |   backend-agent        |   backend-agent        |   backend-agent      |
 +------------------------+------------------------+----------------------+
@@ -111,8 +116,11 @@ These splits are **blockers** for all subsequent ISO work. Zero behavioral chang
 |                                                                        |
 |   FILES:                                                               |
 |   - ScoringService.ts (MODIFY - remove extracted methods)              |
+|   - ScoringLLMService.ts (MODIFY - add getModelId)                     |
 |   - index.ts (MODIFY - update DI wiring)                               |
 |   - ScoringService.test.ts (MODIFY - update imports)                   |
+|   - scoring-trigger.test.ts (MODIFY - update constructor)              |
+|   - scoring-rehydration.test.ts (MODIFY - update constructor)          |
 |                                                                        |
 |   MUST wait for 37.1.1 + 37.1.2 to complete                           |
 |                                                                        |
