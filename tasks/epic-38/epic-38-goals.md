@@ -36,18 +36,26 @@ Same as Epic 37 — the PRD covers both epics:
 
 ## Estimated Scope
 
-| Area | Rough Size | Agent |
-|------|-----------|-------|
-| Export narrative prompt | 1-2 stories | backend-agent |
-| PDF template enrichment | 1-2 stories | export-agent |
-| Word template enrichment | 1-2 stories | export-agent |
-| Excel template enrichment | 1 story | export-agent |
-| Frontend confidence display | 2-3 stories | frontend-agent |
-| Frontend ISO alignment section | 1-2 stories | frontend-agent |
-| E2E integration tests | 1-2 stories | backend-agent |
-| Report messaging audit | 1 story | backend-agent |
+Stories are granular, bite-sized units — an agent with zero context picks up the spec, implements, tests, done.
 
-**Total: ~10-14 stories, mixed frontend/backend/export.**
+| Area | Rough Decomposition | Stories | Agent |
+|------|---------------------|---------|-------|
+| Export narrative prompt | Inject ISO + confidence into narrative context | 2-3 | backend-agent |
+| PDF template — ISO references | Per-dimension ISO clause rendering | 2-3 | export-agent |
+| PDF template — confidence badges | H/M/L badge + rationale per dimension | 1-2 | export-agent |
+| PDF template — Guardian-native labels | Healthcare-specific dimension labels | 1 | export-agent |
+| Word template — ISO enrichment | Mirror PDF enrichment for Word format | 2-3 | export-agent |
+| Excel template — ISO mapping sheet | Control mapping tab, confidence column | 2-3 | export-agent |
+| Frontend — confidence badge component | Reusable H/M/L badge with tooltip rationale | 1-2 | frontend-agent |
+| Frontend — dimension score enrichment | ISO refs + confidence in assessment detail view | 2-3 | frontend-agent |
+| Frontend — ISO alignment section | Standalone section listing clause statuses | 2-3 | frontend-agent |
+| Frontend — Guardian-native dimension UI | Healthcare-specific label treatment | 1-2 | frontend-agent |
+| ISO messaging enforcement | Prohibited term linting in templates + prompts | 1-2 | backend-agent |
+| E2E integration tests | Score → export → verify report end-to-end | 2-3 | backend-agent |
+| Snapshot tests | Report format stability tests | 1-2 | backend-agent |
+| Manual QA checklist | 5-report messaging compliance review spec | 1 | backend-agent |
+
+**Total: ~25-35 stories across 5-8 sprints, mixed frontend/backend/export.**
 
 ## Notes for Future Session
 

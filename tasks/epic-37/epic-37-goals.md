@@ -115,14 +115,36 @@ User Prompt (dynamic, per-assessment):
 
 ## Estimated Scope
 
-| Area | Rough Size | Agent |
-|------|-----------|-------|
-| DB schema + migrations + seed | 2-3 stories | backend-agent |
-| Domain entities + types | 1-2 stories | backend-agent |
-| Scoring prompt enrichment | 2-3 stories | backend-agent |
-| Validator + service updates | 1-2 stories | backend-agent |
-| rawToolPayload provenance (D-10) | 1 story | backend-agent |
-| Golden sample regression test | 1 story | backend-agent |
-| Extensibility validation | 1 story | backend-agent |
+Stories are granular, bite-sized units — an agent with zero context picks up the spec, implements, tests, done.
 
-**Total: ~10-14 stories, all backend. Sequential sprints likely (prompt changes are iterative).**
+| Area | Rough Decomposition | Stories | Agent |
+|------|---------------------|---------|-------|
+| DB schema (6 tables) | 1 per table + migration + repository | 6-8 | backend-agent |
+| Domain entities + value objects | 1 per entity + types file | 4-6 | backend-agent |
+| Seed script (Tier 1) | Seed data + review workflow | 2-3 | backend-agent |
+| ISO control retrieval service | Service + tests | 1-2 | backend-agent |
+| Prompt injection service | Static catalog + dynamic applicability | 2-3 | backend-agent |
+| Scoring tool schema update | scoringComplete.ts + types | 1-2 | backend-agent |
+| Scoring prompt enrichment | Iterative changes with regression tests | 3-4 | backend-agent |
+| ScoringPayloadValidator updates | Confidence + ISO field validation | 2-3 | backend-agent |
+| rawToolPayload provenance (D-10) | Schema + service + migration | 2-3 | backend-agent |
+| ScoringService split (D-15) | Extract concerns to stay under 300 LOC | 1-2 | backend-agent |
+| Golden sample regression baseline | Capture + compare framework | 1-2 | backend-agent |
+| Extensibility validation | Fake Tier 2 seed test | 1 | backend-agent |
+
+**Total: ~25-35 stories across 5-8 sprints, all backend.**
+
+## Artifacts (Per Epic Convention)
+
+```
+tasks/epic-37/
+├── epic-37-goals.md              # This file
+├── overview.md                   # Sprint summary, dependency chart, quality gates
+├── .orchestrator-state.json      # Workflow state (auto-managed)
+├── sprint-1-overview.md          # Per-sprint: stories, dependencies, parallel strategy
+├── sprint-1-story-1.md           # Per-story: granular spec (under 300 LOC)
+├── sprint-1-story-2.md
+├── ...
+├── audit-report.md               # Pre-planning audit output (auto-generated)
+└── .review-log.md                # GPT review audit trail (auto-managed)
+```
