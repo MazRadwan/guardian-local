@@ -15,7 +15,8 @@ The plan-agent was writing sprint/story specs when this session ended. The specs
 ```
 [DONE] Pre-planning audit (3 agents) → audit-report.md written
 [IN PROGRESS] Plan-agent writing specs → overview.md, sprint-N-overview.md, sprint-N-story-M.md
-[NOT DONE] GPT sprint spec review loops (per /spec-design skill)
+[NOT DONE] Spec review swarm (agent team — mesh review of specs before Codex)
+[NOT DONE] Codex sprint spec review loops (per /spec-design skill)
 [NOT DONE] Spec final pass (holistic cross-sprint review)
 [NOT DONE] User approval of specs
 [NOT DONE] Implementation
@@ -128,9 +129,14 @@ c37b6dd docs(iso): Update Epic 37/38 story estimates to granular decomposition
 ```
 1. Read this handoff
 2. Check tasks/epic-37/ for plan-agent output (overview.md, sprint files)
-3. If specs exist → run GPT review loops on each sprint (per /spec-design Step 4)
-4. If specs are missing/incomplete → re-run plan-agent with audit-report.md
-5. After GPT approves all sprints → spec final pass (holistic review)
-6. After final pass → user reviews and approves
-7. THEN and only then → /implement (or /audited-delegate Phase 4+)
+3. If specs exist → deploy spec review swarm (agent team, mesh communication)
+   - Reviewers cross-check specs against audit-report.md facts
+   - Catch file conflicts, missing dependencies, wrong assumptions
+4. After swarm → run Codex sprint spec review loops (per /spec-design Step 4)
+5. If specs are missing/incomplete → re-run plan-agent with audit-report.md
+6. After Codex approves all sprints → spec final pass (holistic review)
+7. After final pass → user reviews and approves
+8. THEN and only then → /implement (or /audited-delegate Phase 4+)
 ```
+
+**Review order: Swarm FIRST → Codex SECOND.** Swarm catches structural issues cheaply. Codex deep-reviews what swarm missed.
