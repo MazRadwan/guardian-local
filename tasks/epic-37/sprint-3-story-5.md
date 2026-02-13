@@ -1,8 +1,8 @@
-# Story 37.3.5: Create DimensionControlMapping Value Object
+# Story 37.3.5: Create DimensionControlMapping Domain Model
 
 ## Description
 
-Create the `DimensionControlMapping` domain value object. Maps ISO controls to Guardian's 10 risk dimensions with a relevance weight. Simple, immutable value object.
+Create the `DimensionControlMapping` domain model. Maps ISO controls to Guardian's 10 risk dimensions with a relevance weight. Simple, immutable domain model.
 
 ## Acceptance Criteria
 
@@ -22,9 +22,10 @@ Create the `DimensionControlMapping` domain value object. Maps ISO controls to G
 
 ```typescript
 import { DimensionControlMappingDTO, CreateDimensionControlMappingDTO } from './dtos.js';
+import { RiskDimension } from '../types/QuestionnaireSchema.js';
 
 /**
- * DimensionControlMapping Value Object
+ * DimensionControlMapping Domain Model
  *
  * Maps an ISO control to a Guardian risk dimension.
  * One control can map to multiple dimensions (via separate mapping rows).
@@ -34,7 +35,7 @@ export class DimensionControlMapping {
   private constructor(
     public readonly id: string,
     public readonly controlId: string,
-    public readonly dimension: string,
+    public readonly dimension: RiskDimension,
     public readonly relevanceWeight: number,
     public readonly createdAt: Date
   ) {}
@@ -96,7 +97,7 @@ export class DimensionControlMapping {
 
 ## Definition of Done
 
-- [ ] Value object created and compiles
+- [ ] Domain model created and compiles
 - [ ] Immutable (all readonly properties)
 - [ ] Weight validation (0.0-1.0 range)
 - [ ] Unit tests written and passing

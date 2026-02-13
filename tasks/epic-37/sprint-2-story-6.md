@@ -7,7 +7,7 @@ Create the `assessment_compliance_results` database table. Stores per-assessment
 ## Acceptance Criteria
 
 - [ ] `assessmentComplianceResults.ts` created in `infrastructure/database/schema/`
-- [ ] Table has columns: `id` (uuid PK), `assessment_id` (uuid FK -> assessments), `framework_version_id` (uuid FK -> framework_versions), `criteria_version` (text), `control_id` (uuid FK -> framework_controls), `finding` (jsonb), `evidence_refs` (jsonb), `created_at` (timestamp)
+- [ ] Table has columns: `id` (uuid PK), `assessment_id` (uuid FK -> assessments), `framework_version_id` (uuid FK -> framework_versions), `criteria_version` (text, not null), `control_id` (uuid FK -> framework_controls), `finding` (jsonb), `evidence_refs` (jsonb), `created_at` (timestamp)
 - [ ] Foreign key to `assessments` with `onDelete: 'cascade'`
 - [ ] Foreign key to `framework_versions` with `onDelete: 'cascade'`
 - [ ] Foreign key to `framework_controls` with `onDelete: 'cascade'`
@@ -37,7 +37,7 @@ export const assessmentComplianceResults = pgTable(
     frameworkVersionId: uuid('framework_version_id')
       .notNull()
       .references(() => frameworkVersions.id, { onDelete: 'cascade' }),
-    criteriaVersion: text('criteria_version'),        // "guardian-iso42001-v1.0"
+    criteriaVersion: text('criteria_version').notNull(),  // "guardian-iso42001-v1.0"
     controlId: uuid('control_id')
       .notNull()
       .references(() => frameworkControls.id, { onDelete: 'cascade' }),

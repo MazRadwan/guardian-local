@@ -1,8 +1,8 @@
-# Story 37.3.3: Create FrameworkControl Value Object
+# Story 37.3.3: Create FrameworkControl Domain Model
 
 ## Description
 
-Create the `FrameworkControl` domain value object. Controls are immutable per standard version -- once created, they do not change. This is a value object (not an entity) because controls have no mutable state beyond identity.
+Create the `FrameworkControl` domain model. Controls are immutable per standard version -- once created, they do not change. This is a domain model with identity (id, createdAt) but no mutable state beyond creation.
 
 ## Acceptance Criteria
 
@@ -10,7 +10,7 @@ Create the `FrameworkControl` domain value object. Controls are immutable per st
 - [ ] Has `create()` static factory with validation
 - [ ] Has `fromPersistence()` static factory for DB hydration
 - [ ] Validates `clauseRef`, `domain`, `title` are non-empty
-- [ ] All properties are readonly (immutable value object)
+- [ ] All properties are readonly (immutable domain model)
 - [ ] Under 60 LOC
 - [ ] No TypeScript errors
 
@@ -22,7 +22,7 @@ Create the `FrameworkControl` domain value object. Controls are immutable per st
 import { FrameworkControlDTO, CreateFrameworkControlDTO } from './dtos.js';
 
 /**
- * FrameworkControl Value Object
+ * FrameworkControl Domain Model
  *
  * Represents a single ISO control (e.g., "A.6.2.6 - Data quality management").
  * Immutable per standard version -- controls do not change once seeded.
@@ -98,7 +98,7 @@ export class FrameworkControl {
 
 ## Definition of Done
 
-- [ ] Value object created and compiles
+- [ ] Domain model created and compiles
 - [ ] Immutable (all readonly properties)
 - [ ] Validation in create() method
 - [ ] Unit tests written and passing

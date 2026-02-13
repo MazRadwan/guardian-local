@@ -19,11 +19,11 @@ Create the 6 new database tables defined in the PRD Section 9 and audit report. 
 | Story | Name | Focus | Dependencies |
 |-------|------|-------|--------------|
 | **37.2.1** | compliance_frameworks schema | Table + types for ISO framework registry | None |
-| **37.2.2** | framework_versions schema | Table + types for standard version tracking | None |
-| **37.2.3** | framework_controls schema | Table + types + indexes for ISO controls | None |
-| **37.2.4** | interpretive_criteria schema | Table + types for Guardian's criteria | None |
-| **37.2.5** | dimension_control_mappings schema | Table + types for dimension-to-control maps | None |
-| **37.2.6** | assessment_compliance_results schema | Table + types for per-assessment compliance | None |
+| **37.2.2** | framework_versions schema | Table + types for standard version tracking | 37.2.1 (imports complianceFrameworks FK) |
+| **37.2.3** | framework_controls schema | Table + types + indexes for ISO controls | 37.2.2 (imports frameworkVersions FK) |
+| **37.2.4** | interpretive_criteria schema | Table + types for Guardian's criteria | 37.2.3 (imports frameworkControls FK) |
+| **37.2.5** | dimension_control_mappings schema | Table + types for dimension-to-control maps | 37.2.3 (imports frameworkControls FK) |
+| **37.2.6** | assessment_compliance_results schema | Table + types for per-assessment compliance | 37.2.2, 37.2.3 (imports frameworkVersions + frameworkControls FKs) |
 | **37.2.7** | Update schema/index.ts barrel exports | Add 6 new table exports | 37.2.1-37.2.6 |
 | **37.2.8** | Update test-db.ts truncation list | Add 6 tables to TRUNCATE CASCADE | 37.2.7 |
 
@@ -33,52 +33,63 @@ Create the 6 new database tables defined in the PRD Section 9 and audit report. 
 
 ```
     File Overlap Analysis:
-    +----------+-----------------------------------------------+--------------------+
-    | Story    | Files Touched                                 | Conflicts          |
-    +----------+-----------------------------------------------+--------------------+
-    | 37.2.1   | schema/complianceFrameworks.ts (NEW)           | None               |
-    | 37.2.2   | schema/frameworkVersions.ts (NEW)              | None               |
-    | 37.2.3   | schema/frameworkControls.ts (NEW)              | None               |
-    | 37.2.4   | schema/interpretiveCriteria.ts (NEW)           | None               |
-    | 37.2.5   | schema/dimensionControlMappings.ts (NEW)       | None               |
-    | 37.2.6   | schema/assessmentComplianceResults.ts (NEW)    | None               |
-    | 37.2.7   | schema/index.ts (MODIFY)                      | 37.2.8             |
-    | 37.2.8   | __tests__/setup/test-db.ts (MODIFY)            | None               |
-    +----------+-----------------------------------------------+--------------------+
+    +----------+-----------------------------------------------+--------------------------------------+
+    | Story    | Files Touched                                 | Import Dependencies                  |
+    +----------+-----------------------------------------------+--------------------------------------+
+    | 37.2.1   | schema/complianceFrameworks.ts (NEW)           | None                                 |
+    | 37.2.2   | schema/frameworkVersions.ts (NEW)              | 37.2.1 (imports complianceFrameworks)|
+    | 37.2.3   | schema/frameworkControls.ts (NEW)              | 37.2.2 (imports frameworkVersions)   |
+    | 37.2.4   | schema/interpretiveCriteria.ts (NEW)           | 37.2.3 (imports frameworkControls)   |
+    | 37.2.5   | schema/dimensionControlMappings.ts (NEW)       | 37.2.3 (imports frameworkControls)   |
+    | 37.2.6   | schema/assessmentComplianceResults.ts (NEW)    | 37.2.2 + 37.2.3 (imports both)      |
+    | 37.2.7   | schema/index.ts (MODIFY)                      | 37.2.1-37.2.6 (all schemas)         |
+    | 37.2.8   | __tests__/setup/test-db.ts (MODIFY)            | 37.2.7 (barrel exports)             |
+    +----------+-----------------------------------------------+--------------------------------------+
 ```
 
 ---
 
-## Parallel Execution Strategy
+## Execution Strategy
 
-### Phase 1: Schema File Creation (6 stories in parallel)
+### Dependency Chain
+
+```
+37.2.1 (complianceFrameworks)
+  └─→ 37.2.2 (frameworkVersions)
+        └─→ 37.2.3 (frameworkControls)
+              ├─→ 37.2.4 (interpretiveCriteria)      ─┐
+              ├─→ 37.2.5 (dimensionControlMappings)   ├─ parallel after 37.2.3
+              └─→ 37.2.6 (assessmentComplianceResults)─┘
+                        └─→ 37.2.7 (barrel exports)
+                              └─→ 37.2.8 (test-db truncation)
+```
+
+**Execution order:** 37.2.1 -> 37.2.2 -> 37.2.3 -> (37.2.4 + 37.2.5 + 37.2.6 in parallel) -> 37.2.7 -> 37.2.8
+
+> **Practical note:** Since all 6 schema stories are NEW file creations by a single `backend-agent`, they can be created sequentially in dependency order within a single implementation pass without blocking. No file contention exists -- each story creates its own file. The key constraint is **compile-time**: all imports must resolve before `tsc` runs, so files must be created in dependency order (or all at once before compilation).
+
+### Phase 1: Schema File Creation (sequential by dependency)
 
 ```
 +------------------------------------------------------------------------+
-|                     PHASE 1 - RUN IN PARALLEL                          |
-|           (Each story creates an independent new file)                 |
-+------------------------+------------------------+----------------------+
-|   37.2.1               |   37.2.2               |   37.2.3             |
-|   compliance_          |   framework_            |   framework_         |
-|   frameworks           |   versions              |   controls           |
-|                        |                        |                      |
-|   FILES:               |   FILES:               |   FILES:             |
-|   complianceFrame-     |   frameworkVersions    |   frameworkControls  |
-|   works.ts (NEW)       |   .ts (NEW)            |   .ts (NEW)          |
-+------------------------+------------------------+----------------------+
-|   37.2.4               |   37.2.5               |   37.2.6             |
-|   interpretive_        |   dimension_control_    |   assessment_        |
-|   criteria             |   mappings             |   compliance_results |
-|                        |                        |                      |
-|   FILES:               |   FILES:               |   FILES:             |
-|   interpretive-        |   dimensionControl-    |   assessmentCompl-   |
-|   Criteria.ts (NEW)    |   Mappings.ts (NEW)    |   ianceResults.ts    |
-+------------------------+------------------------+----------------------+
+|                     PHASE 1 - SEQUENTIAL BY DEPENDENCY                 |
+|       (Single agent creates files in import-resolution order)          |
++------------------------------------------------------------------------+
+|   37.2.1 → 37.2.2 → 37.2.3 → 37.2.4 + 37.2.5 + 37.2.6              |
+|                                                                        |
+|   complianceFrameworks.ts                                              |
+|     └→ frameworkVersions.ts (imports complianceFrameworks)              |
+|          └→ frameworkControls.ts (imports frameworkVersions)            |
+|               ├→ interpretiveCriteria.ts (imports frameworkControls)    |
+|               ├→ dimensionControlMappings.ts (imports frameworkControls)|
+|               └→ assessmentComplianceResults.ts (imports fwVersions +  |
+|                    frameworkControls)                                   |
++------------------------------------------------------------------------+
 ```
 
 **Stories:** 37.2.1, 37.2.2, 37.2.3, 37.2.4, 37.2.5, 37.2.6
-**Agents needed:** Up to 6 (or 2-3 with batching)
-**File overlap:** None
+**Agents needed:** 1 (sequential in dependency order)
+**File overlap:** None (each story creates a new file)
 **Review:** After all complete
 
 ### Phase 2: Barrel Exports + Test Setup (sequential)

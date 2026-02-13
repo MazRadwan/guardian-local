@@ -83,7 +83,7 @@ describe('ISO Extensibility Test (SC-3)', () => {
     const catalog = await service.getFullCatalog();
     expect(catalog.length).toBeGreaterThan(0);
     expect(catalog.some(c => c.clauseRef === '3.1.1')).toBe(true);
-    expect(catalog.some(c => c.framework === 'ISO/IEC 23894')).toBe(true);
+    expect(catalog.some(c => c.framework === 'ISO/IEC 22989')).toBe(true);
 
     // 3. Verify prompt builder includes the new controls
     const section = buildISOCatalogSection(catalog);

@@ -1,7 +1,7 @@
 # Sprint 3: Domain Layer
 
 **Epic:** 37 - ISO Foundation + Scoring Enrichment
-**Focus:** Domain entities, value objects, and ISO-specific types
+**Focus:** Domain entities, domain models, and ISO-specific types
 **Stories:** 37.3.1 - 37.3.5 (5 stories)
 **Dependencies:** Sprint 2 complete (database schema exists)
 **Agents:** `backend-agent`
@@ -12,6 +12,8 @@
 
 Create domain entities and value objects for the ISO compliance tables. These follow the existing pattern established by `Assessment.ts` (entity with `create()` and `fromPersistence()` factory methods). Also define the ISO-specific TypeScript types and DTOs that will be used across the application.
 
+Note: AssessmentComplianceResult does not have a dedicated domain object in this sprint. The table is Phase 2 only (per PRD Section 9) and the DTO in types.ts is sufficient for the extensibility test in Sprint 7. A domain entity will be created when Phase 2 implementation begins.
+
 ---
 
 ## Stories
@@ -20,9 +22,9 @@ Create domain entities and value objects for the ISO compliance tables. These fo
 |-------|------|-------|--------------|
 | **37.3.1** | ISO types and DTOs | Types file + DTOs for all 6 ISO entities | None |
 | **37.3.2** | ComplianceFramework + FrameworkVersion entities | Domain entities with factory methods | 37.3.1 |
-| **37.3.3** | FrameworkControl value object | Immutable value object | 37.3.1 |
-| **37.3.4** | InterpretiveCriteria value object | Value object with versioning | 37.3.1 |
-| **37.3.5** | DimensionControlMapping value object | Simple value object | 37.3.1 |
+| **37.3.3** | FrameworkControl domain model | Immutable domain model | 37.3.1 |
+| **37.3.4** | InterpretiveCriteria domain model | Domain model with versioning | 37.3.1 |
+| **37.3.5** | DimensionControlMapping domain model | Simple domain model | 37.3.1 |
 
 ---
 
@@ -71,7 +73,7 @@ Create domain entities and value objects for the ISO compliance tables. These fo
 **Stories:** 37.3.1
 **Review:** After complete
 
-### Phase 2: Entities + Value Objects (4 stories in parallel)
+### Phase 2: Entities + Domain Models (4 stories in parallel)
 
 ```
 +------------------------------------------------------------------------+
@@ -80,7 +82,7 @@ Create domain entities and value objects for the ISO compliance tables. These fo
 +------------------------+------------------------+----------------------+
 |   37.3.2               |   37.3.3               |   37.3.4             |
 |   ComplianceFramework  |   FrameworkControl     |   Interpretive-      |
-|   + FrameworkVersion   |   (value object)       |   Criteria           |
+|   + FrameworkVersion   |   (domain model)       |   Criteria           |
 |                        |                        |                      |
 |   FILES:               |   FILES:               |   FILES:             |
 |   ComplianceFrame-     |   FrameworkControl.ts  |   Interpretive-      |
@@ -89,7 +91,7 @@ Create domain entities and value objects for the ISO compliance tables. These fo
 |   (NEW)                |                        |                      |
 +------------------------+------------------------+----------------------+
 |   37.3.5                                                               |
-|   DimensionControlMapping (value object)                               |
+|   DimensionControlMapping (domain model)                               |
 |                                                                        |
 |   FILES:                                                               |
 |   DimensionControlMapping.ts (NEW)                                     |
@@ -119,7 +121,7 @@ Create domain entities and value objects for the ISO compliance tables. These fo
 
 Sprint 3 is complete when:
 - [ ] All types and DTOs defined in `domain/compliance/`
-- [ ] All entities and value objects created
+- [ ] All entities and value objects created (5 of 6 — AssessmentComplianceResult deferred to Phase 2)
 - [ ] All domain objects have `create()` and `fromPersistence()` factory methods
 - [ ] Unit tests for all domain objects
 - [ ] No TypeScript errors

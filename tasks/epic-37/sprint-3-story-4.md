@@ -1,8 +1,8 @@
-# Story 37.3.4: Create InterpretiveCriteria Value Object
+# Story 37.3.4: Create InterpretiveCriteria Domain Model
 
 ## Description
 
-Create the `InterpretiveCriteria` domain value object. This implements Level 2 of two-level versioning: Guardian's own interpretive criteria for each ISO control. Criteria have a `reviewStatus` that tracks the human approval workflow (`draft` -> `approved` -> `deprecated`).
+Create the `InterpretiveCriteria` domain model. This implements Level 2 of two-level versioning: Guardian's own interpretive criteria for each ISO control. Criteria have a `reviewStatus` that tracks the human approval workflow (`draft` -> `approved` -> `deprecated`).
 
 ## Acceptance Criteria
 
@@ -24,7 +24,7 @@ import { InterpretiveCriteriaDTO, CreateInterpretiveCriteriaDTO } from './dtos.j
 import { ReviewStatus } from './types.js';
 
 /**
- * InterpretiveCriteria Value Object
+ * InterpretiveCriteria Domain Model
  *
  * Guardian's own assessment criteria for an ISO control.
  * Written in Guardian's language (not verbatim ISO text -- copyright compliance).
@@ -59,7 +59,7 @@ export class InterpretiveCriteria {
       data.criteriaVersion.trim(),
       data.criteriaText.trim(),
       data.assessmentGuidance ?? null,
-      data.reviewStatus ?? 'draft',
+      'draft',
       null,
       null,
       new Date()
@@ -121,7 +121,7 @@ export class InterpretiveCriteria {
 
 ## Definition of Done
 
-- [ ] Value object created and compiles
+- [ ] Domain model created and compiles
 - [ ] Review workflow methods (`approve`, `deprecate`) work correctly
 - [ ] Defaults to 'draft' status on creation
 - [ ] Unit tests written and passing

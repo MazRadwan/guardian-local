@@ -14,7 +14,7 @@ Per PRD Section 13:
 - [ ] Tests verify system prompt does NOT contain prohibited terms
 - [ ] Tests verify ISO catalog section does NOT contain prohibited terms
 - [ ] Tests verify ISO applicability section does NOT contain prohibited terms
-- [ ] Tests verify required terms ARE present in appropriate sections
+- [ ] Tests verify all 3 required terms ARE present in appropriate sections ("ISO-traceable", "ISO-informed", "maps to ISO 42001")
 - [ ] Tests cover all 4 prohibited terms from PRD Section 13
 - [ ] Tests serve as regression guard for future prompt changes
 
@@ -40,6 +40,7 @@ const PROHIBITED_TERMS = [
 const REQUIRED_TERMS = [
   'ISO-traceable',
   'ISO-informed',
+  'maps to ISO 42001',
 ];
 
 const sampleControls: ISOControlForPrompt[] = [

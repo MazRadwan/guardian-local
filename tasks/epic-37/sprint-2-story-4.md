@@ -63,6 +63,11 @@ export type NewInterpretiveCriteria = typeof interpretiveCriteria.$inferInsert
 - `criteria_text` is Guardian's own language (not verbatim ISO text -- copyright compliance)
 - `assessment_guidance` provides scoring guidance for assessors
 
+**Key Design Decision:** `.$type<>()` provides TypeScript-only type narrowing. DB-level CHECK constraints are not added because:
+1. Application layer controls all writes -- no external clients insert directly
+2. Drizzle's `.$type<>()` is the established pattern in this codebase
+3. CHECK constraints can be added later without schema migration if needed
+
 ## Files Touched
 
 - `packages/backend/src/infrastructure/database/schema/interpretiveCriteria.ts` - CREATE (~40 LOC)

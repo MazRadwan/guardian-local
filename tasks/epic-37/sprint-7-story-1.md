@@ -20,6 +20,7 @@ The test mocks the LLM client with deterministic responses and verifies that:
 - [ ] Test verifies user prompt still contains vendor responses and weighting
 - [ ] Test verifies ISO applicability section is additive in user prompt
 - [ ] Snapshot test for prompt structure stability (detect unintended format changes)
+- [ ] Test exercises full scoring pipeline with mocked LLM response
 
 ## Technical Approach
 
@@ -30,6 +31,11 @@ import { buildScoringSystemPrompt, buildScoringUserPrompt } from '../../src/infr
 import { ALL_DIMENSIONS, DIMENSION_CONFIG } from '../../src/domain/scoring/rubric';
 
 describe('Golden Sample Regression (SC-6)', () => {
+  const sampleControls = [
+    { clauseRef: 'A.6.2.6', domain: 'Data', title: 'Test', framework: 'ISO 42001',
+      criteriaText: 'Test criteria', dimensions: ['regulatory_compliance'], relevanceWeight: 1.0 }
+  ];
+
   describe('System Prompt Stability', () => {
     it('should contain all rubric dimension criteria', () => {
       const prompt = buildScoringSystemPrompt();
@@ -69,6 +75,13 @@ describe('Golden Sample Regression (SC-6)', () => {
       const prompt = buildScoringSystemPrompt();
       expect(prompt).toContain('ISO-traceable');
       expect(prompt).not.toContain('"ISO-compliant"');
+    });
+
+    it('should match prompt structure snapshot', () => {
+      const prompt = buildScoringSystemPrompt(sampleControls);
+      // Use Jest .toMatchSnapshot() or inline snapshot for structure guard
+      expect(prompt.length).toBeGreaterThan(0);
+      expect(prompt).toMatchSnapshot();
     });
 
     it('should preserve rubric when ISO catalog is appended', () => {
@@ -120,6 +133,15 @@ describe('Golden Sample Regression (SC-6)', () => {
       expect(enrichedPrompt).toContain('A.6.2.6');
     });
   });
+
+  describe('Pipeline-Level Regression', () => {
+    it('should produce valid scoring output through pipeline with mocked LLM', async () => {
+      // Create mock ScoringLLMService that returns a deterministic, valid payload
+      // Run scoringService.score() with the mock
+      // Verify the output payload structure matches expected format
+      // Verify the narrative report contains expected ISO-traceable language
+    });
+  });
 });
 ```
 
@@ -138,6 +160,8 @@ describe('Golden Sample Regression (SC-6)', () => {
 ## Tests Required
 
 This IS the test story. Tests described above.
+- Test full scoring pipeline with mocked LLM returns valid payload (pipeline-level regression)
+- Test prompt structure via Jest snapshot assertion
 
 ## Definition of Done
 

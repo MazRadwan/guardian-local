@@ -50,6 +50,11 @@ export type NewFrameworkVersion = typeof frameworkVersions.$inferInsert
 
 **Pattern note:** The `status` column uses `.$type<>()` for type narrowing, same pattern as `assessmentResults.ts` uses for `recommendation` and `overallRiskRating`.
 
+**Key Design Decision:** `.$type<>()` provides TypeScript-only type narrowing. DB-level CHECK constraints are not added because:
+1. Application layer controls all writes -- no external clients insert directly
+2. Drizzle's `.$type<>()` is the established pattern in this codebase
+3. CHECK constraints can be added later without schema migration if needed
+
 ## Files Touched
 
 - `packages/backend/src/infrastructure/database/schema/frameworkVersions.ts` - CREATE (~30 LOC)

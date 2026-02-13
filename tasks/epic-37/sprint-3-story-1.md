@@ -86,7 +86,7 @@ export interface ISOControlForPrompt {
   framework: string;
   criteriaText: string;
   assessmentGuidance?: string;
-  dimensions: string[];
+  dimensions: RiskDimension[];
   relevanceWeight: number;
 }
 ```
@@ -104,6 +104,7 @@ export interface ISOControlForPrompt {
  */
 
 import { FrameworkStatus, ReviewStatus } from './types';
+import { RiskDimension } from '../types/QuestionnaireSchema.js';
 
 // --- ComplianceFramework ---
 export interface ComplianceFrameworkDTO {
@@ -170,21 +171,20 @@ export interface CreateInterpretiveCriteriaDTO {
   criteriaVersion: string;
   criteriaText: string;
   assessmentGuidance?: string;
-  reviewStatus?: ReviewStatus;
 }
 
 // --- DimensionControlMapping ---
 export interface DimensionControlMappingDTO {
   id: string;
   controlId: string;
-  dimension: string;
+  dimension: RiskDimension;
   relevanceWeight: number;
   createdAt: Date;
 }
 
 export interface CreateDimensionControlMappingDTO {
   controlId: string;
-  dimension: string;
+  dimension: RiskDimension;
   relevanceWeight?: number;
 }
 
