@@ -75,7 +75,7 @@ describe('Golden Sample Regression (SC-6)', () => {
       const basePrompt = buildScoringSystemPrompt();
       const enrichedPrompt = buildScoringSystemPrompt([
         { clauseRef: 'A.6.2.6', domain: 'Data', title: 'Test', framework: 'ISO 42001',
-          criteriaText: 'Test criteria', dimensions: ['data_governance'], relevanceWeight: 1.0 }
+          criteriaText: 'Test criteria', dimensions: ['regulatory_compliance'], relevanceWeight: 1.0 }
       ]);
       // Enriched prompt should contain everything base has, plus ISO content
       expect(enrichedPrompt).toContain('CLINICAL RISK');
@@ -112,7 +112,7 @@ describe('Golden Sample Regression (SC-6)', () => {
         ...baseParams,
         isoControls: [
           { clauseRef: 'A.6.2.6', domain: 'Data', title: 'Test', framework: 'ISO 42001',
-            criteriaText: 'Test', dimensions: ['data_governance'], relevanceWeight: 1.0 }
+            criteriaText: 'Test', dimensions: ['regulatory_compliance'], relevanceWeight: 1.0 }
         ],
       });
       expect(enrichedPrompt).toContain('TestVendor');

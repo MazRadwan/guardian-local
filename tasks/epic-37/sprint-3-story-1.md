@@ -68,7 +68,7 @@ export interface ISOClauseReference {
 
 /**
  * Guardian-native dimension indicator
- * Used for clinical_risk and vendor_capability (no ISO mapping)
+ * Used for clinical_risk, vendor_capability, ethical_considerations, and sustainability (no ISO mapping)
  */
 export interface GuardianNativeLabel {
   isGuardianNative: true;

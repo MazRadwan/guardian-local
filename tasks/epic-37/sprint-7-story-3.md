@@ -50,7 +50,7 @@ const sampleControls: ISOControlForPrompt[] = [
     framework: 'ISO/IEC 42001',
     criteriaText: 'Organization implements systematic data quality processes.',
     assessmentGuidance: 'Evaluate data quality processes.',
-    dimensions: ['data_governance'],
+    dimensions: ['regulatory_compliance'],
     relevanceWeight: 1.0,
   },
   {
@@ -59,7 +59,7 @@ const sampleControls: ISOControlForPrompt[] = [
     title: 'Risk treatment for AI systems',
     framework: 'ISO/IEC 23894',
     criteriaText: 'Organization applies systematic risk treatment.',
-    dimensions: ['data_governance', 'operational_excellence'],
+    dimensions: ['regulatory_compliance', 'operational_excellence'],
     relevanceWeight: 1.0,
   },
 ];
@@ -110,19 +110,19 @@ describe('ISO Messaging Compliance (SC-8)', () => {
 
   describe('ISO Applicability Section', () => {
     it('should not contain prohibited terms', () => {
-      const section = buildISOApplicabilitySection(sampleControls, ['data_governance']);
+      const section = buildISOApplicabilitySection(sampleControls, ['regulatory_compliance']);
       for (const term of PROHIBITED_TERMS) {
         expect(section).not.toContain(term);
       }
     });
 
     it('should use approved language', () => {
-      const section = buildISOApplicabilitySection(sampleControls, ['data_governance']);
+      const section = buildISOApplicabilitySection(sampleControls, ['regulatory_compliance']);
       expect(section).toContain('ISO-traceable');
     });
 
     it('should note Guardian-native dimensions when included', () => {
-      const section = buildISOApplicabilitySection(sampleControls, ['clinical_risk', 'data_governance']);
+      const section = buildISOApplicabilitySection(sampleControls, ['clinical_risk', 'regulatory_compliance']);
       expect(section).toContain('Guardian healthcare-specific criteria');
     });
   });

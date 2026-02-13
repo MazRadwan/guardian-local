@@ -103,7 +103,7 @@ For EACH ISO-mapped dimension, include isoClauseReferences listing relevant clau
 - "not_evidenced": No evidence provided for this control
 - "not_applicable": Control is not relevant to this assessment
 
-For Clinical Risk and Vendor Viability: these are Guardian-native dimensions with no ISO mapping. Do NOT include isoClauseReferences for these dimensions.
+For Clinical Risk, Vendor Viability, Ethical Considerations, and Sustainability: these are Guardian-native dimensions with no ISO mapping. Do NOT include isoClauseReferences for these dimensions.
 
 ## ISO Messaging Rules
 - Use "ISO-traceable" or "ISO-informed" language

@@ -16,7 +16,7 @@ Per the PRD prompt architecture:
 - [ ] Applicability section includes: relevant controls for the assessed dimensions
 - [ ] ISO messaging compliance: uses "ISO-traceable" / "ISO-informed" language only
 - [ ] No prohibited terms: "ISO-compliant", "ISO-certified", "meets ISO requirements", "ISO score"
-- [ ] Guardian-native dimensions noted: "Clinical Risk and Vendor Viability use Guardian healthcare-specific criteria (no ISO mapping)"
+- [ ] Guardian-native dimensions noted: "Clinical Risk, Vendor Viability, Ethical Considerations, and Sustainability use Guardian healthcare-specific criteria (no ISO mapping)"
 - [ ] Under 150 LOC
 - [ ] No TypeScript errors
 
@@ -48,7 +48,7 @@ These are Guardian's interpretive criteria referencing ISO clause numbers.
 
 **IMPORTANT:** Use "ISO-traceable" or "ISO-informed" language. Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements".
 
-**Guardian-Native Dimensions:** Clinical Risk and Vendor Viability are assessed using Guardian healthcare-specific criteria (no ISO mapping available in current framework scope).
+**Guardian-Native Dimensions:** Clinical Risk, Vendor Viability, Ethical Considerations, and Sustainability are assessed using Guardian healthcare-specific criteria (no ISO mapping available in current framework scope).
 
 ### Controls by Domain\n\n`;
 
@@ -99,10 +99,10 @@ Consider these ISO-traceable controls when scoring the relevant dimensions:\n\n`
 
   if (dimensions) {
     const nativeDims = dimensions.filter(d =>
-      d === 'clinical_risk' || d === 'vendor_capability'
+      d === 'clinical_risk' || d === 'vendor_capability' || d === 'ethical_considerations' || d === 'sustainability'
     );
     if (nativeDims.length > 0) {
-      section += `\n**Note:** ${nativeDims.join(', ')} use Guardian healthcare-specific criteria (no ISO mapping).\n`;
+      section += `\n**Note:** ${nativeDims.join(', ')} use Guardian healthcare-specific criteria (no ISO mapping). These are Guardian-native dimensions.\n`;
     }
   }
 
@@ -115,7 +115,7 @@ Consider these ISO-traceable controls when scoring the relevant dimensions:\n\n`
 - **Data flow**: Service fetches -> prompt function formats. The prompt functions are pure formatters that take data as input. This avoids database calls in the prompt layer.
 - **Cacheability**: The system prompt catalog is the same for all assessments using the same criteria version. The user prompt section varies per assessment.
 - **Messaging compliance**: Every ISO reference uses "ISO-traceable" / "ISO-informed" per PRD Section 13.
-- **Guardian-native callout**: Explicit note about clinical_risk and vendor_capability having no ISO mapping.
+- **Guardian-native callout**: Explicit note about clinical_risk, vendor_capability, ethical_considerations, and sustainability having no ISO mapping.
 
 ## Files Touched
 
@@ -139,7 +139,7 @@ Consider these ISO-traceable controls when scoring the relevant dimensions:\n\n`
   - Test `buildISOCatalogSection(controls)` does NOT contain prohibited terms
   - Test `buildISOApplicabilitySection([])` returns empty string
   - Test `buildISOApplicabilitySection(controls, dimensions)` lists controls with dimensions
-  - Test `buildISOApplicabilitySection(controls, ['clinical_risk'])` includes Guardian-native note
+  - Test `buildISOApplicabilitySection(controls, ['clinical_risk', 'ethical_considerations'])` includes Guardian-native note
   - Test messaging compliance: no "ISO-compliant", "ISO-certified", "meets ISO requirements"
 
 ## Definition of Done

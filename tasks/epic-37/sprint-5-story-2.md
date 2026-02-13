@@ -10,7 +10,7 @@ Create the `ISOControlRetrievalService` -- the application service that queries 
 - [ ] `getControlsForDimension(dimension)` returns controls mapped to a specific dimension with their interpretive criteria
 - [ ] `getApplicableControls(dimensions)` returns all controls applicable to a set of dimensions (deduped)
 - [ ] `getFullCatalog()` returns all mapped controls for the static system prompt catalog
-- [ ] Returns empty results for Guardian-native dimensions (clinical_risk, vendor_capability) -- no ISO mappings exist
+- [ ] Returns empty results for Guardian-native dimensions (clinical_risk, vendor_capability, ethical_considerations, sustainability) -- no ISO mappings exist
 - [ ] Includes interpretive criteria text (only approved criteria)
 - [ ] Under 150 LOC
 - [ ] No TypeScript errors
@@ -152,7 +152,7 @@ export class ISOControlRetrievalService {
   - Test `getFullCatalog()` returns all mapped controls (mock repos)
   - Test `getApplicableControls()` dedupes controls across dimensions
   - Test `getControlsForDimension('clinical_risk')` returns empty array (no mappings)
-  - Test `getControlsForDimension('data_governance')` returns controls with criteria
+  - Test `getControlsForDimension('regulatory_compliance')` returns controls with criteria
   - Test criteria text is included when approved criteria exists
   - Test criteria text is empty string when no approved criteria
   - Test `inferFramework()` returns ISO 42001 for "A.x.x" refs and ISO 23894 for numeric refs
@@ -161,7 +161,7 @@ export class ISOControlRetrievalService {
 ## Definition of Done
 
 - [ ] Service created and compiles
-- [ ] Returns empty for Guardian-native dimensions
+- [ ] Returns empty for Guardian-native dimensions (clinical_risk, vendor_capability, ethical_considerations, sustainability)
 - [ ] Deduplicates controls across dimensions
 - [ ] Attaches interpretive criteria (approved only)
 - [ ] Unit tests written and passing

@@ -94,7 +94,7 @@ findings: {
         },
         required: ['clauseRef', 'title', 'framework', 'status'],
       },
-      description: 'ISO clause references relevant to this dimension. Empty array for Guardian-native dimensions (clinical_risk, vendor_capability).',
+      description: 'ISO clause references relevant to this dimension. Empty array for Guardian-native dimensions (clinical_risk, vendor_capability, ethical_considerations, sustainability).',
     },
   },
 },

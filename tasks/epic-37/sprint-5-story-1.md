@@ -15,7 +15,7 @@ Per the PRD, interpretive criteria are written in Guardian's own language refere
 - [ ] Creates ~38 controls for ISO 42001 (Annex A) + supplementary controls from 23894
 - [ ] Creates interpretive criteria for each control (Guardian's language, `reviewStatus: 'draft'`)
 - [ ] Creates dimension-control mappings (~30 controls mapped to dimensions)
-- [ ] `clinical_risk` and `vendor_capability` have ZERO mappings (Guardian-native dimensions)
+- [ ] `clinical_risk`, `vendor_capability`, `ethical_considerations`, and `sustainability` have ZERO mappings (Guardian-native dimensions)
 - [ ] Criteria version tagged as `guardian-iso42001-v1.0`
 - [ ] Script can be run via `npx tsx packages/backend/scripts/seed-iso-tier1.ts`
 - [ ] Under 300 LOC (data in separate constant file if needed)
@@ -46,7 +46,7 @@ export const ISO_42001_CONTROLS: SeedControl[] = [
     title: 'AI policy',
     criteria: 'Organization has established and maintains an AI policy aligned with business objectives and regulatory requirements.',
     guidance: 'Look for documented AI governance policy, executive endorsement, and regular review cadence.',
-    dimensions: ['data_governance'],
+    dimensions: ['regulatory_compliance'],
     relevanceWeight: 0.8,
   },
   {
@@ -55,7 +55,7 @@ export const ISO_42001_CONTROLS: SeedControl[] = [
     title: 'Data quality management for AI systems',
     criteria: 'Organization implements systematic processes for ensuring AI training and operational data meets quality, completeness, and representativeness standards.',
     guidance: 'Evaluate data quality processes, bias testing, data lineage documentation.',
-    dimensions: ['data_governance', 'technical_credibility'],
+    dimensions: ['regulatory_compliance', 'technical_credibility'],
   },
   // ... 36 more controls
 ];
@@ -67,7 +67,7 @@ export const ISO_23894_CONTROLS: SeedControl[] = [
     title: 'Risk treatment for AI systems',
     criteria: 'Organization applies systematic risk treatment processes specific to AI systems, including residual risk assessment and risk acceptance criteria.',
     guidance: 'Evaluate risk register, treatment plans, acceptance criteria, monitoring processes.',
-    dimensions: ['data_governance', 'operational_excellence'],
+    dimensions: ['regulatory_compliance', 'operational_excellence'],
   },
   // ... supplementary controls
 ];
@@ -117,7 +117,7 @@ seedTier1().catch(console.error);
 ### 3. Key Rules
 
 - **Idempotent**: Check `findByName` before creating frameworks. Check `findByClauseRef` before creating controls. Skip if already exists.
-- **Guardian-native dimensions**: `clinical_risk` and `vendor_capability` must have ZERO dimension-control mappings. These get "Guardian healthcare-specific criteria" label.
+- **Guardian-native dimensions**: `clinical_risk`, `vendor_capability`, `ethical_considerations`, and `sustainability` must have ZERO dimension-control mappings. These get "Guardian healthcare-specific criteria" label.
 - **Criteria are DRAFT**: All criteria start as `reviewStatus: 'draft'`. Human review approves them before production use.
 - **Copyright compliance**: Criteria text is written in Guardian's language, referencing clause numbers but NOT reproducing ISO verbatim text.
 
@@ -143,7 +143,7 @@ seedTier1().catch(console.error);
   - Test correct number of controls created (~38 + supplementary)
   - Test clinical_risk has zero mappings
   - Test vendor_capability has zero mappings
-  - Test data_governance has multiple mappings
+  - Test regulatory_compliance has multiple mappings
   - Test criteria version is `guardian-iso42001-v1.0`
   - Test all criteria have `reviewStatus: 'draft'`
 
@@ -152,6 +152,6 @@ seedTier1().catch(console.error);
 - [ ] Seed script created and runs successfully
 - [ ] Idempotent (safe to re-run)
 - [ ] Tier 1 data loaded correctly
-- [ ] Guardian-native dimensions have no ISO mappings
+- [ ] Guardian-native dimensions (clinical_risk, vendor_capability, ethical_considerations, sustainability) have no ISO mappings
 - [ ] Integration tests pass
 - [ ] No TypeScript errors

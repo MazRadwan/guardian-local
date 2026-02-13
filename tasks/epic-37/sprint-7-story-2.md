@@ -108,7 +108,7 @@ describe('ISO Extensibility Test (SC-3)', () => {
       criteriaText: 'Test criteria',
       reviewStatus: 'approved',
     });
-    await mappingRepo.create({ controlId: c1.id, dimension: 'data_governance' });
+    await mappingRepo.create({ controlId: c1.id, dimension: 'regulatory_compliance' });
 
     // Add Tier 2
     const fw2 = await frameworkRepo.create({ name: 'ISO/IEC 22989' });
@@ -122,7 +122,7 @@ describe('ISO Extensibility Test (SC-3)', () => {
       criteriaText: 'Tier 2 criteria',
       reviewStatus: 'approved',
     });
-    await mappingRepo.create({ controlId: c2.id, dimension: 'data_governance' });
+    await mappingRepo.create({ controlId: c2.id, dimension: 'regulatory_compliance' });
 
     // Verify both tiers present
     const service = new ISOControlRetrievalService(mappingRepo, criteriaRepo);

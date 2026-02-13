@@ -141,7 +141,7 @@ const scoringService = new ScoringService(
 - **maxTokens increase**: 8000 -> 10000. Per audit: "increase to 10000 for ISO headroom"
 - **ISO is optional**: If no ISO data seeded (empty DB), controls arrays are empty, prompts are unchanged. This ensures backwards compatibility.
 - **Prompt caching**: The system prompt (with ISO catalog) is still cacheable via PromptCacheManager. The ISO catalog is static per criteria version.
-- **ALL_DIMENSIONS**: All 10 dimensions are passed to `getApplicableControls()`. The service returns empty for clinical_risk and vendor_capability (no mappings in DB).
+- **ALL_DIMENSIONS**: All 10 dimensions are passed to `getApplicableControls()`. The service returns empty for clinical_risk, vendor_capability, ethical_considerations, and sustainability (no mappings in DB).
 
 ## Files Touched
 

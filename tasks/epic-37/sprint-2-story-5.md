@@ -30,7 +30,7 @@ export const dimensionControlMappings = pgTable(
     controlId: uuid('control_id')
       .notNull()
       .references(() => frameworkControls.id, { onDelete: 'cascade' }),
-    dimension: text('dimension').notNull(),          // "data_governance", "privacy_risk", etc.
+    dimension: text('dimension').notNull(),          // "regulatory_compliance", "privacy_risk", etc.
     relevanceWeight: real('relevance_weight').notNull().default(1.0),  // How relevant (0.0-1.0)
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
@@ -51,10 +51,10 @@ export type NewDimensionControlMapping = typeof dimensionControlMappings.$inferI
 ```
 
 **Key design notes:**
-- `dimension` stores Guardian's dimension names (e.g., `data_governance`, `privacy_risk`) matching the `RiskDimension` type in `domain/types/QuestionnaireSchema.ts`
+- `dimension` stores Guardian's dimension names (e.g., `regulatory_compliance`, `privacy_risk`) matching the `RiskDimension` type in `domain/types/QuestionnaireSchema.ts`
 - `relevance_weight` uses `real` (4-byte float) since we only need approximate weighting (0.0-1.0)
 - Index on `(dimension, control_id)` supports the primary query pattern: "get all controls for a given dimension"
-- Per PRD: `clinical_risk` and `vendor_capability` will have zero mappings (Guardian-native)
+- Per PRD: `clinical_risk`, `vendor_capability`, `ethical_considerations`, and `sustainability` will have zero mappings (Guardian-native)
 
 ## Files Touched
 
