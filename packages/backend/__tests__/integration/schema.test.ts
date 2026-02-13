@@ -6,7 +6,7 @@ describe('Database Schema', () => {
     await queryClient.end()
   })
 
-  it('should have all 10 tables', async () => {
+  it('should have all 16 tables', async () => {
     const result = await db.execute<{ tablename: string }>(
       sql`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
     )
@@ -26,9 +26,16 @@ describe('Database Schema', () => {
     expect(tableNames).toContain('responses')
     expect(tableNames).toContain('dimension_scores')
     expect(tableNames).toContain('assessment_results')
+    // Epic 37: ISO Compliance Framework tables
+    expect(tableNames).toContain('compliance_frameworks')
+    expect(tableNames).toContain('framework_versions')
+    expect(tableNames).toContain('framework_controls')
+    expect(tableNames).toContain('interpretive_criteria')
+    expect(tableNames).toContain('dimension_control_mappings')
+    expect(tableNames).toContain('assessment_compliance_results')
 
-    // Should have exactly 10 tables
-    expect(tableNames).toHaveLength(10)
+    // Should have exactly 16 tables (10 MVP + 6 ISO compliance)
+    expect(tableNames).toHaveLength(16)
   })
 
   it('should have users table with correct columns', async () => {

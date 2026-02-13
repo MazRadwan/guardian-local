@@ -48,6 +48,12 @@ export async function closeTestDb() {
 export async function truncateAllTables() {
   await testDb.execute(sql`
     TRUNCATE TABLE
+      assessment_compliance_results,
+      dimension_control_mappings,
+      interpretive_criteria,
+      framework_controls,
+      framework_versions,
+      compliance_frameworks,
       assessment_results,
       dimension_scores,
       responses,
