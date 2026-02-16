@@ -698,9 +698,9 @@ describe('ChatMessage', () => {
           batchId: 'batch-456',
           dimensionScores: [
             {
-              dimension: 'clinical_risk',
-              score: 7,
-              riskRating: 'high',
+              dimension: 'security_risk',
+              score: 70,
+              riskRating: 'medium',
               findings: {
                 subScores: [{ name: 'Patient Safety', score: 3, maxScore: 5, notes: 'Needs improvement' }],
                 keyRisks: ['Data leakage risk'],
@@ -714,7 +714,7 @@ describe('ChatMessage', () => {
             },
             {
               dimension: 'privacy_risk',
-              score: 5,
+              score: 50,
               riskRating: 'medium',
               findings: {
                 assessmentConfidence: { level: 'medium', rationale: 'Partial evidence' },
@@ -737,9 +737,19 @@ describe('ChatMessage', () => {
 
       // The scoring_result component should be rendered (fallback path)
       expect(screen.getByTestId('scoring-result-component')).toBeInTheDocument();
-      // The scoring result card should be present with the correct composite score
       expect(screen.getByTestId('scoring-result-card')).toBeInTheDocument();
       expect(screen.getByTestId('composite-score')).toHaveTextContent('82');
+
+      // CONTRACT: If findings were stripped (the bug this test guards against),
+      // ConfidenceBadge would return null and these elements would not exist.
+      const badges = screen.getAllByTestId('confidence-badge');
+      expect(badges.length).toBeGreaterThanOrEqual(2); // both dimensions have confidence
+      expect(badges[0]).toHaveAttribute('data-confidence-level', 'high');
+
+      // security_risk is NOT Guardian-native, has 1 ISO clause → shows "1 ISO"
+      const isoCounts = screen.getAllByTestId('iso-clause-count');
+      expect(isoCounts.length).toBeGreaterThanOrEqual(1);
+      expect(isoCounts[0]).toHaveTextContent('1 ISO');
     });
 
     it('handles null activeConversationId gracefully', () => {
