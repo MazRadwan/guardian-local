@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, BarChart3 } from 'lucide-react';
 import { RecommendationBadge } from './RecommendationBadge';
 import { ScoreDashboard } from './ScoreDashboard';
 import { DownloadButton } from './DownloadButton';
+import { ISOAlignmentSection } from './ISOAlignmentSection';
 import { ScoringResultData, RiskRating } from '@/types/scoring';
 
 interface ScoringResultCardProps {
@@ -143,6 +144,11 @@ export function ScoringResultCard({
   result,
 }: ScoringResultCardProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isISOExpanded, setIsISOExpanded] = useState(false);
+
+  const hasISOData = result.dimensionScores.some(
+    (d) => d.findings?.isoClauseReferences && d.findings.isoClauseReferences.length > 0
+  );
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden" data-testid="scoring-result-card">
@@ -222,6 +228,29 @@ export function ScoringResultCard({
         )}
       </div>
 
+      {/* ISO Alignment (Collapsible) */}
+      {hasISOData && (
+        <div className="border-b border-gray-100">
+          <button
+            onClick={() => setIsISOExpanded(!isISOExpanded)}
+            className="w-full px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
+            data-testid="iso-toggle"
+          >
+            <span className="text-sm font-semibold text-gray-900">ISO Alignment</span>
+            {isISOExpanded ? (
+              <ChevronUp className="h-4 w-4 text-gray-500" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-gray-500" />
+            )}
+          </button>
+          {isISOExpanded && (
+            <div className="px-6 pb-4">
+              <ISOAlignmentSection dimensionScores={result.dimensionScores} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Export Actions */}
       <div className="px-6 py-4 bg-gray-50 flex gap-3">
         <DownloadButton
@@ -237,6 +266,13 @@ export function ScoringResultCard({
           format="word"
           exportType="scoring"
           label="Export Word"
+        />
+        <DownloadButton
+          assessmentId={result.assessmentId}
+          batchId={result.batchId}
+          format="excel"
+          exportType="scoring"
+          label="Export Excel"
         />
       </div>
     </div>

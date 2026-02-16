@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { ScoringResultCard } from '../ScoringResultCard';
 import type { ScoringResultData } from '@/types/scoring';
 
@@ -15,6 +15,14 @@ jest.mock('../ScoreDashboard', () => ({
 jest.mock('../RecommendationBadge', () => ({
   RecommendationBadge: ({ recommendation }: { recommendation: string }) => (
     <span data-testid="recommendation-badge">{recommendation}</span>
+  ),
+}));
+
+jest.mock('../ISOAlignmentSection', () => ({
+  ISOAlignmentSection: ({ dimensionScores }: { dimensionScores: unknown[] }) => (
+    <div data-testid="iso-alignment-section">
+      {dimensionScores.length} dimensions with ISO data
+    </div>
   ),
 }));
 
@@ -62,32 +70,38 @@ describe('ScoringResultCard', () => {
     expect(screen.getByTestId('overall-risk')).toHaveTextContent('medium');
   });
 
-  it('passes batchId to both DownloadButton components', () => {
+  it('passes batchId to all DownloadButton components', () => {
     render(<ScoringResultCard result={baseScoringResult} />);
 
-    // There should be two DownloadButton instances (PDF and Word)
+    // There should be three DownloadButton instances (PDF, Word, and Excel)
     const pdfButton = screen.getByTestId('download-pdf');
     const wordButton = screen.getByTestId('download-word');
+    const excelButton = screen.getByTestId('download-excel');
 
     expect(pdfButton).toHaveAttribute('data-batch-id', 'batch-xyz-789');
     expect(wordButton).toHaveAttribute('data-batch-id', 'batch-xyz-789');
+    expect(excelButton).toHaveAttribute('data-batch-id', 'batch-xyz-789');
 
     // Verify through captured props
-    expect(mockDownloadButtonCalls).toHaveLength(2);
+    expect(mockDownloadButtonCalls).toHaveLength(3);
     const pdfCall = mockDownloadButtonCalls.find((c) => c.format === 'pdf');
     const wordCall = mockDownloadButtonCalls.find((c) => c.format === 'word');
+    const excelCall = mockDownloadButtonCalls.find((c) => c.format === 'excel');
     expect(pdfCall?.batchId).toBe('batch-xyz-789');
     expect(wordCall?.batchId).toBe('batch-xyz-789');
+    expect(excelCall?.batchId).toBe('batch-xyz-789');
   });
 
-  it('passes assessmentId to both DownloadButton components', () => {
+  it('passes assessmentId to all DownloadButton components', () => {
     render(<ScoringResultCard result={baseScoringResult} />);
 
     const pdfButton = screen.getByTestId('download-pdf');
     const wordButton = screen.getByTestId('download-word');
+    const excelButton = screen.getByTestId('download-excel');
 
     expect(pdfButton).toHaveAttribute('data-assessment-id', 'assess-abc-123');
     expect(wordButton).toHaveAttribute('data-assessment-id', 'assess-abc-123');
+    expect(excelButton).toHaveAttribute('data-assessment-id', 'assess-abc-123');
   });
 
   it('renders DownloadButton without batchId when batchId is empty string', () => {
@@ -100,8 +114,10 @@ describe('ScoringResultCard', () => {
 
     const pdfCall = mockDownloadButtonCalls.find((c) => c.format === 'pdf');
     const wordCall = mockDownloadButtonCalls.find((c) => c.format === 'word');
+    const excelCall = mockDownloadButtonCalls.find((c) => c.format === 'excel');
     expect(pdfCall?.batchId).toBe('');
     expect(wordCall?.batchId).toBe('');
+    expect(excelCall?.batchId).toBe('');
   });
 
   it('renders executive summary text', () => {
@@ -121,5 +137,83 @@ describe('ScoringResultCard', () => {
     render(<ScoringResultCard result={baseScoringResult} />);
 
     expect(screen.getByTestId('score-dashboard')).toHaveTextContent('2 dimensions');
+  });
+
+  describe('Excel download button', () => {
+    it('renders the Excel download button', () => {
+      render(<ScoringResultCard result={baseScoringResult} />);
+
+      const excelButton = screen.getByTestId('download-excel');
+      expect(excelButton).toBeInTheDocument();
+      expect(excelButton).toHaveTextContent('Export Excel');
+    });
+
+    it('passes format="excel" and exportType="scoring" to DownloadButton', () => {
+      render(<ScoringResultCard result={baseScoringResult} />);
+
+      const excelCall = mockDownloadButtonCalls.find((c) => c.format === 'excel');
+      expect(excelCall).toBeDefined();
+      expect(excelCall?.exportType).toBe('scoring');
+      expect(excelCall?.label).toBe('Export Excel');
+    });
+
+    it('renders all three export buttons (PDF, Word, Excel)', () => {
+      render(<ScoringResultCard result={baseScoringResult} />);
+
+      expect(screen.getByTestId('download-pdf')).toBeInTheDocument();
+      expect(screen.getByTestId('download-word')).toBeInTheDocument();
+      expect(screen.getByTestId('download-excel')).toBeInTheDocument();
+      expect(mockDownloadButtonCalls).toHaveLength(3);
+    });
+  });
+
+  describe('ISO Alignment section', () => {
+    const resultWithISO: ScoringResultData = {
+      ...baseScoringResult,
+      dimensionScores: [
+        {
+          dimension: 'clinical_risk',
+          score: 6,
+          riskRating: 'medium',
+          findings: {
+            isoClauseReferences: [
+              {
+                clauseRef: 'A.5.1',
+                title: 'Info security policies',
+                framework: 'ISO 27001:2022',
+                status: 'aligned',
+              },
+            ],
+          },
+        },
+        { dimension: 'privacy_risk', score: 8, riskRating: 'high' },
+      ],
+    };
+
+    it('shows ISO toggle button when ISO data exists', () => {
+      render(<ScoringResultCard result={resultWithISO} />);
+
+      expect(screen.getByTestId('iso-toggle')).toBeInTheDocument();
+      expect(screen.getByText('ISO Alignment')).toBeInTheDocument();
+    });
+
+    it('does not show ISO toggle button when no ISO data exists', () => {
+      render(<ScoringResultCard result={baseScoringResult} />);
+
+      expect(screen.queryByTestId('iso-toggle')).not.toBeInTheDocument();
+    });
+
+    it('ISO section starts collapsed and expands on toggle click', () => {
+      render(<ScoringResultCard result={resultWithISO} />);
+
+      // Initially collapsed - ISOAlignmentSection not rendered
+      expect(screen.queryByTestId('iso-alignment-section')).not.toBeInTheDocument();
+
+      // Click toggle to expand
+      fireEvent.click(screen.getByTestId('iso-toggle'));
+
+      // Now the section should be visible
+      expect(screen.getByTestId('iso-alignment-section')).toBeInTheDocument();
+    });
   });
 });

@@ -30,6 +30,13 @@ const DIMENSION_CONFIG: Record<string, { label: string; type: 'risk' | 'capabili
   sustainability: { label: 'Sustainability', type: 'capability' },
 };
 
+const GUARDIAN_NATIVE_DIMENSIONS = [
+  'clinical_risk',
+  'vendor_capability',
+  'ethical_considerations',
+  'sustainability',
+];
+
 export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
   // Group by type
   const riskDimensions = dimensionScores.filter(
@@ -37,6 +44,13 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
   );
   const capabilityDimensions = dimensionScores.filter(
     (d) => DIMENSION_CONFIG[d.dimension]?.type === 'capability'
+  );
+
+  const hasGuardianNativeRisk = riskDimensions.some(
+    (d) => GUARDIAN_NATIVE_DIMENSIONS.includes(d.dimension)
+  );
+  const hasGuardianNativeCapability = capabilityDimensions.some(
+    (d) => GUARDIAN_NATIVE_DIMENSIONS.includes(d.dimension)
   );
 
   return (
@@ -48,6 +62,14 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
           Risk Dimensions
           <span className="text-xs text-gray-500 font-normal">(lower is better)</span>
         </h4>
+        {hasGuardianNativeRisk && (
+          <p
+            className="text-xs text-purple-500 italic mb-2 ml-4"
+            data-testid="guardian-native-label"
+          >
+            * Some dimensions assessed using Guardian healthcare-specific criteria
+          </p>
+        )}
         <div className="space-y-3">
           {riskDimensions.map((d) => (
             <DimensionScoreBar
@@ -70,6 +92,14 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
           Capability Dimensions
           <span className="text-xs text-gray-500 font-normal">(higher is better)</span>
         </h4>
+        {hasGuardianNativeCapability && (
+          <p
+            className="text-xs text-purple-500 italic mb-2 ml-4"
+            data-testid="guardian-native-label"
+          >
+            * Some dimensions assessed using Guardian healthcare-specific criteria
+          </p>
+        )}
         <div className="space-y-3">
           {capabilityDimensions.map((d) => (
             <DimensionScoreBar
