@@ -14,6 +14,7 @@ import { IDimensionScoreRepository } from '../interfaces/IDimensionScoreReposito
 import { IResponseRepository } from '../interfaces/IResponseRepository';
 import { IScoringPDFExporter, ScoringExportData } from '../interfaces/IScoringPDFExporter';
 import { IScoringWordExporter } from '../interfaces/IScoringWordExporter';
+import { IScoringExcelExporter } from '../interfaces/IScoringExcelExporter';
 import { IExportNarrativeGenerator } from '../interfaces/IExportNarrativeGenerator';
 import { ScoringReportData, DimensionScoreData } from '../../domain/scoring/types';
 import { AssessmentResultDTO, DimensionScoreDTO } from '../../domain/scoring/dtos';
@@ -49,7 +50,8 @@ export class ScoringExportService {
     private readonly responseRepository: IResponseRepository,
     private readonly pdfExporter: IScoringPDFExporter,
     private readonly wordExporter: IScoringWordExporter,
-    private readonly narrativeGenerator: IExportNarrativeGenerator
+    private readonly narrativeGenerator: IExportNarrativeGenerator,
+    private readonly excelExporter?: IScoringExcelExporter
   ) {}
 
   /**
@@ -70,6 +72,19 @@ export class ScoringExportService {
   async exportToWord(assessmentId: string, batchId?: string): Promise<Buffer> {
     const data = await this.getScoringData(assessmentId, batchId);
     return this.wordExporter.generateWord(data);
+  }
+
+  /**
+   * Exports scoring report to Excel format
+   * @param assessmentId Assessment ID
+   * @param batchId Optional batch ID (uses latest if not provided)
+   */
+  async exportToExcel(assessmentId: string, batchId?: string): Promise<Buffer> {
+    if (!this.excelExporter) {
+      throw new Error('Excel exporter not configured');
+    }
+    const data = await this.getScoringData(assessmentId, batchId);
+    return this.excelExporter.generateExcel(data);
   }
 
   /**

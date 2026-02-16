@@ -13,6 +13,7 @@ import { IDimensionScoreRepository } from '../../../../src/application/interface
 import { IResponseRepository } from '../../../../src/application/interfaces/IResponseRepository'
 import { IScoringPDFExporter } from '../../../../src/application/interfaces/IScoringPDFExporter'
 import { IScoringWordExporter } from '../../../../src/application/interfaces/IScoringWordExporter'
+import { IScoringExcelExporter } from '../../../../src/application/interfaces/IScoringExcelExporter'
 import { IExportNarrativeGenerator } from '../../../../src/application/interfaces/IExportNarrativeGenerator'
 import { Assessment } from '../../../../src/domain/entities/Assessment'
 import { Vendor } from '../../../../src/domain/entities/Vendor'
@@ -27,6 +28,7 @@ describe('ScoringExportService', () => {
   let mockPDFExporter: jest.Mocked<IScoringPDFExporter>
   let mockWordExporter: jest.Mocked<IScoringWordExporter>
   let mockNarrativeGenerator: jest.Mocked<IExportNarrativeGenerator>
+  let mockExcelExporter: jest.Mocked<IScoringExcelExporter>
 
   // Test fixtures
   const mockAssessment = Assessment.create({
@@ -172,6 +174,10 @@ describe('ScoringExportService', () => {
       generateNarrative: jest.fn().mockResolvedValue('# Generated Narrative\n\nDetailed analysis...'),
     } as jest.Mocked<IExportNarrativeGenerator>
 
+    mockExcelExporter = {
+      generateExcel: jest.fn().mockResolvedValue(Buffer.from('Excel content')),
+    } as jest.Mocked<IScoringExcelExporter>
+
     service = new ScoringExportService(
       mockAssessmentRepo,
       mockResultRepo,
@@ -179,7 +185,8 @@ describe('ScoringExportService', () => {
       mockResponseRepo,
       mockPDFExporter,
       mockWordExporter,
-      mockNarrativeGenerator
+      mockNarrativeGenerator,
+      mockExcelExporter
     )
   })
 
@@ -995,6 +1002,109 @@ describe('ScoringExportService', () => {
           })
         )
       })
+    })
+  })
+
+  describe('exportToExcel', () => {
+    it('should throw error if excel exporter not configured', async () => {
+      const serviceWithoutExcel = new ScoringExportService(
+        mockAssessmentRepo,
+        mockResultRepo,
+        mockDimensionScoreRepo,
+        mockResponseRepo,
+        mockPDFExporter,
+        mockWordExporter,
+        mockNarrativeGenerator
+        // No excelExporter param
+      )
+
+      await expect(serviceWithoutExcel.exportToExcel('assess-1')).rejects.toThrow(
+        'Excel exporter not configured'
+      )
+    })
+
+    it('should throw error if assessment not found', async () => {
+      mockAssessmentRepo.findByIdWithVendor.mockResolvedValue(null)
+
+      await expect(service.exportToExcel('non-existent-id')).rejects.toThrow(
+        'Assessment not found: non-existent-id'
+      )
+    })
+
+    it('should export Excel document with valid data', async () => {
+      const resultWithNarrative = {
+        ...mockResult,
+        narrativeStatus: 'complete' as const,
+        narrativeReport: 'Existing narrative',
+      }
+
+      mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+        assessment: mockAssessment,
+        vendor: mockVendor,
+      })
+      mockResultRepo.findLatestByAssessmentId.mockResolvedValue(resultWithNarrative)
+      mockDimensionScoreRepo.findByBatchId.mockResolvedValue(mockDimensionScores)
+
+      const buffer = await service.exportToExcel('assess-1')
+
+      expect(mockAssessmentRepo.findByIdWithVendor).toHaveBeenCalledWith('assess-1')
+      expect(mockExcelExporter.generateExcel).toHaveBeenCalled()
+      expect(buffer).toBeInstanceOf(Buffer)
+    })
+
+    it('should pass enriched data with dimensionISOData to excel exporter', async () => {
+      const dimensionScoresWithISO: DimensionScoreDTO[] = [
+        {
+          ...mockDimensionScores[0],
+          findings: {
+            subScores: [],
+            keyRisks: [],
+            mitigations: [],
+            evidenceRefs: [],
+            assessmentConfidence: {
+              level: 'high' as const,
+              rationale: 'Strong evidence',
+            },
+            isoClauseReferences: [
+              {
+                clauseRef: 'A.6.2.6',
+                title: 'Data quality',
+                framework: 'ISO/IEC 42001',
+                status: 'aligned' as const,
+              },
+            ],
+          },
+        },
+      ]
+
+      const resultWithNarrative = {
+        ...mockResult,
+        narrativeStatus: 'complete' as const,
+        narrativeReport: 'Existing narrative',
+      }
+
+      mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+        assessment: mockAssessment,
+        vendor: mockVendor,
+      })
+      mockResultRepo.findLatestByAssessmentId.mockResolvedValue(resultWithNarrative)
+      mockDimensionScoreRepo.findByBatchId.mockResolvedValue(dimensionScoresWithISO)
+
+      await service.exportToExcel('assess-1')
+
+      expect(mockExcelExporter.generateExcel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dimensionISOData: expect.arrayContaining([
+            expect.objectContaining({
+              dimension: 'privacy_risk',
+              confidence: { level: 'high', rationale: 'Strong evidence' },
+              isoClauseReferences: expect.arrayContaining([
+                expect.objectContaining({ clauseRef: 'A.6.2.6' }),
+              ]),
+            }),
+          ]),
+        })
+      )
     })
   })
 })

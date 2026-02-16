@@ -66,6 +66,7 @@ import { WordExporter } from './infrastructure/export/WordExporter.js';
 import { ExcelExporter } from './infrastructure/export/ExcelExporter.js';
 import { ScoringPDFExporter } from './infrastructure/export/ScoringPDFExporter.js';
 import { ScoringWordExporter } from './infrastructure/export/ScoringWordExporter.js';
+import { ScoringExcelExporter } from './infrastructure/export/ScoringExcelExporter.js';
 
 // --- Infrastructure: controllers ---
 import { AuthController } from './infrastructure/http/controllers/AuthController.js';
@@ -164,6 +165,7 @@ const scoringPdfTemplatePath = resolve(
 );
 const scoringPDFExporter = new ScoringPDFExporter(scoringPdfTemplatePath);
 const scoringWordExporter = new ScoringWordExporter();
+const scoringExcelExporter = new ScoringExcelExporter();
 
 // ============================================================
 // Service instantiation
@@ -203,7 +205,8 @@ export const scoringExportService = new ScoringExportService(
   responseRepo,
   scoringPDFExporter,
   scoringWordExporter,
-  exportNarrativeGenerator
+  exportNarrativeGenerator,
+  scoringExcelExporter
 );
 
 // File storage and validation (Epic 16)

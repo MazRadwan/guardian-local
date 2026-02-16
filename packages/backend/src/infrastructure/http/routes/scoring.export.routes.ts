@@ -37,5 +37,16 @@ export function createScoringExportRoutes(
     controller.exportToWord
   );
 
+  /**
+   * @route   GET /api/export/scoring/:assessmentId/excel
+   * @desc    Export scoring report to Excel (.xlsx)
+   * @access  Protected
+   */
+  router.get(
+    '/:assessmentId/excel',
+    authMiddleware(authService),
+    controller.exportToExcel
+  );
+
   return router;
 }
