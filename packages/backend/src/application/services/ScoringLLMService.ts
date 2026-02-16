@@ -104,8 +104,9 @@ export class ScoringLLMService {
       tools: [scoringCompleteTool],
       tool_choice: { type: 'any' },
       usePromptCache: true,
-      // Epic 37: Increased from 8000 to 10000 for ISO enrichment headroom
-      maxTokens: 10000,
+      // Epic 37→38: Increased to 16384 — ISO-enriched scoring produces longer
+      // narrative + 10 dimension tool payload with confidence + ISO clause refs
+      maxTokens: 16384,
       temperature: 0,
       abortSignal,
       onTextDelta: (delta) => {
@@ -126,7 +127,11 @@ export class ScoringLLMService {
       if (abortSignal.aborted) {
         throw new Error('Scoring aborted');
       }
-      throw new Error('Claude did not call scoring_complete tool');
+      const narrativeLen = narrativeReport.length;
+      throw new Error(
+        `Claude did not call scoring_complete tool (narrative length: ${narrativeLen} chars). ` +
+        'Likely hit max_tokens before tool call. Consider increasing maxTokens.'
+      );
     }
 
     return { narrativeReport, payload: toolPayload };

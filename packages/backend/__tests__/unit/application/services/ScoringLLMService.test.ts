@@ -180,7 +180,7 @@ describe('ScoringLLMService', () => {
       expect(callArgs.tools[0].name).toBe('scoring_complete');
       expect(callArgs.tool_choice).toEqual({ type: 'any' });
       expect(callArgs.usePromptCache).toBe(true);
-      expect(callArgs.maxTokens).toBe(10000);
+      expect(callArgs.maxTokens).toBe(16384);
       expect(callArgs.temperature).toBe(0);
       expect(callArgs.abortSignal).toBe(abortController.signal);
       expect(callArgs.onTextDelta).toBeDefined();
