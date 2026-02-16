@@ -193,14 +193,14 @@ describe('ScoringResultCard', () => {
     it('shows ISO toggle button when ISO data exists', () => {
       render(<ScoringResultCard result={resultWithISO} />);
 
-      expect(screen.getByTestId('iso-toggle')).toBeInTheDocument();
-      expect(screen.getByText('ISO Alignment')).toBeInTheDocument();
+      expect(screen.getByTestId('iso-alignment-toggle')).toBeInTheDocument();
+      expect(screen.getByText('ISO Standards Alignment')).toBeInTheDocument();
     });
 
     it('does not show ISO toggle button when no ISO data exists', () => {
       render(<ScoringResultCard result={baseScoringResult} />);
 
-      expect(screen.queryByTestId('iso-toggle')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('iso-alignment-toggle')).not.toBeInTheDocument();
     });
 
     it('ISO section starts collapsed and expands on toggle click', () => {
@@ -210,7 +210,7 @@ describe('ScoringResultCard', () => {
       expect(screen.queryByTestId('iso-alignment-section')).not.toBeInTheDocument();
 
       // Click toggle to expand
-      fireEvent.click(screen.getByTestId('iso-toggle'));
+      fireEvent.click(screen.getByTestId('iso-alignment-toggle'));
 
       // Now the section should be visible
       expect(screen.getByTestId('iso-alignment-section')).toBeInTheDocument();

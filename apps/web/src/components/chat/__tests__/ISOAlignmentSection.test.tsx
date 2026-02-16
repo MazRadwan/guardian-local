@@ -156,6 +156,73 @@ describe('ISOAlignmentSection', () => {
     expect(screen.getByText('N/A')).toBeInTheDocument();
   });
 
+  it('escalates to worst-case status when same clause has conflicting statuses', () => {
+    const dimensionScores: DimensionScoreData[] = [
+      {
+        dimension: 'privacy_risk',
+        score: 7,
+        riskRating: 'low' as const,
+        findings: {
+          isoClauseReferences: [
+            { clauseRef: 'A.8.1', title: 'Asset management', framework: 'ISO 27001', status: 'aligned' as const },
+          ],
+        },
+      },
+      {
+        dimension: 'security_risk',
+        score: 5,
+        riskRating: 'medium' as const,
+        findings: {
+          isoClauseReferences: [
+            { clauseRef: 'A.8.1', title: 'Asset management', framework: 'ISO 27001', status: 'not_evidenced' as const },
+          ],
+        },
+      },
+    ];
+
+    render(<ISOAlignmentSection dimensionScores={dimensionScores} />);
+
+    // Should show worst-case status
+    expect(screen.getByText('Not Evidenced')).toBeInTheDocument();
+    expect(screen.queryByText('Aligned')).not.toBeInTheDocument();
+
+    // Both dimension labels should appear
+    expect(screen.getByText('Privacy Risk')).toBeInTheDocument();
+    expect(screen.getByText('Security Risk')).toBeInTheDocument();
+
+    // Only one row for the clause (deduped)
+    expect(screen.getAllByText('A.8.1')).toHaveLength(1);
+  });
+
+  it('keeps same clauseRef from different frameworks as separate entries', () => {
+    const dimensionScores: DimensionScoreData[] = [
+      {
+        dimension: 'security_risk',
+        score: 5,
+        riskRating: 'medium' as const,
+        findings: {
+          isoClauseReferences: [
+            { clauseRef: 'A.4.2', title: 'AI risk assessment', framework: 'ISO 42001', status: 'aligned' as const },
+            { clauseRef: 'A.4.2', title: 'Information classification', framework: 'ISO 27001', status: 'partial' as const },
+          ],
+        },
+      },
+    ];
+
+    render(<ISOAlignmentSection dimensionScores={dimensionScores} />);
+
+    // Same clauseRef should appear TWICE (one per framework)
+    expect(screen.getAllByText('A.4.2')).toHaveLength(2);
+
+    // Both frameworks shown
+    expect(screen.getByText('ISO 42001')).toBeInTheDocument();
+    expect(screen.getByText('ISO 27001')).toBeInTheDocument();
+
+    // Different statuses
+    expect(screen.getByText('Aligned')).toBeInTheDocument();
+    expect(screen.getByText('Partial')).toBeInTheDocument();
+  });
+
   it('has correct data-testid attribute', () => {
     const scores: DimensionScoreData[] = [
       {

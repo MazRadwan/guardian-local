@@ -234,9 +234,9 @@ export function ScoringResultCard({
           <button
             onClick={() => setIsISOExpanded(!isISOExpanded)}
             className="w-full px-6 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors"
-            data-testid="iso-toggle"
+            data-testid="iso-alignment-toggle"
           >
-            <span className="text-sm font-semibold text-gray-900">ISO Alignment</span>
+            <span className="text-sm font-semibold text-gray-900">ISO Standards Alignment</span>
             {isISOExpanded ? (
               <ChevronUp className="h-4 w-4 text-gray-500" />
             ) : (

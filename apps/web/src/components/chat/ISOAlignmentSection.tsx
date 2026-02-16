@@ -14,6 +14,13 @@ const STATUS_STYLES: Record<string, { badge: string; label: string }> = {
   not_applicable: { badge: 'bg-gray-100 text-gray-500', label: 'N/A' },
 };
 
+const STATUS_PRECEDENCE: Record<string, number> = {
+  not_evidenced: 3,
+  partial: 2,
+  not_applicable: 1,
+  aligned: 0,
+};
+
 const DIMENSION_LABELS: Record<string, string> = {
   clinical_risk: 'Clinical Risk',
   privacy_risk: 'Privacy Risk',
@@ -48,6 +55,12 @@ export function ISOAlignmentSection({ dimensionScores }: ISOAlignmentSectionProp
       if (existing) {
         if (!existing.dimensions.includes(dimLabel)) {
           existing.dimensions.push(dimLabel);
+        }
+        // Escalate to worst-case status
+        const existingPrecedence = STATUS_PRECEDENCE[existing.status] ?? 0;
+        const newPrecedence = STATUS_PRECEDENCE[ref.status] ?? 0;
+        if (newPrecedence > existingPrecedence) {
+          existing.status = ref.status;
         }
       } else {
         clauseMap.set(dedupKey, {
