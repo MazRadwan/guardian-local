@@ -16,8 +16,14 @@ import { IScoringPDFExporter, ScoringExportData } from '../interfaces/IScoringPD
 import { IScoringWordExporter } from '../interfaces/IScoringWordExporter';
 import { IExportNarrativeGenerator } from '../interfaces/IExportNarrativeGenerator';
 import { ScoringReportData, DimensionScoreData } from '../../domain/scoring/types';
-import { AssessmentResultDTO, ResponseDTO, DimensionScoreDTO } from '../../domain/scoring/dtos';
+import { AssessmentResultDTO, DimensionScoreDTO } from '../../domain/scoring/dtos';
 import { SolutionType } from '../../domain/scoring/rubric';
+import {
+  selectTopResponses,
+  determineSolutionType,
+  buildFallbackNarrative,
+  sleep,
+} from './ScoringExportHelpers';
 
 /**
  * Default claim time-to-live for narrative generation (5 minutes)
@@ -110,7 +116,7 @@ export class ScoringExportService {
     }));
 
     // Determine solution type for narrative generation
-    const solutionType = this.determineSolutionType(assessment.solutionType);
+    const solutionType = determineSolutionType(assessment.solutionType);
 
     // Ensure narrative is generated (on-demand if missing)
     const narrativeReport = await this.ensureNarrative(
@@ -191,7 +197,7 @@ export class ScoringExportService {
       if (refreshed?.narrativeReport) {
         return refreshed.narrativeReport;
       }
-      return this.buildFallbackNarrative(result);
+      return buildFallbackNarrative(result);
     }
 
     // 3. We have the claim - generate narrative
@@ -201,7 +207,7 @@ export class ScoringExportService {
         result.assessmentId,
         result.batchId
       );
-      const topResponses = this.selectTopResponses(responses, dimensionScoreData);
+      const topResponses = selectTopResponses(responses, dimensionScoreData);
 
       const narrative = await this.narrativeGenerator.generateNarrative({
         vendorName,
@@ -230,7 +236,7 @@ export class ScoringExportService {
         error instanceof Error ? error.message : 'Unknown error',
         DEFAULT_CLAIM_TTL_MS
       );
-      return this.buildFallbackNarrative(result);
+      return buildFallbackNarrative(result);
     }
   }
 
@@ -247,7 +253,7 @@ export class ScoringExportService {
 
     while (Date.now() - startTime < timeoutMs) {
       // Wait before checking
-      await this.sleep(POLL_INTERVAL_MS);
+      await sleep(POLL_INTERVAL_MS);
 
       // Check status
       const result = await this.assessmentResultRepository.findByBatchId(assessmentId, batchId);
@@ -262,175 +268,5 @@ export class ScoringExportService {
     }
 
     return null;
-  }
-
-  /**
-   * Build fallback narrative when LLM generation fails.
-   * Uses executiveSummary + keyFindings with warning.
-   */
-  private buildFallbackNarrative(result: AssessmentResultDTO): string {
-    const findings = (result.keyFindings || []).map((f) => `- ${f}`).join('\n');
-
-    return `## Executive Summary
-
-${result.executiveSummary || 'No executive summary available.'}
-
-## Key Findings
-
-${findings || 'No key findings available.'}
-
----
-*Note: Detailed analysis was not available for this export. Please contact support if this issue persists.*
-`;
-  }
-
-  /**
-   * Select top vendor responses for narrative evidence.
-   *
-   * Implements tiered fallback strategy:
-   * 1. Use findings.evidenceRefs if available
-   * 2. Fall back to section-to-dimension mapping
-   * 3. Fall back to even distribution across sections
-   *
-   * @param responses All responses for the batch
-   * @param dimensionScores Dimension scores with potential evidence refs
-   * @returns Selected responses (max 30, truncated to 500 chars each)
-   */
-  private selectTopResponses(
-    responses: ResponseDTO[],
-    dimensionScores: DimensionScoreData[]
-  ): ResponseDTO[] {
-    const selected: ResponseDTO[] = [];
-    const usedIds = new Set<string>();
-
-    // Strategy 1: Try to use findings references if available
-    for (const ds of dimensionScores) {
-      if (ds.findings?.evidenceRefs && Array.isArray(ds.findings.evidenceRefs)) {
-        for (const ref of ds.findings.evidenceRefs.slice(0, 2)) {
-          const match = responses.find(
-            (r) =>
-              r.questionNumber === ref.questionNumber &&
-              r.sectionNumber === ref.sectionNumber &&
-              !usedIds.has(`${r.sectionNumber}-${r.questionNumber}`)
-          );
-          if (match) {
-            selected.push(match);
-            usedIds.add(`${match.sectionNumber}-${match.questionNumber}`);
-          }
-        }
-      }
-    }
-
-    // Strategy 2: Fallback - select by dimension/section mapping
-    if (selected.length < 20) {
-      const sectionToDimension = this.getSectionDimensionMapping();
-
-      for (const ds of dimensionScores) {
-        const relevantSections = sectionToDimension[ds.dimension] || [];
-        for (const section of relevantSections) {
-          const sectionResponses = responses.filter(
-            (r) =>
-              r.sectionNumber === section &&
-              !usedIds.has(`${r.sectionNumber}-${r.questionNumber}`)
-          );
-          // Take up to 2 per section
-          for (const r of sectionResponses.slice(0, 2)) {
-            if (selected.length >= 30) break;
-            selected.push(r);
-            usedIds.add(`${r.sectionNumber}-${r.questionNumber}`);
-          }
-        }
-        if (selected.length >= 30) break;
-      }
-    }
-
-    // Strategy 3: Ultimate fallback - distribute evenly across all sections
-    if (selected.length < 10) {
-      const remaining = responses.filter(
-        (r) => !usedIds.has(`${r.sectionNumber}-${r.questionNumber}`)
-      );
-      const perSection = Math.ceil(20 / 10); // ~2 per section
-      const bySectionMap = new Map<number, ResponseDTO[]>();
-
-      for (const r of remaining) {
-        if (!bySectionMap.has(r.sectionNumber)) {
-          bySectionMap.set(r.sectionNumber, []);
-        }
-        bySectionMap.get(r.sectionNumber)!.push(r);
-      }
-
-      for (const [, sectionResps] of bySectionMap) {
-        for (const r of sectionResps.slice(0, perSection)) {
-          if (selected.length >= 30) break;
-          selected.push(r);
-        }
-        if (selected.length >= 30) break;
-      }
-    }
-
-    // Truncate each response for token budgeting
-    return selected.map((r) => ({
-      ...r,
-      responseText: r.responseText.slice(0, 500) + (r.responseText.length > 500 ? '...' : ''),
-    }));
-  }
-
-  /**
-   * Maps dimensions to questionnaire sections.
-   * Based on Guardian questionnaire structure.
-   */
-  private getSectionDimensionMapping(): Record<string, number[]> {
-    return {
-      clinical_risk: [1, 2],
-      privacy_risk: [3],
-      security_risk: [4],
-      technical_credibility: [5, 6],
-      operational_excellence: [7],
-      vendor_capability: [8],
-      ai_transparency: [5],
-      ethical_considerations: [9],
-      regulatory_compliance: [3, 10],
-      sustainability: [8],
-    };
-  }
-
-  /**
-   * Determine solution type from assessment solutionType string.
-   * Aligns with ScoringService.determineSolutionType() for consistent weighting.
-   *
-   * GPT Review Fix: Use same logic as ScoringService to ensure narrative
-   * weighting aligns with actual scoring weights.
-   */
-  private determineSolutionType(solutionType: string | null): SolutionType {
-    // P2 Fix: Use same strict logic as ScoringService to ensure narrative
-    // weighting aligns with actual scoring weights.
-    // Removed keyword heuristics that could cause mismatches.
-    const validTypes: SolutionType[] = ['clinical_ai', 'administrative_ai', 'patient_facing'];
-
-    if (!solutionType) {
-      // Default to clinical_ai for healthcare assessments (aligned with ScoringService)
-      return 'clinical_ai';
-    }
-
-    const lower = solutionType.toLowerCase();
-
-    // Only accept exact rubric types - no keyword heuristics
-    // This ensures export narrative uses same weighting as scoring
-    if (validTypes.includes(lower as SolutionType)) {
-      return lower as SolutionType;
-    }
-
-    // Log warning for invalid values (aligned with ScoringService)
-    console.warn(
-      `[ScoringExportService] Invalid solutionType "${solutionType}", defaulting to clinical_ai`
-    );
-    return 'clinical_ai';
-  }
-
-  /**
-   * Sleep utility for polling
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
