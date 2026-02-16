@@ -31,10 +31,43 @@ export const WARNING_MESSAGES: Record<DocumentWarning, string> = {
 export type RiskRating = 'low' | 'medium' | 'high' | 'critical';
 export type Recommendation = 'approve' | 'conditional' | 'decline' | 'more_info';
 
+// ISO enrichment types (mirrors backend domain/compliance/types.ts)
+export type AssessmentConfidenceLevel = 'high' | 'medium' | 'low';
+
+export interface AssessmentConfidence {
+  level: AssessmentConfidenceLevel;
+  rationale: string;
+}
+
+export interface ISOClauseReference {
+  clauseRef: string;
+  title: string;
+  framework: string;
+  status: 'aligned' | 'partial' | 'not_evidenced' | 'not_applicable';
+}
+
 export interface DimensionScoreData {
   dimension: string;
   score: number;
   riskRating: RiskRating;
+  findings?: {
+    subScores?: Array<{
+      name: string;
+      score: number;
+      maxScore: number;
+      notes: string;
+    }>;
+    keyRisks?: string[];
+    mitigations?: string[];
+    evidenceRefs?: Array<{
+      sectionNumber: number;
+      questionNumber: number;
+      quote: string;
+    }>;
+    // ISO enrichment (Epic 37/38)
+    assessmentConfidence?: AssessmentConfidence;
+    isoClauseReferences?: ISOClauseReference[];
+  };
 }
 
 export interface ScoringResultData {

@@ -226,12 +226,14 @@ export function ScoringResultCard({
       <div className="px-6 py-4 bg-gray-50 flex gap-3">
         <DownloadButton
           assessmentId={result.assessmentId}
+          batchId={result.batchId}
           format="pdf"
           exportType="scoring"
           label="Export PDF"
         />
         <DownloadButton
           assessmentId={result.assessmentId}
+          batchId={result.batchId}
           format="word"
           exportType="scoring"
           label="Export Word"

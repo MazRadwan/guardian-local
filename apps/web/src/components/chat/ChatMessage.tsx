@@ -536,6 +536,7 @@ function EmbeddedScoringResult({ data }: { data: Record<string, any> }) {
           dimension: d.dimension || '',
           score: typeof d.score === 'number' ? d.score : 0,
           riskRating: (d.riskRating || 'medium') as RiskRating,
+          findings: d.findings,
         }))
       : [],
     batchId: data.batchId || '',

@@ -40,7 +40,7 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="score-dashboard">
       {/* Risk Dimensions */}
       <div>
         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -56,6 +56,8 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
               score={d.score}
               riskRating={d.riskRating}
               type="risk"
+              dimension={d.dimension}
+              findings={d.findings}
             />
           ))}
         </div>
@@ -76,6 +78,8 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
               score={d.score}
               riskRating={d.riskRating}
               type="capability"
+              dimension={d.dimension}
+              findings={d.findings}
             />
           ))}
         </div>

@@ -474,6 +474,85 @@ describe('DownloadButton', () => {
     });
   });
 
+  describe('batchId prop', () => {
+    it('appends batchId to scoring export URL when provided', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      (global.fetch as jest.Mock).mockResolvedValue(
+        createMockResponse({ ok: true, status: 200, blob: mockBlob })
+      );
+
+      render(
+        <DownloadButton
+          assessmentId="test-123"
+          format="pdf"
+          exportType="scoring"
+          batchId="batch-456"
+        />
+      );
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/export/scoring/test-123/pdf?batchId=batch-456',
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('does not append batchId when not provided', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      (global.fetch as jest.Mock).mockResolvedValue(
+        createMockResponse({ ok: true, status: 200, blob: mockBlob })
+      );
+
+      render(
+        <DownloadButton
+          assessmentId="test-123"
+          format="pdf"
+          exportType="scoring"
+        />
+      );
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/export/scoring/test-123/pdf',
+          expect.any(Object)
+        );
+      });
+    });
+
+    it('does not append batchId for questionnaire export', async () => {
+      const mockBlob = new Blob(['test content'], { type: 'application/pdf' });
+      (global.fetch as jest.Mock).mockResolvedValue(
+        createMockResponse({ ok: true, status: 200, blob: mockBlob })
+      );
+
+      render(
+        <DownloadButton
+          assessmentId="test-123"
+          format="pdf"
+          exportType="questionnaire"
+          batchId="batch-456"
+        />
+      );
+
+      const button = screen.getByRole('button');
+      fireEvent.click(button);
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:8000/api/assessments/test-123/export/pdf',
+          expect.any(Object)
+        );
+      });
+    });
+  });
+
   describe('progress messages', () => {
     beforeEach(() => {
       jest.useFakeTimers();
