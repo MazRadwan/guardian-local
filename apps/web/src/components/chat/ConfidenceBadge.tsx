@@ -31,7 +31,7 @@ export function ConfidenceBadge({ confidence, size = 'sm' }: ConfidenceBadgeProp
 
   if (!confidence) return null;
 
-  const styles = LEVEL_STYLES[confidence.level];
+  const styles = LEVEL_STYLES[confidence.level] || LEVEL_STYLES.medium;
   const sizeClasses = size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-sm px-2 py-1';
 
   return (

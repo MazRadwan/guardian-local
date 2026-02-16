@@ -676,6 +676,72 @@ describe('ChatMessage', () => {
       expect(screen.queryByTestId('scoring-result-component')).not.toBeInTheDocument();
     });
 
+    it('passes findings data (including assessmentConfidence and isoClauseReferences) through to ScoringResultCard', () => {
+      // Mock store with empty scoring result so fallback rendering is used
+      mockUseChatStore.mockImplementation((selector) => {
+        const state = {
+          activeConversationId: 'conv-123',
+          scoringResultByConversation: {},
+        };
+        return selector(state as any);
+      });
+
+      const scoringResultWithFindings = {
+        type: 'scoring_result' as const,
+        data: {
+          compositeScore: 82,
+          recommendation: 'conditional',
+          overallRiskRating: 'medium',
+          assessmentId: 'assess-findings-123',
+          executiveSummary: 'Summary with findings',
+          keyFindings: ['Finding 1'],
+          batchId: 'batch-456',
+          dimensionScores: [
+            {
+              dimension: 'clinical_risk',
+              score: 7,
+              riskRating: 'high',
+              findings: {
+                subScores: [{ name: 'Patient Safety', score: 3, maxScore: 5, notes: 'Needs improvement' }],
+                keyRisks: ['Data leakage risk'],
+                mitigations: ['Encryption at rest'],
+                evidenceRefs: [{ sectionNumber: 1, questionNumber: 3, quote: 'We encrypt all data' }],
+                assessmentConfidence: { level: 'high', rationale: 'Strong evidence provided' },
+                isoClauseReferences: [
+                  { clauseRef: 'A.8.2', title: 'Information classification', framework: 'ISO 27001:2022', status: 'aligned' },
+                ],
+              },
+            },
+            {
+              dimension: 'privacy_risk',
+              score: 5,
+              riskRating: 'medium',
+              findings: {
+                assessmentConfidence: { level: 'medium', rationale: 'Partial evidence' },
+                isoClauseReferences: [],
+              },
+            },
+          ],
+        },
+      };
+
+      // Should render without errors and include the scoring result component
+      render(
+        <ChatMessage
+          role="assistant"
+          content="Analysis with findings"
+          components={[scoringResultWithFindings]}
+          isLastScoringMessage={true}
+        />
+      );
+
+      // The scoring_result component should be rendered (fallback path)
+      expect(screen.getByTestId('scoring-result-component')).toBeInTheDocument();
+      // The scoring result card should be present with the correct composite score
+      expect(screen.getByTestId('scoring-result-card')).toBeInTheDocument();
+      expect(screen.getByTestId('composite-score')).toHaveTextContent('82');
+    });
+
     it('handles null activeConversationId gracefully', () => {
       // Mock store with null conversation ID
       mockUseChatStore.mockImplementation((selector) => {

@@ -132,4 +132,21 @@ describe('ConfidenceBadge', () => {
     expect(badge.className).toContain('text-red-700');
     expect(badge.className).toContain('border-red-200');
   });
+
+  it('falls back to medium styling for unknown confidence level', () => {
+    const unknownConfidence = {
+      level: 'unknown' as any,
+      rationale: 'Some rationale for unknown level.',
+    };
+
+    render(<ConfidenceBadge confidence={unknownConfidence} />);
+
+    const badge = screen.getByTestId('confidence-badge');
+    // Should not crash and should fall back to medium (amber) styles
+    expect(badge).toBeInTheDocument();
+    expect(badge.className).toContain('bg-amber-100');
+    expect(badge.className).toContain('text-amber-700');
+    expect(badge.className).toContain('border-amber-200');
+    expect(badge).toHaveTextContent('Med');
+  });
 });
