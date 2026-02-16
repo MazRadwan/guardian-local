@@ -13,6 +13,8 @@ import {
   createDimensionTable,
   createNarrativeReport,
 } from './WordSectionBuilders';
+import { createISOAlignmentSection } from './WordISOBuilders';
+import { ISO_DISCLAIMER } from '../../domain/compliance/isoMessagingTerms.js';
 
 export class ScoringWordExporter implements IScoringWordExporter {
   async generateWord(data: ScoringExportData): Promise<Buffer> {
@@ -65,27 +67,18 @@ export class ScoringWordExporter implements IScoringWordExporter {
                     size: 18,
                     color: '9CA3AF',
                   }),
-                  new TextRun({
-                    text: 'Page ',
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
-                  new TextRun({
-                    children: [PageNumber.CURRENT],
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
-                  new TextRun({
-                    text: ' of ',
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
-                  new TextRun({
-                    children: [PageNumber.TOTAL_PAGES],
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
+                  new TextRun({ text: 'Page ', size: 18, color: '9CA3AF' }),
+                  new TextRun({ children: [PageNumber.CURRENT], size: 18, color: '9CA3AF' }),
+                  new TextRun({ text: ' of ', size: 18, color: '9CA3AF' }),
+                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: '9CA3AF' }),
                 ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({ text: ISO_DISCLAIMER, size: 16, color: '9CA3AF', italics: true }),
+                ],
+                spacing: { before: 100 },
               }),
             ],
           }),
@@ -98,6 +91,7 @@ export class ScoringWordExporter implements IScoringWordExporter {
           // Page break before dimension table
           new Paragraph({ children: [new PageBreak()] }),
           ...createDimensionTable(data),
+          ...createISOAlignmentSection(data),
           // Page break before narrative
           new Paragraph({ children: [new PageBreak()] }),
           ...createNarrativeReport(data),

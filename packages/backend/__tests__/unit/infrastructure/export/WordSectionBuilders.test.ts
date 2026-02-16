@@ -10,6 +10,7 @@ import {
   RISK_COLORS,
   RECOMMENDATION_COLORS,
   BRAND_COLOR,
+  CONFIDENCE_COLORS,
   createHeader,
   createScoreBanner,
   createExecutiveSummary,
@@ -17,7 +18,10 @@ import {
   createDimensionTable,
   createNarrativeReport,
   parseInlineFormatting,
+  buildConfidenceCell,
+  buildISORefCell,
 } from '../../../../src/infrastructure/export/WordSectionBuilders';
+import { DimensionExportISOData } from '../../../../src/application/interfaces/IScoringPDFExporter';
 
 function buildMockData(overrides?: Partial<ScoringExportData>): ScoringExportData {
   return {
@@ -260,6 +264,306 @@ describe('WordSectionBuilders', () => {
       const json = JSON.stringify(result);
 
       expect(json).toContain('unknown_dimension');
+    });
+  });
+
+  describe('createHeader date determinism', () => {
+    it('should use data.generatedAt for the date, not current date', () => {
+      const data = buildMockData({ generatedAt: new Date('2025-01-15T12:00:00Z') });
+      const result = createHeader(data);
+      const json = JSON.stringify(result);
+
+      expect(json).toContain('January 15, 2025');
+    });
+  });
+
+  describe('createDimensionTable with ISO data', () => {
+    function buildISOData(): DimensionExportISOData[] {
+      return [
+        {
+          dimension: 'privacy_risk',
+          label: 'Privacy Risk',
+          confidence: { level: 'high', rationale: 'Strong evidence' },
+          isoClauseReferences: [
+            { clauseRef: 'A.6.2.6', title: 'Data quality management', framework: 'ISO/IEC 42001', status: 'aligned' },
+            { clauseRef: 'A.6.2.7', title: 'Data provenance', framework: 'ISO/IEC 42001', status: 'partial' },
+          ],
+          isGuardianNative: false,
+        },
+        {
+          dimension: 'security_risk',
+          label: 'Security Risk',
+          confidence: { level: 'medium', rationale: 'Some gaps' },
+          isoClauseReferences: [
+            { clauseRef: 'A.8.1', title: 'Risk treatment', framework: 'ISO/IEC 23894', status: 'aligned' },
+          ],
+          isGuardianNative: false,
+        },
+        {
+          dimension: 'regulatory_compliance',
+          label: 'Regulatory Compliance',
+          confidence: null,
+          isoClauseReferences: [],
+          isGuardianNative: true,
+        },
+      ];
+    }
+
+    it('should include 5 header columns', () => {
+      const data = buildMockData({ dimensionISOData: buildISOData() });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      expect(json).toContain('Dimension');
+      expect(json).toContain('Score');
+      expect(json).toContain('Rating');
+      expect(json).toContain('Confidence');
+      expect(json).toContain('ISO Refs');
+    });
+
+    it('should show HIGH for high confidence dimension', () => {
+      const data = buildMockData({ dimensionISOData: buildISOData() });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      expect(json).toContain('HIGH');
+    });
+
+    it('should show MEDIUM for medium confidence dimension', () => {
+      const data = buildMockData({ dimensionISOData: buildISOData() });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      expect(json).toContain('MEDIUM');
+    });
+
+    it('should show "--" for dimension without confidence', () => {
+      const data = buildMockData({ dimensionISOData: buildISOData() });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      // Guardian-native dimension has confidence: null, should show "--"
+      expect(json).toContain('--');
+    });
+
+    it('should show clause count for mapped dimension', () => {
+      const data = buildMockData({ dimensionISOData: buildISOData() });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      expect(json).toContain('2 clauses');
+      expect(json).toContain('1 clause');
+    });
+
+    it('should show "--" for Guardian-native dimension ISO refs', () => {
+      const data = buildMockData({ dimensionISOData: buildISOData() });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      // At least 2 "--" markers (one for confidence null, one for Guardian-native ISO refs)
+      const dashCount = (json.match(/--/g) || []).length;
+      expect(dashCount).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('createDimensionTable Guardian-native labels', () => {
+    it('should include Guardian Healthcare-Specific sublabel for Guardian-native dimensions', () => {
+      const data = buildMockData({
+        dimensionISOData: [
+          {
+            dimension: 'privacy_risk',
+            label: 'Privacy Risk',
+            confidence: null,
+            isoClauseReferences: [],
+            isGuardianNative: true,
+          },
+        ],
+      });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      expect(json).toContain('Guardian Healthcare-Specific');
+    });
+
+    it('should NOT include Guardian sublabel for non-Guardian-native dimensions', () => {
+      const data = buildMockData({
+        dimensionISOData: [
+          {
+            dimension: 'privacy_risk',
+            label: 'Privacy Risk',
+            confidence: { level: 'high', rationale: 'Good' },
+            isoClauseReferences: [
+              { clauseRef: 'A.6.2.6', title: 'Data quality', framework: 'ISO/IEC 42001', status: 'aligned' },
+            ],
+            isGuardianNative: false,
+          },
+        ],
+      });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      expect(json).not.toContain('Guardian Healthcare-Specific');
+    });
+
+    it('should render sublabel in italic with brand color', () => {
+      const data = buildMockData({
+        dimensionISOData: [
+          {
+            dimension: 'privacy_risk',
+            label: 'Privacy Risk',
+            confidence: null,
+            isoClauseReferences: [],
+            isGuardianNative: true,
+          },
+        ],
+      });
+      const result = createDimensionTable(data);
+      const json = JSON.stringify(result);
+
+      // Check that the sublabel text is present with italic formatting
+      expect(json).toContain('Guardian Healthcare-Specific');
+      expect(json).toContain(BRAND_COLOR); // purple color for sublabel
+    });
+  });
+
+  describe('buildConfidenceCell', () => {
+    it('should return green shading for high confidence', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'privacy_risk',
+        label: 'Privacy Risk',
+        confidence: { level: 'high', rationale: 'Good' },
+        isoClauseReferences: [],
+        isGuardianNative: false,
+      };
+      const cell = buildConfidenceCell(isoData, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('HIGH');
+      expect(json).toContain(CONFIDENCE_COLORS.high.background);
+      expect(json).toContain(CONFIDENCE_COLORS.high.text);
+    });
+
+    it('should return amber shading for medium confidence', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'security_risk',
+        label: 'Security Risk',
+        confidence: { level: 'medium', rationale: 'OK' },
+        isoClauseReferences: [],
+        isGuardianNative: false,
+      };
+      const cell = buildConfidenceCell(isoData, false);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('MEDIUM');
+      expect(json).toContain(CONFIDENCE_COLORS.medium.background);
+    });
+
+    it('should return red shading for low confidence', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'ai_transparency',
+        label: 'AI Transparency',
+        confidence: { level: 'low', rationale: 'Lacking' },
+        isoClauseReferences: [],
+        isGuardianNative: false,
+      };
+      const cell = buildConfidenceCell(isoData, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('LOW');
+      expect(json).toContain(CONFIDENCE_COLORS.low.background);
+    });
+
+    it('should return "--" when no ISO data', () => {
+      const cell = buildConfidenceCell(undefined, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('--');
+    });
+
+    it('should return "--" when confidence is null', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'privacy_risk',
+        label: 'Privacy Risk',
+        confidence: null,
+        isoClauseReferences: [],
+        isGuardianNative: false,
+      };
+      const cell = buildConfidenceCell(isoData, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('--');
+    });
+  });
+
+  describe('buildISORefCell', () => {
+    it('should show clause count with correct pluralization', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'privacy_risk',
+        label: 'Privacy Risk',
+        confidence: null,
+        isoClauseReferences: [
+          { clauseRef: 'A.6.2.6', title: 'T1', framework: 'ISO/IEC 42001', status: 'aligned' },
+          { clauseRef: 'A.6.2.7', title: 'T2', framework: 'ISO/IEC 42001', status: 'partial' },
+          { clauseRef: 'A.8.1', title: 'T3', framework: 'ISO/IEC 23894', status: 'aligned' },
+        ],
+        isGuardianNative: false,
+      };
+      const cell = buildISORefCell(isoData, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('3 clauses');
+    });
+
+    it('should show singular "clause" for count of 1', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'security_risk',
+        label: 'Security Risk',
+        confidence: null,
+        isoClauseReferences: [
+          { clauseRef: 'A.8.1', title: 'Risk treatment', framework: 'ISO/IEC 23894', status: 'aligned' },
+        ],
+        isGuardianNative: false,
+      };
+      const cell = buildISORefCell(isoData, false);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('1 clause');
+      expect(json).not.toContain('1 clauses');
+    });
+
+    it('should show "--" for Guardian-native dimension', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'clinical_risk',
+        label: 'Clinical Risk',
+        confidence: null,
+        isoClauseReferences: [],
+        isGuardianNative: true,
+      };
+      const cell = buildISORefCell(isoData, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('--');
+    });
+
+    it('should show "--" when no ISO data', () => {
+      const cell = buildISORefCell(undefined, false);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('--');
+    });
+
+    it('should show "--" when ISO refs are empty', () => {
+      const isoData: DimensionExportISOData = {
+        dimension: 'security_risk',
+        label: 'Security Risk',
+        confidence: null,
+        isoClauseReferences: [],
+        isGuardianNative: false,
+      };
+      const cell = buildISORefCell(isoData, true);
+      const json = JSON.stringify(cell);
+
+      expect(json).toContain('--');
     });
   });
 
