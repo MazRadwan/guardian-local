@@ -6,6 +6,14 @@ import { DimensionExportISOData, IScoringPDFExporter, ScoringExportData } from '
 import { DIMENSION_CONFIG } from '../../domain/scoring/rubric';
 import { ISO_DISCLAIMER } from '../../domain/compliance/isoMessagingTerms.js';
 
+/** Worst-case precedence: lower number = worse status (shown first in dedup). */
+const STATUS_PRECEDENCE: Record<string, number> = {
+  not_evidenced: 0,
+  partial: 1,
+  not_applicable: 2,
+  aligned: 3,
+};
+
 export class ScoringPDFExporter implements IScoringPDFExporter {
   constructor(private templatePath: string) {
     if (!templatePath) {
@@ -145,6 +153,12 @@ export class ScoringPDFExporter implements IScoringPDFExporter {
         if (existing) {
           if (!existing.dimensions.includes(dim.label)) {
             existing.dimensions.push(dim.label);
+          }
+          // Keep worst-case status across dimensions
+          const existingPrecedence = STATUS_PRECEDENCE[existing.status] ?? 3;
+          const newPrecedence = STATUS_PRECEDENCE[ref.status] ?? 3;
+          if (newPrecedence < existingPrecedence) {
+            existing.status = ref.status;
           }
         } else {
           clauseMap.set(dedupKey, {

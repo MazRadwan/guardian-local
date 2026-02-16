@@ -89,6 +89,7 @@ describe('ScoringPDFExporter', () => {
         isoClauseReferences: [
           { clauseRef: '6.3.1', title: 'Risk identification', framework: 'ISO/IEC 23894', status: 'aligned' },
           { clauseRef: 'A.6.2.6', title: 'Data quality management', framework: 'ISO/IEC 42001', status: 'aligned' },
+          { clauseRef: '6.4.1', title: 'Risk treatment', framework: 'ISO/IEC 23894', status: 'not_applicable' },
         ],
         isGuardianNative: false,
       },
@@ -182,6 +183,10 @@ describe('ScoringPDFExporter', () => {
       expect(capturedHtml).toContain('>MEDIUM</span>')
       expect(capturedHtml).toContain('confidence-badge low')
       expect(capturedHtml).toContain('>LOW</span>')
+
+      // Table column headers must be present
+      expect(capturedHtml).toContain('<th>Confidence</th>')
+      expect(capturedHtml).toContain('<th>ISO Refs</th>')
     })
 
     it('should show "--" for dimensions without confidence data', async () => {
@@ -198,7 +203,8 @@ describe('ScoringPDFExporter', () => {
 
       // privacy_risk has 2 clauses
       expect(capturedHtml).toContain('iso-ref-count">2 clauses</span>')
-      // security_risk has 2 clauses
+      // security_risk has 3 clauses
+      expect(capturedHtml).toContain('iso-ref-count">3 clauses</span>')
       // regulatory_compliance has 1 clause
       expect(capturedHtml).toContain('iso-ref-count">1 clause</span>')
     })
@@ -240,6 +246,7 @@ describe('ScoringPDFExporter', () => {
 
       expect(capturedHtml).toContain('ISO Standards Alignment')
       expect(capturedHtml).toContain('iso-alignment-table')
+      expect(capturedHtml).toContain('section page-break')
     })
 
     it('should not render ISO alignment section when no ISO clauses exist', async () => {
@@ -281,6 +288,7 @@ describe('ScoringPDFExporter', () => {
       expect(capturedHtml).toContain('iso-status aligned')
       expect(capturedHtml).toContain('iso-status partial')
       expect(capturedHtml).toContain('iso-status not_evidenced')
+      expect(capturedHtml).toContain('iso-status not_applicable')
     })
 
     it('should deduplicate: same clause from multiple dimensions listed once', async () => {
@@ -303,6 +311,39 @@ describe('ScoringPDFExporter', () => {
       // A.6.2.6 is referenced by both Privacy Risk and Security Risk
       // They should both appear in the dimensions column of that row
       expect(capturedHtml).toContain('Privacy Risk, Security Risk')
+    })
+
+    it('should keep worst-case status when same clause appears in multiple dimensions', async () => {
+      // A.6.2.6 appears in privacy_risk as "aligned" and security_risk as "aligned"
+      // Override security_risk to have "partial" for A.6.2.6 to test worst-case dedup
+      const isoData = makeISOData()
+      // Set security_risk's A.6.2.6 to "partial"
+      isoData[1].isoClauseReferences[1] = {
+        clauseRef: 'A.6.2.6', title: 'Data quality management', framework: 'ISO/IEC 42001', status: 'partial',
+      }
+      const data = makeBaseData({ dimensionISOData: isoData })
+      await exporter.generatePDF(data)
+
+      // The deduplicated row for A.6.2.6 should show "partial" (worse than "aligned")
+      const rowMatch = capturedHtml.match(/<strong>A\.6\.2\.6<\/strong>[\s\S]*?<\/tr>/)
+      expect(rowMatch).not.toBeNull()
+      expect(rowMatch![0]).toContain('iso-status partial')
+      expect(rowMatch![0]).not.toContain('iso-status aligned')
+    })
+
+    it('should keep not_evidenced over aligned in worst-case dedup', async () => {
+      const isoData = makeISOData()
+      // Set security_risk's A.6.2.6 to "not_evidenced" (privacy_risk has "aligned")
+      isoData[1].isoClauseReferences[1] = {
+        clauseRef: 'A.6.2.6', title: 'Data quality management', framework: 'ISO/IEC 42001', status: 'not_evidenced',
+      }
+      const data = makeBaseData({ dimensionISOData: isoData })
+      await exporter.generatePDF(data)
+
+      const rowMatch = capturedHtml.match(/<strong>A\.6\.2\.6<\/strong>[\s\S]*?<\/tr>/)
+      expect(rowMatch).not.toBeNull()
+      expect(rowMatch![0]).toContain('iso-status not_evidenced')
+      expect(rowMatch![0]).not.toContain('iso-status aligned')
     })
 
     it('should sort clauses within each framework', async () => {
