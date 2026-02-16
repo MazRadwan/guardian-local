@@ -93,3 +93,30 @@ export const ISO_DISCLAIMER =
 export function findProhibitedTerms(text: string): ProhibitedTerm[] {
   return PROHIBITED_TERMS.filter((pt) => pt.pattern.test(text))
 }
+
+/**
+ * Validate and clean narrative text for ISO messaging compliance.
+ *
+ * If prohibited terms are found, they are replaced with approved alternatives
+ * and a warning is logged. This provides a safety net for LLM-generated narratives
+ * that may inadvertently use certification language.
+ *
+ * @param narrative - The narrative text to validate
+ * @returns Cleaned narrative with prohibited terms replaced
+ */
+export function validateNarrativeMessaging(narrative: string): string {
+  const violations = findProhibitedTerms(narrative)
+  if (violations.length === 0) return narrative
+
+  console.warn(
+    `[ISO Messaging] ${violations.length} prohibited term(s) found in generated narrative:`,
+    violations.map((v) => `"${v.term}" -> "${v.alternative}"`).join(', ')
+  )
+
+  let cleaned = narrative
+  for (const violation of violations) {
+    const globalPattern = new RegExp(violation.pattern.source, 'gi')
+    cleaned = cleaned.replace(globalPattern, violation.alternative)
+  }
+  return cleaned
+}

@@ -26,6 +26,7 @@ import {
   buildDimensionISOData,
   sleep,
 } from './ScoringExportHelpers';
+import { validateNarrativeMessaging } from '../../domain/compliance/isoMessagingTerms';
 
 /**
  * Default claim time-to-live for narrative generation (5 minutes)
@@ -135,7 +136,7 @@ export class ScoringExportService {
     const solutionType = determineSolutionType(assessment.solutionType);
 
     // Ensure narrative is generated (on-demand if missing)
-    const narrativeReport = await this.ensureNarrative(
+    const rawNarrative = await this.ensureNarrative(
       result,
       dimensionScores,
       dimensionScoreData,
@@ -143,6 +144,8 @@ export class ScoringExportService {
       assessment.solutionName || 'Unknown Solution',
       solutionType
     );
+    // ISO messaging compliance: validate cached narratives that bypass the generator
+    const narrativeReport = validateNarrativeMessaging(rawNarrative);
 
     const report: ScoringReportData = {
       assessmentId: result.assessmentId,
