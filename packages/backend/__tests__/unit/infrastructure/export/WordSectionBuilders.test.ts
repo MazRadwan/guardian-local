@@ -46,6 +46,7 @@ function buildMockData(overrides?: Partial<ScoringExportData>): ScoringExportDat
     solutionName: 'Acme AI Platform',
     assessmentType: 'comprehensive',
     generatedAt: new Date('2025-01-15T12:00:00Z'),
+    dimensionISOData: [],
     ...overrides,
   };
 }

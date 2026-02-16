@@ -571,6 +571,96 @@ describe('ScoringHandler', () => {
         });
       });
 
+      it('should include findings in scoring_complete dimensionScores (Story 38.2.2)', async () => {
+        const reportWithFindings = createMockReport({
+          payload: {
+            compositeScore: 72,
+            recommendation: 'conditional',
+            overallRiskRating: 'medium',
+            executiveSummary: 'Summary text',
+            keyFindings: ['Finding 1'],
+            disqualifyingFactors: [],
+            dimensionScores: [
+              {
+                dimension: 'security_risk' as RiskDimension,
+                score: 80,
+                riskRating: 'low',
+                findings: {
+                  subScores: [],
+                  keyRisks: [],
+                  mitigations: [],
+                  evidenceRefs: [],
+                  assessmentConfidence: {
+                    level: 'high' as const,
+                    rationale: 'Strong security evidence',
+                  },
+                  isoClauseReferences: [
+                    {
+                      clauseRef: 'A.8.2',
+                      title: 'Security controls',
+                      framework: 'ISO/IEC 42001',
+                      status: 'aligned' as const,
+                    },
+                  ],
+                },
+              },
+            ] as DimensionScoreData[],
+          },
+        });
+
+        mockScoringService.score.mockResolvedValue({
+          success: true,
+          batchId: 'batch-123',
+          report: reportWithFindings,
+        });
+
+        await handler.triggerScoringOnSend(
+          mockSocket,
+          'conv-1',
+          'user-123',
+          ['file-1']
+        );
+
+        const scoringCompleteCall = mockSocket.emit.mock.calls.find(
+          call => call[0] === 'scoring_complete'
+        );
+        expect(scoringCompleteCall).toBeDefined();
+        const resultData = (scoringCompleteCall![1] as { result: { dimensionScores: Array<{ findings?: unknown }> } }).result;
+        expect(resultData.dimensionScores[0].findings).toBeDefined();
+        expect(resultData.dimensionScores[0].findings).toEqual(
+          expect.objectContaining({
+            assessmentConfidence: expect.objectContaining({ level: 'high' }),
+            isoClauseReferences: expect.arrayContaining([
+              expect.objectContaining({ clauseRef: 'A.8.2' }),
+            ]),
+          })
+        );
+      });
+
+      it('should set findings to undefined when not present in dimension scores (Story 38.2.2)', async () => {
+        // Default mock report has dimension scores without findings
+        mockScoringService.score.mockResolvedValue({
+          success: true,
+          batchId: 'batch-123',
+          report: createMockReport(),
+        });
+
+        await handler.triggerScoringOnSend(
+          mockSocket,
+          'conv-1',
+          'user-123',
+          ['file-1']
+        );
+
+        const scoringCompleteCall = mockSocket.emit.mock.calls.find(
+          call => call[0] === 'scoring_complete'
+        );
+        expect(scoringCompleteCall).toBeDefined();
+        const resultData = (scoringCompleteCall![1] as { result: { dimensionScores: Array<{ findings?: unknown }> } }).result;
+        // Findings should be undefined (not present) for scores without findings
+        expect(resultData.dimensionScores[0].findings).toBeUndefined();
+      });
+
       it('should pass progress callback to scoring service', async () => {
         mockScoringService.score.mockImplementation(async (input, onProgress) => {
           onProgress({ status: 'scoring', message: 'Processing...', progress: 50 });

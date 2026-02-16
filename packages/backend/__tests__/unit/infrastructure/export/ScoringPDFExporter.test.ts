@@ -74,6 +74,7 @@ describe('ScoringPDFExporter', () => {
       solutionName: 'Acme AI Platform',
       assessmentType: 'comprehensive',
       generatedAt: new Date('2025-01-15T12:00:00Z'),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generatePDF(mockData)
@@ -105,6 +106,7 @@ describe('ScoringPDFExporter', () => {
       solutionName: 'Safe Solution',
       assessmentType: 'quick',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     // Should not throw - XSS should be sanitized
@@ -135,6 +137,7 @@ describe('ScoringPDFExporter', () => {
       solutionName: 'Test Solution',
       assessmentType: 'comprehensive',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generatePDF(mockData)
@@ -169,6 +172,7 @@ describe('ScoringPDFExporter', () => {
         solutionName: 'Test Solution',
         assessmentType: 'quick',
         generatedAt: new Date(),
+        dimensionISOData: [],
       }
 
       const buffer = await exporter.generatePDF(mockData)
@@ -204,6 +208,7 @@ describe('ScoringPDFExporter', () => {
       solutionName: 'Test Solution',
       assessmentType: 'comprehensive',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generatePDF(mockData)

@@ -11,7 +11,8 @@
 
 import { DimensionScoreData } from '../../domain/scoring/types';
 import { AssessmentResultDTO, ResponseDTO } from '../../domain/scoring/dtos';
-import { SolutionType } from '../../domain/scoring/rubric';
+import { SolutionType, DIMENSION_CONFIG } from '../../domain/scoring/rubric';
+import { DimensionExportISOData } from '../interfaces/IScoringPDFExporter';
 
 /**
  * Select top vendor responses for narrative evidence.
@@ -174,6 +175,33 @@ ${findings || 'No key findings available.'}
 ---
 *Note: Detailed analysis was not available for this export. Please contact support if this issue persists.*
 `;
+}
+
+/**
+ * Guardian-native dimensions that have no ISO control mappings.
+ * These use Guardian healthcare-specific criteria instead.
+ */
+const GUARDIAN_NATIVE_DIMENSIONS = [
+  'clinical_risk',
+  'vendor_capability',
+  'ethical_considerations',
+  'sustainability',
+];
+
+/**
+ * Build export-friendly ISO data from dimension scores.
+ * Extracts assessmentConfidence and isoClauseReferences from findings JSONB.
+ */
+export function buildDimensionISOData(
+  dimensionScores: DimensionScoreData[]
+): DimensionExportISOData[] {
+  return dimensionScores.map((ds) => ({
+    dimension: ds.dimension,
+    label: DIMENSION_CONFIG[ds.dimension]?.label || ds.dimension.replace(/_/g, ' '),
+    confidence: ds.findings?.assessmentConfidence ?? null,
+    isoClauseReferences: ds.findings?.isoClauseReferences ?? [],
+    isGuardianNative: GUARDIAN_NATIVE_DIMENSIONS.includes(ds.dimension),
+  }));
 }
 
 /**

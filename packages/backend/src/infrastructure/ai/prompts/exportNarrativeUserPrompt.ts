@@ -55,6 +55,19 @@ function formatDimensionScore(dimScore: DimensionScoreData): string {
   output += `- **Rating:** ${dimScore.riskRating.toUpperCase()}\n`;
   output += `- **Type:** ${type === 'risk' ? 'Risk (lower is better)' : 'Capability (higher is better)'}\n`;
 
+  // ISO enrichment from findings (Epic 38)
+  if (dimScore.findings?.assessmentConfidence) {
+    const conf = dimScore.findings.assessmentConfidence;
+    output += `- **Assessment Confidence:** ${conf.level.toUpperCase()} - ${conf.rationale}\n`;
+  }
+
+  if (dimScore.findings?.isoClauseReferences && dimScore.findings.isoClauseReferences.length > 0) {
+    output += '\n**ISO Clause Alignment:**\n';
+    for (const ref of dimScore.findings.isoClauseReferences) {
+      output += `- ${ref.clauseRef} (${ref.framework}): ${ref.title} - **${ref.status.toUpperCase()}**\n`;
+    }
+  }
+
   if (dimScore.findings) {
     if (dimScore.findings.subScores && dimScore.findings.subScores.length > 0) {
       output += '\n**Sub-scores:**\n';
@@ -149,6 +162,17 @@ export function buildExportNarrativeUserPrompt(params: {
     .map((ds) => formatDimensionScore(ds))
     .join('\n---\n\n');
 
+  // Identify Guardian-native dimensions (no ISO mapping)
+  const GUARDIAN_NATIVE: RiskDimension[] = [
+    'clinical_risk', 'vendor_capability', 'ethical_considerations', 'sustainability',
+  ];
+  const guardianNativeDims = dimensionScores
+    .filter((ds) => GUARDIAN_NATIVE.includes(ds.dimension))
+    .map((ds) => DIMENSION_CONFIG[ds.dimension]?.label || ds.dimension);
+  const guardianNativeNote = guardianNativeDims.length > 0
+    ? `\n**Guardian-Native Dimensions:** ${guardianNativeDims.join(', ')} are assessed using Guardian healthcare-specific criteria without ISO control mapping.\n`
+    : '';
+
   // Format top responses with truncation
   const responsesText = topResponses
     .slice(0, MAX_TOP_RESPONSES)
@@ -201,7 +225,7 @@ ${findingsText}
 ## Dimension Scores
 
 ${dimensionScoresText || 'No dimension scores available.'}
-
+${guardianNativeNote}
 ---
 
 ## Vendor Responses (Selected Evidence)

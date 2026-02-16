@@ -766,6 +766,7 @@ export class DocumentUploadController {
             dimension: ds.dimension,
             score: ds.score,
             riskRating: ds.riskRating,
+            findings: ds.findings ?? undefined,
           })),
           batchId: scoringResult.batchId,
           assessmentId,

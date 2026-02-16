@@ -73,4 +73,43 @@ describe('buildExportNarrativeSystemPrompt', () => {
     const prompt2 = buildExportNarrativeSystemPrompt();
     expect(prompt1).toBe(prompt2);
   });
+
+  // Epic 38 Story 38.2.3: ISO injection tests
+  describe('ISO Standards Context (Story 38.2.3)', () => {
+    it('includes ISO-traceable guidance', () => {
+      expect(systemPrompt).toContain('ISO-traceable');
+      expect(systemPrompt).toContain('ISO-informed');
+      expect(systemPrompt).toContain('aligned with');
+      expect(systemPrompt).toContain('referenced against');
+    });
+
+    it('includes prohibited terms list', () => {
+      expect(systemPrompt).toContain('ISO compliant');
+      expect(systemPrompt).toContain('ISO certified');
+      expect(systemPrompt).toContain('meets ISO requirements');
+      expect(systemPrompt).toContain('ISO conformant');
+    });
+
+    it('includes "NEVER use" messaging rules', () => {
+      expect(systemPrompt).toContain('NEVER use');
+      expect(systemPrompt).toContain('ALWAYS use');
+      expect(systemPrompt).toContain('CRITICAL MESSAGING RULES');
+    });
+
+    it('includes confidence level interpretation', () => {
+      expect(systemPrompt).toContain('Assessment Confidence');
+      expect(systemPrompt).toContain('High confidence');
+      expect(systemPrompt).toContain('Medium confidence');
+      expect(systemPrompt).toContain('Low confidence');
+    });
+
+    it('mentions Guardian-native dimensions', () => {
+      expect(systemPrompt).toContain('Guardian-Native Dimensions');
+      expect(systemPrompt).toContain('Clinical Risk');
+      expect(systemPrompt).toContain('Vendor Capability');
+      expect(systemPrompt).toContain('Ethical Considerations');
+      expect(systemPrompt).toContain('Sustainability');
+      expect(systemPrompt).toContain('Guardian healthcare-specific criteria');
+    });
+  });
 });

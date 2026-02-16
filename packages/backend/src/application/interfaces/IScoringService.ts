@@ -1,4 +1,4 @@
-import { ScoringReportData, ScoringProgressEvent } from '../../domain/scoring/types.js';
+import { ScoringReportData, ScoringProgressEvent, DimensionScoreData } from '../../domain/scoring/types.js';
 import type { ScoringErrorCode } from '../../domain/scoring/errors.js';
 
 export interface ScoringInput {
@@ -35,6 +35,7 @@ export interface ScoringRehydrationResult {
     dimension: string;
     score: number;
     riskRating: 'low' | 'medium' | 'high' | 'critical';
+    findings?: DimensionScoreData['findings'];
   }>;
   batchId: string;
   assessmentId: string;

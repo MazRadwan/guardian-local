@@ -11,6 +11,7 @@ import {
   getSectionDimensionMapping,
   determineSolutionType,
   buildFallbackNarrative,
+  buildDimensionISOData,
   sleep,
 } from '../../../../src/application/services/ScoringExportHelpers'
 import { DimensionScoreData } from '../../../../src/domain/scoring/types'
@@ -381,6 +382,232 @@ describe('ScoringExportHelpers', () => {
       const narrative = buildFallbackNarrative(result)
 
       expect(narrative).toContain('Please contact support if this issue persists.')
+    })
+  })
+
+  describe('buildDimensionISOData', () => {
+    it('should extract confidence from findings', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({
+          dimension: 'regulatory_compliance',
+          findings: {
+            subScores: [],
+            keyRisks: [],
+            mitigations: [],
+            evidenceRefs: [],
+            assessmentConfidence: {
+              level: 'high',
+              rationale: 'Strong evidence from vendor responses',
+            },
+          },
+        }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result).toHaveLength(1)
+      expect(result[0].confidence).toEqual({
+        level: 'high',
+        rationale: 'Strong evidence from vendor responses',
+      })
+    })
+
+    it('should extract isoClauseReferences from findings', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({
+          dimension: 'privacy_risk',
+          findings: {
+            subScores: [],
+            keyRisks: [],
+            mitigations: [],
+            evidenceRefs: [],
+            isoClauseReferences: [
+              {
+                clauseRef: 'A.6.2.6',
+                title: 'Data quality management',
+                framework: 'ISO/IEC 42001',
+                status: 'aligned',
+              },
+              {
+                clauseRef: 'A.8.4',
+                title: 'Privacy impact assessment',
+                framework: 'ISO/IEC 27701',
+                status: 'partial',
+              },
+            ],
+          },
+        }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isoClauseReferences).toHaveLength(2)
+      expect(result[0].isoClauseReferences[0]).toEqual({
+        clauseRef: 'A.6.2.6',
+        title: 'Data quality management',
+        framework: 'ISO/IEC 42001',
+        status: 'aligned',
+      })
+      expect(result[0].isoClauseReferences[1].status).toBe('partial')
+    })
+
+    it('should return confidence: null when findings missing', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({
+          dimension: 'privacy_risk',
+          // No findings at all
+        }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].confidence).toBeNull()
+    })
+
+    it('should return empty array when isoClauseReferences missing', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({
+          dimension: 'security_risk',
+          findings: {
+            subScores: [],
+            keyRisks: [],
+            mitigations: [],
+            evidenceRefs: [],
+            // No isoClauseReferences
+          },
+        }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isoClauseReferences).toEqual([])
+    })
+
+    it('should mark clinical_risk as guardianNative', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'clinical_risk' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isGuardianNative).toBe(true)
+    })
+
+    it('should mark vendor_capability as guardianNative', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'vendor_capability' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isGuardianNative).toBe(true)
+    })
+
+    it('should mark ethical_considerations as guardianNative', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'ethical_considerations' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isGuardianNative).toBe(true)
+    })
+
+    it('should mark sustainability as guardianNative', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'sustainability' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isGuardianNative).toBe(true)
+    })
+
+    it('should mark regulatory_compliance as NOT guardianNative', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'regulatory_compliance' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isGuardianNative).toBe(false)
+    })
+
+    it('should mark privacy_risk as NOT guardianNative', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'privacy_risk' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].isGuardianNative).toBe(false)
+    })
+
+    it('should use DIMENSION_CONFIG labels', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({ dimension: 'clinical_risk' }),
+        makeDimensionScore({ dimension: 'privacy_risk' }),
+        makeDimensionScore({ dimension: 'regulatory_compliance' }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].label).toBe('Clinical Risk')
+      expect(result[1].label).toBe('Privacy Risk')
+      expect(result[2].label).toBe('Regulatory Compliance')
+    })
+
+    it('should handle all 10 dimensions', () => {
+      const allDimensions: DimensionScoreData['dimension'][] = [
+        'clinical_risk',
+        'privacy_risk',
+        'security_risk',
+        'technical_credibility',
+        'operational_excellence',
+        'vendor_capability',
+        'ai_transparency',
+        'ethical_considerations',
+        'regulatory_compliance',
+        'sustainability',
+      ]
+
+      const scores = allDimensions.map(d => makeDimensionScore({ dimension: d }))
+      const result = buildDimensionISOData(scores)
+
+      expect(result).toHaveLength(10)
+
+      // Guardian native: 4 dimensions
+      const nativeCount = result.filter(r => r.isGuardianNative).length
+      expect(nativeCount).toBe(4)
+
+      // Non-native: 6 dimensions
+      const nonNativeCount = result.filter(r => !r.isGuardianNative).length
+      expect(nonNativeCount).toBe(6)
+    })
+
+    it('should return confidence: null when findings has no assessmentConfidence', () => {
+      const scores: DimensionScoreData[] = [
+        makeDimensionScore({
+          dimension: 'security_risk',
+          findings: {
+            subScores: [],
+            keyRisks: ['Key risk'],
+            mitigations: [],
+            evidenceRefs: [],
+            assessmentConfidence: undefined,
+          },
+        }),
+      ]
+
+      const result = buildDimensionISOData(scores)
+
+      expect(result[0].confidence).toBeNull()
+    })
+
+    it('should handle empty dimensionScores array', () => {
+      const result = buildDimensionISOData([])
+
+      expect(result).toEqual([])
     })
   })
 

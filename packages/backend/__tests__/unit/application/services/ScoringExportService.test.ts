@@ -529,6 +529,100 @@ describe('ScoringExportService', () => {
       })
     })
 
+    describe('dimensionISOData population (Story 38.2.2)', () => {
+      it('should populate dimensionISOData from dimension scores findings', async () => {
+        const dimensionScoresWithISO: DimensionScoreDTO[] = [
+          {
+            ...mockDimensionScores[0],
+            findings: {
+              subScores: [],
+              keyRisks: [],
+              mitigations: [],
+              evidenceRefs: [],
+              assessmentConfidence: {
+                level: 'high' as const,
+                rationale: 'Strong evidence',
+              },
+              isoClauseReferences: [
+                {
+                  clauseRef: 'A.6.2.6',
+                  title: 'Data quality',
+                  framework: 'ISO/IEC 42001',
+                  status: 'aligned' as const,
+                },
+              ],
+            },
+          },
+        ]
+
+        const resultWithNarrative = {
+          ...mockResult,
+          narrativeStatus: 'complete' as const,
+          narrativeReport: 'Existing narrative',
+        }
+
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: mockAssessment,
+          vendor: mockVendor,
+        })
+        mockResultRepo.findLatestByAssessmentId.mockResolvedValue(resultWithNarrative)
+        mockDimensionScoreRepo.findByBatchId.mockResolvedValue(dimensionScoresWithISO)
+
+        await service.exportToPDF('assess-1')
+
+        expect(mockPDFExporter.generatePDF).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dimensionISOData: expect.arrayContaining([
+              expect.objectContaining({
+                dimension: 'privacy_risk',
+                label: 'Privacy Risk',
+                confidence: { level: 'high', rationale: 'Strong evidence' },
+                isoClauseReferences: expect.arrayContaining([
+                  expect.objectContaining({ clauseRef: 'A.6.2.6' }),
+                ]),
+                isGuardianNative: false,
+              }),
+            ]),
+          })
+        )
+      })
+
+      it('should return empty dimensionISOData for dimensions without findings', async () => {
+        const dimensionScoresNoFindings: DimensionScoreDTO[] = [
+          {
+            ...mockDimensionScores[1], // security_risk, no findings
+          },
+        ]
+
+        const resultWithNarrative = {
+          ...mockResult,
+          narrativeStatus: 'complete' as const,
+          narrativeReport: 'Existing narrative',
+        }
+
+        mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+          assessment: mockAssessment,
+          vendor: mockVendor,
+        })
+        mockResultRepo.findLatestByAssessmentId.mockResolvedValue(resultWithNarrative)
+        mockDimensionScoreRepo.findByBatchId.mockResolvedValue(dimensionScoresNoFindings)
+
+        await service.exportToPDF('assess-1')
+
+        expect(mockPDFExporter.generatePDF).toHaveBeenCalledWith(
+          expect.objectContaining({
+            dimensionISOData: expect.arrayContaining([
+              expect.objectContaining({
+                dimension: 'security_risk',
+                confidence: null,
+                isoClauseReferences: [],
+              }),
+            ]),
+          })
+        )
+      })
+    })
+
     describe('Evidence Selection', () => {
       it('should use findings.evidenceRefs when available', async () => {
         const dimensionWithEvidence: DimensionScoreDTO[] = [

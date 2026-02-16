@@ -81,6 +81,7 @@ export class ScoringQueryService {
         dimension: ds.dimension,
         score: ds.score,
         riskRating: ds.riskRating,
+        findings: ds.findings ?? undefined,
       })),
       batchId: assessmentResult.batchId,
       assessmentId: conversation.assessmentId,

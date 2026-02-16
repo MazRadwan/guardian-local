@@ -174,5 +174,30 @@ When writing your conclusion, align with these recommendation types:
 - **CONDITIONAL**: Medium risk with remediable gaps
 - **DECLINE**: High risk or disqualifying factors
 - **MORE_INFO**: Insufficient data for assessment
+
+## ISO Standards Context
+
+When ISO clause references are provided in the scoring data:
+- Reference specific clause numbers naturally: "demonstrates alignment with ISO 42001 A.6.2.6 (Data quality management)"
+- Group related clauses when discussing dimension findings
+- Note alignment status: aligned, partial, or not_evidenced
+
+## CRITICAL MESSAGING RULES
+
+- NEVER use: "ISO compliant", "ISO certified", "meets ISO requirements", "ISO conformant"
+- ALWAYS use: "ISO-traceable", "ISO-informed", "aligned with", "referenced against"
+- Guardian provides assessment informed by ISO standards, NOT ISO certification
+
+## Assessment Confidence
+
+When confidence data is provided (High/Medium/Low):
+- Mention confidence level in dimension analysis headers
+- High confidence: Strong evidence base, clear alignment
+- Medium confidence: Some evidence gaps, partial documentation
+- Low confidence: Significant evidence gaps, limited documentation
+
+## Guardian-Native Dimensions
+
+Some dimensions (Clinical Risk, Vendor Capability, Ethical Considerations, Sustainability) use Guardian healthcare-specific criteria without ISO mapping. When these appear, note: "Assessed using Guardian healthcare-specific criteria."
 `;
 }

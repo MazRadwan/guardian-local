@@ -61,6 +61,7 @@ describe('ScoringWordExporter', () => {
       solutionName: 'Acme AI Platform',
       assessmentType: 'comprehensive',
       generatedAt: new Date('2025-01-15T12:00:00Z'),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generateWord(mockData)
@@ -102,6 +103,7 @@ describe('ScoringWordExporter', () => {
         solutionName: 'Test Solution',
         assessmentType: 'quick',
         generatedAt: new Date(),
+        dimensionISOData: [],
       }
 
       const buffer = await exporter.generateWord(mockData)
@@ -138,6 +140,7 @@ describe('ScoringWordExporter', () => {
       solutionName: 'Test Solution',
       assessmentType: 'comprehensive',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generateWord(mockData)
@@ -170,6 +173,7 @@ describe('ScoringWordExporter', () => {
       solutionName: 'Test Solution',
       assessmentType: 'quick',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generateWord(mockData)
@@ -199,6 +203,7 @@ describe('ScoringWordExporter', () => {
       solutionName: 'Test Solution',
       assessmentType: 'comprehensive',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generateWord(mockData)
@@ -234,6 +239,7 @@ describe('ScoringWordExporter', () => {
       solutionName: 'Test Solution',
       assessmentType: 'comprehensive',
       generatedAt: new Date(),
+      dimensionISOData: [],
     }
 
     const buffer = await exporter.generateWord(mockData)

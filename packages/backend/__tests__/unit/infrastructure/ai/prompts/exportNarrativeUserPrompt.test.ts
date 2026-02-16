@@ -177,6 +177,199 @@ describe('buildExportNarrativeUserPrompt', () => {
     });
     expect(prompt).toContain('No vendor responses available');
   });
+
+  // Epic 38 Story 38.2.3: ISO enrichment tests
+  describe('ISO enrichment in formatDimensionScore (Story 38.2.3)', () => {
+    it('includes assessment confidence when present in findings', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          {
+            dimension: 'regulatory_compliance' as const,
+            score: 72,
+            riskRating: 'medium' as const,
+            findings: {
+              subScores: [],
+              keyRisks: [],
+              mitigations: [],
+              evidenceRefs: [],
+              assessmentConfidence: {
+                level: 'high' as const,
+                rationale: 'Strong documentation and clear evidence trail',
+              },
+            },
+          },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).toContain('**Assessment Confidence:** HIGH');
+      expect(prompt).toContain('Strong documentation and clear evidence trail');
+    });
+
+    it('includes ISO clause references when present in findings', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          {
+            dimension: 'security_risk' as const,
+            score: 45,
+            riskRating: 'high' as const,
+            findings: {
+              subScores: [],
+              keyRisks: [],
+              mitigations: [],
+              evidenceRefs: [],
+              isoClauseReferences: [
+                {
+                  clauseRef: 'A.6.2.6',
+                  title: 'Data quality management for AI systems',
+                  framework: 'ISO/IEC 42001',
+                  status: 'aligned' as const,
+                },
+                {
+                  clauseRef: 'A.8.4',
+                  title: 'Security controls for AI',
+                  framework: 'ISO/IEC 42001',
+                  status: 'partial' as const,
+                },
+              ],
+            },
+          },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).toContain('**ISO Clause Alignment:**');
+      expect(prompt).toContain('A.6.2.6 (ISO/IEC 42001): Data quality management for AI systems - **ALIGNED**');
+      expect(prompt).toContain('A.8.4 (ISO/IEC 42001): Security controls for AI - **PARTIAL**');
+    });
+
+    it('omits ISO sections when findings have no ISO data', () => {
+      // baseParams already has clinical_risk with findings but no ISO data
+      const prompt = buildExportNarrativeUserPrompt(baseParams);
+      expect(prompt).not.toContain('**Assessment Confidence:**');
+      expect(prompt).not.toContain('**ISO Clause Alignment:**');
+    });
+
+    it('omits ISO sections when findings are undefined', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          {
+            dimension: 'privacy_risk' as const,
+            score: 30,
+            riskRating: 'medium' as const,
+            // no findings at all
+          },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).not.toContain('**Assessment Confidence:**');
+      expect(prompt).not.toContain('**ISO Clause Alignment:**');
+    });
+
+    it('shows clause status NOT_EVIDENCED correctly', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          {
+            dimension: 'ai_transparency' as const,
+            score: 55,
+            riskRating: 'high' as const,
+            findings: {
+              subScores: [],
+              keyRisks: [],
+              mitigations: [],
+              evidenceRefs: [],
+              isoClauseReferences: [
+                {
+                  clauseRef: 'A.5.3',
+                  title: 'AI transparency requirements',
+                  framework: 'ISO/IEC 42001',
+                  status: 'not_evidenced' as const,
+                },
+              ],
+            },
+          },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).toContain('A.5.3 (ISO/IEC 42001): AI transparency requirements - **NOT_EVIDENCED**');
+    });
+
+    it('shows clause status NOT_APPLICABLE correctly', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          {
+            dimension: 'operational_excellence' as const,
+            score: 60,
+            riskRating: 'medium' as const,
+            findings: {
+              subScores: [],
+              keyRisks: [],
+              mitigations: [],
+              evidenceRefs: [],
+              isoClauseReferences: [
+                {
+                  clauseRef: 'A.7.1',
+                  title: 'Operational monitoring',
+                  framework: 'ISO/IEC 42001',
+                  status: 'not_applicable' as const,
+                },
+              ],
+            },
+          },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).toContain('A.7.1 (ISO/IEC 42001): Operational monitoring - **NOT_APPLICABLE**');
+    });
+  });
+
+  describe('Guardian-native dimensions note (Story 38.2.3)', () => {
+    it('includes Guardian-native dimension note when Guardian-native dimensions are present', () => {
+      const prompt = buildExportNarrativeUserPrompt(baseParams);
+      // baseParams has clinical_risk which is Guardian-native
+      expect(prompt).toContain('**Guardian-Native Dimensions:**');
+      expect(prompt).toContain('Clinical Risk');
+      expect(prompt).toContain('Guardian healthcare-specific criteria without ISO control mapping');
+    });
+
+    it('lists multiple Guardian-native dimensions', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          { dimension: 'clinical_risk' as const, score: 28, riskRating: 'medium' as const },
+          { dimension: 'vendor_capability' as const, score: 65, riskRating: 'medium' as const },
+          { dimension: 'sustainability' as const, score: 50, riskRating: 'high' as const },
+          { dimension: 'security_risk' as const, score: 35, riskRating: 'medium' as const },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).toContain('Clinical Risk');
+      expect(prompt).toContain('Vendor Capability');
+      expect(prompt).toContain('Sustainability');
+    });
+
+    it('omits Guardian-native note when no Guardian-native dimensions present', () => {
+      const params = {
+        ...baseParams,
+        dimensionScores: [
+          { dimension: 'security_risk' as const, score: 35, riskRating: 'medium' as const },
+          { dimension: 'privacy_risk' as const, score: 22, riskRating: 'medium' as const },
+        ] as DimensionScoreData[],
+      };
+
+      const prompt = buildExportNarrativeUserPrompt(params);
+      expect(prompt).not.toContain('**Guardian-Native Dimensions:**');
+    });
+  });
 });
 
 describe('truncateText', () => {

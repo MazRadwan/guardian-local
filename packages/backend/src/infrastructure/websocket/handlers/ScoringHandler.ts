@@ -242,6 +242,7 @@ export class ScoringHandler {
               dimension: ds.dimension,
               score: ds.score,
               riskRating: ds.riskRating,
+              findings: ds.findings ?? undefined,
             })),
             batchId: scoringResult.batchId,  // CRITICAL: Include batchId
             assessmentId,                     // CRITICAL: Include assessmentId

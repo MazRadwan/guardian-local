@@ -22,6 +22,7 @@ import {
   selectTopResponses,
   determineSolutionType,
   buildFallbackNarrative,
+  buildDimensionISOData,
   sleep,
 } from './ScoringExportHelpers';
 
@@ -152,6 +153,7 @@ export class ScoringExportService {
       solutionName: assessment.solutionName || 'N/A',
       assessmentType: assessment.assessmentType || 'N/A',
       generatedAt: new Date(),
+      dimensionISOData: buildDimensionISOData(dimensionScoreData),
     };
   }
 
