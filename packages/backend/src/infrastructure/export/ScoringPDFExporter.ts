@@ -2,8 +2,9 @@ import puppeteer, { Browser } from 'puppeteer';
 import * as fs from 'fs/promises';
 import { marked } from 'marked';
 import DOMPurify from 'isomorphic-dompurify';
-import { IScoringPDFExporter, ScoringExportData } from '../../application/interfaces/IScoringPDFExporter';
+import { DimensionExportISOData, IScoringPDFExporter, ScoringExportData } from '../../application/interfaces/IScoringPDFExporter';
 import { DIMENSION_CONFIG } from '../../domain/scoring/rubric';
+import { ISO_DISCLAIMER } from '../../domain/compliance/isoMessagingTerms.js';
 
 export class ScoringPDFExporter implements IScoringPDFExporter {
   constructor(private templatePath: string) {
@@ -22,11 +23,37 @@ export class ScoringPDFExporter implements IScoringPDFExporter {
     const { report, vendorName, solutionName, generatedAt } = data;
     const { payload, narrativeReport, rubricVersion, batchId } = report;
 
-    // Prepare dimension scores with labels
-    const dimensionScoresWithLabels = payload.dimensionScores.map((d) => ({
-      ...d,
-      label: DIMENSION_CONFIG[d.dimension as keyof typeof DIMENSION_CONFIG]?.label || d.dimension,
-    }));
+    // Prepare dimension scores with labels and ISO data
+    const dimensionScoresWithLabels = payload.dimensionScores.map((d) => {
+      const isoData = data.dimensionISOData.find((iso) => iso.dimension === d.dimension);
+      const baseLabel = DIMENSION_CONFIG[d.dimension as keyof typeof DIMENSION_CONFIG]?.label || d.dimension;
+
+      // Build confidence badge HTML
+      let confidenceHtml = '<span class="no-data">--</span>';
+      if (isoData?.confidence) {
+        const lvl = isoData.confidence.level;
+        confidenceHtml = `<span class="confidence-badge ${lvl}">${lvl.toUpperCase()}</span>`;
+      }
+
+      // Build ISO ref count HTML
+      let isoRefHtml = '<span class="no-data">--</span>';
+      if (isoData && !isoData.isGuardianNative && isoData.isoClauseReferences.length > 0) {
+        const count = isoData.isoClauseReferences.length;
+        isoRefHtml = `<span class="iso-ref-count">${count} clause${count !== 1 ? 's' : ''}</span>`;
+      }
+
+      // Build label with optional Guardian-native indicator
+      const labelHtml = isoData?.isGuardianNative
+        ? `${this.escapeHtml(baseLabel)}<span class="guardian-native-label">Guardian Healthcare-Specific</span>`
+        : this.escapeHtml(baseLabel);
+
+      return {
+        ...d,
+        label: labelHtml,
+        confidenceHtml,
+        isoRefHtml,
+      };
+    });
 
     // Recommendation labels
     const recommendationLabels: Record<string, string> = {
@@ -40,15 +67,15 @@ export class ScoringPDFExporter implements IScoringPDFExporter {
       .replace(/{{vendorName}}/g, this.escapeHtml(vendorName))
       .replace(/{{solutionName}}/g, this.escapeHtml(solutionName))
       .replace(/{{generatedAt}}/g, this.formatDate(generatedAt))
-      .replace(/{{assessmentId}}/g, report.assessmentId)
+      .replace(/{{assessmentId}}/g, this.escapeHtml(report.assessmentId))
       .replace(/{{compositeScore}}/g, payload.compositeScore.toString())
       .replace(/{{recommendation}}/g, payload.recommendation)
       .replace(/{{recommendationLabel}}/g, recommendationLabels[payload.recommendation])
       .replace(/{{overallRiskRating}}/g, payload.overallRiskRating.toUpperCase())
       .replace(/{{executiveSummary}}/g, this.escapeHtml(payload.executiveSummary))
       .replace(/{{narrativeReport}}/g, this.renderMarkdown(narrativeReport))
-      .replace(/{{rubricVersion}}/g, rubricVersion)
-      .replace(/{{batchId}}/g, batchId);
+      .replace(/{{rubricVersion}}/g, this.escapeHtml(rubricVersion))
+      .replace(/{{batchId}}/g, this.escapeHtml(batchId));
 
     // Render key findings
     const findingsHtml = payload.keyFindings
@@ -60,9 +87,11 @@ export class ScoringPDFExporter implements IScoringPDFExporter {
     const dimensionsHtml = dimensionScoresWithLabels
       .map((d) => `
         <tr>
-          <td>${this.escapeHtml(d.label)}</td>
+          <td>${d.label}</td>
           <td>${d.score}/100</td>
           <td><span class="risk-badge ${d.riskRating}">${d.riskRating}</span></td>
+          <td>${d.confidenceHtml}</td>
+          <td>${d.isoRefHtml}</td>
           <td>
             <div class="score-bar">
               <div class="score-bar-fill risk-${d.riskRating}" style="width: ${d.score}%"></div>
@@ -72,6 +101,13 @@ export class ScoringPDFExporter implements IScoringPDFExporter {
       `)
       .join('\n');
     html = html.replace(/{{#dimensionScores}}[\s\S]*?{{\/dimensionScores}}/, dimensionsHtml);
+
+    // Render ISO alignment section
+    const isoAlignmentHtml = this.buildISOAlignmentSection(data.dimensionISOData);
+    html = html.replace('{{{isoAlignmentSection}}}', isoAlignmentHtml);
+
+    // Inject ISO disclaimer (escaped for defense-in-depth)
+    html = html.replace(/{{isoDisclaimer}}/g, this.escapeHtml(ISO_DISCLAIMER));
 
     return html;
   }
@@ -94,6 +130,61 @@ export class ScoringPDFExporter implements IScoringPDFExporter {
     } finally {
       if (browser) await browser.close();
     }
+  }
+
+  private buildISOAlignmentSection(isoData: DimensionExportISOData[]): string {
+    // Collect all unique clauses across dimensions (dedup by framework::clauseRef)
+    const clauseMap = new Map<string, {
+      clauseRef: string; title: string; framework: string; status: string; dimensions: string[];
+    }>();
+
+    for (const dim of isoData) {
+      for (const ref of dim.isoClauseReferences) {
+        const dedupKey = `${ref.framework}::${ref.clauseRef}`;
+        const existing = clauseMap.get(dedupKey);
+        if (existing) {
+          if (!existing.dimensions.includes(dim.label)) {
+            existing.dimensions.push(dim.label);
+          }
+        } else {
+          clauseMap.set(dedupKey, {
+            clauseRef: ref.clauseRef, title: ref.title,
+            framework: ref.framework, status: ref.status, dimensions: [dim.label],
+          });
+        }
+      }
+    }
+
+    if (clauseMap.size === 0) return '';
+
+    // Group by framework
+    const byFramework = new Map<string, Array<{ clauseRef: string; title: string; framework: string; status: string; dimensions: string[] }>>();
+    for (const [, clause] of clauseMap) {
+      const list = byFramework.get(clause.framework) ?? [];
+      list.push(clause);
+      byFramework.set(clause.framework, list);
+    }
+
+    let html = '<div class="section page-break">\n<h2>ISO Standards Alignment</h2>\n';
+    for (const [framework, clauses] of byFramework) {
+      html += `<p class="framework-label">${this.escapeHtml(framework)}</p>\n`;
+      html += '<table class="iso-alignment-table">\n';
+      html += '<thead><tr><th>Clause</th><th>Title</th><th>Status</th><th>Dimensions</th></tr></thead>\n';
+      html += '<tbody>\n';
+      for (const clause of clauses.sort((a, b) => a.clauseRef.localeCompare(b.clauseRef))) {
+        const statusClass = clause.status.replace(/ /g, '_');
+        const statusLabel = clause.status.replace(/_/g, ' ').toUpperCase();
+        html += `<tr>`;
+        html += `<td><strong>${this.escapeHtml(clause.clauseRef)}</strong></td>`;
+        html += `<td>${this.escapeHtml(clause.title)}</td>`;
+        html += `<td><span class="iso-status ${statusClass}">${statusLabel}</span></td>`;
+        html += `<td>${clause.dimensions.map((d) => this.escapeHtml(d)).join(', ')}</td>`;
+        html += `</tr>\n`;
+      }
+      html += '</tbody></table>\n';
+    }
+    html += '</div>\n';
+    return html;
   }
 
   private escapeHtml(text: string): string {
