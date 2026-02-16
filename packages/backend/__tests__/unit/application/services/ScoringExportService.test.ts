@@ -1005,6 +1005,54 @@ describe('ScoringExportService', () => {
     })
   })
 
+  describe('ISO Messaging Sanitization (Story 38.8.3)', () => {
+    it('should sanitize prohibited terms in cached narratives', async () => {
+      // Simulate a narrative stored BEFORE the ISO validation was added,
+      // containing a prohibited term "ISO certified"
+      const resultWithProhibitedTerm = {
+        ...mockResult,
+        narrativeStatus: 'complete' as const,
+        narrativeReport: 'The vendor solution is ISO certified for healthcare use.',
+      }
+
+      mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
+        assessment: mockAssessment,
+        vendor: mockVendor,
+      })
+      mockResultRepo.findLatestByAssessmentId.mockResolvedValue(resultWithProhibitedTerm)
+      mockDimensionScoreRepo.findByBatchId.mockResolvedValue(mockDimensionScores)
+
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      await service.exportToPDF('assess-1')
+
+      // The narrative passed to the PDF exporter should be sanitized:
+      // "ISO certified" -> "assessed against ISO standards"
+      expect(mockPDFExporter.generatePDF).toHaveBeenCalledWith(
+        expect.objectContaining({
+          report: expect.objectContaining({
+            narrativeReport: expect.stringContaining('assessed against ISO standards'),
+          }),
+        })
+      )
+
+      // Should NOT contain the prohibited term
+      const callArg = mockPDFExporter.generatePDF.mock.calls[0][0]
+      expect(callArg.report.narrativeReport).not.toMatch(/ISO[- ]certified/i)
+
+      // validateNarrativeMessaging should have logged a warning
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[ISO Messaging]'),
+        expect.stringContaining('"ISO certified"')
+      )
+
+      // Should NOT have called the narrative generator (cached narrative reused)
+      expect(mockNarrativeGenerator.generateNarrative).not.toHaveBeenCalled()
+
+      warnSpy.mockRestore()
+    })
+  })
+
   describe('exportToExcel', () => {
     it('should throw error if excel exporter not configured', async () => {
       const serviceWithoutExcel = new ScoringExportService(

@@ -223,5 +223,30 @@ describe('ExportNarrativeGenerator', () => {
         })
       )
     })
+
+    it('should sanitize prohibited ISO terms in generated narrative (Story 38.8.3)', async () => {
+      // Mock Claude returning a narrative with a prohibited term
+      mockClaudeClient.sendMessage.mockResolvedValue({
+        content: '# Vendor Report\n\nThis vendor is ISO compliant with framework requirements.',
+        stop_reason: 'end_turn',
+        model: 'claude-sonnet-4.5',
+      })
+
+      const warnSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+      const result = await generator.generateNarrative(mockParams)
+
+      // The prohibited term "ISO compliant" should be replaced with "ISO-informed"
+      expect(result).toContain('ISO-informed')
+      expect(result).not.toMatch(/ISO[- ]compliant/i)
+
+      // validateNarrativeMessaging logs a warning when it sanitizes
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[ISO Messaging]'),
+        expect.stringContaining('"ISO compliant"')
+      )
+
+      warnSpy.mockRestore()
+    })
   })
 })

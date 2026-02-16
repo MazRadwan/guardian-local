@@ -92,13 +92,14 @@ describe('ISO Messaging Compliance Audit', () => {
       }
     })
 
-    it('should have at least 90% of scanned files exist (not skipped)', () => {
-      const existenceRatio = existingFiles.length / FILES_TO_SCAN.length
-      expect(existenceRatio).toBeGreaterThanOrEqual(0.9)
+    it('should have ALL scanned files exist (fail-closed gate)', () => {
+      const scannedCount = existingFiles.length
+      expect(scannedCount).toBe(FILES_TO_SCAN.length)
       if (skippedFiles.length > 0) {
-        console.warn(
-          `[ISO Audit] Skipped ${skippedFiles.length} missing file(s):`,
-          skippedFiles.join(', ')
+        throw new Error(
+          `ISO Audit gate is fail-closed: ${skippedFiles.length} file(s) not found.\n` +
+          `Missing: ${skippedFiles.join(', ')}\n` +
+          `If renamed/moved, update FILES_TO_SCAN in this test.`
         )
       }
     })
@@ -109,8 +110,9 @@ describe('ISO Messaging Compliance Audit', () => {
         const fullPath = path.join(BACKEND_ROOT, relativePath)
 
         if (!fs.existsSync(fullPath)) {
-          console.warn(`[ISO Audit] File not found, skipping: ${relativePath}`)
-          return
+          throw new Error(
+            `Audited file not found: ${relativePath}. If renamed/moved, update FILES_TO_SCAN.`
+          )
         }
 
         const rawContent = fs.readFileSync(fullPath, 'utf-8')
