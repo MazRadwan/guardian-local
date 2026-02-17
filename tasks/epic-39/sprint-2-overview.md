@@ -18,14 +18,21 @@ Currently the scoring pipeline emits only 2 meaningful progress messages across 
 
 ---
 
-## 300 LOC Warning
+## 300 LOC Rule: No Net Growth in Oversized Files
 
-**IMPORTANT (Codex finding):** Sprint 2 modifies files that are already at or near the 300 LOC limit:
-- `ScoringService.ts` (297 LOC) — Story 39.2.1 adds ~15 lines of progress calls. Keep under 300 LOC by replacing existing generic messages, not adding alongside them.
-- `ScoringLLMService.ts` — Story 39.2.2 modifies the `% 500` logic. Net LOC change should be minimal (replacing ~3 lines).
-- `DocumentParserService.ts` (784 LOC) — Story 39.2.4 threads onProgress through. Keep additions minimal (<10 lines). Sprint 4 will split this file.
+**HARD RULE (Codex governance finding):** Until Sprint 4 splits land, the following constraint applies to ALL oversized files:
 
-Sprint 4 handles the proper file splits. Do not grow these files unnecessarily.
+| File | Current LOC | Rule |
+|------|-------------|------|
+| `ScoringService.ts` | 297 | MUST stay under 300. Replace existing messages, do not add alongside. |
+| `ScoringLLMService.ts` | ~250 | No net growth. Replace `% 500` logic in-place (~3 lines). |
+| `DocumentParserService.ts` | 784 | **No net LOC growth.** New logic MUST go in new modules only. |
+
+- **No net LOC growth** in any file already over 300 LOC. If you add lines, remove at least as many.
+- **New logic MUST go in new modules only.** Oversized files get thin dispatch/wiring, not inline logic.
+- **Enforcement:** Code review MUST verify net LOC delta <= 0 for oversized files.
+
+This is not a suggestion. Sprint 4 handles the proper file splits.
 
 ---
 
@@ -53,17 +60,21 @@ Sprint 4 handles the proper file splits. Do not grow these files unnecessarily.
     +----------+---------------------------------------------------+--------------------+
     | Story    | Files Touched                                     | Conflicts          |
     +----------+---------------------------------------------------+--------------------+
-    | 39.2.1   | ScoringService.ts (MODIFY)                        | 39.2.4             |
+    | 39.2.1   | ScoringService.ts (MODIFY - OWNS progress calls)  | 39.2.4             |
     +----------+---------------------------------------------------+--------------------+
     | 39.2.2   | ScoringLLMService.ts (MODIFY)                     | None               |
     +----------+---------------------------------------------------+--------------------+
     | 39.2.3   | MessageList.tsx (MODIFY)                           | None               |
     |          | ProgressMessage.tsx (MODIFY)                       |                    |
     +----------+---------------------------------------------------+--------------------+
-    | 39.2.4   | ScoringService.ts (MODIFY)                        | 39.2.1             |
-    |          | DocumentParserService.ts (MODIFY)                  |                    |
+    | 39.2.4   | ScoringService.ts (MODIFY - OWNS only onProgress   | 39.2.1             |
+    |          |   threading to parseForResponses, 1 call site)      |                    |
+    |          | DocumentParserService.ts (MODIFY)                   |                    |
+    |          | IScoringDocumentParser.ts (MODIFY)                  |                    |
     +----------+---------------------------------------------------+--------------------+
 ```
+
+**ScoringService.ts ownership rule:** 39.2.1 owns ALL progress message additions. 39.2.4 owns exactly ONE change — passing `onProgress` into the `parseForResponses()` options object. See `sprint-2-story-4.md` for full boundary definition.
 
 ---
 

@@ -21,9 +21,15 @@ The scoring pipeline takes ~7 minutes. The biggest bottleneck is Stage 2: `Docum
 
 ---
 
-## 300 LOC Warning
+## 300 LOC Rule: No Net Growth in Oversized Files
 
-**IMPORTANT (Codex finding):** Sprint 1 Story 39.1.4 modifies `DocumentParserService.ts` (784 LOC — already 2.6x over the 300 LOC limit). Additions must be minimal — only add routing logic to wire in the new regex modules. Do NOT add substantial new logic inline. Sprint 4 Story 39.4.1/39.4.2 will split this file properly. The goal here is to keep the LOC increase as small as possible (target: <20 new lines for routing).
+**HARD RULE (Codex governance finding):** `DocumentParserService.ts` is at 784 LOC (2.6x over the 300 LOC limit). Until Sprint 4 splits land, the following constraint applies:
+
+- **No net LOC growth** in `DocumentParserService.ts`. If you add lines, you must remove at least as many.
+- **New logic MUST go in new modules only.** Story 39.1.4 wires in `RegexResponseExtractor`, `ExtractionConfidenceCalculator`, and `DocxImageDetector` — all new files. The routing code in `DocumentParserService.ts` should be a thin dispatch (if/else + function calls), not inline logic.
+- **Enforcement:** Code review MUST verify net LOC delta <= 0 for this file.
+
+This is not a suggestion. Sprint 4 (Story 39.4.1/39.4.2) will properly split this file.
 
 ---
 

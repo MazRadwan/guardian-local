@@ -19,7 +19,18 @@ Also thread the `onProgress` callback through `DocumentParserService.parseForRes
 
 ## Dependencies
 
-- **39.2.1** (Granular Progress Events in ScoringService) — MUST complete first. Story 39.2.1 adds the `onProgress` calls to `ScoringService.score()`. This story (39.2.4) threads that same callback through `DocumentParserService.parseForResponses()` so extraction can emit per-section progress. Both stories modify `ScoringService.ts` — 39.2.1 adds progress calls, 39.2.4 passes `onProgress` into parseForResponses options.
+- **Blocked by 39.2.1** (Granular Progress Events in ScoringService) — MUST complete first.
+
+### ScoringService.ts Ownership Boundaries (Codex finding)
+
+Both 39.2.1 and 39.2.4 modify `ScoringService.ts`. To avoid conflicts:
+
+| Story | Owns | Scope in ScoringService.ts |
+|-------|------|---------------------------|
+| **39.2.1** | Progress call additions | Adds/replaces `onProgress()` calls at each pipeline stage (lines ~62-260). Owns all message strings and percentage values. |
+| **39.2.4** | onProgress threading | Adds ONE line: passing `onProgress` into `parseForResponses()` options. Does NOT modify any progress messages or percentages — those belong to 39.2.1. |
+
+**Rule:** 39.2.4 touches exactly one call site in ScoringService.ts — the `parseForResponses()` invocation where it adds `onProgress` to the options object. All other ScoringService.ts progress changes belong exclusively to 39.2.1.
 
 ## Technical Approach
 

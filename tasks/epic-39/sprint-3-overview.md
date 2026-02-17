@@ -21,13 +21,20 @@ After Sprint 1 eliminates the ~5 min extraction call, the Claude scoring call (~
 
 ---
 
-## 300 LOC Warning
+## 300 LOC Rule: No Net Growth in Oversized Files
 
-**IMPORTANT (Codex finding):** Sprint 3 modifies files that are at or near the 300 LOC limit:
-- `ScoringLLMService.ts` — Story 39.3.2 adds metrics instrumentation, Story 39.3.3 modifies prompt parameters. Keep additions minimal — extract metrics to separate `ScoringMetricsCollector.ts` (which Story 39.3.2 does correctly).
-- `ClaudeClient.ts` (844 LOC) — Story 39.3.4 modifies `streamWithTool` for multi-block support. This is an interface change only, not new logic. Sprint 4 will split ClaudeClient properly.
+**HARD RULE (Codex governance finding):** Until Sprint 4 splits land, the following constraint applies:
 
-Sprint 4 handles the proper file splits. Do not grow these files unnecessarily.
+| File | Current LOC | Rule |
+|------|-------------|------|
+| `ScoringLLMService.ts` | ~250 | No net growth. Metrics go in new `ScoringMetricsCollector.ts`. |
+| `ClaudeClient.ts` | 844 | **No net LOC growth.** Interface type change only (string → union). No new logic inline. |
+
+- **No net LOC growth** in any file already over 300 LOC. If you add lines, remove at least as many.
+- **New logic MUST go in new modules only.** Story 39.3.2 correctly extracts metrics to `ScoringMetricsCollector.ts`. Story 39.3.4 changes a type signature, not logic.
+- **Enforcement:** Code review MUST verify net LOC delta <= 0 for oversized files.
+
+This is not a suggestion. Sprint 4 handles the proper file splits.
 
 ---
 
