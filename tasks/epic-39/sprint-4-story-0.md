@@ -7,7 +7,7 @@ Remove three dead private methods from `DocumentUploadController.ts` (920 LOC):
 - `parseForScoring()` (lines 642-708, 66 LOC) -- deprecated in Epic 18, zero callers
 - `runScoring()` (lines 714-920, ~206 LOC) -- only caller is `parseForScoring()` (line 680), which is itself deprecated with zero callers
 
-Active scoring path moved to WebSocket (`ScoringHandler` via `ChatServer.handleScoringModeMessage()`) in Epic 18.
+Active scoring path moved to WebSocket (`ScoringHandler.triggerScoringOnSend()`) in Epic 18.
 All three methods are `private` with zero external callers. This is a dev project with no backwards compatibility requirement.
 
 **Re-audit completed (2026-02-17):** `runScoring()` has exactly one caller: `parseForScoring():680`. Since `parseForScoring()` itself has zero callers and is being deleted, `runScoring()` becomes dead code. Delete all three.
@@ -46,7 +46,7 @@ grep -rn "runScoring" packages/backend/src/
 
 ### 2. Delete Methods
 
-Remove the two method blocks and their JSDoc comments. Clean up any imports that become
+Remove all three method blocks and their JSDoc comments. Clean up any imports that become
 unused after deletion (e.g., types only used by these methods).
 
 ### 3. Verify (deletion + regression)
@@ -68,7 +68,8 @@ grep -n "async upload\|async download\|async handleUpload" packages/backend/src/
 
 ## Files Touched
 
-- `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts` -- DELETE 2 private methods (~134 LOC removed)
+- `packages/backend/src/infrastructure/http/controllers/DocumentUploadController.ts` -- DELETE 3 private methods (~340 LOC removed)
+- `packages/backend/__tests__/unit/infrastructure/http/controllers/DocumentUploadController.runScoring.test.ts` -- DELETE (tests dead code)
 
 ## Agent Assignment
 
