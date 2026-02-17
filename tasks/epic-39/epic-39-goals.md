@@ -724,7 +724,7 @@ Split only if time permits; active path files take priority. (Codex catch)
 | 2026-02-16 | Two-call design (extraction + scoring) is intentional | Separation of concerns; extraction can be swapped without touching scoring |
 | 2026-02-16 | maxTokens increased to 16384 | Tool JSON payload is 54,626 chars; 10K was insufficient |
 | 2026-02-16 | Regex extraction viable for Guardian docs | Format is deterministic (WordExporter), questions in DB |
-| 2026-02-16 | Keep Claude as fallback for non-Guardian docs | Third-party uploads won't follow our format |
+| 2026-02-16 | ~~Keep Claude as fallback for non-Guardian docs~~ **SUPERSEDED** | ~~Third-party uploads won't follow our format~~ → Corrected 2026-02-17: non-Guardian docs are REJECTED (product decision). Claude fallback is Guardian-only. See entry below. |
 | 2026-02-17 | Full codebase audit before implementation | Pipeline is complex with multiple tool calls; need verified data flow map |
 | 2026-02-17 | Audit A agent said regex NOT viable — OVERRULED | Agent evaluated generic regex, not anchored extraction with DB questions as reference. The approach is fundamentally different: we know all questions, we control the format, pattern `Question \d+\.\d+` is highly specific. Claude fallback covers all edge cases. |
 | 2026-02-17 | Two-tier extraction (regex fast path + Claude fallback) | Regex handles 90%+ of cases (Guardian docs). Claude handles: scanned PDFs, vendor-modified formats, low regex confidence (<0.9). Same ScoringParseResult output. |

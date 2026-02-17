@@ -10,9 +10,11 @@ Active scoring path moved to WebSocket (`ChatServer.handleScoringModeMessage()`)
 These methods have zero callers, zero tests, and are both `private`. This is a dev project
 with no backwards compatibility requirement.
 
-`runScoring()` status must be re-audited before this story executes. Previous audit found it
-used by the WebSocket auto-trigger path, but Codex review flagged that current runtime scoring
-is in `ScoringHandler` and `runScoring()` may have zero external callers.
+`runScoring()` must be re-audited before this story executes. Current runtime scoring is
+handled by `ScoringHandler` (WebSocket path), NOT by `DocumentUploadController.runScoring()`.
+The implementing agent MUST grep for all callers of `runScoring()` across the codebase. If
+zero external callers are found, delete it. If callers exist, keep it with an explicit comment
+documenting each caller.
 
 This is a prerequisite cleanup before the Sprint 4 file splits.
 
@@ -62,7 +64,9 @@ No new tests needed -- this is pure deletion of dead code with zero callers.
 ## Tests Affected
 
 - `packages/backend/__tests__/unit/DocumentUploadController.test.ts` -- should pass unchanged (no tests for deprecated methods)
-- `packages/backend/__tests__/unit/infrastructure/http/controllers/DocumentUploadController.runScoring.test.ts` -- should pass unchanged (tests `runScoring()` which is kept)
+- `packages/backend/__tests__/unit/infrastructure/http/controllers/DocumentUploadController.runScoring.test.ts` -- **outcome depends on re-audit:**
+  - If `runScoring()` has zero callers → DELETE this test file along with the method
+  - If `runScoring()` has callers → keep test file unchanged, add comment documenting the caller
 
 ## Estimated Size
 
