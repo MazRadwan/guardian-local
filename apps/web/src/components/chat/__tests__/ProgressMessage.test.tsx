@@ -283,3 +283,82 @@ describe('ProgressMessage wait animation', () => {
     expect(waitMessage).toHaveClass('text-gray-900');
   });
 });
+
+// Story 39.2.3: Extended status and progress tests
+describe('ProgressMessage extended statuses (Story 39.2.3)', () => {
+  beforeEach(() => {
+    mockMatchMedia(false);
+  });
+
+  it('should render with validating status', () => {
+    render(
+      <ProgressMessage
+        status="validating"
+        progress={90}
+        message="Validating results..."
+      />
+    );
+
+    expect(screen.getByText('Validating results...')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '90');
+  });
+
+  it('should render with uploading status', () => {
+    render(
+      <ProgressMessage
+        status="uploading"
+        progress={15}
+        message="Uploading document..."
+      />
+    );
+
+    expect(screen.getByText('Uploading document...')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '15');
+  });
+
+  it('should render spinner icon for validating status', () => {
+    const { container } = render(
+      <ProgressMessage
+        status="validating"
+        progress={95}
+        message="Finalizing..."
+      />
+    );
+
+    const spinner = container.querySelector('.animate-spin');
+    expect(spinner).toBeInTheDocument();
+  });
+
+  it('should handle granular progress percentages correctly', () => {
+    const percentages = [5, 10, 15, 50, 55, 60, 90, 95, 100];
+
+    for (const pct of percentages) {
+      const { unmount } = render(
+        <ProgressMessage
+          status="scoring"
+          progress={pct}
+          message={`Progress at ${pct}%`}
+        />
+      );
+
+      const progressBar = screen.getByRole('progressbar');
+      expect(progressBar).toHaveAttribute('aria-valuenow', String(pct));
+      expect(progressBar).toHaveStyle({ width: `${pct}%` });
+
+      unmount();
+    }
+  });
+
+  it('should fill progress bar to correct width', () => {
+    render(
+      <ProgressMessage
+        status="scoring"
+        progress={50}
+        message="Halfway there..."
+      />
+    );
+
+    const progressBar = screen.getByRole('progressbar');
+    expect(progressBar).toHaveStyle({ width: '50%' });
+  });
+});

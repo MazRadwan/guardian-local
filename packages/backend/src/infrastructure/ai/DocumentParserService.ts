@@ -196,6 +196,15 @@ export class DocumentParserService
       );
 
       if (regexResult.result) {
+        // Story 39.2.4: Emit per-section progress for regex path
+        const sections = [...new Set(regexResult.result.responses.map(r => r.sectionNumber))].sort((a, b) => a - b);
+        for (const [i] of sections.entries()) {
+          options?.onProgress?.({
+            status: 'parsing',
+            message: `Matching responses... section ${i + 1} of ${sections.length}`,
+            progress: 15 + Math.round((i / sections.length) * 35),
+          });
+        }
         // Apply per-response truncation to regex results too
         const maxResponseChars = options?.maxResponseChars ?? DEFAULT_MAX_RESPONSE_CHARS;
         regexResult.result.responses = this.truncateResponses(
@@ -205,6 +214,8 @@ export class DocumentParserService
       }
 
       // Fall through to Claude extraction
+      // Story 39.2.4: Single progress message for opaque Claude extraction
+      options?.onProgress?.({ status: 'parsing', message: 'Processing document with AI...', progress: 15 });
       console.log('[DocumentParserService] Extraction method: claude');
       return await this.parseWithClaude(
         rawDocumentText, visionContent, file, metadata, options, startTime,

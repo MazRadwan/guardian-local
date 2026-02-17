@@ -59,7 +59,7 @@ export class ScoringService implements IScoringService {
     try {
       // 1. AUTHORIZATION: Verify user owns the file
       // Epic 18: Move file retrieval before assessment check since assessmentId may come from file
-      onProgress({ status: 'parsing', message: 'Retrieving uploaded document...' });
+      onProgress({ status: 'parsing', message: 'Processing uploaded document...', progress: 5 });
       const fileRecord = await this.fileRepo.findByIdAndUser(fileId, userId);
       if (!fileRecord) {
         throw new ScoringError('UNAUTHORIZED_ASSESSMENT', `User ${userId} does not own file ${fileId}`);
@@ -74,7 +74,7 @@ export class ScoringService implements IScoringService {
 
       // 3. Parse document to extract assessmentId and responses
       // Epic 18: Parse first to extract assessmentId from document when not provided in input
-      onProgress({ status: 'parsing', message: 'Extracting responses from document...' });
+      onProgress({ status: 'parsing', message: 'Extracting text from document...', progress: 10 });
 
       // Build full DocumentMetadata as required by IScoringDocumentParser
       const documentMetadata: DocumentMetadata = {
@@ -93,7 +93,9 @@ export class ScoringService implements IScoringService {
         expectedAssessmentId: inputAssessmentId, // May be undefined - that's OK
         minConfidence: 0.7,
         abortSignal: abortController.signal,
+        onProgress, // Story 39.2.4: Thread progress to parser
       };
+      onProgress({ status: 'parsing', message: 'Analyzing document format...', progress: 15 });
       const parseResult = await this.documentParser.parseForResponses(
         fileBuffer,
         documentMetadata,
@@ -182,7 +184,7 @@ export class ScoringService implements IScoringService {
       }
 
       // 5. Store responses (delegated to ScoringStorageService)
-      onProgress({ status: 'parsing', message: 'Storing extracted responses...' });
+      onProgress({ status: 'parsing', message: `Found ${parseResult.parsedQuestionCount} of ${parseResult.expectedQuestionCount ?? '?'} responses`, progress: 50 });
       await this.storageService.storeResponses(parseResult, assessmentId, batchId, fileId);
 
       // 6. Determine solution type for correct weighting (delegated to ScoringStorageService)
@@ -191,7 +193,7 @@ export class ScoringService implements IScoringService {
 
       // 8. Fetch ISO controls via ScoringLLMService (Epic 37: ISO enrichment)
       // Graceful degradation: ISO enrichment is optional — fallback to empty arrays on failure
-      onProgress({ status: 'scoring', message: 'Analyzing scoring...' });
+      onProgress({ status: 'scoring', message: 'Loading compliance controls...', progress: 55 });
       let catalogControls: ISOControlForPrompt[] = [];
       try {
         catalogControls = await this.llmService.fetchISOCatalog();
@@ -199,6 +201,7 @@ export class ScoringService implements IScoringService {
         // ISO enrichment failure is non-critical — baseline scoring still runs
         console.warn('[ScoringService] ISO catalog fetch failed, proceeding without ISO enrichment:', err);
       }
+      onProgress({ status: 'scoring', message: 'Analyzing vendor responses against risk rubric...', progress: 60 });
 
       // 9. Score with Claude (delegated to ScoringLLMService)
       // Note: applicableControls = catalogControls when all dimensions apply (avoids duplicate fetch/tokens)
@@ -217,7 +220,7 @@ export class ScoringService implements IScoringService {
       }
 
       // 9. Validate payload
-      onProgress({ status: 'validating', message: 'Validating scoring results...' });
+      onProgress({ status: 'validating', message: 'Validating scoring results...', progress: 90 });
       const validationResult = this.validator.validate(payload);
 
       if (!validationResult.valid) {
@@ -234,7 +237,7 @@ export class ScoringService implements IScoringService {
       }
 
       // 10. Store scores (delegated to ScoringStorageService)
-      onProgress({ status: 'validating', message: 'Storing assessment results...' });
+      onProgress({ status: 'validating', message: 'Storing assessment results...', progress: 95 });
       await this.storageService.storeScores(
         assessmentId,
         batchId,
@@ -257,7 +260,8 @@ export class ScoringService implements IScoringService {
         scoringDurationMs: Date.now() - startTime,
       };
 
-      onProgress({ status: 'complete', message: 'Scoring complete!' });
+      const compositeScore = validationResult.sanitized!.compositeScore;
+      onProgress({ status: 'complete', message: `Risk assessment complete -- score: ${compositeScore}/100`, progress: 100 });
 
       return { success: true, batchId, report };
     } catch (error) {

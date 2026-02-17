@@ -804,6 +804,176 @@ describe('DocumentParserService', () => {
     });
   });
 
+  // Story 39.2.4: Extraction Progress Events
+  describe('Extraction Progress Events (Story 39.2.4)', () => {
+    // Guardian text that passes pre-check (needed because earlier tests may override pdf-parse mock)
+    const guardianBuffer = Buffer.from(
+      `Assessment ID: 12345678-1234-1234-1234-123456789012\nGUARDIAN Security Assessment\nSection 1: Clinical Risk\nQuestion 1.1 - How do you validate?`
+    );
+
+    describe('Claude fallback path', () => {
+      beforeEach(() => {
+        // Reset pdf-parse mock to use buffer content (may have been overridden)
+        const { PDFParse } = require('pdf-parse');
+        PDFParse.mockImplementation((opts: { data: Buffer }) => ({
+          getText: jest.fn().mockResolvedValue({
+            text: opts.data.toString(),
+            total: 1,
+            pages: [],
+          }),
+          destroy: jest.fn().mockResolvedValue(undefined),
+        }));
+        // Must mock scoring extraction response for Claude fallback
+        mockClaudeClient.sendMessage.mockResolvedValue({
+          content: JSON.stringify(createScoringExtractionResponse()),
+        });
+      });
+
+      it('emits "Processing document with AI..." progress at 15% on Claude fallback', async () => {
+        const onProgress = jest.fn();
+
+        await service.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { onProgress }
+        );
+
+        expect(onProgress).toHaveBeenCalledWith({
+          status: 'parsing',
+          message: 'Processing document with AI...',
+          progress: 15,
+        });
+      });
+
+      it('does not crash when onProgress is not provided', async () => {
+        const result = await service.parseForResponses(
+          guardianBuffer,
+          createMetadata()
+        );
+
+        expect(result.success).toBe(true);
+      });
+
+      it('does not crash when options provided without onProgress', async () => {
+        const result = await service.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { minConfidence: 0.7 }
+        );
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe('regex path', () => {
+      beforeEach(() => {
+        // Reset pdf-parse mock to use buffer content
+        const { PDFParse } = require('pdf-parse');
+        PDFParse.mockImplementation((opts: { data: Buffer }) => ({
+          getText: jest.fn().mockResolvedValue({
+            text: opts.data.toString(),
+            total: 1,
+            pages: [],
+          }),
+          destroy: jest.fn().mockResolvedValue(undefined),
+        }));
+      });
+
+      it('emits per-section progress messages during regex extraction', async () => {
+        const customService = new DocumentParserService(
+          mockClaudeClient as any,
+          mockVisionClient as any,
+          mockQuestionRepo as any
+        );
+
+        const mockRegexResult = {
+          result: {
+            success: true, confidence: 0.95, metadata: createMetadata(), parseTimeMs: 50,
+            assessmentId: 'assessment-123', vendorName: 'Test Vendor', solutionName: null,
+            responses: [
+              { sectionNumber: 1, sectionTitle: null, questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 1, sectionTitle: null, questionNumber: 2, questionText: 'Q2', responseText: 'A2', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 2, sectionTitle: null, questionNumber: 1, questionText: 'Q3', responseText: 'A3', confidence: 0.90, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 3, sectionTitle: null, questionNumber: 1, questionText: 'Q4', responseText: 'A4', confidence: 0.90, hasVisualContent: false, visualContentDescription: null },
+            ],
+            expectedQuestionCount: 4, parsedQuestionCount: 4, unparsedQuestions: [], isComplete: true,
+          },
+          method: 'regex',
+          confidence: { confident: true, overallScore: 0.95 },
+        };
+
+        (customService as any).routingService = {
+          tryRegexExtraction: jest.fn().mockResolvedValue(mockRegexResult),
+        };
+
+        const onProgress = jest.fn();
+        const result = await customService.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { onProgress }
+        );
+
+        expect(result.success).toBe(true);
+
+        const progressCalls = onProgress.mock.calls.map((c: any[]) => c[0]);
+        const sectionCalls = progressCalls.filter((c: any) =>
+          c.message && c.message.startsWith('Matching responses...')
+        );
+
+        expect(sectionCalls).toHaveLength(3);
+        expect(sectionCalls[0]).toEqual({ status: 'parsing', message: 'Matching responses... section 1 of 3', progress: 15 });
+        expect(sectionCalls[1]).toEqual({ status: 'parsing', message: 'Matching responses... section 2 of 3', progress: expect.any(Number) });
+        expect(sectionCalls[2]).toEqual({ status: 'parsing', message: 'Matching responses... section 3 of 3', progress: expect.any(Number) });
+      });
+
+      it('interpolates progress between 15% and 50%', async () => {
+        const customService = new DocumentParserService(
+          mockClaudeClient as any,
+          mockVisionClient as any,
+          mockQuestionRepo as any
+        );
+
+        const mockRegexResult = {
+          result: {
+            success: true, confidence: 0.95, metadata: createMetadata(), parseTimeMs: 50,
+            assessmentId: 'assessment-123', vendorName: 'Test Vendor', solutionName: null,
+            responses: [
+              { sectionNumber: 1, sectionTitle: null, questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 2, sectionTitle: null, questionNumber: 1, questionText: 'Q2', responseText: 'A2', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 3, sectionTitle: null, questionNumber: 1, questionText: 'Q3', responseText: 'A3', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 4, sectionTitle: null, questionNumber: 1, questionText: 'Q4', responseText: 'A4', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+            ],
+            expectedQuestionCount: 4, parsedQuestionCount: 4, unparsedQuestions: [], isComplete: true,
+          },
+          method: 'regex',
+          confidence: { confident: true, overallScore: 0.95 },
+        };
+
+        (customService as any).routingService = {
+          tryRegexExtraction: jest.fn().mockResolvedValue(mockRegexResult),
+        };
+
+        const onProgress = jest.fn();
+        await customService.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { onProgress }
+        );
+
+        const progressCalls = onProgress.mock.calls.map((c: any[]) => c[0]);
+        const sectionCalls = progressCalls.filter((c: any) =>
+          c.message && c.message.startsWith('Matching responses...')
+        );
+
+        // All progress values should be >= 15 and <= 50
+        for (const call of sectionCalls) {
+          expect(call.progress).toBeGreaterThanOrEqual(15);
+          expect(call.progress).toBeLessThanOrEqual(50);
+        }
+      });
+    });
+  });
+
   // Story 20.4.2: Per-Response Truncation
   describe('Per-Response Truncation (Story 20.4.2)', () => {
     beforeEach(() => {

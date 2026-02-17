@@ -97,6 +97,7 @@ export class ScoringLLMService {
     // Call LLM via port (not ClaudeClient directly)
     let narrativeReport = '';
     let toolPayload: unknown = null;
+    let lastReportedLength = 0;
 
     await this.llmClient.streamWithTool({
       systemPrompt,
@@ -111,7 +112,8 @@ export class ScoringLLMService {
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;
-        if (narrativeReport.length % 500 === 0) {
+        if (narrativeReport.length - lastReportedLength >= 500) {
+          lastReportedLength = narrativeReport.length;
           onMessage('Generating risk assessment...');
         }
       },

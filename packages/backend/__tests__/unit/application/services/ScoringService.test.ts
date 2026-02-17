@@ -251,18 +251,42 @@ describe('ScoringService', () => {
         expect(progressEvents.some((e) => e.status === 'complete')).toBe(true)
       })
 
-      it('should emit "Analyzing scoring..." message (Story 24.4)', async () => {
+      it('should emit granular progress events with percentages (Story 39.2.1)', async () => {
         const progressEvents: ScoringProgressEvent[] = []
         await service.score(defaultInput, (e) => progressEvents.push(e))
 
-        // Find the scoring status progress call (initial scoring message, not streaming updates)
-        const scoringCall = progressEvents.find(
-          (e) => e.status === 'scoring' && e.message === 'Analyzing scoring...'
-        )
+        // Verify all 9 granular progress events are emitted
+        const expected = [
+          { status: 'parsing', message: 'Processing uploaded document...', progress: 5 },
+          { status: 'parsing', message: 'Extracting text from document...', progress: 10 },
+          { status: 'parsing', message: 'Analyzing document format...', progress: 15 },
+          { status: 'parsing', message: 'Found 1 of 111 responses', progress: 50 },
+          { status: 'scoring', message: 'Loading compliance controls...', progress: 55 },
+          { status: 'scoring', message: 'Analyzing vendor responses against risk rubric...', progress: 60 },
+          { status: 'validating', message: 'Validating scoring results...', progress: 90 },
+          { status: 'validating', message: 'Storing assessment results...', progress: 95 },
+          { status: 'complete', message: 'Risk assessment complete -- score: 75/100', progress: 100 },
+        ]
 
-        expect(scoringCall).toBeDefined()
-        expect(scoringCall!.message).toBe('Analyzing scoring...')
-        expect(scoringCall!.message).not.toContain('rubric')
+        for (const exp of expected) {
+          const found = progressEvents.find(
+            (e) => e.status === exp.status && e.message === exp.message && e.progress === exp.progress
+          )
+          expect(found).toBeDefined()
+        }
+      })
+
+      it('should emit progress values that are monotonically increasing (Story 39.2.1)', async () => {
+        const progressEvents: ScoringProgressEvent[] = []
+        await service.score(defaultInput, (e) => progressEvents.push(e))
+
+        const progressValues = progressEvents
+          .filter((e) => e.progress !== undefined && e.status !== 'error')
+          .map((e) => e.progress!)
+
+        for (let i = 1; i < progressValues.length; i++) {
+          expect(progressValues[i]).toBeGreaterThanOrEqual(progressValues[i - 1])
+        }
       })
 
       it('should delegate storeResponses to storageService', async () => {
@@ -826,6 +850,28 @@ describe('ScoringService', () => {
         expect.any(Object),
         expect.objectContaining({
           abortSignal: expect.any(AbortSignal),
+        })
+      )
+    })
+
+    it('should pass onProgress to document parser (Story 39.2.4)', async () => {
+      const onProgress = jest.fn()
+      await service.score(
+        {
+          assessmentId: testAssessmentId,
+          conversationId: testConversationId,
+          fileId: testFileId,
+          userId: testUserId,
+        },
+        onProgress
+      )
+
+      // Verify parseForResponses was called with onProgress callback
+      expect(mockDocumentParser.parseForResponses).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        expect.any(Object),
+        expect.objectContaining({
+          onProgress: expect.any(Function),
         })
       )
     })
