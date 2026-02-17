@@ -605,15 +605,17 @@ if same_error_count >= 3:
 1. **Runs in main context** - Can spawn subagents via Task tool
 2. **User only at start and end** - Autonomous execution
 3. **Per-sprint spec reviews** - Deep analysis for each sprint
-4. **GPT review loops are MANDATORY** - Loop until APPROVED
-5. **Browser QA for frontend** - Visual verification with Chrome DevTools
-6. **State is checkpoint** - Update frequently for recovery
-7. **Log all GPT exchanges** - Audit trail in .review-log.md
-8. **Update CLAUDE.md** - Institutional memory
-9. **Respect 7 round limit** - GPT final say after that
-10. **Checkpoint per-story** - Not per-batch
-11. **Commit after approval** - Keep git clean for next review
-12. **No Opus fallback for GPT errors** - Clean exit, user fixes, resume
+4. **Codex reviews are SYNC — one sprint at a time, SEQUENTIAL** - NEVER launch parallel Codex reviews across sprints. Later sprints need earlier sprint context. Codex is a sync quality gate (Anthropic Max plan), not a parallel processor. Never spawn async Task agents or use run_in_background for Codex reviews.
+5. **GPT review loops are MANDATORY** - Loop until APPROVED
+6. **Browser QA for frontend** - Visual verification with Chrome DevTools
+7. **State is checkpoint** - Update frequently for recovery
+8. **Log all GPT exchanges** - Audit trail in .review-log.md
+9. **Update CLAUDE.md** - Institutional memory
+10. **Respect 7 round limit** - GPT final say after that
+11. **Checkpoint per-story** - Not per-batch
+12. **Commit after approval** - Keep git clean for next review
+13. **No Opus fallback for GPT errors** - Clean exit, user fixes, resume
+14. **Low context = slow down, not speed up** - If context is running low, hand off cleanly or go one sprint at a time. Never panic-launch async to "finish faster"
 
 ---
 

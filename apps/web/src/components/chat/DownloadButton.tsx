@@ -10,6 +10,7 @@ export interface DownloadButtonProps {
   assessmentId: string;
   format: 'pdf' | 'word' | 'excel';
   exportType?: 'questionnaire' | 'scoring';
+  batchId?: string;
   label?: string;
   onDownload?: () => void;
 }
@@ -23,6 +24,7 @@ export function DownloadButton({
   assessmentId,
   format,
   exportType = 'questionnaire',
+  batchId,
   label,
   onDownload,
 }: DownloadButtonProps) {
@@ -64,9 +66,14 @@ export function DownloadButton({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
       // Build URL based on exportType
-      const url = exportType === 'scoring'
+      let url = exportType === 'scoring'
         ? `${apiUrl}/api/export/scoring/${assessmentId}/${format}`
         : `${apiUrl}/api/assessments/${assessmentId}/export/${format}`;
+
+      // Append batchId to prevent batch drift (export matches displayed results)
+      if (batchId && exportType === 'scoring') {
+        url += `?batchId=${encodeURIComponent(batchId)}`;
+      }
 
       const response = await fetch(url, {
         method: 'GET',

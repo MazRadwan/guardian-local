@@ -13,6 +13,9 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from '@jest/globals'
 import { ScoringService, ScoringError } from '../../src/application/services/ScoringService.js'
+import { ScoringStorageService } from '../../src/application/services/ScoringStorageService.js'
+import { ScoringLLMService } from '../../src/application/services/ScoringLLMService.js'
+import { ScoringQueryService } from '../../src/application/services/ScoringQueryService.js'
 import type { IScoringService, ScoringInput } from '../../src/application/interfaces/IScoringService.js'
 import type { IResponseRepository } from '../../src/application/interfaces/IResponseRepository.js'
 import type { IDimensionScoreRepository } from '../../src/application/interfaces/IDimensionScoreRepository.js'
@@ -160,6 +163,7 @@ class MockFileRepository implements IFileRepository {
   async deleteByConversationId(_conversationId: string): Promise<void> {}
   // Epic 18 methods
   async updateTextExcerpt(_fileId: string, _excerpt: string): Promise<void> {}
+  async updateExcerptAndClassification(_fileId: string, _data: any): Promise<void> {}
   async updateParseStatus(_fileId: string, _status: any): Promise<void> {}
   async tryStartParsing(_fileId: string): Promise<boolean> { return true }
   async findByConversationWithExcerpt(_conversationId: string): Promise<any[]> { return [] }
@@ -272,19 +276,37 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
     mockDocumentParser = new MockDocumentParser()
     mockAssessmentResultRepo = new MockAssessmentResultRepository()
 
-    // Initialize service
+    // Epic 37: Construct sub-services and pass to ScoringService
+    const mockLLMClient = new MockLLMClient()
+    const mockPromptBuilder = new MockPromptBuilder()
+    const mockResponseRepo = new MockResponseRepository()
+    const mockDimensionScoreRepo = new MockDimensionScoreRepository()
+    const mockTransactionRunner = new MockTransactionRunner()
+
+    const storageService = new ScoringStorageService(
+      mockResponseRepo,
+      mockDimensionScoreRepo,
+      mockAssessmentResultRepo,
+      mockTransactionRunner,
+      mockLLMClient
+    )
+    const llmService = new ScoringLLMService(mockLLMClient, mockPromptBuilder)
+    const queryService = new ScoringQueryService(
+      mockAssessmentResultRepo,
+      mockDimensionScoreRepo
+    )
+
+    // Initialize service with new 9-param constructor
     scoringService = new ScoringService(
-      new MockResponseRepository(),
-      new MockDimensionScoreRepository(),
       mockAssessmentResultRepo,
       mockAssessmentRepo,
       mockFileRepo,
       new MockFileStorage(),
       mockDocumentParser,
-      new MockLLMClient(),
-      new MockPromptBuilder(),
       new ScoringPayloadValidator(),
-      new MockTransactionRunner()
+      storageService,
+      llmService,
+      queryService
     )
   })
 

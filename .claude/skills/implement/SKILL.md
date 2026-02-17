@@ -852,16 +852,18 @@ if same_error_count >= 3:
 
 1. **Runs in main context** - Can spawn subagents via Task tool
 2. **Always prompt for scope** - Even when resuming (includes reviewScope option)
-3. **GPT review loops are MANDATORY** - Loop until APPROVED or max rounds
-4. **Review scope flexibility** - Sprint-scoped (default) or epic-scoped (one review at end)
-5. **Browser QA for frontend** - Visual verification with Chrome DevTools MCP
-6. **Checkpoint per-story** - Not per-batch, enables precise resume
-7. **Commit after approval** - Keep git clean for next review
-8. **Log all GPT exchanges** - Audit trail in .review-log.md
-9. **Update CLAUDE.md** - Institutional memory from learnings
-10. **Respect 7 round limit** - GPT gets final say after that
-11. **No Opus fallback** - Clean exit on GPT errors, user fixes, resume
-12. **Verification before GPT** - Don't waste GPT time on failing tests
+3. **Codex reviews are SYNC — one batch/sprint at a time, SEQUENTIAL** - NEVER launch parallel Codex reviews across batches or sprints. Codex is a sync quality gate (Anthropic Max plan), not a parallel processor. Never spawn async Task agents or use run_in_background for Codex reviews.
+4. **GPT review loops are MANDATORY** - Loop until APPROVED or max rounds
+5. **Review scope flexibility** - Sprint-scoped (default) or epic-scoped (one review at end)
+6. **Browser QA for frontend** - Visual verification with Chrome DevTools MCP
+7. **Checkpoint per-story** - Not per-batch, enables precise resume
+8. **Commit after approval** - Keep git clean for next review
+9. **Log all GPT exchanges** - Audit trail in .review-log.md
+10. **Update CLAUDE.md** - Institutional memory from learnings
+11. **Respect 7 round limit** - GPT gets final say after that
+12. **No Opus fallback** - Clean exit on GPT errors, user fixes, resume
+13. **Verification before GPT** - Don't waste GPT time on failing tests
+14. **Low context = slow down, not speed up** - If context is running low, hand off cleanly. Never panic-launch async to "finish faster"
 
 ---
 

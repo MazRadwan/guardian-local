@@ -83,3 +83,6 @@ docs/infrastructure/AWS_DEPLOYMENT_PLAN.md
 
 # Local knowledge base docs
 .claude/documentation/kb/
+
+# Experiments (throwaway, not production code)
+experiments/

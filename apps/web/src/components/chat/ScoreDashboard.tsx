@@ -30,6 +30,13 @@ const DIMENSION_CONFIG: Record<string, { label: string; type: 'risk' | 'capabili
   sustainability: { label: 'Sustainability', type: 'capability' },
 };
 
+const GUARDIAN_NATIVE_DIMENSIONS = [
+  'clinical_risk',
+  'vendor_capability',
+  'ethical_considerations',
+  'sustainability',
+];
+
 export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
   // Group by type
   const riskDimensions = dimensionScores.filter(
@@ -39,8 +46,15 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
     (d) => DIMENSION_CONFIG[d.dimension]?.type === 'capability'
   );
 
+  const hasGuardianNativeRisk = riskDimensions.some(
+    (d) => GUARDIAN_NATIVE_DIMENSIONS.includes(d.dimension)
+  );
+  const hasGuardianNativeCapability = capabilityDimensions.some(
+    (d) => GUARDIAN_NATIVE_DIMENSIONS.includes(d.dimension)
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="score-dashboard">
       {/* Risk Dimensions */}
       <div>
         <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
@@ -48,6 +62,14 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
           Risk Dimensions
           <span className="text-xs text-gray-500 font-normal">(lower is better)</span>
         </h4>
+        {hasGuardianNativeRisk && (
+          <p
+            className="text-xs text-purple-500 italic mb-2 ml-4"
+            data-testid="guardian-native-label"
+          >
+            * Some dimensions assessed using Guardian healthcare-specific criteria
+          </p>
+        )}
         <div className="space-y-3">
           {riskDimensions.map((d) => (
             <DimensionScoreBar
@@ -56,6 +78,8 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
               score={d.score}
               riskRating={d.riskRating}
               type="risk"
+              dimension={d.dimension}
+              findings={d.findings}
             />
           ))}
         </div>
@@ -68,6 +92,14 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
           Capability Dimensions
           <span className="text-xs text-gray-500 font-normal">(higher is better)</span>
         </h4>
+        {hasGuardianNativeCapability && (
+          <p
+            className="text-xs text-purple-500 italic mb-2 ml-4"
+            data-testid="guardian-native-label"
+          >
+            * Some dimensions assessed using Guardian healthcare-specific criteria
+          </p>
+        )}
         <div className="space-y-3">
           {capabilityDimensions.map((d) => (
             <DimensionScoreBar
@@ -76,6 +108,8 @@ export function ScoreDashboard({ dimensionScores }: ScoreDashboardProps) {
               score={d.score}
               riskRating={d.riskRating}
               type="capability"
+              dimension={d.dimension}
+              findings={d.findings}
             />
           ))}
         </div>

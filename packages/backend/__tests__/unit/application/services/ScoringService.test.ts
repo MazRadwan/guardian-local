@@ -4,43 +4,42 @@
  * Tests the scoring orchestration workflow:
  * - Authorization checks
  * - Document parsing
- * - LLM scoring via Claude
+ * - LLM scoring via ScoringLLMService
  * - Payload validation
- * - Score storage
+ * - Score storage via ScoringStorageService
  * - Abort handling
+ * - Query delegation via ScoringQueryService
+ *
+ * Epic 37 Sprint 1 Story 3: Updated to use sub-service mocks
+ * (ScoringStorageService, ScoringLLMService, ScoringQueryService)
+ * instead of individual repository/client mocks.
  */
 
 // Jest provides describe, it, expect, beforeEach, jest globals
 import { ScoringService, UnauthorizedError } from '../../../../src/application/services/ScoringService.js'
 import { ScoringPayloadValidator } from '../../../../src/domain/scoring/ScoringPayloadValidator.js'
 import { ALL_DIMENSIONS } from '../../../../src/domain/scoring/rubric.js'
-import type { IResponseRepository } from '../../../../src/application/interfaces/IResponseRepository.js'
-import type { IDimensionScoreRepository } from '../../../../src/application/interfaces/IDimensionScoreRepository.js'
 import type { IAssessmentResultRepository } from '../../../../src/application/interfaces/IAssessmentResultRepository.js'
 import type { IAssessmentRepository } from '../../../../src/application/interfaces/IAssessmentRepository.js'
 import type { IFileRepository } from '../../../../src/application/interfaces/IFileRepository.js'
 import type { IFileStorage } from '../../../../src/application/interfaces/IFileStorage.js'
 import type { IScoringDocumentParser } from '../../../../src/application/interfaces/IScoringDocumentParser.js'
-import type { ILLMClient } from '../../../../src/application/interfaces/ILLMClient.js'
-import type { IPromptBuilder } from '../../../../src/application/interfaces/IPromptBuilder.js'
-import type { ITransactionRunner } from '../../../../src/application/interfaces/ITransactionRunner.js'
 import type { ScoringProgressEvent } from '../../../../src/domain/scoring/types.js'
-import type { IConversationRepository } from '../../../../src/application/interfaces/IConversationRepository.js'
+import type { ScoringStorageService } from '../../../../src/application/services/ScoringStorageService.js'
+import type { ScoringLLMService } from '../../../../src/application/services/ScoringLLMService.js'
+import type { ScoringQueryService } from '../../../../src/application/services/ScoringQueryService.js'
 import { Conversation } from '../../../../src/domain/entities/Conversation.js'
 
 describe('ScoringService', () => {
   let service: ScoringService
-  let mockResponseRepo: jest.Mocked<IResponseRepository>
-  let mockDimensionScoreRepo: jest.Mocked<IDimensionScoreRepository>
   let mockAssessmentResultRepo: jest.Mocked<IAssessmentResultRepository>
   let mockAssessmentRepo: jest.Mocked<IAssessmentRepository>
   let mockFileRepo: jest.Mocked<IFileRepository>
   let mockFileStorage: jest.Mocked<IFileStorage>
   let mockDocumentParser: jest.Mocked<IScoringDocumentParser>
-  let mockLLMClient: jest.Mocked<ILLMClient>
-  let mockPromptBuilder: jest.Mocked<IPromptBuilder>
-  let mockTransactionRunner: jest.Mocked<ITransactionRunner>
-  let mockConversationRepo: jest.Mocked<IConversationRepository>
+  let mockStorageService: jest.Mocked<ScoringStorageService>
+  let mockLLMService: jest.Mocked<ScoringLLMService>
+  let mockQueryService: jest.Mocked<ScoringQueryService>
   let validator: ScoringPayloadValidator
 
   const testUserId = 'user-1'
@@ -64,24 +63,6 @@ describe('ScoringService', () => {
   }
 
   beforeEach(() => {
-    // Create mocks for all repositories
-    mockResponseRepo = {
-      createBatch: jest.fn().mockResolvedValue([]),
-      findByAssessmentId: jest.fn().mockResolvedValue([]),
-      findByBatchId: jest.fn().mockResolvedValue([]),
-      deleteByBatchId: jest.fn().mockResolvedValue(undefined),
-      // Epic 20: Orphan cleanup methods
-      findOrphanedBatches: jest.fn().mockResolvedValue([]),
-      deleteByBatchIdIfOrphaned: jest.fn().mockResolvedValue(0),
-    } as jest.Mocked<IResponseRepository>
-
-    mockDimensionScoreRepo = {
-      createBatch: jest.fn().mockResolvedValue([]),
-      findByAssessmentId: jest.fn().mockResolvedValue([]),
-      findByBatchId: jest.fn().mockResolvedValue([]),
-      findLatestByAssessmentId: jest.fn().mockResolvedValue([]),
-    } as jest.Mocked<IDimensionScoreRepository>
-
     mockAssessmentResultRepo = {
       create: jest.fn().mockResolvedValue({}),
       findByAssessmentId: jest.fn().mockResolvedValue(null),
@@ -200,69 +181,42 @@ describe('ScoringService', () => {
       }),
     } as jest.Mocked<IScoringDocumentParser>
 
-    // Mock LLM client port
-    mockLLMClient = {
-      streamWithTool: jest.fn(),
-      getModelId: jest.fn().mockReturnValue('claude-3-5-sonnet-20241022'),
-    } as jest.Mocked<ILLMClient>
+    // Epic 37: Mock ScoringStorageService (replaces individual repo mocks for storage)
+    mockStorageService = {
+      storeResponses: jest.fn().mockResolvedValue(undefined),
+      storeScores: jest.fn().mockResolvedValue(undefined),
+      deriveDocumentType: jest.fn().mockReturnValue('pdf'),
+      determineSolutionType: jest.fn().mockReturnValue('clinical_ai'),
+    } as unknown as jest.Mocked<ScoringStorageService>
 
-    // Mock prompt builder port
-    mockPromptBuilder = {
-      buildScoringSystemPrompt: jest.fn().mockReturnValue('system prompt with rubric'),
-      buildScoringUserPrompt: jest.fn().mockReturnValue('user prompt with responses'),
-    } as jest.Mocked<IPromptBuilder>
-
-    // Mock transaction runner (Epic 20: clean architecture compliance)
-    mockTransactionRunner = {
-      run: jest.fn().mockImplementation(async (callback) => {
-        // Execute callback with a mock transaction context
-        return callback({})
+    // Epic 37: Mock ScoringLLMService (replaces llmClient + promptBuilder mocks)
+    mockLLMService = {
+      scoreWithClaude: jest.fn().mockResolvedValue({
+        narrativeReport: 'Narrative report content for the assessment.',
+        payload: validPayload,
       }),
-    } as jest.Mocked<ITransactionRunner>
+      getModelId: jest.fn().mockReturnValue('claude-3-5-sonnet-20241022'),
+      fetchISOCatalog: jest.fn().mockResolvedValue([]),
+      fetchApplicableControls: jest.fn().mockResolvedValue([]),
+    } as unknown as jest.Mocked<ScoringLLMService>
 
-    // Mock conversation repository (Epic 22: scoring rehydration)
-    mockConversationRepo = {
-      findById: jest.fn().mockResolvedValue(
-        Conversation.fromPersistence({
-          id: testConversationId,
-          userId: testUserId,
-          mode: 'scoring',
-          assessmentId: testAssessmentId,
-          status: 'active',
-          context: {},
-          startedAt: new Date(),
-          lastActivityAt: new Date(),
-          completedAt: null,
-          title: null,
-          titleManuallyEdited: false,
-        })
-      ),
-      findByUserId: jest.fn(),
-      create: jest.fn(),
-      updateMode: jest.fn(),
-      updateStatus: jest.fn(),
-      linkAssessment: jest.fn(),
-      updateContext: jest.fn(),
-      updateActivity: jest.fn(),
-      delete: jest.fn(),
-      updateTitle: jest.fn(),
-    } as jest.Mocked<IConversationRepository>
+    // Epic 37: Mock ScoringQueryService (replaces inline getResultForConversation)
+    mockQueryService = {
+      getResultForConversation: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<ScoringQueryService>
 
     validator = new ScoringPayloadValidator()
 
     service = new ScoringService(
-      mockResponseRepo,
-      mockDimensionScoreRepo,
       mockAssessmentResultRepo,
       mockAssessmentRepo,
       mockFileRepo,
       mockFileStorage,
       mockDocumentParser,
-      mockLLMClient,
-      mockPromptBuilder,
       validator,
-      mockTransactionRunner,
-      mockConversationRepo
+      mockStorageService,
+      mockLLMService,
+      mockQueryService
     )
   })
 
@@ -275,14 +229,6 @@ describe('ScoringService', () => {
     }
 
     describe('successful workflow', () => {
-      beforeEach(() => {
-        // Setup successful LLM call
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Narrative report content for the assessment.')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
-      })
-
       it('should complete scoring workflow successfully', async () => {
         const progressEvents: ScoringProgressEvent[] = []
         const result = await service.score(defaultInput, (e) => progressEvents.push(e))
@@ -319,56 +265,97 @@ describe('ScoringService', () => {
         expect(scoringCall!.message).not.toContain('rubric')
       })
 
-      it('should store responses from parsed document', async () => {
+      it('should delegate storeResponses to storageService', async () => {
         await service.score(defaultInput, jest.fn())
 
-        expect(mockResponseRepo.createBatch).toHaveBeenCalledWith(
-          expect.arrayContaining([
-            expect.objectContaining({
-              assessmentId: testAssessmentId,
-              sectionNumber: 1,
-              questionNumber: 1,
-              questionText: 'Q1',
-              responseText: 'A1',
-            }),
-          ])
-        )
-      })
-
-      it('should store dimension scores with transaction context', async () => {
-        await service.score(defaultInput, jest.fn())
-
-        // Epic 20.2.1: Verify transaction parameter is passed
-        expect(mockDimensionScoreRepo.createBatch).toHaveBeenCalledWith(
-          expect.arrayContaining([
-            expect.objectContaining({
-              assessmentId: testAssessmentId,
-              dimension: expect.any(String),
-              score: 75,
-              riskRating: 'medium',
-            }),
-          ]),
-          expect.anything() // Transaction context
-        )
-      })
-
-      it('should store assessment result with provenance and transaction context', async () => {
-        await service.score(defaultInput, jest.fn())
-
-        // Epic 20.2.1: Verify transaction parameter is passed
-        expect(mockAssessmentResultRepo.create).toHaveBeenCalledWith(
+        expect(mockStorageService.storeResponses).toHaveBeenCalledWith(
           expect.objectContaining({
             assessmentId: testAssessmentId,
-            compositeScore: 75,
-            recommendation: 'conditional',
-            overallRiskRating: 'medium',
-            narrativeReport: expect.any(String),
-            rubricVersion: expect.any(String),
-            modelId: 'claude-3-5-sonnet-20241022',
-            scoringDurationMs: expect.any(Number),
+            responses: expect.arrayContaining([
+              expect.objectContaining({
+                questionText: 'Q1',
+                responseText: 'A1',
+              }),
+            ]),
           }),
-          expect.anything() // Transaction context
+          testAssessmentId,
+          expect.any(String), // batchId
+          testFileId
         )
+      })
+
+      it('should delegate storeScores to storageService', async () => {
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockStorageService.storeScores).toHaveBeenCalledWith(
+          testAssessmentId,
+          expect.any(String), // batchId
+          validPayload,
+          'Narrative report content for the assessment.',
+          expect.any(Number) // durationMs
+        )
+      })
+
+      it('should delegate scoreWithClaude to llmService', async () => {
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.objectContaining({
+            assessmentId: testAssessmentId,
+          }),
+          'Test Vendor',
+          'Test Solution',
+          'clinical_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          { catalogControls: [], applicableControls: [] }
+        )
+      })
+
+      it('should fetch ISO catalog before scoring (Epic 37)', async () => {
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockLLMService.fetchISOCatalog).toHaveBeenCalledTimes(1)
+      })
+
+      it('should pass catalog as both catalogControls and applicableControls (Epic 37)', async () => {
+        const mockCatalog = [{ clauseRef: 'A.6.1' }]
+        mockLLMService.fetchISOCatalog.mockResolvedValue(mockCatalog as any)
+
+        await service.score(defaultInput, jest.fn())
+
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.any(String),
+          expect.any(String),
+          expect.any(String),
+          expect.any(AbortSignal),
+          expect.any(Function),
+          { catalogControls: mockCatalog, applicableControls: mockCatalog }
+        )
+      })
+
+      it('should gracefully degrade when ISO fetch fails (Epic 37)', async () => {
+        mockLLMService.fetchISOCatalog.mockRejectedValue(new Error('DB error'))
+
+        const result = await service.score(defaultInput, jest.fn())
+        expect(result.success).toBe(true)
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.any(String),
+          expect.any(String),
+          expect.any(String),
+          expect.any(AbortSignal),
+          expect.any(Function),
+          { catalogControls: [], applicableControls: [] }
+        )
+      })
+
+      it('should use llmService.getModelId() for report data', async () => {
+        const result = await service.score(defaultInput, jest.fn())
+
+        expect(mockLLMService.getModelId).toHaveBeenCalled()
+        expect(result.report?.modelId).toBe('claude-3-5-sonnet-20241022')
       })
 
       it('should update assessment status to scored', async () => {
@@ -385,29 +372,6 @@ describe('ScoringService', () => {
         // Duration may be 0 in fast unit tests, just check it's a number
         expect(typeof result.report?.scoringDurationMs).toBe('number')
         expect(result.report?.scoringDurationMs).toBeGreaterThanOrEqual(0)
-      })
-
-      it('should pass maxTokens: 8000 to LLM client for scoring (Story 20.3.2)', async () => {
-        await service.score(defaultInput, jest.fn())
-
-        // Verify maxTokens is set to 8000 for scoring
-        // 10 dimensions with findings + executive summary needs ~6-7K tokens
-        expect(mockLLMClient.streamWithTool).toHaveBeenCalledWith(
-          expect.objectContaining({
-            maxTokens: 8000,
-          })
-        )
-      })
-
-      it('should enable usePromptCache for scoring (Story 20.3.1)', async () => {
-        await service.score(defaultInput, jest.fn())
-
-        // Verify prompt caching is enabled for scoring rubric
-        expect(mockLLMClient.streamWithTool).toHaveBeenCalledWith(
-          expect.objectContaining({
-            usePromptCache: true,
-          })
-        )
       })
     })
 
@@ -539,6 +503,11 @@ describe('ScoringService', () => {
           detectedVendorName: null,
         })
 
+        // Make deriveDocumentType throw for unsupported MIME type
+        mockStorageService.deriveDocumentType.mockImplementation(() => {
+          throw new Error('Unsupported MIME type: application/xyz')
+        })
+
         const result = await service.score(defaultInput, jest.fn())
 
         expect(result.success).toBe(false)
@@ -548,10 +517,9 @@ describe('ScoringService', () => {
 
     describe('LLM scoring errors', () => {
       it('should fail if Claude does not call scoring_complete tool', async () => {
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report without tool call')
-          // No onToolUse call
-        })
+        mockLLMService.scoreWithClaude.mockRejectedValue(
+          new Error('Claude did not call scoring_complete tool')
+        )
 
         const result = await service.score(defaultInput, jest.fn())
 
@@ -559,8 +527,8 @@ describe('ScoringService', () => {
         expect(result.error).toContain('scoring_complete')
       })
 
-      it('should fail if LLM client throws error', async () => {
-        mockLLMClient.streamWithTool.mockRejectedValue(new Error('API rate limit exceeded'))
+      it('should fail if LLM service throws error', async () => {
+        mockLLMService.scoreWithClaude.mockRejectedValue(new Error('API rate limit exceeded'))
 
         const result = await service.score(defaultInput, jest.fn())
 
@@ -571,9 +539,9 @@ describe('ScoringService', () => {
 
     describe('validation errors', () => {
       it('should fail if payload validation fails - missing fields', async () => {
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', { invalid: 'payload' })
+        mockLLMService.scoreWithClaude.mockResolvedValue({
+          narrativeReport: 'Report',
+          payload: { invalid: 'payload' },
         })
 
         const result = await service.score(defaultInput, jest.fn())
@@ -583,12 +551,12 @@ describe('ScoringService', () => {
       })
 
       it('should fail if compositeScore is out of range', async () => {
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', {
+        mockLLMService.scoreWithClaude.mockResolvedValue({
+          narrativeReport: 'Report',
+          payload: {
             ...validPayload,
             compositeScore: 150, // Invalid - over 100
-          })
+          },
         })
 
         const result = await service.score(defaultInput, jest.fn())
@@ -598,14 +566,14 @@ describe('ScoringService', () => {
       })
 
       it('should fail if missing required dimensions', async () => {
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', {
+        mockLLMService.scoreWithClaude.mockResolvedValue({
+          narrativeReport: 'Report',
+          payload: {
             ...validPayload,
             dimensionScores: [
               { dimension: 'clinical_risk', score: 75, riskRating: 'medium' },
             ], // Only 1 dimension, missing 9
-          })
+          },
         })
 
         const result = await service.score(defaultInput, jest.fn())
@@ -629,17 +597,18 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('clinical_ai')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'clinical_ai',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Clinical AI Tool',
+          'clinical_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -655,17 +624,18 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('administrative_ai')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'administrative_ai',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Admin AI Tool',
+          'administrative_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -681,17 +651,18 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('patient_facing')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'patient_facing',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Patient Portal',
+          'patient_facing',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -707,17 +678,18 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('clinical_ai')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'clinical_ai',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Unknown Tool',
+          'clinical_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -733,17 +705,18 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('clinical_ai')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'clinical_ai',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Unknown Tool',
+          'clinical_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
@@ -759,23 +732,22 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('clinical_ai')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'clinical_ai',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Clinical Tool',
+          'clinical_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
 
       it('should log warning and default to clinical_ai for invalid solutionType', async () => {
-        const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
-
         mockAssessmentRepo.findByIdWithVendor.mockResolvedValue({
           assessment: {
             id: testAssessmentId,
@@ -787,23 +759,21 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        // ScoringStorageService.determineSolutionType handles the warning + default
+        mockStorageService.determineSolutionType.mockReturnValue('clinical_ai')
 
         await service.score(defaultInput, jest.fn())
 
-        expect(consoleSpy).toHaveBeenCalledWith(
-          expect.stringContaining('Invalid solutionType "invalid_type"')
+        expect(mockStorageService.determineSolutionType).toHaveBeenCalled()
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Unknown Tool',
+          'clinical_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'clinical_ai',
-          })
-        )
-
-        consoleSpy.mockRestore()
       })
 
       it('should ignore assessmentType and use solutionType for weighting', async () => {
@@ -820,18 +790,19 @@ describe('ScoringService', () => {
           vendor: { id: 'vendor-1', name: 'Test Vendor' },
         })
 
-        mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-          opts.onTextDelta?.('Report')
-          opts.onToolUse?.('scoring_complete', validPayload)
-        })
+        mockStorageService.determineSolutionType.mockReturnValue('administrative_ai')
 
         await service.score(defaultInput, jest.fn())
 
         // Should use solutionType, not assessmentType
-        expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-          expect.objectContaining({
-            solutionType: 'administrative_ai',
-          })
+        expect(mockLLMService.scoreWithClaude).toHaveBeenCalledWith(
+          expect.anything(),
+          'Test Vendor',
+          'Admin Tool',
+          'administrative_ai',
+          expect.any(AbortSignal),
+          expect.any(Function),
+          expect.objectContaining({ catalogControls: expect.any(Array), applicableControls: expect.any(Array) })
         )
       })
     })
@@ -839,12 +810,6 @@ describe('ScoringService', () => {
 
   describe('abort', () => {
     it('should pass abort signal to document parser (Story 20.3.3)', async () => {
-      // Setup successful LLM call
-      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-        opts.onTextDelta?.('Report')
-        opts.onToolUse?.('scoring_complete', validPayload)
-      })
-
       await service.score(
         {
           assessmentId: testAssessmentId,
@@ -903,21 +868,22 @@ describe('ScoringService', () => {
 
       expect(result.success).toBe(false)
       expect(result.error).toBe('Scoring aborted')
-      // LLM client should not be called since parsing was aborted
-      expect(mockLLMClient.streamWithTool).not.toHaveBeenCalled()
+      // LLM service should not be called since parsing was aborted
+      expect(mockLLMService.scoreWithClaude).not.toHaveBeenCalled()
     })
 
     it('should abort in-progress scoring', async () => {
-      // Setup LLM call that checks abort signal and waits
-      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-        // Simulate checking abort signal during long operation
-        await new Promise((resolve) => setTimeout(resolve, 100))
-        if (opts.abortSignal?.aborted) {
-          throw new Error('Request aborted')
+      // Setup LLM service that checks abort signal and waits
+      mockLLMService.scoreWithClaude.mockImplementation(
+        async (_parseResult, _vendorName, _solutionName, _solutionType, abortSignal) => {
+          // Simulate checking abort signal during long operation
+          await new Promise((resolve) => setTimeout(resolve, 100))
+          if (abortSignal?.aborted) {
+            throw new Error('Request aborted')
+          }
+          return { narrativeReport: 'Report', payload: validPayload }
         }
-        opts.onTextDelta?.('Report')
-        opts.onToolUse?.('scoring_complete', validPayload)
-      })
+      )
 
       const scorePromise = service.score(
         {
@@ -947,12 +913,6 @@ describe('ScoringService', () => {
       // Abort conv1 (which isn't in progress)
       service.abort(conv1)
 
-      // Setup successful scoring for conv2
-      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-        opts.onTextDelta?.('Report')
-        opts.onToolUse?.('scoring_complete', validPayload)
-      })
-
       const result = await service.score(
         {
           assessmentId: testAssessmentId,
@@ -968,15 +928,12 @@ describe('ScoringService', () => {
   })
 
   describe('error handling', () => {
-    it('should return STORAGE_FAILED error when transaction fails (Epic 20.2.1)', async () => {
-      // Setup successful LLM call
-      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-        opts.onTextDelta?.('Report')
-        opts.onToolUse?.('scoring_complete', validPayload)
-      })
-
-      // Make dimension score insert fail
-      mockDimensionScoreRepo.createBatch.mockRejectedValue(new Error('Unique constraint violation'))
+    it('should return STORAGE_FAILED error when storeScores fails (Epic 20.2.1)', async () => {
+      // Make storageService.storeScores fail with ScoringError
+      const { ScoringError: ScoringErrorClass } = await import('../../../../src/domain/scoring/errors.js')
+      mockStorageService.storeScores.mockRejectedValue(
+        new ScoringErrorClass('STORAGE_FAILED', 'Transaction failed while storing scores: Unique constraint violation')
+      )
 
       const result = await service.score(
         {
@@ -1033,11 +990,6 @@ describe('ScoringService', () => {
     })
 
     it('should clean up abort controller on success', async () => {
-      mockLLMClient.streamWithTool.mockImplementation(async (opts) => {
-        opts.onTextDelta?.('Report')
-        opts.onToolUse?.('scoring_complete', validPayload)
-      })
-
       await service.score(
         {
           assessmentId: testAssessmentId,
@@ -1054,152 +1006,46 @@ describe('ScoringService', () => {
   })
 
   describe('getResultForConversation (Epic 22.1.1)', () => {
-    const testBatchId = 'batch-1'
-
-    beforeEach(() => {
-      // Setup default assessment result
-      mockAssessmentResultRepo.findLatestByAssessmentId.mockResolvedValue({
-        id: 'result-1',
-        assessmentId: testAssessmentId,
-        batchId: testBatchId,
+    it('should delegate to queryService', async () => {
+      const mockResult = {
         compositeScore: 75,
-        recommendation: 'conditional',
-        overallRiskRating: 'medium',
+        recommendation: 'conditional' as const,
+        overallRiskRating: 'medium' as const,
         executiveSummary: 'Test executive summary',
         keyFindings: ['Finding 1', 'Finding 2'],
-        rubricVersion: '1.0',
-        modelId: 'claude-3-5-sonnet-20241022',
-        scoredAt: new Date(),
-      })
+        dimensionScores: [
+          { dimension: 'clinical_risk', score: 80, riskRating: 'low' as const },
+        ],
+        batchId: 'batch-1',
+        assessmentId: testAssessmentId,
+      }
+      mockQueryService.getResultForConversation.mockResolvedValue(mockResult)
 
-      // Setup default dimension scores
-      mockDimensionScoreRepo.findByBatchId.mockResolvedValue([
-        {
-          id: 'dim-1',
-          assessmentId: testAssessmentId,
-          batchId: testBatchId,
-          dimension: 'clinical_risk',
-          score: 80,
-          riskRating: 'low',
-          createdAt: new Date(),
-        },
-        {
-          id: 'dim-2',
-          assessmentId: testAssessmentId,
-          batchId: testBatchId,
-          dimension: 'data_governance',
-          score: 70,
-          riskRating: 'medium',
-          createdAt: new Date(),
-        },
-      ])
-    })
-
-    it('should return scoring result for valid conversation', async () => {
       const result = await service.getResultForConversation(testConversationId, testUserId)
 
-      expect(result).not.toBeNull()
-      expect(result?.compositeScore).toBe(75)
-      expect(result?.recommendation).toBe('conditional')
-      expect(result?.overallRiskRating).toBe('medium')
-      expect(result?.executiveSummary).toBe('Test executive summary')
-      expect(result?.keyFindings).toEqual(['Finding 1', 'Finding 2'])
-      expect(result?.batchId).toBe(testBatchId)
-      expect(result?.assessmentId).toBe(testAssessmentId)
-      expect(result?.dimensionScores).toHaveLength(2)
-      expect(result?.dimensionScores[0]).toEqual({
-        dimension: 'clinical_risk',
-        score: 80,
-        riskRating: 'low',
-      })
+      expect(mockQueryService.getResultForConversation).toHaveBeenCalledWith(
+        testConversationId,
+        testUserId
+      )
+      expect(result).toEqual(mockResult)
     })
 
-    it('should return null if conversation not found', async () => {
-      mockConversationRepo.findById.mockResolvedValue(null)
+    it('should return null when queryService returns null', async () => {
+      mockQueryService.getResultForConversation.mockResolvedValue(null)
 
       const result = await service.getResultForConversation('nonexistent', testUserId)
 
       expect(result).toBeNull()
     })
 
-    it('should throw UnauthorizedError if user does not own conversation', async () => {
-      const otherUserId = 'other-user'
+    it('should propagate errors from queryService', async () => {
+      mockQueryService.getResultForConversation.mockRejectedValue(
+        new UnauthorizedError('User other-user does not own conversation conv-1')
+      )
 
       await expect(
-        service.getResultForConversation(testConversationId, otherUserId)
+        service.getResultForConversation(testConversationId, 'other-user')
       ).rejects.toThrow(UnauthorizedError)
-    })
-
-    it('should return null if conversation has no assessmentId linked', async () => {
-      mockConversationRepo.findById.mockResolvedValue(
-        Conversation.fromPersistence({
-          id: testConversationId,
-          userId: testUserId,
-          mode: 'scoring',
-          assessmentId: null, // No assessment linked
-          status: 'active',
-          context: {},
-          startedAt: new Date(),
-          lastActivityAt: new Date(),
-          completedAt: null,
-        })
-      )
-
-      const result = await service.getResultForConversation(testConversationId, testUserId)
-
-      expect(result).toBeNull()
-    })
-
-    it('should return null if no assessment result exists', async () => {
-      mockAssessmentResultRepo.findLatestByAssessmentId.mockResolvedValue(null)
-
-      const result = await service.getResultForConversation(testConversationId, testUserId)
-
-      expect(result).toBeNull()
-    })
-
-    it('should handle missing optional fields gracefully', async () => {
-      mockAssessmentResultRepo.findLatestByAssessmentId.mockResolvedValue({
-        id: 'result-1',
-        assessmentId: testAssessmentId,
-        batchId: testBatchId,
-        compositeScore: 75,
-        recommendation: 'conditional',
-        overallRiskRating: 'medium',
-        executiveSummary: undefined, // Optional field missing
-        keyFindings: undefined, // Optional field missing
-        rubricVersion: '1.0',
-        modelId: 'claude-3-5-sonnet-20241022',
-        scoredAt: new Date(),
-      })
-
-      const result = await service.getResultForConversation(testConversationId, testUserId)
-
-      expect(result).not.toBeNull()
-      expect(result?.executiveSummary).toBe('')
-      expect(result?.keyFindings).toEqual([])
-    })
-
-    it('should throw error if conversationRepo is not configured', async () => {
-      // Create service without conversationRepo
-      const serviceWithoutConvRepo = new ScoringService(
-        mockResponseRepo,
-        mockDimensionScoreRepo,
-        mockAssessmentResultRepo,
-        mockAssessmentRepo,
-        mockFileRepo,
-        mockFileStorage,
-        mockDocumentParser,
-        mockLLMClient,
-        mockPromptBuilder,
-        validator,
-        mockTransactionRunner
-        // No conversationRepo passed
-      )
-
-      await expect(
-        serviceWithoutConvRepo.getResultForConversation(testConversationId, testUserId)
-      ).rejects.toThrow('ConversationRepository not configured for rehydration')
     })
   })
 })

@@ -20,6 +20,9 @@ export const dimensionScores = pgTable(
       keyRisks: string[]
       mitigations: string[]
       evidenceRefs: Array<{ sectionNumber: number; questionNumber: number; quote: string }>
+      // ISO enrichment (Epic 37)
+      assessmentConfidence?: { level: 'high' | 'medium' | 'low'; rationale: string }
+      isoClauseReferences?: Array<{ clauseRef: string; title: string; framework: string; status: 'aligned' | 'partial' | 'not_evidenced' | 'not_applicable' }>
     }>(),
 
     createdAt: timestamp('created_at').defaultNow().notNull(),

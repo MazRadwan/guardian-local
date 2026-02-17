@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import type { GenerationPhasePayload } from '@guardian/shared';
+import type { DimensionScoreData } from '@/types/scoring';
 
 export interface Conversation {
   id: string;
@@ -237,11 +238,7 @@ export interface ScoringCompletePayload {
     overallRiskRating: 'low' | 'medium' | 'high' | 'critical';
     executiveSummary: string;
     keyFindings: string[];
-    dimensionScores: Array<{
-      dimension: string;
-      score: number;
-      riskRating: 'low' | 'medium' | 'high' | 'critical';
-    }>;
+    dimensionScores: DimensionScoreData[];
     batchId: string;
     assessmentId: string;
   };

@@ -14,6 +14,7 @@ import {
 } from '../../application/interfaces/IExportNarrativeGenerator.js';
 import { IExportNarrativePromptBuilder } from '../../application/interfaces/IExportNarrativePromptBuilder.js';
 import { IClaudeClient } from '../../application/interfaces/IClaudeClient.js';
+import { validateNarrativeMessaging } from '../../domain/compliance/isoMessagingTerms.js';
 
 /**
  * Infrastructure implementation of IExportNarrativeGenerator
@@ -86,7 +87,7 @@ export class ExportNarrativeGenerator implements IExportNarrativeGenerator {
       throw new Error('LLM returned empty narrative');
     }
 
-    return narrative;
+    return validateNarrativeMessaging(narrative);
   }
 
   /**

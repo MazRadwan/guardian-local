@@ -1,0 +1,90 @@
+# Epic 38: ISO Export QA Checklist
+
+## Purpose
+Manual review of 5 exported reports to verify ISO messaging compliance,
+visual quality, and data accuracy.
+
+## Reports to Review
+
+| # | Profile | Composite | Recommendation | ISO Clauses | Expected |
+|---|---------|-----------|----------------|-------------|----------|
+| 1 | High-scoring clinical | 85 | approve | 10+ aligned | All green |
+| 2 | Medium-scoring admin | 55 | conditional | Mixed statuses | Amber/green mix |
+| 3 | Low-scoring patient-facing | 30 | decline | Mostly not_evidenced | Red badges |
+| 4 | Pre-Epic-37 assessment | 70 | conditional | None (no ISO data) | No ISO sections |
+| 5 | Guardian-native heavy | 65 | conditional | Few clauses | Guardian labels prominent |
+
+## Per-Report Checklist
+
+### A. Prohibited Terms Search (ALL formats)
+
+Open the report and search (Ctrl+F) for each term:
+
+- [ ] "ISO compliant" - MUST NOT appear
+- [ ] "ISO certified" - MUST NOT appear
+- [ ] "meets ISO requirements" - MUST NOT appear
+- [ ] "ISO conformant" - MUST NOT appear
+- [ ] "complies with ISO" - MUST NOT appear
+- [ ] "ISO compliance" (as a noun phrase implying certification) - MUST NOT appear
+- [ ] "certified against ISO" - MUST NOT appear
+
+### B. Approved Terms Verification
+
+Confirm these terms ARE used:
+
+- [ ] "ISO-traceable" or "ISO-informed" appears at least once
+- [ ] "aligned with" used for ISO references
+- [ ] ISO disclaimer present in footer
+
+### C. PDF Specific Checks
+
+- [ ] Dimension table has Confidence and ISO Refs columns
+- [ ] Confidence badges show correct colors (H=green, M=amber, L=red)
+- [ ] ISO Standards Alignment section appears (if ISO data exists)
+- [ ] Guardian-native dimensions show "Guardian Healthcare-Specific" label
+- [ ] ISO disclaimer in footer
+- [ ] Page breaks are clean (no orphaned headers)
+
+### D. Word Specific Checks
+
+- [ ] Same columns and sections as PDF
+- [ ] Table formatting is clean (no overlapping cells)
+- [ ] Footer has ISO disclaimer
+- [ ] Inline formatting (bold, italic) renders correctly
+
+### E. Excel Specific Checks
+
+- [ ] "Scoring Summary" sheet has Confidence and ISO Refs columns
+- [ ] "ISO Control Mapping" sheet exists (if ISO data exists)
+- [ ] Conditional formatting works (colored cells)
+- [ ] ISO disclaimer in footer row
+- [ ] "Guardian-Specific" shown for Guardian-native dimensions
+
+### F. ISO Alignment Section (if ISO data exists)
+
+- [ ] Clauses grouped by framework (ISO 42001, ISO 23894)
+- [ ] Each clause shows status badge (Aligned/Partial/Not Evidenced)
+- [ ] Dimensions column lists all referencing dimensions
+- [ ] No duplicate clause entries
+
+### G. Visual Quality
+
+- [ ] Report is professional and readable
+- [ ] Colors are consistent across formats
+- [ ] No broken layouts or overflowing text
+- [ ] Score bars and badges render correctly
+
+## Pass/Fail Criteria
+
+- **PASS**: All 5 reports pass all checklist items
+- **FAIL**: Any prohibited term found in any report
+- **FAIL**: Any missing ISO section when ISO data exists
+- **FAIL**: Any broken formatting that impacts readability
+
+## Reviewer Notes
+
+Record any issues found:
+
+| Report # | Format | Issue | Severity |
+|----------|--------|-------|----------|
+| | | | |

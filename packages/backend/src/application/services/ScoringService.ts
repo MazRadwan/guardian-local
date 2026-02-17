@@ -1,22 +1,19 @@
 import { randomUUID } from 'crypto';
 import { IScoringService, ScoringInput, ScoringOutput, ScoringRehydrationResult } from '../interfaces/IScoringService.js';
-import { IConversationRepository } from '../interfaces/IConversationRepository.js';
-import { IResponseRepository } from '../interfaces/IResponseRepository.js';
-import { IDimensionScoreRepository } from '../interfaces/IDimensionScoreRepository.js';
 import { IAssessmentResultRepository } from '../interfaces/IAssessmentResultRepository.js';
 import { IAssessmentRepository } from '../interfaces/IAssessmentRepository.js';
-import { IScoringDocumentParser, ScoringParseResult, ScoringParseOptions } from '../interfaces/IScoringDocumentParser.js';
-import { DocumentMetadata, DocumentType, MIME_TYPE_MAP } from '../interfaces/IDocumentParser.js';
+import { IScoringDocumentParser, ScoringParseOptions } from '../interfaces/IScoringDocumentParser.js';
+import { DocumentMetadata } from '../interfaces/IDocumentParser.js';
 import { IFileRepository } from '../interfaces/IFileRepository.js';
 import { IFileStorage } from '../interfaces/IFileStorage.js';
-import { ILLMClient } from '../interfaces/ILLMClient.js';
-import { IPromptBuilder } from '../interfaces/IPromptBuilder.js';
-import { ITransactionRunner } from '../interfaces/ITransactionRunner.js';
 import { ScoringPayloadValidator } from '../../domain/scoring/ScoringPayloadValidator.js';
-import { ScoringReportData, ScoringProgressEvent, ScoringCompletePayload } from '../../domain/scoring/types.js';
-import { RUBRIC_VERSION, SolutionType } from '../../domain/scoring/rubric.js';
-import { scoringCompleteTool } from '../../domain/scoring/tools/scoringComplete.js';
+import { ScoringReportData, ScoringProgressEvent } from '../../domain/scoring/types.js';
+import { RUBRIC_VERSION } from '../../domain/scoring/rubric.js';
 import { ScoringError, ScoringErrorCode, UnauthorizedError } from '../../domain/scoring/errors.js';
+import { ScoringStorageService } from './ScoringStorageService.js';
+import { ScoringLLMService } from './ScoringLLMService.js';
+import { ScoringQueryService } from './ScoringQueryService.js';
+import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
 // Re-export for backward compatibility
 export { ScoringError, UnauthorizedError };
@@ -26,25 +23,25 @@ export type { ScoringErrorCode };
  * ScoringService orchestrates the scoring workflow:
  * 1. Fetch uploaded file (with authorization)
  * 2. Parse document to extract responses
- * 3. Send to Claude with scoring prompt
- * 4. Validate and store results
+ * 3. Send to Claude with scoring prompt (via ScoringLLMService)
+ * 4. Validate and store results (via ScoringStorageService)
+ *
+ * Epic 37 Sprint 1: Delegates to ScoringStorageService, ScoringLLMService,
+ * and ScoringQueryService for separation of concerns.
  */
 export class ScoringService implements IScoringService {
   private abortControllers = new Map<string, AbortController>();
 
   constructor(
-    private responseRepo: IResponseRepository,
-    private dimensionScoreRepo: IDimensionScoreRepository,
     private assessmentResultRepo: IAssessmentResultRepository,
     private assessmentRepo: IAssessmentRepository,
     private fileRepo: IFileRepository,
     private fileStorage: IFileStorage,
     private documentParser: IScoringDocumentParser,
-    private llmClient: ILLMClient,
-    private promptBuilder: IPromptBuilder,
     private validator: ScoringPayloadValidator,
-    private transactionRunner: ITransactionRunner,
-    private conversationRepo?: IConversationRepository
+    private storageService: ScoringStorageService,
+    private llmService: ScoringLLMService,
+    private queryService: ScoringQueryService
   ) {}
 
   async score(
@@ -84,7 +81,7 @@ export class ScoringService implements IScoringService {
         filename: fileRecord.filename,
         mimeType: fileRecord.mimeType,
         sizeBytes: fileRecord.size,
-        documentType: this.deriveDocumentType(fileRecord.mimeType),
+        documentType: this.storageService.deriveDocumentType(fileRecord.mimeType),
         storagePath: fileRecord.storagePath,
         uploadedAt: fileRecord.createdAt,
         uploadedBy: userId,
@@ -184,23 +181,35 @@ export class ScoringService implements IScoringService {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // 5. Store responses
+      // 5. Store responses (delegated to ScoringStorageService)
       onProgress({ status: 'parsing', message: 'Storing extracted responses...' });
-      await this.storeResponses(parseResult, assessmentId, batchId, fileId);
+      await this.storageService.storeResponses(parseResult, assessmentId, batchId, fileId);
 
-      // 6. Determine solution type for correct weighting
+      // 6. Determine solution type for correct weighting (delegated to ScoringStorageService)
       // Note: vendor already fetched via findByIdWithVendor (Story 20.3.4)
-      const solutionType = this.determineSolutionType(assessment);
+      const solutionType = this.storageService.determineSolutionType(assessment);
 
-      // 8. Score with Claude
+      // 8. Fetch ISO controls via ScoringLLMService (Epic 37: ISO enrichment)
+      // Graceful degradation: ISO enrichment is optional — fallback to empty arrays on failure
       onProgress({ status: 'scoring', message: 'Analyzing scoring...' });
-      const { narrativeReport, payload } = await this.scoreWithClaude(
+      let catalogControls: ISOControlForPrompt[] = [];
+      try {
+        catalogControls = await this.llmService.fetchISOCatalog();
+      } catch (err) {
+        // ISO enrichment failure is non-critical — baseline scoring still runs
+        console.warn('[ScoringService] ISO catalog fetch failed, proceeding without ISO enrichment:', err);
+      }
+
+      // 9. Score with Claude (delegated to ScoringLLMService)
+      // Note: applicableControls = catalogControls when all dimensions apply (avoids duplicate fetch/tokens)
+      const { narrativeReport, payload } = await this.llmService.scoreWithClaude(
         parseResult,
         vendor.name,
         assessment.solutionName || 'Unknown Solution',
         solutionType,
         abortController.signal,
-        (message) => onProgress({ status: 'scoring', message })
+        (message) => onProgress({ status: 'scoring', message }),
+        { catalogControls, applicableControls: catalogControls }
       );
 
       if (abortController.signal.aborted) {
@@ -224,9 +233,9 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 10. Store scores
+      // 10. Store scores (delegated to ScoringStorageService)
       onProgress({ status: 'validating', message: 'Storing assessment results...' });
-      await this.storeScores(
+      await this.storageService.storeScores(
         assessmentId,
         batchId,
         validationResult.sanitized!,
@@ -244,7 +253,7 @@ export class ScoringService implements IScoringService {
         payload: validationResult.sanitized!,
         narrativeReport,
         rubricVersion: RUBRIC_VERSION,
-        modelId: this.llmClient.getModelId(),
+        modelId: this.llmService.getModelId(),
         scoringDurationMs: Date.now() - startTime,
       };
 
@@ -275,268 +284,13 @@ export class ScoringService implements IScoringService {
   }
 
   /**
-   * Store extracted responses to database
-   */
-  private async storeResponses(
-    parseResult: ScoringParseResult,
-    assessmentId: string,
-    batchId: string,
-    fileId: string
-  ): Promise<void> {
-    const responses = parseResult.responses.map(r => ({
-      assessmentId,
-      batchId,
-      fileId,
-      sectionNumber: r.sectionNumber,
-      questionNumber: r.questionNumber,
-      questionText: r.questionText,
-      responseText: r.responseText,
-      confidence: r.confidence,
-      hasVisualContent: r.hasVisualContent || false,
-      // Convert null to undefined for DTO compatibility
-      visualContentDescription: r.visualContentDescription ?? undefined,
-    }));
-
-    await this.responseRepo.createBatch(responses);
-  }
-
-  /**
-   * Derive DocumentType from MIME type
-   * Uses MIME_TYPE_MAP from IDocumentParser for consistency
-   */
-  private deriveDocumentType(mimeType: string): DocumentType {
-    const docType = MIME_TYPE_MAP[mimeType];
-    if (!docType) {
-      throw new Error(`Unsupported MIME type: ${mimeType}`);
-    }
-    return docType;
-  }
-
-  /**
-   * Determine solution type from assessment for correct dimension weighting.
-   *
-   * Maps assessment.solutionType to rubric SolutionType for weight selection.
-   * Only accepts exact rubric values - no keyword heuristics to prevent
-   * mismatches between scoring weights and export narrative emphasis.
-   *
-   * @see docs/design/architecture/scoring-solution-type.md for field semantics
-   * @see rubric.ts DIMENSION_WEIGHTS for weight definitions
-   */
-  private determineSolutionType(assessment: { solutionType?: string | null }): SolutionType {
-    // Valid rubric solution types
-    const validTypes: SolutionType[] = ['clinical_ai', 'administrative_ai', 'patient_facing'];
-
-    const solutionType = assessment.solutionType?.toLowerCase();
-
-    if (!solutionType) {
-      // Default to clinical_ai for healthcare assessments
-      return 'clinical_ai';
-    }
-
-    if (validTypes.includes(solutionType as SolutionType)) {
-      return solutionType as SolutionType;
-    }
-
-    // Log warning for invalid values
-    console.warn(
-      `[ScoringService] Invalid solutionType "${assessment.solutionType}", defaulting to clinical_ai`
-    );
-    return 'clinical_ai';
-  }
-
-  /**
-   * Send responses to Claude for scoring
-   *
-   * NOTE: Uses ports (ILLMClient, IPromptBuilder) - no infrastructure imports
-   */
-  private async scoreWithClaude(
-    parseResult: ScoringParseResult,
-    vendorName: string,
-    solutionName: string,
-    solutionType: SolutionType,
-    abortSignal: AbortSignal,
-    onMessage: (message: string) => void
-  ): Promise<{ narrativeReport: string; payload: unknown }> {
-    // Build prompts using port (not infrastructure import)
-    const systemPrompt = this.promptBuilder.buildScoringSystemPrompt();
-    const userPrompt = this.promptBuilder.buildScoringUserPrompt({
-      vendorName,
-      solutionName,
-      solutionType, // CRITICAL: Determines composite score weights
-      responses: parseResult.responses.map(r => ({
-        sectionNumber: r.sectionNumber,
-        questionNumber: r.questionNumber,
-        questionText: r.questionText,
-        responseText: r.responseText,
-      })),
-    });
-
-    // Call LLM via port (not ClaudeClient directly)
-    let narrativeReport = '';
-    let toolPayload: unknown = null;
-
-    await this.llmClient.streamWithTool({
-      systemPrompt,
-      userPrompt,
-      tools: [scoringCompleteTool],
-      // CRITICAL: Force Claude to use the scoring_complete tool
-      // Without this, Claude may write narrative but skip calling the tool
-      tool_choice: { type: 'any' },
-      // Enable prompt caching for the large scoring rubric system prompt
-      // Reduces input token costs by 30-50% for repeated scoring requests
-      usePromptCache: true,
-      // Scoring output includes 10 dimensions with findings, executive summary,
-      // and key findings. 8K tokens provides headroom for comprehensive analysis.
-      maxTokens: 8000,
-      // Use temperature 0 for deterministic, reproducible scoring output
-      temperature: 0,
-      abortSignal,
-      onTextDelta: (delta) => {
-        narrativeReport += delta;
-        // Emit progress updates periodically
-        if (narrativeReport.length % 500 === 0) {
-          onMessage('Generating risk assessment...');
-        }
-      },
-      onToolUse: (toolName, input) => {
-        if (toolName === 'scoring_complete') {
-          toolPayload = input;
-        }
-      },
-    });
-
-    // P2 Fix: Check if abort caused the missing tool payload
-    // When user aborts mid-stream, streamWithTool exits early before tool fires
-    if (!toolPayload) {
-      if (abortSignal.aborted) {
-        throw new Error('Scoring aborted');
-      }
-      throw new Error('Claude did not call scoring_complete tool');
-    }
-
-    return { narrativeReport, payload: toolPayload };
-  }
-
-  /**
-   * Store dimension scores and assessment result atomically.
-   * Uses a database transaction to ensure both inserts succeed or both fail.
-   * This prevents partial writes (e.g., dimension scores without assessment result).
-   */
-  private async storeScores(
-    assessmentId: string,
-    batchId: string,
-    payload: ScoringCompletePayload,
-    narrativeReport: string,
-    durationMs: number
-  ): Promise<void> {
-    // Prepare dimension scores data
-    const dimensionScoresData = payload.dimensionScores.map(ds => ({
-      assessmentId,
-      batchId,
-      dimension: ds.dimension,
-      score: ds.score,
-      riskRating: ds.riskRating,
-      findings: ds.findings,
-    }));
-
-    // Prepare assessment result data
-    const assessmentResultData = {
-      assessmentId,
-      batchId,
-      compositeScore: payload.compositeScore,
-      recommendation: payload.recommendation,
-      overallRiskRating: payload.overallRiskRating,
-      narrativeReport,
-      executiveSummary: payload.executiveSummary,
-      keyFindings: payload.keyFindings,
-      disqualifyingFactors: payload.disqualifyingFactors,
-      rubricVersion: RUBRIC_VERSION,
-      modelId: this.llmClient.getModelId(),
-      rawToolPayload: payload,
-      scoringDurationMs: durationMs,
-    };
-
-    // Wrap both inserts in a transaction for atomicity
-    // If either fails, both are rolled back
-    try {
-      await this.transactionRunner.run(async (tx) => {
-        await this.dimensionScoreRepo.createBatch(dimensionScoresData, tx);
-        await this.assessmentResultRepo.create(assessmentResultData, tx);
-      });
-    } catch (error) {
-      // Re-throw with clear transaction context
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      throw new ScoringError(
-        'STORAGE_FAILED',
-        `Transaction failed while storing scores: ${errorMessage}`
-      );
-    }
-  }
-
-  /**
    * Epic 22.1.1: Get scoring result for a conversation.
-   * Used for rehydrating scoring card after page refresh.
-   *
-   * Logic:
-   * 1. Look up conversation by ID
-   * 2. Verify user owns conversation (throw error if not)
-   * 3. Get assessmentId from conversation (return null if not linked)
-   * 4. Fetch latest assessmentResult for that assessment (most recent scoredAt)
-   * 5. Fetch dimensionScores for that batch
-   * 6. Map to ScoringRehydrationResult shape
+   * Delegates to ScoringQueryService.
    */
   async getResultForConversation(
     conversationId: string,
     userId: string
   ): Promise<ScoringRehydrationResult | null> {
-    if (!this.conversationRepo) {
-      throw new Error('ConversationRepository not configured for rehydration');
-    }
-
-    // 1. Look up conversation
-    const conversation = await this.conversationRepo.findById(conversationId);
-    if (!conversation) {
-      return null;
-    }
-
-    // 2. Verify user owns conversation
-    if (conversation.userId !== userId) {
-      throw new UnauthorizedError(`User ${userId} does not own conversation ${conversationId}`);
-    }
-
-    // 3. Get assessmentId from conversation
-    if (!conversation.assessmentId) {
-      return null;
-    }
-
-    // 4. Fetch latest assessmentResult for that assessment
-    const assessmentResult = await this.assessmentResultRepo.findLatestByAssessmentId(
-      conversation.assessmentId
-    );
-    if (!assessmentResult) {
-      return null;
-    }
-
-    // 5. Fetch dimensionScores for that batch
-    const dimensionScores = await this.dimensionScoreRepo.findByBatchId(
-      conversation.assessmentId,
-      assessmentResult.batchId
-    );
-
-    // 6. Map to ScoringRehydrationResult shape
-    return {
-      compositeScore: assessmentResult.compositeScore,
-      recommendation: assessmentResult.recommendation,
-      overallRiskRating: assessmentResult.overallRiskRating,
-      executiveSummary: assessmentResult.executiveSummary || '',
-      keyFindings: assessmentResult.keyFindings || [],
-      dimensionScores: dimensionScores.map(ds => ({
-        dimension: ds.dimension,
-        score: ds.score,
-        riskRating: ds.riskRating,
-      })),
-      batchId: assessmentResult.batchId,
-      assessmentId: conversation.assessmentId,
-    };
+    return this.queryService.getResultForConversation(conversationId, userId);
   }
 }

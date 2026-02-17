@@ -33,6 +33,7 @@ describe('ScoringExportController', () => {
     mockExportService = {
       exportToPDF: jest.fn(),
       exportToWord: jest.fn(),
+      exportToExcel: jest.fn(),
     } as any;
 
     // Mock assessment repository
@@ -259,6 +260,110 @@ describe('ScoringExportController', () => {
       mockExportService.exportToWord.mockRejectedValue(unexpectedError);
 
       await controller.exportToWord(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalledWith(unexpectedError);
+      expect(mockRes.status).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('exportToExcel', () => {
+    it('returns 404 when assessment not found', async () => {
+      mockAssessmentRepo.findById.mockResolvedValue(null);
+
+      await controller.exportToExcel(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Assessment not found' });
+      expect(mockExportService.exportToExcel).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 when user does not own assessment', async () => {
+      const mockAssessment = {
+        id: 'assess-123',
+        createdBy: 'other-user',
+      } as Assessment;
+
+      mockAssessmentRepo.findById.mockResolvedValue(mockAssessment);
+
+      await controller.exportToExcel(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Access denied' });
+      expect(mockExportService.exportToExcel).not.toHaveBeenCalled();
+    });
+
+    it('returns Excel document with correct headers when successful', async () => {
+      const mockAssessment = {
+        id: 'assess-123',
+        createdBy: 'user-123',
+      } as Assessment;
+
+      const mockBuffer = Buffer.from('PK...');
+      mockAssessmentRepo.findById.mockResolvedValue(mockAssessment);
+      mockExportService.exportToExcel.mockResolvedValue(mockBuffer);
+
+      await controller.exportToExcel(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockExportService.exportToExcel).toHaveBeenCalledWith('assess-123', undefined);
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      );
+      expect(mockRes.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        expect.stringContaining('scoring-report-')
+      );
+      expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Length', mockBuffer.length);
+      expect(mockRes.send).toHaveBeenCalledWith(mockBuffer);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('passes batchId query parameter when provided', async () => {
+      const mockAssessment = {
+        id: 'assess-123',
+        createdBy: 'user-123',
+      } as Assessment;
+
+      mockReq.query = { batchId: 'batch-excel-1' };
+      mockAssessmentRepo.findById.mockResolvedValue(mockAssessment);
+      mockExportService.exportToExcel.mockResolvedValue(Buffer.from('PK...'));
+
+      await controller.exportToExcel(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockExportService.exportToExcel).toHaveBeenCalledWith('assess-123', 'batch-excel-1');
+    });
+
+    it('returns 404 when scoring results not found', async () => {
+      const mockAssessment = {
+        id: 'assess-123',
+        createdBy: 'user-123',
+      } as Assessment;
+
+      mockAssessmentRepo.findById.mockResolvedValue(mockAssessment);
+      mockExportService.exportToExcel.mockRejectedValue(
+        new Error('No scoring results found for assessment: assess-123')
+      );
+
+      await controller.exportToExcel(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        error: 'No scoring results found for assessment: assess-123',
+      });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('calls next with error for unexpected errors', async () => {
+      const mockAssessment = {
+        id: 'assess-123',
+        createdBy: 'user-123',
+      } as Assessment;
+
+      const unexpectedError = new Error('Excel generation failed');
+      mockAssessmentRepo.findById.mockResolvedValue(mockAssessment);
+      mockExportService.exportToExcel.mockRejectedValue(unexpectedError);
+
+      await controller.exportToExcel(mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockNext).toHaveBeenCalledWith(unexpectedError);
       expect(mockRes.status).not.toHaveBeenCalled();

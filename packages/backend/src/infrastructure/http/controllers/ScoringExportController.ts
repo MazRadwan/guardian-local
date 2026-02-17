@@ -2,7 +2,7 @@
  * Scoring Export Controller
  *
  * Handles HTTP requests for exporting scoring reports
- * in multiple formats (PDF, Word)
+ * in multiple formats (PDF, Word, Excel)
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -105,6 +105,62 @@ export class ScoringExportController {
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      );
+      res.setHeader('Content-Disposition', buildContentDisposition(filename));
+      res.setHeader('Content-Length', buffer.length);
+
+      // Send file
+      res.send(buffer);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        (error.message.includes('not found') ||
+          error.message.includes('results found') ||
+          error.message.includes('scores found'))
+      ) {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      next(error);
+    }
+  };
+
+  /**
+   * Exports scoring report to Excel
+   * GET /api/export/scoring/:assessmentId/excel
+   */
+  exportToExcel = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const { assessmentId } = req.params;
+      const { batchId } = req.query;
+      const userId = req.user?.id;
+
+      // Verify ownership
+      const assessment = await this.assessmentRepository.findById(assessmentId);
+      if (!assessment) {
+        res.status(404).json({ error: 'Assessment not found' });
+        return;
+      }
+      if (assessment.createdBy !== userId) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+
+      // Generate Excel workbook
+      const buffer = await this.exportService.exportToExcel(
+        assessmentId,
+        batchId as string | undefined
+      );
+
+      // Set headers for file download
+      const filename = this.generateFilename(assessmentId, 'xlsx');
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       );
       res.setHeader('Content-Disposition', buildContentDisposition(filename));
       res.setHeader('Content-Length', buffer.length);

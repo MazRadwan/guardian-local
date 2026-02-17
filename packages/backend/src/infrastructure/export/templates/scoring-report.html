@@ -25,13 +25,13 @@
 
     /* ===== HEADER ===== */
     .header {
-      border-bottom: 3px solid #7c3aed;
+      border-bottom: 3px solid #1e3a5f;
       padding-bottom: 20px;
       margin-bottom: 30px;
     }
 
     .header h1 {
-      color: #7c3aed;
+      color: #1e3a5f;
       font-size: 28px;
       margin-bottom: 10px;
     }
@@ -54,7 +54,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+      background: linear-gradient(135deg, #f0f4f8 0%, #dbe4ee 100%);
       padding: 24px;
       border-radius: 12px;
       margin-bottom: 30px;
@@ -68,7 +68,7 @@
     .composite-score .value {
       font-size: 48px;
       font-weight: bold;
-      color: #7c3aed;
+      color: #1e3a5f;
     }
 
     .composite-score .label {
@@ -105,7 +105,7 @@
 
     .section h2 {
       font-size: 18px;
-      color: #7c3aed;
+      color: #1e3a5f;
       margin-bottom: 12px;
       padding-bottom: 8px;
       border-bottom: 2px solid #e5e7eb;
@@ -118,7 +118,7 @@
       padding: 16px;
       border-radius: 8px;
       font-size: 14px;
-      border-left: 4px solid #7c3aed;
+      border-left: 4px solid #1e3a5f;
     }
 
     /* ===== KEY FINDINGS ===== */
@@ -160,7 +160,7 @@
     .dimension-table th {
       text-align: left;
       padding: 12px;
-      background: #7c3aed;
+      background: #1e3a5f;
       color: white;
       font-weight: 600;
     }
@@ -209,6 +209,30 @@
     .risk-high { background: #f97316; }
     .risk-critical { background: #ef4444; }
 
+    /* ===== CONFIDENCE BADGES ===== */
+    .confidence-badge {
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      display: inline-block;
+    }
+
+    .confidence-badge.high { background: #dcfce7; color: #166534; }
+    .confidence-badge.medium { background: #fef3c7; color: #92400e; }
+    .confidence-badge.low { background: #fee2e2; color: #991b1b; }
+
+    .iso-ref-count {
+      font-size: 12px;
+      color: #6b7280;
+    }
+
+    .no-data {
+      color: #d1d5db;
+      font-style: italic;
+    }
+
     /* ===== RISK BADGES ===== */
     .risk-badge {
       padding: 4px 12px;
@@ -224,6 +248,64 @@
     .risk-badge.high { background: #ffedd5; color: #c2410c; }
     .risk-badge.critical { background: #fee2e2; color: #991b1b; }
 
+    /* ===== ISO ALIGNMENT SECTION ===== */
+    .iso-alignment-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      page-break-inside: avoid;
+    }
+
+    .iso-alignment-table th {
+      text-align: left;
+      padding: 10px 12px;
+      background: #374151;
+      color: white;
+      font-weight: 600;
+    }
+
+    .iso-alignment-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .iso-status {
+      padding: 2px 8px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-block;
+    }
+
+    .iso-status.aligned { background: #dcfce7; color: #166534; }
+    .iso-status.partial { background: #fef3c7; color: #92400e; }
+    .iso-status.not_evidenced { background: #fee2e2; color: #991b1b; }
+    .iso-status.not_applicable { background: #f3f4f6; color: #6b7280; }
+
+    .framework-label {
+      font-size: 11px;
+      color: #6b7280;
+      font-style: italic;
+    }
+
+    /* ===== GUARDIAN-NATIVE LABEL ===== */
+    .guardian-native-label {
+      display: block;
+      font-size: 10px;
+      color: #1e3a5f;
+      font-style: italic;
+      margin-top: 2px;
+    }
+
+    .iso-disclaimer {
+      margin-top: 12px;
+      font-size: 11px;
+      color: #9ca3af;
+      font-style: italic;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 8px;
+    }
+
     /* ===== NARRATIVE CONTENT STYLING ===== */
     .narrative {
       line-height: 1.7;
@@ -231,11 +313,11 @@
 
     .narrative h1 {
       font-size: 22px;
-      color: #7c3aed;
+      color: #1e3a5f;
       margin-top: 30px;
       margin-bottom: 16px;
       padding-bottom: 8px;
-      border-bottom: 2px solid #7c3aed;
+      border-bottom: 2px solid #1e3a5f;
       page-break-after: avoid;
     }
 
@@ -300,7 +382,7 @@
       content: "";
       width: 6px;
       height: 6px;
-      background: #7c3aed;
+      background: #1e3a5f;
       border-radius: 50%;
       position: absolute;
       left: 0;
@@ -346,8 +428,8 @@
 
     /* Blockquotes for emphasis */
     .narrative blockquote {
-      border-left: 4px solid #7c3aed;
-      background: #f5f3ff;
+      border-left: 4px solid #1e3a5f;
+      background: #f0f4f8;
       padding: 12px 16px;
       margin: 16px 0;
       font-style: italic;
@@ -489,15 +571,19 @@
           <th>Dimension</th>
           <th>Score</th>
           <th>Rating</th>
+          <th>Confidence</th>
+          <th>ISO Refs</th>
           <th>Visual</th>
         </tr>
       </thead>
       <tbody>
         {{#dimensionScores}}
         <tr>
-          <td>{{label}}</td>
+          <td>{{{label}}}</td>
           <td>{{score}}/100</td>
           <td><span class="risk-badge {{riskRating}}">{{riskRating}}</span></td>
+          <td>{{{confidenceHtml}}}</td>
+          <td>{{{isoRefHtml}}}</td>
           <td>
             <div class="score-bar">
               <div class="score-bar-fill risk-{{riskRating}}" style="width: {{score}}%"></div>
@@ -509,15 +595,19 @@
     </table>
   </div>
 
+  <!-- ISO Standards Alignment (rendered conditionally) -->
+  {{{isoAlignmentSection}}}
+
   <!-- Narrative Report -->
   <div class="section page-break">
     <h2>Detailed Analysis</h2>
-    <div class="narrative">{{{narrativeReport}}}</div>
+    <div class="narrative">{{narrativeReport}}</div>
   </div>
 
   <!-- Footer -->
   <div class="footer">
     <p>Generated by Guardian | Rubric Version: {{rubricVersion}} | Report ID: {{batchId}}</p>
+    <p class="iso-disclaimer">{{isoDisclaimer}}</p>
   </div>
 </body>
 </html>

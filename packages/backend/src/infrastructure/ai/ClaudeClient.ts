@@ -752,6 +752,11 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
 
       // Track tool use blocks during streaming
       let currentToolUse: { name: string; inputJson: string } | null = null;
+      let textLength = 0;
+      let toolCallStarted = false;
+      let toolJsonLength = 0;
+      let messageStopSeen = false;
+      let streamStopReason = 'not_seen';
 
       for await (const event of stream) {
         // Check abort signal
@@ -762,6 +767,8 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
 
         if (event.type === 'content_block_start') {
           if (event.content_block.type === 'tool_use') {
+            toolCallStarted = true;
+            console.log(`[ClaudeClient] Tool call started: ${event.content_block.name}`);
             // Start tracking a new tool use
             currentToolUse = {
               name: event.content_block.name,
@@ -770,6 +777,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
           }
         } else if (event.type === 'content_block_delta') {
           if (event.delta.type === 'text_delta') {
+            textLength += event.delta.text.length;
             // Emit text delta
             onTextDelta?.(event.delta.text);
           } else if (event.delta.type === 'input_json_delta' && currentToolUse) {
@@ -778,17 +786,37 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
           }
         } else if (event.type === 'content_block_stop') {
           if (currentToolUse) {
+            toolJsonLength = currentToolUse.inputJson.length;
+            console.log(`[ClaudeClient] Tool block complete, JSON length: ${toolJsonLength}`);
             // Parse accumulated JSON and emit tool use
             try {
               const input = JSON.parse(currentToolUse.inputJson || '{}');
               onToolUse?.(currentToolUse.name, input);
-            } catch {
-              console.error('[ClaudeClient] Failed to parse tool input JSON');
+            } catch (parseErr) {
+              console.error('[ClaudeClient] Failed to parse tool input JSON:', (parseErr as Error).message);
+              console.error('[ClaudeClient] Tool JSON length:', currentToolUse.inputJson.length);
+              console.error('[ClaudeClient] Tool JSON last 200 chars:', currentToolUse.inputJson.slice(-200));
             }
             currentToolUse = null;
           }
+        } else if (event.type === 'message_stop') {
+          messageStopSeen = true;
+          streamStopReason = stream.currentMessage?.stop_reason || 'null';
+          console.log(`[ClaudeClient] message_stop event — stop_reason: ${streamStopReason}`);
         }
       }
+
+      // Check if tool call was started but never finished (truncated)
+      if (currentToolUse) {
+        toolJsonLength = currentToolUse.inputJson.length;
+        console.error(`[ClaudeClient] INCOMPLETE tool call — stream ended before content_block_stop. JSON accumulated: ${toolJsonLength} chars`);
+        console.error(`[ClaudeClient] Incomplete JSON last 200 chars: ${currentToolUse.inputJson.slice(-200)}`);
+      }
+
+      // Log final stream diagnostics
+      const finalStopReason = stream.currentMessage?.stop_reason || 'unavailable';
+      const usage = stream.currentMessage?.usage;
+      console.log(`[ClaudeClient] streamWithTool complete — stop_reason: ${finalStopReason}, messageStopSeen: ${messageStopSeen}, textLength: ${textLength}, toolCallStarted: ${toolCallStarted}, toolJsonLength: ${toolJsonLength}, usage: ${JSON.stringify(usage)}`);
     } catch (error) {
       if (abortSignal?.aborted) {
         console.log('[ClaudeClient] streamWithTool aborted during request');

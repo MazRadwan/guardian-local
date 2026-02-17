@@ -1,29 +1,20 @@
 import {
-  Document, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell,
-  WidthType, BorderStyle, AlignmentType, Packer, ShadingType,
-  PageBreak, TableOfContents, Header, Footer, PageNumber, NumberFormat,
-  convertInchesToTwip, UnderlineType,
+  Document, Paragraph, TextRun, Footer, PageBreak, PageNumber,
+  AlignmentType, Packer, convertInchesToTwip,
 } from 'docx';
 import { IScoringWordExporter } from '../../application/interfaces/IScoringWordExporter';
 import { ScoringExportData } from '../../application/interfaces/IScoringPDFExporter';
-import { DIMENSION_CONFIG } from '../../domain/scoring/rubric';
-
-// Risk level color schemes
-const RISK_COLORS = {
-  low: { background: 'DCFCE7', text: '166534' },
-  medium: { background: 'FEF3C7', text: '92400E' },
-  high: { background: 'FFEDD5', text: 'C2410C' },
-  critical: { background: 'FEE2E2', text: '991B1B' },
-};
-
-const RECOMMENDATION_COLORS = {
-  approve: { background: 'DCFCE7', text: '166534' },
-  conditional: { background: 'FEF3C7', text: '92400E' },
-  decline: { background: 'FEE2E2', text: '991B1B' },
-  more_info: { background: 'DBEAFE', text: '1E40AF' },
-};
-
-const BRAND_COLOR = '7C3AED'; // Purple
+import {
+  BRAND_COLOR,
+  createHeader,
+  createScoreBanner,
+  createExecutiveSummary,
+  createKeyFindings,
+  createDimensionTable,
+  createNarrativeReport,
+} from './WordSectionBuilders';
+import { createISOAlignmentSection } from './WordISOBuilders';
+import { ISO_DISCLAIMER } from '../../domain/compliance/isoMessagingTerms.js';
 
 export class ScoringWordExporter implements IScoringWordExporter {
   async generateWord(data: ScoringExportData): Promise<Buffer> {
@@ -76,408 +67,38 @@ export class ScoringWordExporter implements IScoringWordExporter {
                     size: 18,
                     color: '9CA3AF',
                   }),
-                  new TextRun({
-                    text: 'Page ',
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
-                  new TextRun({
-                    children: [PageNumber.CURRENT],
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
-                  new TextRun({
-                    text: ' of ',
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
-                  new TextRun({
-                    children: [PageNumber.TOTAL_PAGES],
-                    size: 18,
-                    color: '9CA3AF',
-                  }),
+                  new TextRun({ text: 'Page ', size: 18, color: '9CA3AF' }),
+                  new TextRun({ children: [PageNumber.CURRENT], size: 18, color: '9CA3AF' }),
+                  new TextRun({ text: ' of ', size: 18, color: '9CA3AF' }),
+                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: '9CA3AF' }),
                 ],
+              }),
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  new TextRun({ text: ISO_DISCLAIMER, size: 16, color: '9CA3AF', italics: true }),
+                ],
+                spacing: { before: 100 },
               }),
             ],
           }),
         },
         children: [
-          ...this.createHeader(data),
-          ...this.createScoreBanner(data),
-          ...this.createExecutiveSummary(data),
-          ...this.createKeyFindings(data),
+          ...createHeader(data),
+          ...createScoreBanner(data),
+          ...createExecutiveSummary(data),
+          ...createKeyFindings(data),
           // Page break before dimension table
           new Paragraph({ children: [new PageBreak()] }),
-          ...this.createDimensionTable(data),
+          ...createDimensionTable(data),
+          ...createISOAlignmentSection(data),
           // Page break before narrative
           new Paragraph({ children: [new PageBreak()] }),
-          ...this.createNarrativeReport(data),
+          ...createNarrativeReport(data),
         ],
       }],
     });
 
     return await Packer.toBuffer(doc);
-  }
-
-  private createHeader(data: ScoringExportData): Paragraph[] {
-    return [
-      new Paragraph({
-        children: [
-          new TextRun({
-            text: 'Guardian Risk Assessment Report',
-            bold: true,
-            size: 48,
-            color: BRAND_COLOR,
-          }),
-        ],
-        spacing: { after: 200 },
-        border: {
-          bottom: { color: BRAND_COLOR, size: 24, style: BorderStyle.SINGLE },
-        },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Vendor: ', bold: true, size: 24 }),
-          new TextRun({ text: data.vendorName, size: 24 }),
-          new TextRun({ text: '  |  ', size: 24, color: '9CA3AF' }),
-          new TextRun({ text: 'Solution: ', bold: true, size: 24 }),
-          new TextRun({ text: data.solutionName, size: 24 }),
-          new TextRun({ text: '  |  ', size: 24, color: '9CA3AF' }),
-          new TextRun({ text: 'Date: ', bold: true, size: 24 }),
-          new TextRun({ text: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }), size: 24 }),
-        ],
-        spacing: { after: 100 },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Assessment ID: ', bold: true, size: 20, color: '6B7280' }),
-          new TextRun({ text: data.report.assessmentId, font: 'Courier New', size: 20, color: '6B7280' }),
-        ],
-        spacing: { after: 400 },
-      }),
-    ];
-  }
-
-  private createScoreBanner(data: ScoringExportData): Paragraph[] {
-    const { payload } = data.report;
-    const recommendationLabels: Record<string, string> = {
-      approve: 'APPROVED',
-      conditional: 'CONDITIONAL APPROVAL',
-      decline: 'DECLINED',
-      more_info: 'MORE INFO NEEDED',
-    };
-
-    const recColors = RECOMMENDATION_COLORS[payload.recommendation as keyof typeof RECOMMENDATION_COLORS] || RECOMMENDATION_COLORS.more_info;
-    const riskColors = RISK_COLORS[payload.overallRiskRating as keyof typeof RISK_COLORS] || RISK_COLORS.medium;
-
-    return [
-      // Score and recommendation on same line
-      new Paragraph({
-        children: [
-          new TextRun({ text: `${payload.compositeScore}`, bold: true, size: 72, color: BRAND_COLOR }),
-          new TextRun({ text: '/100', size: 36, color: '6B7280' }),
-          new TextRun({ text: '     ' }),
-          new TextRun({
-            text: ` ${recommendationLabels[payload.recommendation]} `,
-            bold: true,
-            size: 28,
-            color: recColors.text,
-            shading: { type: ShadingType.CLEAR, fill: recColors.background },
-          }),
-        ],
-        spacing: { after: 100 },
-        shading: { type: ShadingType.CLEAR, fill: 'F5F3FF' },
-      }),
-      new Paragraph({
-        children: [
-          new TextRun({ text: 'Composite Score', size: 20, color: '6B7280' }),
-          new TextRun({ text: '          ' }),
-          new TextRun({ text: 'Overall Risk: ', size: 24, color: '6B7280' }),
-          new TextRun({
-            text: ` ${payload.overallRiskRating.toUpperCase()} `,
-            bold: true,
-            size: 24,
-            color: riskColors.text,
-            shading: { type: ShadingType.CLEAR, fill: riskColors.background },
-          }),
-        ],
-        spacing: { after: 400 },
-        shading: { type: ShadingType.CLEAR, fill: 'F5F3FF' },
-      }),
-    ];
-  }
-
-  private createExecutiveSummary(data: ScoringExportData): Paragraph[] {
-    return [
-      new Paragraph({
-        text: 'Executive Summary',
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 200, after: 100 },
-        border: { bottom: { color: 'E5E7EB', size: 6, style: BorderStyle.SINGLE } },
-      }),
-      new Paragraph({
-        children: [new TextRun({ text: data.report.payload.executiveSummary, size: 24 })],
-        spacing: { after: 400 },
-        shading: { type: ShadingType.CLEAR, fill: 'F9FAFB' },
-      }),
-    ];
-  }
-
-  private createKeyFindings(data: ScoringExportData): Paragraph[] {
-    const { keyFindings } = data.report.payload;
-    return [
-      new Paragraph({
-        text: 'Key Findings',
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 200, after: 100 },
-        border: { bottom: { color: 'E5E7EB', size: 6, style: BorderStyle.SINGLE } },
-      }),
-      ...keyFindings.map((f) => new Paragraph({
-        children: [
-          new TextRun({ text: '• ', color: 'F59E0B', bold: true, size: 24 }),
-          new TextRun({ text: f, size: 24 }),
-        ],
-        spacing: { after: 100 },
-        indent: { left: convertInchesToTwip(0.25) },
-      })),
-      new Paragraph({ spacing: { after: 200 } }),
-    ];
-  }
-
-  private createDimensionTable(data: ScoringExportData): (Paragraph | Table)[] {
-    const { dimensionScores } = data.report.payload;
-
-    const headerRow = new TableRow({
-      tableHeader: true,
-      children: ['Dimension', 'Score', 'Rating'].map((text) =>
-        new TableCell({
-          children: [new Paragraph({
-            children: [new TextRun({ text, bold: true, color: 'FFFFFF', size: 22 })],
-            alignment: AlignmentType.CENTER,
-          })],
-          shading: { type: ShadingType.CLEAR, fill: BRAND_COLOR },
-          verticalAlign: 'center',
-        })
-      ),
-    });
-
-    const dataRows = dimensionScores.map((d, index) => {
-      const riskColors = RISK_COLORS[d.riskRating as keyof typeof RISK_COLORS] || RISK_COLORS.medium;
-      const isEven = index % 2 === 0;
-
-      return new TableRow({
-        children: [
-          new TableCell({
-            children: [new Paragraph({
-              children: [new TextRun({
-                text: DIMENSION_CONFIG[d.dimension as keyof typeof DIMENSION_CONFIG]?.label || d.dimension,
-                size: 22,
-              })],
-            })],
-            shading: { type: ShadingType.CLEAR, fill: isEven ? 'FFFFFF' : 'F9FAFB' },
-          }),
-          new TableCell({
-            children: [new Paragraph({
-              children: [new TextRun({ text: `${d.score}/100`, size: 22 })],
-              alignment: AlignmentType.CENTER,
-            })],
-            shading: { type: ShadingType.CLEAR, fill: isEven ? 'FFFFFF' : 'F9FAFB' },
-          }),
-          new TableCell({
-            children: [new Paragraph({
-              children: [new TextRun({
-                text: d.riskRating.toUpperCase(),
-                bold: true,
-                size: 20,
-                color: riskColors.text,
-              })],
-              alignment: AlignmentType.CENTER,
-            })],
-            shading: { type: ShadingType.CLEAR, fill: riskColors.background },
-          }),
-        ],
-      });
-    });
-
-    return [
-      new Paragraph({
-        text: 'Dimension Scores',
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 200, after: 150 },
-        border: { bottom: { color: 'E5E7EB', size: 6, style: BorderStyle.SINGLE } },
-      }),
-      new Table({
-        rows: [headerRow, ...dataRows],
-        width: { size: 100, type: WidthType.PERCENTAGE },
-      }),
-      new Paragraph({ spacing: { after: 400 } }),
-    ];
-  }
-
-  private createNarrativeReport(data: ScoringExportData): Paragraph[] {
-    const paragraphs: Paragraph[] = [
-      new Paragraph({
-        text: 'Detailed Analysis',
-        heading: HeadingLevel.HEADING_1,
-        spacing: { before: 200, after: 150 },
-        border: { bottom: { color: BRAND_COLOR, size: 12, style: BorderStyle.SINGLE } },
-      }),
-    ];
-
-    // Parse markdown and convert to Word paragraphs
-    const lines = data.report.narrativeReport.split('\n');
-    let inList = false;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-
-      if (!trimmed) {
-        if (inList) {
-          inList = false;
-        }
-        paragraphs.push(new Paragraph({ spacing: { after: 100 } }));
-        continue;
-      }
-
-      // Handle headings
-      if (trimmed.startsWith('## ')) {
-        const headingText = trimmed.replace(/^## /, '').replace(/\*\*/g, '');
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: headingText, bold: true, size: 28, color: '374151' })],
-          spacing: { before: 300, after: 150 },
-          border: { bottom: { color: 'E5E7EB', size: 6, style: BorderStyle.SINGLE } },
-        }));
-        continue;
-      }
-
-      if (trimmed.startsWith('### ')) {
-        const headingText = trimmed.replace(/^### /, '').replace(/\*\*/g, '');
-        paragraphs.push(new Paragraph({
-          children: [new TextRun({ text: headingText, bold: true, size: 24, color: '4B5563' })],
-          spacing: { before: 200, after: 100 },
-        }));
-        continue;
-      }
-
-      // Handle horizontal rules
-      if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
-        paragraphs.push(new Paragraph({
-          spacing: { before: 200, after: 200 },
-          border: { bottom: { color: 'E5E7EB', size: 6, style: BorderStyle.SINGLE } },
-        }));
-        continue;
-      }
-
-      // Handle bullet points
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        inList = true;
-        const bulletText = trimmed.replace(/^[-*] /, '');
-        paragraphs.push(new Paragraph({
-          children: this.parseInlineFormatting(bulletText),
-          bullet: { level: 0 },
-          spacing: { after: 80 },
-        }));
-        continue;
-      }
-
-      // Handle numbered lists
-      const numberedMatch = trimmed.match(/^(\d+)\. (.+)/);
-      if (numberedMatch) {
-        inList = true;
-        paragraphs.push(new Paragraph({
-          children: [
-            new TextRun({ text: `${numberedMatch[1]}. `, bold: true, color: BRAND_COLOR, size: 24 }),
-            ...this.parseInlineFormatting(numberedMatch[2]),
-          ],
-          spacing: { after: 80 },
-          indent: { left: convertInchesToTwip(0.25) },
-        }));
-        continue;
-      }
-
-      // Handle table rows (basic markdown tables)
-      if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
-        // Skip table separator rows
-        if (trimmed.includes('---')) continue;
-
-        const cells = trimmed.split('|').filter(c => c.trim()).map(c => c.trim());
-        // Simple approach: render as tab-separated text
-        paragraphs.push(new Paragraph({
-          children: cells.flatMap((cell, i) => [
-            new TextRun({ text: cell, size: 22 }),
-            i < cells.length - 1 ? new TextRun({ text: '\t' }) : new TextRun({ text: '' }),
-          ]),
-          spacing: { after: 50 },
-          shading: { type: ShadingType.CLEAR, fill: 'F9FAFB' },
-        }));
-        continue;
-      }
-
-      // Regular paragraph with inline formatting
-      paragraphs.push(new Paragraph({
-        children: this.parseInlineFormatting(trimmed),
-        spacing: { after: 120 },
-      }));
-    }
-
-    return paragraphs;
-  }
-
-  /**
-   * Parse inline markdown formatting (bold, italic, code)
-   */
-  private parseInlineFormatting(text: string): TextRun[] {
-    const runs: TextRun[] = [];
-    let remaining = text;
-
-    // Simple regex-based parsing for **bold**, *italic*, `code`
-    const patterns = [
-      { regex: /\*\*([^*]+)\*\*/g, style: { bold: true } },
-      { regex: /\*([^*]+)\*/g, style: { italics: true } },
-      { regex: /`([^`]+)`/g, style: { font: 'Courier New', shading: { type: ShadingType.CLEAR, fill: 'F3F4F6' } } },
-    ];
-
-    // Find all matches and their positions
-    const matches: Array<{ start: number; end: number; text: string; style: object }> = [];
-
-    for (const pattern of patterns) {
-      let match;
-      const tempRegex = new RegExp(pattern.regex.source, 'g');
-      while ((match = tempRegex.exec(text)) !== null) {
-        matches.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          text: match[1],
-          style: pattern.style,
-        });
-      }
-    }
-
-    // Sort matches by position
-    matches.sort((a, b) => a.start - b.start);
-
-    // Build runs
-    let lastEnd = 0;
-    for (const match of matches) {
-      // Add text before match
-      if (match.start > lastEnd) {
-        runs.push(new TextRun({ text: text.slice(lastEnd, match.start), size: 24 }));
-      }
-      // Add formatted text
-      runs.push(new TextRun({ text: match.text, size: 24, ...match.style }));
-      lastEnd = match.end;
-    }
-
-    // Add remaining text
-    if (lastEnd < text.length) {
-      runs.push(new TextRun({ text: text.slice(lastEnd), size: 24 }));
-    }
-
-    // If no matches, just return the plain text
-    if (runs.length === 0) {
-      runs.push(new TextRun({ text, size: 24 }));
-    }
-
-    return runs;
   }
 }

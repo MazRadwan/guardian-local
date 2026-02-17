@@ -1,7 +1,8 @@
 import { ScoringCompletePayload, RiskRating, Recommendation, DimensionScoreData } from './types';
 import { ALL_DIMENSIONS } from './rubric';
 import { RiskDimension } from '../types/QuestionnaireSchema';
-import { SUB_SCORE_RULES, getValidSubScoreNames } from './subScoreRules';
+import { SubScoreValidator } from './SubScoreValidator';
+import { ScoringConfidenceValidator } from './ScoringConfidenceValidator';
 
 /**
  * Validation result
@@ -23,6 +24,9 @@ const VALID_RECOMMENDATIONS: Recommendation[] = ['approve', 'conditional', 'decl
  * Validates scoring_complete tool payloads from Claude
  */
 export class ScoringPayloadValidator {
+  private subScoreValidator = new SubScoreValidator();
+  private confidenceValidator = new ScoringConfidenceValidator();
+
   /**
    * Validate a payload from Claude's scoring_complete tool call
    */
@@ -75,8 +79,16 @@ export class ScoringPayloadValidator {
 
     // Validate sub-scores within dimension findings (soft warnings)
     if (Array.isArray(p.dimensionScores)) {
-      const subScoreWarnings = this.validateAllSubScores(p.dimensionScores);
+      const subScoreWarnings = this.subScoreValidator.validateAllSubScores(p.dimensionScores);
       warnings.push(...subScoreWarnings);
+
+      // Validate assessmentConfidence within dimension findings (soft warnings)
+      const confidenceWarnings = this.confidenceValidator.validateAllConfidence(p.dimensionScores);
+      warnings.push(...confidenceWarnings);
+
+      // Validate ISO clause references (soft warnings)
+      const isoWarnings = this.validateISOReferences(p.dimensionScores);
+      warnings.push(...isoWarnings);
     }
 
     if (errors.length > 0) {
@@ -183,92 +195,51 @@ export class ScoringPayloadValidator {
   }
 
   /**
-   * Validate sub-scores across all dimension scores (soft warnings only).
-   * Returns warnings for invalid sub-score names, values, or sum mismatches.
+   * Validate ISO clause references across all dimension scores (soft warnings only).
    */
-  private validateAllSubScores(dimensionScores: unknown[]): string[] {
+  private validateISOReferences(dimensionScores: unknown[]): string[] {
     const warnings: string[] = [];
+    const VALID_STATUSES = ['aligned', 'partial', 'not_evidenced', 'not_applicable'];
 
     for (let i = 0; i < dimensionScores.length; i++) {
       const ds = dimensionScores[i] as Record<string, unknown> | null;
       if (!ds || typeof ds !== 'object') continue;
 
-      const dimension = ds.dimension as RiskDimension;
+      const dimension = ds.dimension as string;
       const findings = ds.findings as Record<string, unknown> | undefined;
       if (!findings || typeof findings !== 'object') continue;
 
-      const subScores = findings.subScores as Array<Record<string, unknown>> | undefined;
-      if (!Array.isArray(subScores)) continue;
+      const refs = findings.isoClauseReferences as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(refs)) continue;
 
-      const dimensionWarnings = this.validateDimensionSubScores(
-        dimension,
-        ds.score as number,
-        subScores,
-        i
-      );
-      warnings.push(...dimensionWarnings);
-    }
+      const prefix = `dimensionScores[${i}] (${dimension})`;
 
-    return warnings;
-  }
-
-  /**
-   * Validate sub-scores for a single dimension against rubric rules.
-   */
-  private validateDimensionSubScores(
-    dimension: RiskDimension,
-    dimensionScore: number,
-    subScores: Array<Record<string, unknown>>,
-    index: number
-  ): string[] {
-    const warnings: string[] = [];
-    const prefix = `dimensionScores[${index}] (${dimension})`;
-    const rules = SUB_SCORE_RULES[dimension];
-
-    // No rules defined for this dimension -- skip validation
-    if (!rules) return warnings;
-
-    const validNames = getValidSubScoreNames(dimension)!;
-    let subScoreSum = 0;
-
-    for (const sub of subScores) {
-      const name = sub.name as string;
-      const score = sub.score as number;
-
-      // Validate sub-score name
-      if (typeof name === 'string' && !validNames.has(name)) {
-        warnings.push(
-          `${prefix}: unknown sub-score name '${name}'. ` +
-          `Valid names: ${Array.from(validNames).join(', ')}`
-        );
-      }
-
-      // Validate sub-score value against allowed values
-      if (typeof name === 'string' && typeof score === 'number') {
-        const rule = rules.find(r => r.name === name);
-        if (rule && !rule.allowedValues.includes(score)) {
+      for (let j = 0; j < refs.length; j++) {
+        const ref = refs[j];
+        if (!ref || typeof ref !== 'object') {
+          warnings.push(`${prefix}: isoClauseReferences[${j}] must be an object`);
+          continue;
+        }
+        if (typeof ref.clauseRef !== 'string' || ref.clauseRef.trim().length === 0) {
+          warnings.push(`${prefix}: isoClauseReferences[${j}].clauseRef is required`);
+        }
+        if (typeof ref.title !== 'string' || ref.title.trim().length === 0) {
+          warnings.push(`${prefix}: isoClauseReferences[${j}].title is required`);
+        }
+        if (typeof ref.status !== 'string' || !VALID_STATUSES.includes(ref.status)) {
           warnings.push(
-            `${prefix}: sub-score '${name}' has value ${score}, ` +
-            `allowed values: [${rule.allowedValues.join(', ')}]`
+            `${prefix}: isoClauseReferences[${j}].status must be one of [${VALID_STATUSES.join(', ')}]`
           );
         }
-        subScoreSum += score;
-      }
-    }
-
-    // Validate sub-score sum matches dimension score (within tolerance)
-    if (subScores.length > 0 && typeof dimensionScore === 'number') {
-      const tolerance = 2;
-      if (Math.abs(subScoreSum - dimensionScore) > tolerance) {
-        warnings.push(
-          `${prefix}: sub-score sum ${subScoreSum} differs from ` +
-          `dimension score ${dimensionScore} (tolerance: +/-${tolerance})`
-        );
+        if (typeof ref.framework !== 'string' || ref.framework.trim().length === 0) {
+          warnings.push(`${prefix}: isoClauseReferences[${j}].framework is required`);
+        }
       }
     }
 
     return warnings;
   }
+
 }
 
 // Export singleton instance
