@@ -219,7 +219,7 @@ The agent evaluated GENERIC regex parsing. The actual approach is ANCHORED extra
 - Scanned PDFs → already planned as Claude fallback, not a blocker
 - We can use question text proximity matching as secondary validation
 
-**VERDICT: Regex extraction is VIABLE for the happy path** (Guardian-generated docx/pdf with standard format). Claude remains fallback for: scanned PDFs, vendor-modified formats, low-confidence regex matches.
+**VERDICT: Regex extraction is VIABLE for the happy path** (Guardian-generated docx/pdf with standard format). Claude remains fallback for Guardian docs only: scanned Guardian PDFs, Guardian docs with vendor-modified formatting, Guardian docs with low regex confidence. Non-Guardian documents are always rejected (product decision).
 
 ---
 
@@ -601,7 +601,7 @@ system" or "common question from customers" does NOT match because:
 
 2. **Tier 2 — Claude (fallback, ~5 min):** For Guardian docs where regex confidence is low
    - Existing DocumentParserService.parseForResponses() Claude path — unchanged
-   - Triggered when: regex confidence fails, scanned PDFs, Vision-required docs
+   - Triggered when: Guardian doc regex confidence fails, Guardian scanned PDFs, Guardian Vision-required docs
 
 3. **Non-Guardian documents:** Rejected (existing behavior, unchanged — product decision)
 

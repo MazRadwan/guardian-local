@@ -10,7 +10,9 @@ Active scoring path moved to WebSocket (`ChatServer.handleScoringModeMessage()`)
 These methods have zero callers, zero tests, and are both `private`. This is a dev project
 with no backwards compatibility requirement.
 
-`runScoring()` MUST be kept -- it is still actively used by the WebSocket auto-trigger scoring path.
+`runScoring()` status must be re-audited before this story executes. Previous audit found it
+used by the WebSocket auto-trigger path, but Codex review flagged that current runtime scoring
+is in `ScoringHandler` and `runScoring()` may have zero external callers.
 
 This is a prerequisite cleanup before the Sprint 4 file splits.
 
@@ -19,8 +21,8 @@ This is a prerequisite cleanup before the Sprint 4 file splits.
 - [ ] `parseForIntake()` method deleted (lines 561-629)
 - [ ] `parseForScoring()` method deleted (lines 642-708)
 - [ ] All `@deprecated` doc comments for these methods deleted
-- [ ] `runScoring()` method preserved (actively used)
-- [ ] `DocumentUploadController.ts` reduced from 920 to ~786 LOC
+- [ ] **`runScoring()` re-audited:** grep for all callers across the codebase. If zero external callers found, DELETE it too. If callers exist, KEEP with explicit comment documenting the caller.
+- [ ] `DocumentUploadController.ts` reduced from 920 to ~786 LOC (or lower if `runScoring()` also deleted)
 - [ ] All existing tests pass (no tests reference deleted methods)
 - [ ] No TypeScript errors
 - [ ] No unused imports after deletion

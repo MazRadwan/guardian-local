@@ -17,6 +17,10 @@ Also thread the `onProgress` callback through `DocumentParserService.parseForRes
 - [ ] No behavioral changes to extraction logic
 - [ ] No TypeScript errors
 
+## Dependencies
+
+- **39.2.1** (Granular Progress Events in ScoringService) — MUST complete first. Story 39.2.1 adds the `onProgress` calls to `ScoringService.score()`. This story (39.2.4) threads that same callback through `DocumentParserService.parseForResponses()` so extraction can emit per-section progress. Both stories modify `ScoringService.ts` — 39.2.1 adds progress calls, 39.2.4 passes `onProgress` into parseForResponses options.
+
 ## Technical Approach
 
 ### 1. Update IScoringDocumentParser Interface
@@ -28,8 +32,9 @@ Add `onProgress` to `ScoringParseOptions`:
 ```typescript
 export interface ScoringParseOptions extends ParseOptions {
   // ... existing fields ...
-  /** Progress callback for granular extraction updates */
-  onProgress?: (event: { status: string; message: string; progress?: number }) => void;
+  /** Progress callback for granular extraction updates.
+   *  Uses ScoringStatus type for type safety (Codex finding: raw string is too loose). */
+  onProgress?: (event: { status: ScoringStatus; message: string; progress?: number }) => void;
 }
 ```
 
@@ -45,7 +50,7 @@ const parseOptions: ScoringParseOptions = {
   minConfidence: 0.7,
   abortSignal: abortController.signal,
   onProgress: (event) => onProgress({
-    status: event.status as ScoringStatus,
+    status: event.status,  // already typed as ScoringStatus
     message: event.message,
     progress: event.progress,
   }),

@@ -48,15 +48,20 @@ export class ExtractionConfidenceCalculator {
   ): Promise<ConfidenceResult> {
     const checks: ConfidenceCheck[] = [];
 
-    // Check 1: AssessmentId validity
+    // Check 1: AssessmentId validity -- compare extracted ID against the AUTHORIZED
+    // expectedAssessmentId passed from ScoringService (which has already verified ownership).
+    // IMPORTANT (Codex security finding): Do NOT query DB using the extracted assessmentId
+    // directly -- that would bypass the authorization gate. Always use expectedAssessmentId
+    // for DB lookups.
     checks.push(this.checkAssessmentId(extraction.assessmentId, expectedAssessmentId));
 
     // Check 2: No duplicate markers
     checks.push(this.checkDuplicates(extraction.responses));
 
     // Check 3: Count ratio (requires DB lookup for expected count)
-    const dbQuestions = extraction.assessmentId
-      ? await this.questionRepo.findByAssessmentId(extraction.assessmentId)
+    // Uses expectedAssessmentId (authorized) for DB query, NOT extraction.assessmentId
+    const dbQuestions = expectedAssessmentId
+      ? await this.questionRepo.findByAssessmentId(expectedAssessmentId)
       : [];
     checks.push(this.checkCountRatio(extraction.responses.length, dbQuestions.length));
 

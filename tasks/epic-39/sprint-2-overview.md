@@ -18,6 +18,23 @@ Currently the scoring pipeline emits only 2 meaningful progress messages across 
 
 ---
 
+## 300 LOC Warning
+
+**IMPORTANT (Codex finding):** Sprint 2 modifies files that are already at or near the 300 LOC limit:
+- `ScoringService.ts` (297 LOC) — Story 39.2.1 adds ~15 lines of progress calls. Keep under 300 LOC by replacing existing generic messages, not adding alongside them.
+- `ScoringLLMService.ts` — Story 39.2.2 modifies the `% 500` logic. Net LOC change should be minimal (replacing ~3 lines).
+- `DocumentParserService.ts` (784 LOC) — Story 39.2.4 threads onProgress through. Keep additions minimal (<10 lines). Sprint 4 will split this file.
+
+Sprint 4 handles the proper file splits. Do not grow these files unnecessarily.
+
+---
+
+## Status Vocabulary Note
+
+**Keep the status enum stable.** The current `ScoringStatus` values are: `idle | uploading | parsing | scoring | validating | complete | error`. New progress stages should vary the `message` and `progress` fields, NOT add new status values. This prevents frontend/backend vocabulary drift and avoids breaking the frontend status filter (Story 39.2.3).
+
+---
+
 ## Stories
 
 | Story | Name | Focus | Dependencies |

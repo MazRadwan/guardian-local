@@ -94,8 +94,19 @@ If using the facade approach, `container.ts` requires NO changes -- `ClaudeClien
 
 ## Tests Affected
 
-Existing tests that may need updates:
-- No direct test files found for ClaudeClient (mocked at interface level in consuming tests). Verify all tests that mock `IClaudeClient` or `IVisionClient` still work.
+**IMPORTANT (Codex finding): Existing ClaudeClient tests must be migrated to split clients.**
+
+Before implementing, grep for ALL test files that reference `ClaudeClient`:
+- `packages/backend/__tests__/unit/infrastructure/ai/ClaudeClient.test.ts` — If this exists, split tests into `ClaudeTextClient.test.ts` and `ClaudeVisionClient.test.ts` matching the new file structure
+- Any test that directly imports or mocks `ClaudeClient` must be updated to import/mock the correct split client
+- Tests that mock at the interface level (`IClaudeClient`, `IVisionClient`, `ILLMClient`) should work unchanged — verify this
+
+**Migration checklist:**
+- [ ] Grep: `grep -r "ClaudeClient" packages/backend/__tests__/` to find ALL test references
+- [ ] Move text-related test cases (sendMessage, streamMessage, continueWithToolResult) to `ClaudeTextClient.test.ts`
+- [ ] Move vision-related test cases (analyzeImages, prepareDocument) to `ClaudeVisionClient.test.ts`
+- [ ] Keep facade-level tests in `ClaudeClient.test.ts` if facade pattern is used (delegation verification)
+- [ ] Verify all tests that mock at interface level still pass without changes
 
 ## Agent Assignment
 

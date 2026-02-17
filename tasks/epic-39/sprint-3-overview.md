@@ -21,6 +21,16 @@ After Sprint 1 eliminates the ~5 min extraction call, the Claude scoring call (~
 
 ---
 
+## 300 LOC Warning
+
+**IMPORTANT (Codex finding):** Sprint 3 modifies files that are at or near the 300 LOC limit:
+- `ScoringLLMService.ts` — Story 39.3.2 adds metrics instrumentation, Story 39.3.3 modifies prompt parameters. Keep additions minimal — extract metrics to separate `ScoringMetricsCollector.ts` (which Story 39.3.2 does correctly).
+- `ClaudeClient.ts` (844 LOC) — Story 39.3.4 modifies `streamWithTool` for multi-block support. This is an interface change only, not new logic. Sprint 4 will split ClaudeClient properly.
+
+Sprint 4 handles the proper file splits. Do not grow these files unnecessarily.
+
+---
+
 ## Stories
 
 | Story | Name | Focus | Dependencies |

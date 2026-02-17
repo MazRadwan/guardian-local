@@ -21,6 +21,12 @@ The scoring pipeline takes ~7 minutes. The biggest bottleneck is Stage 2: `Docum
 
 ---
 
+## 300 LOC Warning
+
+**IMPORTANT (Codex finding):** Sprint 1 Story 39.1.4 modifies `DocumentParserService.ts` (784 LOC — already 2.6x over the 300 LOC limit). Additions must be minimal — only add routing logic to wire in the new regex modules. Do NOT add substantial new logic inline. Sprint 4 Story 39.4.1/39.4.2 will split this file properly. The goal here is to keep the LOC increase as small as possible (target: <20 new lines for routing).
+
+---
+
 ## Stories
 
 | Story | Name | Focus | Dependencies |

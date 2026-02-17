@@ -82,6 +82,13 @@ Existing tests that may need updates:
   - Test progress bar fills to correct width (e.g., 50% width for progress=50)
   - Test handles rapid progress updates without flickering
 
+- [ ] VERIFY `RotatingStatus.tsx` handles all ScoringStatus values (Codex finding)
+
+- [ ] Add `useWebSocketEvents` throttling test (Codex finding):
+  - Test 500ms throttle collapses rapid progress updates correctly
+  - Test no progress messages are silently dropped (last message always displayed)
+  - Test dense progress bursts (11 stages firing in <2 sec for regex path) don't cause UI regressions
+
 ## QA Verification
 
 **Route:** N/A (progress is transient during scoring -- cannot be reliably triggered in static QA)
