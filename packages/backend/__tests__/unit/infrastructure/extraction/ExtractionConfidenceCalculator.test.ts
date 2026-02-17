@@ -157,7 +157,7 @@ describe('ExtractionConfidenceCalculator', () => {
     })
 
     it('should pass when no expectedAssessmentId is provided and extracted ID is valid UUID', async () => {
-      const repo = createMockQuestionRepo([])
+      const repo = createMockQuestionRepo(dbQuestions)
       const calc = new ExtractionConfidenceCalculator(repo)
 
       const extraction = makeExtraction()
@@ -166,6 +166,8 @@ describe('ExtractionConfidenceCalculator', () => {
       const check = result.checks.find((c) => c.name === 'assessmentId')!
       expect(check.passed).toBe(true)
       expect(check.score).toBe(1)
+      // Verify extracted ID was used for DB fallback lookup
+      expect(repo.findByAssessmentId).toHaveBeenCalledWith(VALID_UUID)
     })
   })
 
@@ -300,12 +302,25 @@ describe('ExtractionConfidenceCalculator', () => {
       expect(check.detail).toContain('below 0.9')
     })
 
-    it('should fail when no expectedAssessmentId gives 0 DB questions', async () => {
+    it('should use extracted assessmentId for DB lookup when no expectedAssessmentId', async () => {
+      const repo = createMockQuestionRepo(dbQuestions)
+      const calc = new ExtractionConfidenceCalculator(repo)
+
+      const extraction = makeExtraction() // has VALID_UUID as assessmentId
+      // No expectedAssessmentId -> falls back to extraction.assessmentId for DB lookup
+      const result = await calc.evaluate(extraction)
+
+      // Should have used extraction.assessmentId for DB lookup
+      expect(repo.findByAssessmentId).toHaveBeenCalledWith(VALID_UUID)
+      const check = result.checks.find((c) => c.name === 'countRatio')!
+      expect(check.passed).toBe(true) // 3 parsed / 3 expected = 1.0
+    })
+
+    it('should fail when no expectedAssessmentId and invalid extracted ID', async () => {
       const repo = createMockQuestionRepo([])
       const calc = new ExtractionConfidenceCalculator(repo)
 
-      const extraction = makeExtraction()
-      // No expectedAssessmentId -> no DB lookup -> 0 expected
+      const extraction = makeExtraction({ assessmentId: 'not-a-uuid' })
       const result = await calc.evaluate(extraction)
 
       const check = result.checks.find((c) => c.name === 'countRatio')!
@@ -478,12 +493,23 @@ describe('ExtractionConfidenceCalculator', () => {
       expect(repo.findByAssessmentId).not.toHaveBeenCalledWith(DIFFERENT_UUID)
     })
 
-    it('should not call DB when no expectedAssessmentId provided', async () => {
+    it('should fall back to extracted assessmentId when no expectedAssessmentId', async () => {
+      const repo = createMockQuestionRepo(dbQuestions)
+      const calc = new ExtractionConfidenceCalculator(repo)
+
+      const extraction = makeExtraction() // has VALID_UUID
+      await calc.evaluate(extraction) // no expectedAssessmentId
+
+      // Falls back to extraction.assessmentId for read-only DB lookup
+      expect(repo.findByAssessmentId).toHaveBeenCalledWith(VALID_UUID)
+    })
+
+    it('should not call DB when no expectedAssessmentId and extracted ID is invalid', async () => {
       const repo = createMockQuestionRepo([])
       const calc = new ExtractionConfidenceCalculator(repo)
 
-      const extraction = makeExtraction()
-      await calc.evaluate(extraction) // no expectedAssessmentId
+      const extraction = makeExtraction({ assessmentId: 'not-a-uuid' })
+      await calc.evaluate(extraction)
 
       expect(repo.findByAssessmentId).not.toHaveBeenCalled()
     })

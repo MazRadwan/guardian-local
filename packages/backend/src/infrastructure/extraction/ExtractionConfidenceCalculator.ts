@@ -47,9 +47,14 @@ export class ExtractionConfidenceCalculator {
   /**
    * Run all 5 confidence checks against an extraction result.
    *
-   * SECURITY: `expectedAssessmentId` comes from the auth layer and is the
-   * only ID used for DB lookups. `extraction.assessmentId` is untrusted
-   * user-controlled data from the parsed document.
+   * SECURITY: When `expectedAssessmentId` is provided (HTTP upload path),
+   * it is the ONLY ID used for DB lookups — most secure.
+   *
+   * When `expectedAssessmentId` is undefined (WebSocket trigger-on-send),
+   * we fall back to `extraction.assessmentId` for the read-only DB lookup.
+   * This is safe because: (1) the query only reads question data,
+   * (2) ScoringService independently verifies assessment ownership downstream,
+   * (3) a tampered ID means DB questions won't match → confidence fails → Claude fallback.
    */
   async evaluate(
     extraction: RegexExtractionResult,
@@ -69,9 +74,14 @@ export class ExtractionConfidenceCalculator {
     checks.push(this.checkResponseFillRate(extraction.responses));
 
     // Check 4 & 5: Require DB questions
-    // SECURITY: Use expectedAssessmentId (authorized) for DB query, NOT extraction.assessmentId
-    const dbQuestions = expectedAssessmentId
-      ? await this.questionRepo.findByAssessmentId(expectedAssessmentId)
+    // Prefer expectedAssessmentId (authorized); fall back to extraction.assessmentId
+    // for WebSocket path where assessmentId is only known after parsing.
+    const lookupId = expectedAssessmentId
+      ?? (extraction.assessmentId && isValidUUID(extraction.assessmentId)
+        ? extraction.assessmentId
+        : null);
+    const dbQuestions = lookupId
+      ? await this.questionRepo.findByAssessmentId(lookupId)
       : [];
 
     // Check 4: Count ratio
