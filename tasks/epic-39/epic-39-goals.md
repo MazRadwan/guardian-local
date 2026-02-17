@@ -1,7 +1,7 @@
 # Epic 39: Scoring Pipeline Optimization
 
 **Branch:** `feat/scoring-optimization`
-**Status:** Planning — audit complete, implementation plan ready for review
+**Status:** Planning — audit complete, Codex-reviewed, implementation plan finalized
 **Previous Analysis:** `tasks/scoring-optimization-analysis.md`
 
 ---
@@ -33,9 +33,10 @@ The document format is deterministic. Questions are already in the `questions` D
 grab answer text after `Response:` markers, match to DB questions by section_number + question_number.
 
 **Constraints:**
-- Keep Claude extraction as fallback for non-Guardian (third-party) documents
+- Keep Claude extraction as fallback for Guardian docs where regex confidence < 0.9
+- Non-Guardian documents continue to be rejected (existing behavior, no change) — this is a **product decision**
 - Must handle PDF-converted documents (same text structure after conversion)
-- Images in documents handled separately by Vision API
+- Image detection in Sprint 1 (flag only); Vision API orchestration is future scope
 - Must not break the downstream scoring pipeline — same `ScoringParseResult` shape
 
 ### Goal 2: Scoring Call Optimization (P0 — saves ~30 sec)
@@ -45,10 +46,11 @@ grab answer text after `Response:` markers, match to DB questions by section_num
 - ISO catalog fetched from DB via 2 sequential queries on every call (no caching)
 - Full catalog injected even when assessment has no ISO-mapped dimensions
 
-**Fixes:**
-- Split: static system prompt (cacheable) + ISO catalog as user-prompt appendix
+**Fixes (treat as experiment — measure before/after):**
+- Restructure prompts for caching: static system prompt + ISO as cacheable user block (spike needed)
 - Cache ISO catalog in-memory on service init
 - Make ISO injection conditional on assessment dimensions
+- **Metrics plan:** cache hit rate, input tokens, latency p50/p95, cost per run, before/after sample size
 
 ### Goal 3: User Progress Feedback (P0 — UX)
 
@@ -73,9 +75,13 @@ grab answer text after `Response:` markers, match to DB questions by section_num
 
 ### Goal 4: Code Quality (P2 — prerequisite for safe refactoring)
 
-**Files exceeding 300 LOC limit that are in the scoring pipeline:**
+**Files exceeding 300 LOC limit on the active scoring path:**
 - `DocumentParserService.ts` (784 LOC) — split into focused modules
 - `ClaudeClient.ts` (844 LOC) — split into interface-specific modules
+- `ScoringHandler.ts` (~567 LOC) — active WebSocket scoring orchestrator (Codex catch)
+
+**Note:** `DocumentUploadController.ts` (920 LOC) scoring methods are **deprecated** — active
+scoring path is WebSocket-driven via `ScoringHandler`. Split priority goes to active path files.
 
 **These splits may be prerequisites** for Goals 1-3 to keep changes safe and testable.
 
@@ -115,9 +121,15 @@ grab answer text after `Response:` markers, match to DB questions by section_num
 |------|----------|------------|
 | Regex fails on vendor-modified questionnaire format | HIGH | Detect format deviation → fall back to Claude extraction |
 | Regex produces different field count/shape than Claude | HIGH | Contract test: regex output must match `ScoringParseResult` interface exactly |
+| Silent quality regression — regex passes with structurally bad parse | HIGH | Composite confidence: assessmentId + duplicate keys + expected-vs-parsed + DB key mapping (Codex catch) |
 | Progress events break WebSocket protocol | MEDIUM | Test event sequence in existing integration tests |
+| Frontend only renders `parsing|scoring` status — new stages invisible | MEDIUM | Update `MessageList.tsx` condition to render all progress statuses (Codex catch) |
+| `% 500 === 0` scoring stream progress is near-random | MEDIUM | Replace with threshold-based delta reporting (Codex catch) |
+| Prompt cache restructure may not improve cost/latency | MEDIUM | Treat Sprint 3 as experiment with metrics; measure before/after (Codex catch) |
+| `ClaudeClient.streamWithTool` is string-based — multi-block user prompt not drop-in | MEDIUM | Spike: verify API supports `cache_control` on user content blocks (Codex catch) |
 | ISO cache serves stale data after framework update | LOW | TTL or version-based cache invalidation |
 | Splitting 784-LOC file introduces import regressions | MEDIUM | Run full test suite after each split |
+| Non-Guardian reject policy may drift if not explicit | LOW | Document as product decision in goals doc + code comments (Codex catch) |
 
 ---
 
@@ -534,9 +546,32 @@ system" or "common question from customers" does NOT match because:
 
 ---
 
+## Codex Review Summary (2026-02-17)
+
+> Two-round review with rebuttals. All actionable findings incorporated into plan.
+
+**Findings accepted (7):**
+1. `DocumentUploadController` scoring methods are deprecated — active path is WebSocket `ScoringHandler`
+2. `% 500 === 0` progress trigger is near-random — needs threshold-based delta
+3. Frontend only renders `parsing|scoring` — new progress stages would be invisible
+4. Confidence needs composite checks beyond count ratio (assessmentId, duplicates, DB key mapping)
+5. Feature flag for regex rollout (instant rollback without deploy)
+6. Image detection vs orchestration scope split (detect in Sprint 1, Vision API = future)
+7. Sprint 3 prompt caching needs measurement, not assumption
+
+**Findings partially accepted (3):**
+1. Pre-check gate: valid routing refactor needed, but NOT critical severity (fallback operates within Guardian branch)
+2. Structural confidence: assessmentId + duplicates + DB keys = yes; delimiter integrity = over-engineering for v1
+3. Multi-block user caching: good idea but needs spike to verify API support (string-based interface today)
+
+**Findings rejected (1):**
+1. Shadow mode (parallel regex + Claude): negates time savings. Feature flag + logging is sufficient.
+
+---
+
 ## Implementation Plan
 
-> Audit complete. Plan designed based on verified findings. Awaiting user review.
+> Audit complete. Codex-reviewed. Plan finalized with all accepted findings incorporated.
 
 ### Sprint 1: Regex Extraction Engine (P0 — saves ~5 min)
 
@@ -549,27 +584,46 @@ system" or "common question from customers" does NOT match because:
 - Scanned PDFs → Claude fallback (already planned)
 - Confidence scoring: compare found-count vs DB expected-count
 
-**Strategy: Two-tier extraction**
+**Strategy: Two-tier extraction (behind feature flag)**
 1. **Tier 1 — Regex (fast path, <1 sec):** For Guardian-generated docs with standard format
    - Extract raw text (mammoth/pdfparse)
-   - Verify GUARDIAN_MARKERS (existing check)
+   - Verify GUARDIAN_MARKERS (existing check — convert from reject gate to routing signal)
    - Split on `Question \d+\.\d+` anchors
    - Match to DB questions by sectionNumber + questionNumber
    - Grab text between `Response:` marker and next question anchor
-   - Confidence = (matched questions / total DB questions)
-   - If confidence >= 0.9 → use regex result
-   - If confidence < 0.9 → fall through to Tier 2
+   - **Composite confidence scoring** (not just count ratio):
+     - assessmentId extracted and valid (matches DB)
+     - No duplicate question markers detected
+     - Expected-vs-parsed question ratio >= 0.9
+     - Deterministic mapping: all extracted question keys exist in DB
+   - If composite confidence passes → use regex result
+   - If any check fails → fall through to Tier 2
 
-2. **Tier 2 — Claude (fallback, ~5 min):** For non-Guardian or low-confidence docs
-   - Existing DocumentParserService.parseForResponses() — unchanged
-   - Triggered when: regex confidence < 0.9, no GUARDIAN_MARKERS, scanned PDFs, Vision-required docs
+2. **Tier 2 — Claude (fallback, ~5 min):** For Guardian docs where regex confidence is low
+   - Existing DocumentParserService.parseForResponses() Claude path — unchanged
+   - Triggered when: regex confidence fails, scanned PDFs, Vision-required docs
+
+3. **Non-Guardian documents:** Rejected (existing behavior, unchanged — product decision)
+
+**Feature flag:** `ENABLE_REGEX_EXTRACTION` (env var, default: true). Allows instant rollback
+to Claude-only extraction without code deploy. Log extraction method + confidence on every call.
 
 **Output contract:** Both tiers produce identical `ScoringParseResult` shape (verified by Audit D — exports fully decoupled, only care about DB data).
 
+**Required test gate (3 paths):**
+1. Regex pass: Guardian doc → regex confidence passes → fast result
+2. Regex fail → Claude fallback: Guardian doc → regex confidence fails → Claude extraction
+3. Non-Guardian reject: no GUARDIAN_MARKERS → reject (unchanged behavior)
+
+**Image handling scope:** Sprint 1 detects and flags images (`hasVisualContent: true`).
+Per-question Vision API orchestration (extracting image bytes, calling Vision, merging results)
+is **future scope** — not Sprint 1.
+
 **Files to create/modify:**
 - NEW: `infrastructure/extraction/RegexResponseExtractor.ts` — regex extraction logic
-- MODIFY: `DocumentParserService.parseForResponses()` — add tier routing
+- MODIFY: `DocumentParserService.parseForResponses()` — add tier routing (pre-check → routing signal, not reject gate)
 - NEW: tests for regex extractor (unit + integration with real docx)
+- NEW: contract test comparing regex vs Claude output on same document
 
 ### Sprint 2: Progress Feedback Enhancement (P0 — UX)
 
@@ -591,19 +645,49 @@ system" or "common question from customers" does NOT match because:
 | Storage | "Storing assessment results..." | 95 |
 | Complete | "Risk assessment complete — score: X/100" | 100 |
 
+**Known bugs to fix in this sprint (Codex catches):**
+1. `ScoringLLMService:112` — `narrativeReport.length % 500 === 0` is near-random with variable
+   chunk sizes. Replace with threshold-based: `narrativeReport.length - lastReportedLength > 500`
+2. `MessageList.tsx:324` — only renders progress for `parsing|scoring` status. Expand condition
+   to render all progress statuses (`validating`, `storage`, etc.) or remove status filter entirely
+
 **Files to modify:**
 - `ScoringService.score()` — add progress calls at each stage
-- `ScoringLLMService.scoreWithClaude()` — pass through more granular callbacks
+- `ScoringLLMService.scoreWithClaude()` — fix `% 500` bug, pass through granular callbacks
 - `DocumentParserService.parseForResponses()` — add extraction progress
+- `MessageList.tsx` — expand progress rendering beyond `parsing|scoring`
+- `useWebSocketEvents.ts` — consume richer progress payloads
 
 ### Sprint 3: Scoring Call Optimization (P0 — saves ~30 sec)
 
-**Approach:** Fix prompt caching + ISO catalog efficiency.
+**Approach:** Fix prompt caching + ISO catalog efficiency. **Treat as experiment with metrics.**
 
-1. **Move ISO catalog from system prompt to user prompt appendix**
-   - System prompt becomes fully static (rubric + instructions only) → better cache hits
-   - ISO catalog appended to user prompt (dynamic anyway)
-   - Files: `scoringPrompt.ts`, `scoringPrompt.iso.ts`
+**Prerequisite spike:** `ClaudeClient.streamWithTool()` accepts `userPrompt` as string. Multi-block
+content arrays with per-block `cache_control` require interface change. Verify Anthropic API supports
+`cache_control` on user content blocks before committing to the multi-block approach.
+
+**Prompt restructure options (evaluate with metrics):**
+
+| Option | System prompt | User prompt | Expected benefit |
+|--------|--------------|-------------|------------------|
+| A (current) | Rubric + ISO catalog | Vendor responses | Cache busted when ISO differs |
+| B (proposed) | Rubric only (static) | ISO catalog + vendor responses | System always cached, ISO uncached |
+| C (ideal) | Rubric only (static, cached) | ISO catalog (cached block) + vendor responses (uncached block) | Both rubric and ISO cached |
+
+Option C requires API spike. Ship whichever wins on measured metrics.
+
+**Metrics plan (before/after on real assessments):**
+- Cache hit rate (from `cache_read_input_tokens` in API response)
+- Total input tokens per call
+- Latency p50/p95
+- Cost per scoring run
+- Sample size: minimum 10 scoring runs per option
+
+**Tasks:**
+1. **Spike: multi-block user prompt caching**
+   - Test `cache_control` on user content blocks with `streamWithTool`
+   - Verify cache hit behavior across calls with same ISO, different vendor data
+   - File: `ClaudeClient.ts` (interface change if multi-block supported)
 
 2. **Cache ISO catalog in-memory**
    - `ISOControlRetrievalService.getFullCatalog()` → cache with TTL or version-key
@@ -617,13 +701,17 @@ system" or "common question from customers" does NOT match because:
 
 ### Sprint 4: Code Quality (P2 — prerequisite hygiene)
 
-**Split oversized files (300 LOC limit violations in scoring pipeline):**
+**Split oversized files on the ACTIVE scoring path (300 LOC limit violations):**
 
-| File | Current LOC | Split Plan |
-|------|-------------|------------|
-| DocumentParserService.ts | 784 | IntakeParser + ScoringParser + shared text extraction |
-| ClaudeClient.ts | 844 | ClaudeTextClient + ClaudeStreamClient + ClaudeVisionClient |
-| DocumentUploadController.ts | 920 | UploadHandler + ScoringTriggerHandler + FileValidationHandler |
+| File | Current LOC | Active Path? | Split Plan |
+|------|-------------|-------------|------------|
+| DocumentParserService.ts | 784 | YES | IntakeParser + ScoringParser + shared text extraction |
+| ClaudeClient.ts | 844 | YES | ClaudeTextClient + ClaudeStreamClient + ClaudeVisionClient |
+| ScoringHandler.ts | ~567 | YES (WebSocket) | Scoring orchestration + progress emission + error handling |
+
+**Deprioritized:** `DocumentUploadController.ts` (920 LOC) — scoring methods are `@deprecated`.
+Active scoring path is WebSocket-driven via `ScoringHandler` → `ChatServer.handleScoringModeMessage()`.
+Split only if time permits; active path files take priority. (Codex catch)
 
 **Note:** These splits are deferred to Sprint 4 because they're safe refactors with no behavior change, and Sprints 1-3 can work with the existing file structure.
 
@@ -645,3 +733,11 @@ system" or "common question from customers" does NOT match because:
 | 2026-02-17 | Move ISO catalog from system prompt to user prompt | Enables prompt caching on static system prompt (~2,650 tokens saved per cache hit). ISO data is dynamic per framework version anyway. |
 | 2026-02-17 | Add granular progress via existing infrastructure | ScoringProgressPayload already has `progress?: number` field. No new event types needed. Just add more `onProgress()` calls in ScoringService. |
 | 2026-02-17 | Defer file splits to Sprint 4 | 3 files over 300 LOC (784, 844, 920) are refactors with no behavior change. Sprints 1-3 can work with existing structure. |
+| 2026-02-17 | Codex review: non-Guardian docs = reject (product decision) | Plan text was ambiguous ("Claude fallback for non-Guardian docs"). Clarified: non-Guardian docs continue to be rejected. Claude fallback is Guardian-only when regex fails. Prevents future contributors from reintroducing ambiguity. |
+| 2026-02-17 | Codex review: composite confidence, not just count ratio | 0.9 threshold on question count alone is insufficient. Add: assessmentId validity, duplicate marker detection, DB key mapping. Cheap checks, high safety value. |
+| 2026-02-17 | Codex review: image detection ≠ image orchestration | Sprint 1 detects and flags images. Per-question Vision API orchestration (extract bytes, call Vision, merge results) is future scope. Don't hide complexity in Sprint 1. |
+| 2026-02-17 | Codex review: prompt caching = experiment with metrics | "Strictly better" was overconfident. Current `ClaudeClient.streamWithTool` is string-based for userPrompt — multi-block caching needs API spike. Measure cache hit rate, latency, cost before/after. |
+| 2026-02-17 | Codex review: Sprint 4 targets active path, not legacy | `DocumentUploadController.triggerScoring()` is @deprecated. Active path is `ScoringHandler` (~567 LOC via WebSocket). Replace split target. |
+| 2026-02-17 | Codex review: fix `% 500` progress bug + frontend status filter | `narrativeReport.length % 500 === 0` is near-random. Frontend only renders `parsing|scoring` progress. Both must be fixed in Sprint 2. |
+| 2026-02-17 | Codex review: feature flag for regex rollout | `ENABLE_REGEX_EXTRACTION` env var allows instant rollback without deploy. Log extraction method + confidence on every call. |
+| 2026-02-17 | Codex review: pre-check is routing refactor, not just spec wording | GUARDIAN_MARKERS pre-check needs to become a routing signal (Guardian → regex, Guardian+low-confidence → Claude, non-Guardian → reject). Implementation task in Sprint 1, not just doc cleanup. |
