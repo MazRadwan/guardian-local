@@ -29,6 +29,9 @@ GUARDIAN Security Assessment
 Section 1: Clinical Risk
 Question 1.1 - How do you validate AI outputs?`,
   }),
+  convertToHtml: jest.fn().mockResolvedValue({
+    value: '<p>mock html</p>',
+  }),
 }));
 
 // Mock dependencies
@@ -40,6 +43,14 @@ const mockClaudeClient = {
 const mockVisionClient = {
   analyzeImages: jest.fn(),
   prepareDocument: jest.fn(),
+};
+
+const mockQuestionRepo = {
+  bulkCreate: jest.fn(),
+  findByAssessmentId: jest.fn().mockResolvedValue([]),
+  findById: jest.fn(),
+  deleteByAssessmentId: jest.fn(),
+  replaceAllForAssessment: jest.fn(),
 };
 
 // Helper to create valid intake extraction response
@@ -123,7 +134,8 @@ describe('DocumentParserService', () => {
 
     service = new DocumentParserService(
       mockClaudeClient as any,
-      mockVisionClient as any
+      mockVisionClient as any,
+      mockQuestionRepo as any
     );
 
     // Default mock for Claude text-based response

@@ -214,7 +214,8 @@ export const fileStorage = createFileStorage();
 export const fileValidationService = new FileValidationService();
 export const documentParserService = new DocumentParserService(
   claudeClient,  // IClaudeClient
-  claudeClient   // IVisionClient - ClaudeClient implements both
+  claudeClient,  // IVisionClient - ClaudeClient implements both
+  questionRepo   // IQuestionRepository - for regex extraction routing (Epic 39)
 );
 
 // Epic 30: VisionContentBuilder for Vision API image processing

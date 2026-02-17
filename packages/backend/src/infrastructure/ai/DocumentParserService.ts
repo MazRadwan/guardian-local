@@ -2,6 +2,7 @@
  * DocumentParserService - Main document parsing implementation
  *
  * Part of Epic 16: Document Parser Infrastructure
+ * Epic 39: Regex extraction routing (Story 39.1.4)
  *
  * This service implements both intake and scoring parsing interfaces,
  * sharing the underlying Vision integration while maintaining clean
@@ -13,6 +14,7 @@ import type {
   IVisionClient,
   VisionContent,
 } from '../../application/interfaces/IVisionClient.js';
+import type { IQuestionRepository } from '../../application/interfaces/IQuestionRepository.js';
 import {
   IIntakeDocumentParser,
   IntakeContext,
@@ -40,6 +42,13 @@ import {
   buildScoringExtractionPrompt,
   SCORING_EXTRACTION_SYSTEM_PROMPT,
 } from './prompts/scoringExtraction.js';
+import {
+  applyIntakeDefaults,
+  applyScoringDefaults,
+  isObject,
+  isLikelyGuardianDocument,
+} from './parsing-helpers.js';
+import { ExtractionRoutingService } from '../extraction/ExtractionRoutingService.js';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 
@@ -49,173 +58,30 @@ const DEFAULT_MAX_EXTRACTED_TEXT_CHARS = 100000;
 /** Truncation notice appended when text is truncated */
 const TRUNCATION_NOTICE = '\n\n[NOTE: Document text was truncated due to length. Full document contains additional content.]';
 
-// =============================================================================
-// Story 20.4.1: Guardian Document Signature Pre-Check
-// =============================================================================
-
-/**
- * Regex patterns to identify Guardian questionnaire documents.
- * Best-effort detection to avoid expensive LLM calls on non-Guardian documents.
- */
-const GUARDIAN_MARKERS = [
-  /Assessment\s+ID:\s*[a-f0-9-]{36}/i,     // UUID format assessment ID
-  /GUARDIAN.*Assessment/i,                  // Header text
-  /Section\s+\d+:/i,                        // Section headers (e.g., "Section 1:")
-  /Question\s+\d+\.\d+/i,                   // Question numbering format (e.g., "Question 1.1")
-  /\d+\.\d+\s+[-–—]\s+/i,                   // Alternative question format "1.1 - "
-];
-
-/**
- * Minimum markers required to pass pre-check.
- * Set to 2 to be lenient and avoid false negatives.
- */
-const MIN_MARKERS_REQUIRED = 2;
-
-/**
- * Environment variable to disable pre-check (for testing or edge cases).
- */
+/** Environment variable to disable pre-check (for testing or edge cases). */
 const ENABLE_GUARDIAN_PRECHECK = process.env.GUARDIAN_PRECHECK !== 'false';
 
-// =============================================================================
-// Story 20.4.2: Per-Response Truncation
-// =============================================================================
-
-/**
- * Maximum characters per individual response.
- * Ensures predictable token budget while preserving evidence across all responses.
- */
+/** Maximum characters per individual response (Story 20.4.2). */
 const DEFAULT_MAX_RESPONSE_CHARS = 2000;
 
-/**
- * Notice appended when individual response is truncated.
- */
+/** Notice appended when individual response is truncated. */
 const RESPONSE_TRUNCATION_NOTICE = ' [truncated]';
 
-// =============================================================================
-// Types and Validation Helpers for AI JSON
-// =============================================================================
-
-/**
- * Shape of Claude's intake extraction response
- */
-interface IntakeExtractionResponse {
-  vendorName: string | null;
-  solutionName: string | null;
-  solutionType: string | null;
-  industry: string | null;
-  features: string[];
-  claims: string[];
-  integrations: string[];
-  complianceMentions: string[];
-  architectureNotes: string[];
-  securityMentions: string[];
-  confidence: number;
-  suggestedQuestions: string[];
-  coveredCategories: string[];
-  gapCategories: string[];
-}
-
-/**
- * Shape of Claude's scoring extraction response
- */
-interface ScoringExtractionResponse {
-  assessmentId: string | null;
-  vendorName: string | null;
-  solutionName: string | null;
-  responses: Array<{
-    sectionNumber: number;
-    sectionTitle: string | null;
-    questionNumber: number;
-    questionText: string;
-    responseText: string;
-    confidence: number;
-    hasVisualContent: boolean;
-    visualContentDescription: string | null;
-  }>;
-  expectedQuestionCount: number | null;
-  parsedQuestionCount: number;
-  unparsedQuestions: string[];
-  isComplete: boolean;
-  overallConfidence: number;
-}
-
-/**
- * Filter array to only include strings (hygiene for AI responses)
- */
-function filterStrings(arr: unknown[]): string[] {
-  return arr.filter((x): x is string => typeof x === 'string');
-}
-
-/**
- * Apply safe defaults to intake extraction response
- * Ensures arrays are always arrays of strings, numbers have defaults
- */
-function applyIntakeDefaults(raw: Record<string, unknown>): IntakeExtractionResponse {
-  return {
-    vendorName: typeof raw.vendorName === 'string' ? raw.vendorName : null,
-    solutionName: typeof raw.solutionName === 'string' ? raw.solutionName : null,
-    solutionType: typeof raw.solutionType === 'string' ? raw.solutionType : null,
-    industry: typeof raw.industry === 'string' ? raw.industry : null,
-    features: Array.isArray(raw.features) ? filterStrings(raw.features) : [],
-    claims: Array.isArray(raw.claims) ? filterStrings(raw.claims) : [],
-    integrations: Array.isArray(raw.integrations) ? filterStrings(raw.integrations) : [],
-    complianceMentions: Array.isArray(raw.complianceMentions) ? filterStrings(raw.complianceMentions) : [],
-    architectureNotes: Array.isArray(raw.architectureNotes) ? filterStrings(raw.architectureNotes) : [],
-    securityMentions: Array.isArray(raw.securityMentions) ? filterStrings(raw.securityMentions) : [],
-    confidence: typeof raw.confidence === 'number' ? raw.confidence : 0.5,
-    suggestedQuestions: Array.isArray(raw.suggestedQuestions) ? filterStrings(raw.suggestedQuestions) : [],
-    coveredCategories: Array.isArray(raw.coveredCategories) ? filterStrings(raw.coveredCategories) : [],
-    gapCategories: Array.isArray(raw.gapCategories) ? filterStrings(raw.gapCategories) : [],
-  };
-}
-
-/**
- * Check if value is a non-null object (safe for property access)
- */
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Apply safe defaults to scoring extraction response
- */
-function applyScoringDefaults(raw: Record<string, unknown>): ScoringExtractionResponse {
-  const rawResponses = Array.isArray(raw.responses) ? raw.responses : [];
-
-  return {
-    assessmentId: typeof raw.assessmentId === 'string' ? raw.assessmentId : null,
-    vendorName: typeof raw.vendorName === 'string' ? raw.vendorName : null,
-    solutionName: typeof raw.solutionName === 'string' ? raw.solutionName : null,
-    // Filter out null/non-object elements before mapping
-    responses: rawResponses
-      .filter(isObject)
-      .map((r) => ({
-        sectionNumber: typeof r.sectionNumber === 'number' ? r.sectionNumber : 0,
-        sectionTitle: typeof r.sectionTitle === 'string' ? r.sectionTitle : null,
-        questionNumber: typeof r.questionNumber === 'number' ? r.questionNumber : 0,
-        questionText: typeof r.questionText === 'string' ? r.questionText : '',
-        responseText: typeof r.responseText === 'string' ? r.responseText : '',
-        confidence: typeof r.confidence === 'number' ? r.confidence : 0.5,
-        hasVisualContent: r.hasVisualContent === true,
-        visualContentDescription: typeof r.visualContentDescription === 'string' ? r.visualContentDescription : null,
-      })),
-    expectedQuestionCount: typeof raw.expectedQuestionCount === 'number' ? raw.expectedQuestionCount : null,
-    parsedQuestionCount: typeof raw.parsedQuestionCount === 'number' ? raw.parsedQuestionCount : 0,
-    unparsedQuestions: Array.isArray(raw.unparsedQuestions) ? filterStrings(raw.unparsedQuestions) : [],
-    isComplete: raw.isComplete === true,
-    overallConfidence: typeof raw.overallConfidence === 'number' ? raw.overallConfidence : 0.5,
-  };
-}
+/** Minimum markers needed to pass pre-check */
+const MIN_MARKERS_REQUIRED = 2;
 
 export class DocumentParserService
   implements IIntakeDocumentParser, IScoringDocumentParser
 {
+  private readonly routingService: ExtractionRoutingService;
+
   constructor(
-    /** Inject IClaudeClient interface for testability */
     private readonly claudeClient: IClaudeClient,
-    /** Inject IVisionClient for image processing */
-    private readonly visionClient: IVisionClient
-  ) {}
+    private readonly visionClient: IVisionClient,
+    private readonly questionRepo: IQuestionRepository,
+  ) {
+    this.routingService = new ExtractionRoutingService(questionRepo);
+  }
 
   // =========================================================================
   // IIntakeDocumentParser Implementation
@@ -229,28 +95,21 @@ export class DocumentParserService
     const startTime = Date.now();
 
     try {
-      // 1. Extract content from document (text or vision-based)
       const { text: rawDocumentText, visionContent } = await this.extractContent(
-        file,
-        metadata.documentType,
-        metadata.mimeType
+        file, metadata.documentType, metadata.mimeType
       );
 
-      // 2. Apply text length limits to prevent context overflow
       const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
       const documentText = this.truncateText(rawDocumentText, maxChars);
 
-      // 3. Build extraction prompt
       const prompt = buildIntakeExtractionPrompt({
         focusCategories: options?.focusCategories,
         filename: metadata.filename,
       });
 
-      // 4. Call Claude for extraction (use Vision API for images)
       let responseContent: string;
 
       if (visionContent && visionContent.length > 0) {
-        // Use Vision API for image-based documents
         const visionResponse = await this.visionClient.analyzeImages({
           images: visionContent,
           prompt: `${prompt}\n\nAnalyze the document shown in the image(s).`,
@@ -259,32 +118,19 @@ export class DocumentParserService
         });
         responseContent = visionResponse.content;
       } else {
-        // Use text-based API for PDF/DOCX
         const response = await this.claudeClient.sendMessage(
-          [
-            {
-              role: 'user',
-              content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}`,
-            },
-          ],
+          [{ role: 'user', content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}` }],
           { systemPrompt: INTAKE_EXTRACTION_SYSTEM_PROMPT, maxTokens: 4096, usePromptCache: true }
         );
         responseContent = response.content;
       }
 
-      // 5. Parse and apply safe defaults
       const rawJson = this.parseJsonResponse(responseContent);
       if (!rawJson) {
-        return this.createFailedIntakeResult(
-          metadata,
-          startTime,
-          'Failed to parse extraction response'
-        );
+        return this.createFailedIntakeResult(metadata, startTime, 'Failed to parse extraction response');
       }
       const extracted = applyIntakeDefaults(rawJson);
 
-      // 6. Build successful result
-      // Note: rawTextExcerpt is populated by service (not Claude) - first 2000 chars
       return {
         success: true,
         confidence: extracted.confidence,
@@ -302,8 +148,7 @@ export class DocumentParserService
     } catch (error) {
       console.error('[DocumentParserService] Intake parsing error:', error);
       return this.createFailedIntakeResult(
-        metadata,
-        startTime,
+        metadata, startTime,
         error instanceof Error ? error.message : 'Unknown parsing error'
       );
     }
@@ -321,172 +166,181 @@ export class DocumentParserService
     const startTime = Date.now();
 
     try {
-      // Story 20.3.3: Check abort before extraction
       if (options?.abortSignal?.aborted) {
         return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
       }
 
-      // 1. Extract content from document (text or vision-based)
       const { text: rawDocumentText, visionContent } = await this.extractContent(
-        file,
-        metadata.documentType,
-        metadata.mimeType
+        file, metadata.documentType, metadata.mimeType
       );
 
-      // Story 20.3.3: Check abort after extraction, before LLM call
       if (options?.abortSignal?.aborted) {
         return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
       }
 
-      // Story 20.4.1: Pre-check for Guardian document signature (text-based only)
-      // Images require Vision to read anything, so skip pre-check
-      if (ENABLE_GUARDIAN_PRECHECK && metadata.documentType !== 'image') {
-        const preCheck = this.isLikelyGuardianDocument(rawDocumentText);
-
-        if (!preCheck.likely) {
-          console.log(
-            '[DocumentParserService] Pre-check failed, markers found:',
-            preCheck.foundMarkers.length,
-            '(need at least',
-            MIN_MARKERS_REQUIRED,
-            ')'
-          );
-
-          return this.createFailedScoringResult(
-            metadata,
-            startTime,
-            'Document does not appear to be a Guardian questionnaire. Please upload an exported questionnaire PDF or Word document.'
-          );
-        }
-
-        console.log(
-          '[DocumentParserService] Pre-check passed, markers found:',
-          preCheck.foundMarkers.length
-        );
-      }
-
-      // 2. Apply text length limits to prevent context overflow
-      const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
-      const documentText = this.truncateText(rawDocumentText, maxChars);
-
-      // 3. Build extraction prompt
-      const prompt = buildScoringExtractionPrompt({
-        expectedAssessmentId: options?.expectedAssessmentId,
-        filename: metadata.filename,
-      });
-
-      // 4. Call Claude for extraction (use Vision API for images)
-      let responseContent: string;
-
-      if (visionContent && visionContent.length > 0) {
-        // Use Vision API for image-based documents (scanned questionnaires)
-        // Story 20.3.3: Pass abort signal to Vision client
-        const visionResponse = await this.visionClient.analyzeImages({
-          images: visionContent,
-          prompt: `${prompt}\n\nAnalyze the questionnaire shown in the image(s).`,
-          systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT,
-          maxTokens: 16384, // Extended output for large questionnaires (100+ questions)
-          abortSignal: options?.abortSignal,
-        });
-        responseContent = visionResponse.content;
-      } else {
-        // Use text-based API for PDF/DOCX
-        // Story 20.3.3: Pass abort signal to Claude client
-        const response = await this.claudeClient.sendMessage(
-          [
-            {
-              role: 'user',
-              content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}`,
-            },
-          ],
-          { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384, abortSignal: options?.abortSignal, usePromptCache: true }
-        );
-        responseContent = response.content;
-      }
-
-      // 5. Parse and apply safe defaults
-      const rawJson = this.parseJsonResponse(responseContent);
-      if (!rawJson) {
+      // Guardian pre-check: routing signal (text-based docs only)
+      const isGuardian = this.checkGuardianSignature(rawDocumentText, metadata);
+      if (!isGuardian) {
         return this.createFailedScoringResult(
-          metadata,
-          startTime,
-          'Failed to parse extraction response'
-        );
-      }
-      const extracted = applyScoringDefaults(rawJson);
-
-      // 6. Validate assessment ID - must exist
-      if (!extracted.assessmentId) {
-        throw new AssessmentNotFoundError(
-          'Assessment ID not found in document header. Please ensure this is a Guardian-exported questionnaire.',
-          metadata
+          metadata, startTime,
+          'Document does not appear to be a Guardian questionnaire. Please upload an exported questionnaire PDF or Word document.'
         );
       }
 
-      // 7. Validate assessment ID matches expected (if provided)
-      if (options?.expectedAssessmentId && extracted.assessmentId !== options.expectedAssessmentId) {
-        throw new QuestionnaireMismatchError(
-          `Document assessment ID "${extracted.assessmentId}" does not match expected "${options.expectedAssessmentId}". Please ensure you uploaded the correct questionnaire.`,
-          options.expectedAssessmentId,
-          extracted.assessmentId
+      // Story 39.1.4: Try regex extraction first (Guardian docs only)
+      const regexResult = await this.routingService.tryRegexExtraction(
+        rawDocumentText, file, metadata, startTime, options?.expectedAssessmentId,
+      );
+
+      if (regexResult.result) {
+        // Apply per-response truncation to regex results too
+        const maxResponseChars = options?.maxResponseChars ?? DEFAULT_MAX_RESPONSE_CHARS;
+        regexResult.result.responses = this.truncateResponses(
+          regexResult.result.responses, maxResponseChars,
         );
+        return regexResult.result;
       }
 
-      // Story 20.4.2: Truncate individual responses to prevent token explosion
-      const maxResponseChars = options?.maxResponseChars ?? DEFAULT_MAX_RESPONSE_CHARS;
-      extracted.responses = this.truncateResponses(extracted.responses, maxResponseChars);
-
-      // 8. Filter by confidence if threshold set
-      let responses = extracted.responses;
-      if (options?.minConfidence && !options.includeLowConfidence) {
-        responses = responses.filter(
-          (r) => r.confidence >= (options.minConfidence ?? 0.7)
-        );
-      }
-
-      // 9. Build successful result
-      return {
-        success: true,
-        confidence: extracted.overallConfidence,
-        metadata,
-        parseTimeMs: Date.now() - startTime,
-        assessmentId: extracted.assessmentId,
-        vendorName: extracted.vendorName,
-        solutionName: extracted.solutionName,
-        responses,
-        expectedQuestionCount: extracted.expectedQuestionCount,
-        parsedQuestionCount: responses.length,
-        unparsedQuestions: extracted.unparsedQuestions,
-        isComplete: extracted.isComplete,
-      };
+      // Fall through to Claude extraction
+      console.log('[DocumentParserService] Extraction method: claude');
+      return await this.parseWithClaude(
+        rawDocumentText, visionContent, file, metadata, options, startTime,
+      );
     } catch (error) {
-      // Story 20.3.3: Handle abort during LLM call
       if (options?.abortSignal?.aborted) {
         return this.createFailedScoringResult(metadata, startTime, 'Parse aborted');
       }
-
       console.error('[DocumentParserService] Scoring parsing error:', error);
-
-      // Re-throw specific errors for upstream handling
       if (error instanceof AssessmentNotFoundError || error instanceof QuestionnaireMismatchError) {
         throw error;
       }
-
       return this.createFailedScoringResult(
-        metadata,
-        startTime,
+        metadata, startTime,
         error instanceof Error ? error.message : 'Unknown parsing error'
       );
     }
   }
 
   // =========================================================================
-  // Private Helpers
+  // Private: Guardian Pre-Check
   // =========================================================================
 
   /**
-   * Extract content from document - returns text AND/OR vision content
+   * Check Guardian signature. Returns true if Guardian doc or if pre-check
+   * is disabled/bypassed (images). Returns false if non-Guardian text doc.
    */
+  private checkGuardianSignature(rawText: string, metadata: DocumentMetadata): boolean {
+    if (!ENABLE_GUARDIAN_PRECHECK || metadata.documentType === 'image') {
+      return true;
+    }
+
+    const preCheck = isLikelyGuardianDocument(rawText);
+
+    if (!preCheck.likely) {
+      console.log(
+        '[DocumentParserService] Pre-check failed, markers found:',
+        preCheck.foundMarkers.length, '(need at least', MIN_MARKERS_REQUIRED, ')'
+      );
+      return false;
+    }
+
+    console.log('[DocumentParserService] Pre-check passed, markers found:', preCheck.foundMarkers.length);
+    return true;
+  }
+
+  // =========================================================================
+  // Private: Claude Extraction Path
+  // =========================================================================
+
+  private async parseWithClaude(
+    rawDocumentText: string,
+    visionContent: VisionContent[] | null,
+    _buffer: Buffer,
+    metadata: DocumentMetadata,
+    options: ScoringParseOptions | undefined,
+    startTime: number,
+  ): Promise<ScoringParseResult> {
+    const maxChars = options?.maxExtractedTextChars ?? DEFAULT_MAX_EXTRACTED_TEXT_CHARS;
+    const documentText = this.truncateText(rawDocumentText, maxChars);
+
+    const prompt = buildScoringExtractionPrompt({
+      expectedAssessmentId: options?.expectedAssessmentId,
+      filename: metadata.filename,
+    });
+
+    let responseContent: string;
+
+    if (visionContent && visionContent.length > 0) {
+      const visionResponse = await this.visionClient.analyzeImages({
+        images: visionContent,
+        prompt: `${prompt}\n\nAnalyze the questionnaire shown in the image(s).`,
+        systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT,
+        maxTokens: 16384,
+        abortSignal: options?.abortSignal,
+      });
+      responseContent = visionResponse.content;
+    } else {
+      const response = await this.claudeClient.sendMessage(
+        [{ role: 'user', content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}` }],
+        { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384, abortSignal: options?.abortSignal, usePromptCache: true }
+      );
+      responseContent = response.content;
+    }
+
+    const rawJson = this.parseJsonResponse(responseContent);
+    if (!rawJson) {
+      return this.createFailedScoringResult(metadata, startTime, 'Failed to parse extraction response');
+    }
+    const extracted = applyScoringDefaults(rawJson);
+
+    if (!extracted.assessmentId) {
+      throw new AssessmentNotFoundError(
+        'Assessment ID not found in document header. Please ensure this is a Guardian-exported questionnaire.',
+        metadata
+      );
+    }
+
+    if (options?.expectedAssessmentId && extracted.assessmentId !== options.expectedAssessmentId) {
+      throw new QuestionnaireMismatchError(
+        `Document assessment ID "${extracted.assessmentId}" does not match expected "${options.expectedAssessmentId}". Please ensure you uploaded the correct questionnaire.`,
+        options.expectedAssessmentId,
+        extracted.assessmentId
+      );
+    }
+
+    const maxResponseChars = options?.maxResponseChars ?? DEFAULT_MAX_RESPONSE_CHARS;
+    extracted.responses = this.truncateResponses(extracted.responses, maxResponseChars);
+
+    let responses = extracted.responses;
+    if (options?.minConfidence && !options.includeLowConfidence) {
+      responses = responses.filter(
+        (r) => r.confidence >= (options.minConfidence ?? 0.7)
+      );
+    }
+
+    const claudeParseTime = Date.now() - startTime;
+    console.log(`[DocumentParserService] Parse time: ${claudeParseTime}ms (claude)`);
+
+    return {
+      success: true,
+      confidence: extracted.overallConfidence,
+      metadata,
+      parseTimeMs: claudeParseTime,
+      assessmentId: extracted.assessmentId,
+      vendorName: extracted.vendorName,
+      solutionName: extracted.solutionName,
+      responses,
+      expectedQuestionCount: extracted.expectedQuestionCount,
+      parsedQuestionCount: responses.length,
+      unparsedQuestions: extracted.unparsedQuestions,
+      isComplete: extracted.isComplete,
+    };
+  }
+
+  // =========================================================================
+  // Private: Content Extraction
+  // =========================================================================
+
   private async extractContent(
     buffer: Buffer,
     documentType: DocumentType,
@@ -494,37 +348,18 @@ export class DocumentParserService
   ): Promise<{ text: string; visionContent: VisionContent[] | null }> {
     switch (documentType) {
       case 'pdf':
-        // PDF: Extract text (for text-based PDFs)
-        return {
-          text: await this.extractPdfText(buffer),
-          visionContent: null,
-        };
-
+        return { text: await this.extractPdfText(buffer), visionContent: null };
       case 'docx':
-        // DOCX: Text extraction only (no embedded images for MVP)
-        return {
-          text: await this.extractDocxText(buffer),
-          visionContent: null,
-        };
-
+        return { text: await this.extractDocxText(buffer), visionContent: null };
       case 'image':
-        // Image: Use Vision API - prepare base64 content
-        const visionContent = await this.visionClient.prepareDocument(
-          buffer,
-          mimeType
-        );
-        return {
-          text: '', // No text extraction for images
-          visionContent,
-        };
-
+        const visionContent = await this.visionClient.prepareDocument(buffer, mimeType);
+        return { text: '', visionContent };
       default:
         throw new DocumentParseError(`Unsupported document type: ${documentType}`);
     }
   }
 
   private async extractPdfText(buffer: Buffer): Promise<string> {
-    // pdf-parse v2 uses class-based API
     const parser = new PDFParse({ data: buffer });
     try {
       const result = await parser.getText();
@@ -539,32 +374,22 @@ export class DocumentParserService
     return result.value;
   }
 
-  /**
-   * Parse JSON from Claude response, returning raw object
-   *
-   * @param content - Raw response from Claude (may contain markdown code blocks)
-   * @returns Parsed JSON object, or null if parsing fails
-   */
+  // =========================================================================
+  // Private: JSON Parsing
+  // =========================================================================
+
   private parseJsonResponse(content: string): Record<string, unknown> | null {
     try {
-      // Try to extract JSON from response (handle markdown code blocks)
       let jsonStr = content.trim();
 
-      // Strategy 1: Check for complete markdown code block (```json ... ```)
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         jsonStr = jsonMatch[1].trim();
       } else {
-        // Strategy 2: Strip leading code fence if present but no closing fence
-        // This handles cases where Claude returns ```json\n{...} without closing ```
         if (jsonStr.startsWith('```')) {
-          // Remove opening fence (```json or ```)
           jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '');
-          // Remove trailing fence if it exists at end
           jsonStr = jsonStr.replace(/\s*```\s*$/, '');
         }
-
-        // Strategy 3: Find first { and last } to extract JSON object
         const firstBrace = jsonStr.indexOf('{');
         const lastBrace = jsonStr.lastIndexOf('}');
         if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -572,26 +397,19 @@ export class DocumentParserService
         }
       }
 
-      // First attempt: parse as-is
       try {
         const parsed = JSON.parse(jsonStr.trim());
-        if (isObject(parsed)) {
-          return parsed;
-        }
+        if (isObject(parsed)) return parsed;
       } catch {
-        // Fall through to repair attempts
+        // Fall through to repair
       }
 
-      // Strategy 4: Attempt JSON repair for common Claude errors
       const repairedJson = this.attemptJsonRepair(jsonStr.trim());
       const parsed = JSON.parse(repairedJson);
-
-      // Use isObject to fail fast on arrays, nulls, primitives
       if (!isObject(parsed)) {
         console.error('[DocumentParserService] Parsed JSON is not an object');
         return null;
       }
-
       return parsed;
     } catch (error) {
       console.error('[DocumentParserService] JSON parse error:', error);
@@ -599,142 +417,56 @@ export class DocumentParserService
     }
   }
 
-  /**
-   * Attempt to repair common JSON syntax errors from Claude
-   */
   private attemptJsonRepair(jsonStr: string): string {
     let repaired = jsonStr;
-
-    // Fix 1: Remove trailing commas before ] or }
     repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-
-    // Fix 2: Add missing commas between array elements (} followed by { without comma)
     repaired = repaired.replace(/}(\s*){/g, '},$1{');
-
-    // Fix 3: Add missing commas between array elements (" followed by { without comma)
     repaired = repaired.replace(/"(\s*){/g, '",$1{');
 
-    // Fix 4: Ensure arrays and objects are properly closed
-    // Count brackets
     const openBraces = (repaired.match(/{/g) || []).length;
     const closeBraces = (repaired.match(/}/g) || []).length;
     const openBrackets = (repaired.match(/\[/g) || []).length;
     const closeBrackets = (repaired.match(/\]/g) || []).length;
 
-    // Add missing closing braces
-    for (let i = 0; i < openBraces - closeBraces; i++) {
-      repaired += '}';
-    }
-
-    // Add missing closing brackets
-    for (let i = 0; i < openBrackets - closeBrackets; i++) {
-      repaired += ']';
-    }
-
-    console.log(`[DocumentParserService] JSON repair applied: ${openBraces - closeBraces} missing }, ${openBrackets - closeBrackets} missing ]`);
+    for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
+    for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
 
     return repaired;
   }
 
-  /**
-   * Truncate text to max characters, adding notice if truncated
-   */
-  private truncateText(text: string, maxChars: number): string {
-    if (text.length <= maxChars) {
-      return text;
-    }
+  // =========================================================================
+  // Private: Text Truncation
+  // =========================================================================
 
-    // Guard: If maxChars is too small to fit notice + meaningful content,
-    // just truncate without notice to avoid returning less than maxChars
+  private truncateText(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text;
     const minMeaningfulContent = 100;
     if (maxChars < TRUNCATION_NOTICE.length + minMeaningfulContent) {
       return text.slice(0, maxChars);
     }
-
-    // Reserve space for truncation notice
-    const truncatedText = text.slice(0, maxChars - TRUNCATION_NOTICE.length);
-    return truncatedText + TRUNCATION_NOTICE;
+    return text.slice(0, maxChars - TRUNCATION_NOTICE.length) + TRUNCATION_NOTICE;
   }
 
-  // =========================================================================
-  // Story 20.4.1: Guardian Pre-Check
-  // =========================================================================
-
-  /**
-   * Quick pre-check to detect if document is likely a Guardian questionnaire.
-   * Searches for Guardian markers in extracted text.
-   *
-   * @param text - Extracted document text
-   * @returns Object with `likely` boolean and `foundMarkers` array
-   */
-  private isLikelyGuardianDocument(text: string): { likely: boolean; foundMarkers: string[] } {
-    // Short documents unlikely to be full questionnaires
-    if (!text || text.length < 100) {
-      return { likely: false, foundMarkers: [] };
-    }
-
-    const foundMarkers: string[] = [];
-
-    for (const marker of GUARDIAN_MARKERS) {
-      if (marker.test(text)) {
-        foundMarkers.push(marker.source);
-      }
-    }
-
-    return {
-      likely: foundMarkers.length >= MIN_MARKERS_REQUIRED,
-      foundMarkers,
-    };
-  }
-
-  // =========================================================================
-  // Story 20.4.2: Per-Response Truncation
-  // =========================================================================
-
-  /**
-   * Truncate individual responses to prevent token explosion.
-   * Each response is limited to DEFAULT_MAX_RESPONSE_CHARS.
-   *
-   * @param responses - Array of extracted responses
-   * @param maxChars - Maximum characters per response (default: 2000)
-   * @returns Responses with truncated text where needed
-   */
   private truncateResponses(
-    responses: ScoringExtractionResponse['responses'],
+    responses: ExtractedResponse[],
     maxChars: number = DEFAULT_MAX_RESPONSE_CHARS
-  ): ScoringExtractionResponse['responses'] {
+  ): ExtractedResponse[] {
     let truncatedCount = 0;
 
     const result = responses.map((response) => {
-      if (response.responseText.length <= maxChars) {
-        return response;
-      }
-
+      if (response.responseText.length <= maxChars) return response;
       truncatedCount++;
-
-      // Guard: If maxChars is too small to fit notice + meaningful content,
-      // just truncate without notice to avoid exceeding maxChars
       const minMeaningfulContent = 10;
       if (maxChars < RESPONSE_TRUNCATION_NOTICE.length + minMeaningfulContent) {
-        return {
-          ...response,
-          responseText: response.responseText.slice(0, maxChars),
-        };
+        return { ...response, responseText: response.responseText.slice(0, maxChars) };
       }
-
       const truncateAt = maxChars - RESPONSE_TRUNCATION_NOTICE.length;
-      return {
-        ...response,
-        responseText: response.responseText.slice(0, truncateAt) + RESPONSE_TRUNCATION_NOTICE,
-      };
+      return { ...response, responseText: response.responseText.slice(0, truncateAt) + RESPONSE_TRUNCATION_NOTICE };
     });
 
     if (truncatedCount > 0) {
-      console.log(
-        `[DocumentParserService] Truncated ${truncatedCount} responses to ${maxChars} chars`
-      );
+      console.log(`[DocumentParserService] Truncated ${truncatedCount} responses to ${maxChars} chars`);
     }
-
     return result;
   }
 
@@ -743,42 +475,24 @@ export class DocumentParserService
   // =========================================================================
 
   private createFailedIntakeResult(
-    metadata: DocumentMetadata,
-    startTime: number,
-    error: string
+    metadata: DocumentMetadata, startTime: number, error: string
   ): IntakeParseResult {
     return {
-      success: false,
-      error,
-      confidence: 0,
-      metadata,
+      success: false, error, confidence: 0, metadata,
       parseTimeMs: Date.now() - startTime,
-      context: null,
-      suggestedQuestions: [],
-      coveredCategories: [],
-      gapCategories: [],
+      context: null, suggestedQuestions: [], coveredCategories: [], gapCategories: [],
     };
   }
 
   private createFailedScoringResult(
-    metadata: DocumentMetadata,
-    startTime: number,
-    error: string
+    metadata: DocumentMetadata, startTime: number, error: string
   ): ScoringParseResult {
     return {
-      success: false,
-      error,
-      confidence: 0,
-      metadata,
+      success: false, error, confidence: 0, metadata,
       parseTimeMs: Date.now() - startTime,
-      assessmentId: null,
-      vendorName: null,
-      solutionName: null,
-      responses: [],
-      expectedQuestionCount: null,
-      parsedQuestionCount: 0,
-      unparsedQuestions: [],
-      isComplete: false,
+      assessmentId: null, vendorName: null, solutionName: null,
+      responses: [], expectedQuestionCount: null, parsedQuestionCount: 0,
+      unparsedQuestions: [], isComplete: false,
     };
   }
 }

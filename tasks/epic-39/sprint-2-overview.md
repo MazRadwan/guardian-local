@@ -156,3 +156,5 @@ Sprint 2 is complete when:
 - [ ] No TypeScript errors
 - [ ] **Post-implementation review swarm passed** (3-reviewer mesh: line-by-line, data flow trace, architecture compliance)
 - [ ] Review swarm findings addressed before Codex gate
+- [ ] **Codex gate passed** (via `mcp__codex__codex` MCP tool — autonomous, no user relay needed)
+- [ ] Codex findings fixed and committed
