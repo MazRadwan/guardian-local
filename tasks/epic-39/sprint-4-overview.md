@@ -17,7 +17,7 @@ Three files on the active scoring path exceed the 300 LOC limit:
 
 These are pure refactors with zero behavioral change. Each split preserves identical functionality, method signatures, and test compatibility. The splits are deferred to Sprint 4 because Sprints 1-3 work with the existing file structure.
 
-**Prereq cleanup:** `DocumentUploadController.ts` (920 LOC) has 2 deprecated private methods (`parseForIntake`, `parseForScoring`) with zero callers and zero tests. Story 39.4.0 deletes them (~134 LOC) before the main splits begin. Project is in dev -- no backwards compatibility needed.
+**Prereq cleanup:** `DocumentUploadController.ts` (920 LOC) has 3 dead private methods (`parseForIntake`, `parseForScoring`, `runScoring`) with zero external callers and no live code paths. Story 39.4.0 deletes all three (~340 LOC removed, down to ~580 LOC). Re-audit confirmed: `runScoring()` is only called from `parseForScoring()` which itself has zero callers. Project is in dev -- no backwards compatibility needed.
 
 ---
 
@@ -25,7 +25,7 @@ These are pure refactors with zero behavioral change. Each split preserves ident
 
 | Story | Name | Focus | Dependencies |
 |-------|------|-------|--------------|
-| **39.4.0** | Delete deprecated methods from DocumentUploadController | Remove `parseForIntake` + `parseForScoring` (134 LOC, zero callers) | None |
+| **39.4.0** | Delete dead methods from DocumentUploadController | Remove `parseForIntake` + `parseForScoring` + `runScoring` (~340 LOC, zero live callers) | None |
 | **39.4.1** | Split DocumentParserService: IntakeParser | Extract intake parsing to IntakeDocumentParser.ts | None |
 | **39.4.2** | Split DocumentParserService: Shared helpers | Extract shared helpers to DocumentParserHelpers.ts | 39.4.1 |
 | **39.4.3** | Split ClaudeClient: Text + Vision | Extract text/vision methods to ClaudeTextClient and ClaudeVisionClient | None |
