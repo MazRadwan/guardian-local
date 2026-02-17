@@ -2,7 +2,7 @@
  * Unit tests for ExtractionConfidenceCalculator
  *
  * Epic 39, Story 39.1.2: Composite confidence scoring for regex extraction.
- * Validates all 4 checks (assessmentId, duplicates, countRatio, dbKeyMapping).
+ * Validates all 5 checks (assessmentId, duplicates, responseFillRate, countRatio, dbKeyMapping).
  */
 
 import type { IQuestionRepository } from '../../../../src/application/interfaces/IQuestionRepository'
@@ -88,7 +88,7 @@ describe('ExtractionConfidenceCalculator', () => {
   ]
 
   describe('all checks pass', () => {
-    it('should return confident: true when all 4 checks pass', async () => {
+    it('should return confident: true when all 5 checks pass', async () => {
       const repo = createMockQuestionRepo(dbQuestions)
       const calc = new ExtractionConfidenceCalculator(repo)
 
@@ -96,7 +96,7 @@ describe('ExtractionConfidenceCalculator', () => {
       const result = await calc.evaluate(extraction, EXPECTED_UUID)
 
       expect(result.confident).toBe(true)
-      expect(result.checks).toHaveLength(4)
+      expect(result.checks).toHaveLength(5)
       expect(result.checks.every((c) => c.passed)).toBe(true)
     })
 
@@ -204,7 +204,73 @@ describe('ExtractionConfidenceCalculator', () => {
     })
   })
 
-  describe('Check 3: countRatio', () => {
+  describe('Check 3: responseFillRate', () => {
+    it('should pass when all responses have text', async () => {
+      const repo = createMockQuestionRepo(dbQuestions)
+      const calc = new ExtractionConfidenceCalculator(repo)
+
+      const extraction = makeExtraction() // default responses all have text
+      const result = await calc.evaluate(extraction, EXPECTED_UUID)
+
+      const check = result.checks.find((c) => c.name === 'responseFillRate')!
+      expect(check.passed).toBe(true)
+      expect(check.score).toBe(1)
+      expect(check.detail).toContain('3/3 responses filled')
+    })
+
+    it('should fail when 50% of responses are empty (no visual content)', async () => {
+      const repo = createMockQuestionRepo(dbQuestions)
+      const calc = new ExtractionConfidenceCalculator(repo)
+
+      const extraction = makeExtraction({
+        responses: [
+          makeResponse(1, 1),
+          { ...makeResponse(1, 2), responseText: '' },
+          { ...makeResponse(2, 1), responseText: '   ' },
+        ],
+      })
+      const result = await calc.evaluate(extraction, EXPECTED_UUID)
+
+      const check = result.checks.find((c) => c.name === 'responseFillRate')!
+      expect(check.passed).toBe(false)
+      expect(check.score).toBeCloseTo(1 / 3)
+      expect(check.detail).toContain('1/3 responses filled')
+    })
+
+    it('should count empty responses with hasVisualContent as filled', async () => {
+      const repo = createMockQuestionRepo(dbQuestions)
+      const calc = new ExtractionConfidenceCalculator(repo)
+
+      const extraction = makeExtraction({
+        responses: [
+          makeResponse(1, 1),
+          { ...makeResponse(1, 2), responseText: '', hasVisualContent: true },
+          { ...makeResponse(2, 1), responseText: '', hasVisualContent: true },
+        ],
+      })
+      const result = await calc.evaluate(extraction, EXPECTED_UUID)
+
+      const check = result.checks.find((c) => c.name === 'responseFillRate')!
+      expect(check.passed).toBe(true)
+      expect(check.score).toBe(1)
+      expect(check.detail).toContain('3/3 responses filled')
+    })
+
+    it('should fail when 0 responses are provided', async () => {
+      const repo = createMockQuestionRepo(dbQuestions)
+      const calc = new ExtractionConfidenceCalculator(repo)
+
+      const extraction = makeExtraction({ responses: [] })
+      const result = await calc.evaluate(extraction, EXPECTED_UUID)
+
+      const check = result.checks.find((c) => c.name === 'responseFillRate')!
+      expect(check.passed).toBe(false)
+      expect(check.score).toBe(0)
+      expect(check.detail).toContain('No responses to check fill rate')
+    })
+  })
+
+  describe('Check 4: countRatio', () => {
     it('should fail when count ratio is below 0.9', async () => {
       // 5 DB questions but only 3 parsed -> ratio = 0.6
       const fiveQuestions = [
@@ -287,7 +353,7 @@ describe('ExtractionConfidenceCalculator', () => {
     })
   })
 
-  describe('Check 4: dbKeyMapping', () => {
+  describe('Check 5: dbKeyMapping', () => {
     it('should fail when extracted key is not in DB', async () => {
       const repo = createMockQuestionRepo(dbQuestions) // 1.1, 1.2, 2.1
       const calc = new ExtractionConfidenceCalculator(repo)

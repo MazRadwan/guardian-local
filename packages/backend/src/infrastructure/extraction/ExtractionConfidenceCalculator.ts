@@ -1,7 +1,7 @@
 /**
  * ExtractionConfidenceCalculator
  *
- * Evaluates regex extraction quality using 4 composite checks.
+ * Evaluates regex extraction quality using 5 composite checks.
  * If any check fails, the pipeline falls through to Claude extraction.
  *
  * Epic 39, Story 39.1.2
@@ -45,7 +45,7 @@ export class ExtractionConfidenceCalculator {
   constructor(private readonly questionRepo: IQuestionRepository) {}
 
   /**
-   * Run all 4 confidence checks against an extraction result.
+   * Run all 5 confidence checks against an extraction result.
    *
    * SECURITY: `expectedAssessmentId` comes from the auth layer and is the
    * only ID used for DB lookups. `extraction.assessmentId` is untrusted
@@ -65,18 +65,21 @@ export class ExtractionConfidenceCalculator {
     // Check 2: No duplicate markers
     checks.push(this.checkDuplicates(extraction.responses));
 
-    // Check 3 & 4: Require DB questions
+    // Check 3: Response fill rate
+    checks.push(this.checkResponseFillRate(extraction.responses));
+
+    // Check 4 & 5: Require DB questions
     // SECURITY: Use expectedAssessmentId (authorized) for DB query, NOT extraction.assessmentId
     const dbQuestions = expectedAssessmentId
       ? await this.questionRepo.findByAssessmentId(expectedAssessmentId)
       : [];
 
-    // Check 3: Count ratio
+    // Check 4: Count ratio
     checks.push(
       this.checkCountRatio(extraction.responses.length, dbQuestions.length),
     );
 
-    // Check 4: DB key mapping
+    // Check 5: DB key mapping
     checks.push(this.checkDBKeyMapping(extraction.responses, dbQuestions));
 
     const confident = checks.every((c) => c.passed);
@@ -136,6 +139,27 @@ export class ExtractionConfidenceCalculator {
     }
 
     return { name, passed: true, score: 1, detail: 'No duplicate markers' };
+  }
+
+  private checkResponseFillRate(
+    responses: RegexExtractionResult['responses'],
+  ): ConfidenceCheck {
+    const name = 'responseFillRate';
+    if (responses.length === 0) {
+      return { name, passed: false, score: 0, detail: 'No responses to check fill rate' };
+    }
+    // Count responses with non-empty text OR visual content (image-only is valid)
+    const filled = responses.filter(
+      (r) => r.responseText.trim().length > 0 || r.hasVisualContent,
+    ).length;
+    const rate = filled / responses.length;
+    const passed = rate >= 0.7;
+    return {
+      name,
+      passed,
+      score: rate,
+      detail: `${filled}/${responses.length} responses filled (${(rate * 100).toFixed(0)}%)`,
+    };
   }
 
   private checkCountRatio(

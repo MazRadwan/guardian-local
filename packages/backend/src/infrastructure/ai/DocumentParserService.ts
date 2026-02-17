@@ -1,3 +1,6 @@
+// NOTE: 498 LOC — exceeds 300 LOC limit. Sprint 4 (39.4.1, 39.4.2) will extract
+// IntakeDocumentParser and DocumentParserHelpers to bring this under 300.
+
 /**
  * DocumentParserService - Main document parsing implementation
  *

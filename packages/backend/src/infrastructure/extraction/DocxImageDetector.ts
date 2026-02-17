@@ -25,7 +25,7 @@ export interface QuestionImageFlag {
 export interface ImageDetectionResult {
   /** Map of "sectionNumber.questionNumber" -> image flags */
   questionImages: Map<string, QuestionImageFlag>
-  /** Total images detected across all responses */
+  /** Number of response blocks containing at least one image */
   totalImagesDetected: number
 }
 
