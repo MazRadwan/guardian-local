@@ -160,7 +160,7 @@ describe('ClaudeClient - multi-block user prompt (Story 39.3.4)', () => {
       ]);
     });
 
-    it('should preserve cache_control mapping on individual blocks', async () => {
+    it('should preserve cache_control mapping on individual blocks when usePromptCache is true', async () => {
       mockStream.mockResolvedValue(createMockStream());
 
       const multiBlockPrompt: ContentBlockForPrompt[] = [
@@ -184,6 +184,7 @@ describe('ClaudeClient - multi-block user prompt (Story 39.3.4)', () => {
         systemPrompt: 'System',
         userPrompt: multiBlockPrompt,
         tools: [testTool],
+        usePromptCache: true,
       });
 
       const requestBody = mockStream.mock.calls[0][0];
@@ -193,6 +194,41 @@ describe('ClaudeClient - multi-block user prompt (Story 39.3.4)', () => {
       expect(content[0].cache_control).toEqual({ type: 'ephemeral' });
       expect(content[1].cache_control).toBeUndefined();
       expect(content[2].cache_control).toEqual({ type: 'ephemeral' });
+    });
+
+    it('should NOT add cache_control when usePromptCache is false even if cacheable is true', async () => {
+      mockStream.mockResolvedValue(createMockStream());
+
+      const multiBlockPrompt: ContentBlockForPrompt[] = [
+        {
+          type: 'text',
+          text: 'ISO catalog section (cacheable)',
+          cacheable: true,
+        },
+        {
+          type: 'text',
+          text: 'Vendor responses (unique per call)',
+        },
+      ];
+
+      await client.streamWithTool({
+        systemPrompt: 'System prompt',
+        userPrompt: multiBlockPrompt,
+        tools: [testTool],
+        // usePromptCache deliberately omitted (defaults to undefined/false)
+      });
+
+      expect(mockStream).toHaveBeenCalled();
+      const requestBody = mockStream.mock.calls[0][0];
+      const content = requestBody.messages[0].content;
+
+      // Without usePromptCache, no blocks should have cache_control
+      expect(content[0].cache_control).toBeUndefined();
+      expect(content[1].cache_control).toBeUndefined();
+
+      // The caching beta header should NOT be present
+      const requestOptions = mockStream.mock.calls[0][1];
+      expect(requestOptions).toBeUndefined();
     });
 
     it('should not add cache_control when cacheable is false or undefined', async () => {

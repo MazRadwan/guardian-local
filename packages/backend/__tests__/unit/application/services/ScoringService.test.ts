@@ -342,7 +342,7 @@ describe('ScoringService', () => {
         expect(mockLLMService.fetchISOCatalog).toHaveBeenCalledTimes(1)
       })
 
-      it('should pass catalog as both catalogControls and applicableControls (Epic 37)', async () => {
+      it('should pass catalogControls for cached block and empty applicableControls to avoid duplication (Epic 39)', async () => {
         const mockCatalog = [{ clauseRef: 'A.6.1' }]
         mockLLMService.fetchISOCatalog.mockResolvedValue(mockCatalog as any)
 
@@ -355,7 +355,7 @@ describe('ScoringService', () => {
           expect.any(String),
           expect.any(AbortSignal),
           expect.any(Function),
-          { catalogControls: mockCatalog, applicableControls: mockCatalog }
+          { catalogControls: mockCatalog, applicableControls: [] }
         )
       })
 

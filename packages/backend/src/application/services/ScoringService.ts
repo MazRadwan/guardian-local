@@ -204,7 +204,9 @@ export class ScoringService implements IScoringService {
       onProgress({ status: 'scoring', message: 'Analyzing vendor responses against risk rubric...', progress: 60 });
 
       // 9. Score with Claude (delegated to ScoringLLMService)
-      // Note: applicableControls = catalogControls when all dimensions apply (avoids duplicate fetch/tokens)
+      // The ISO catalog is provided via catalogControls for its own cached block.
+      // applicableControls is empty to avoid duplicating the catalog in the uncached
+      // vendor response block — Claude references the cached catalog block directly.
       const { narrativeReport, payload } = await this.llmService.scoreWithClaude(
         parseResult,
         vendor.name,
@@ -212,7 +214,7 @@ export class ScoringService implements IScoringService {
         solutionType,
         abortController.signal,
         (message) => onProgress({ status: 'scoring', message, progress: 65 }),
-        { catalogControls, applicableControls: catalogControls }
+        { catalogControls, applicableControls: [] }
       );
 
       if (abortController.signal.aborted) {

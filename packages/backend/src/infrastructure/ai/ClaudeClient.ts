@@ -712,13 +712,14 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
     }));
 
     // Build user message content: string passthrough or ContentBlockForPrompt[] (Story 39.3.4)
-    // Map vendor-neutral cacheable hint to Anthropic-specific cache_control
+    // Map vendor-neutral cacheable hint to Anthropic-specific cache_control,
+    // but only when usePromptCache is enabled (the caching beta header is required).
     const userContent = typeof userPrompt === 'string'
       ? userPrompt
       : userPrompt.map(block => ({
           type: block.type,
           text: block.text,
-          ...(block.cacheable ? { cache_control: { type: 'ephemeral' as const } } : {}),
+          ...(usePromptCache && block.cacheable ? { cache_control: { type: 'ephemeral' as const } } : {}),
         }));
 
     // Format system prompt for caching if enabled
