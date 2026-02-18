@@ -52,6 +52,7 @@ import { ClaudeClient } from './infrastructure/ai/ClaudeClient.js';
 import { ScoringPromptBuilder } from './infrastructure/ai/ScoringPromptBuilder.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
+import { IntakeDocumentParser } from './infrastructure/ai/IntakeDocumentParser.js';
 import { VisionContentBuilder } from './infrastructure/ai/VisionContentBuilder.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativePromptBuilder.js';
@@ -212,6 +213,10 @@ export const scoringExportService = new ScoringExportService(
 // File storage and validation (Epic 16)
 export const fileStorage = createFileStorage();
 export const fileValidationService = new FileValidationService();
+export const intakeDocumentParser = new IntakeDocumentParser(
+  claudeClient,  // IClaudeClient
+  claudeClient,  // IVisionClient - ClaudeClient implements both
+);
 export const documentParserService = new DocumentParserService(
   claudeClient,  // IClaudeClient
   claudeClient,  // IVisionClient - ClaudeClient implements both
