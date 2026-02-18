@@ -13,6 +13,7 @@
  */
 
 import { DocumentParserService } from '../../src/infrastructure/ai/DocumentParserService.js';
+import { IntakeDocumentParser } from '../../src/infrastructure/ai/IntakeDocumentParser.js';
 import { DocumentMetadata } from '../../src/application/interfaces/IDocumentParser.js';
 
 // Mock pdf-parse module - includes Guardian markers for pre-check to pass
@@ -133,11 +134,18 @@ function createScoringExtractionResponse(overrides = {}) {
 
 describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
   let service: DocumentParserService;
+  let intakeParser: IntakeDocumentParser;
 
   beforeEach(() => {
     jest.clearAllMocks();
 
+    const mockQuestionRepo = { findBySectionAndNumber: jest.fn() };
     service = new DocumentParserService(
+      mockClaudeClient as any,
+      mockVisionClient as any,
+      mockQuestionRepo as any
+    );
+    intakeParser = new IntakeDocumentParser(
       mockClaudeClient as any,
       mockVisionClient as any
     );
@@ -179,7 +187,7 @@ describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
       });
       const buffer = Buffer.from('PNG content');
 
-      const result = await service.parseForContext(buffer, metadata);
+      const result = await intakeParser.parseForContext(buffer, metadata);
 
       // REGRESSION: Vision API should still be called via prepareDocument
       expect(mockVisionClient.prepareDocument).toHaveBeenCalledWith(buffer, 'image/png');
@@ -201,7 +209,7 @@ describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
       const metadata = createMetadata();
       const buffer = Buffer.from('PDF content');
 
-      const result = await service.parseForContext(buffer, metadata);
+      const result = await intakeParser.parseForContext(buffer, metadata);
 
       // REGRESSION: Should use Claude text API (not Vision)
       expect(mockClaudeClient.sendMessage).toHaveBeenCalled();
@@ -220,7 +228,7 @@ describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
       });
       const buffer = Buffer.from('DOCX content');
 
-      const result = await service.parseForContext(buffer, metadata);
+      const result = await intakeParser.parseForContext(buffer, metadata);
 
       expect(result.success).toBe(true);
       expect(result.context?.vendorName).toBe('Test Vendor');
@@ -232,7 +240,7 @@ describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
     it('still handles extraction errors gracefully', async () => {
       mockClaudeClient.sendMessage.mockRejectedValue(new Error('API timeout'));
 
-      const result = await service.parseForContext(
+      const result = await intakeParser.parseForContext(
         Buffer.from('content'),
         createMetadata()
       );
@@ -467,7 +475,7 @@ describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
         documentType: 'image',
       });
 
-      const result = await service.parseForContext(Buffer.from('PNG'), metadata);
+      const result = await intakeParser.parseForContext(Buffer.from('PNG'), metadata);
 
       // Verify the complete flow
       expect(mockVisionClient.prepareDocument).toHaveBeenCalledTimes(1);
@@ -491,7 +499,7 @@ describe('DocumentParserService Regression Tests (Epic 30 Sprint 4)', () => {
         documentType: 'image',
       });
 
-      const result = await service.parseForContext(Buffer.from('PNG'), metadata);
+      const result = await intakeParser.parseForContext(Buffer.from('PNG'), metadata);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Vision API rate limit');

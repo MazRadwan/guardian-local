@@ -151,7 +151,7 @@ export class ScoringHandler {
         } else {
           await this.postProcessor.processFailure(
             socket, conversationId, fileId,
-            scoringResult.error || 'Scoring failed',
+            scoringResult.error || 'Unknown error',
             scoringResult.code || 'SCORING_FAILED'
           );
         }
