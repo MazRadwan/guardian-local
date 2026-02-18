@@ -1,5 +1,6 @@
 import { ScoringPayloadValidator } from '../../../../src/domain/scoring/ScoringPayloadValidator';
-import { ALL_DIMENSIONS } from '../../../../src/domain/scoring/rubric';
+import { ALL_DIMENSIONS, DIMENSION_WEIGHTS, DIMENSION_CONFIG, SolutionType } from '../../../../src/domain/scoring/rubric';
+import { RiskDimension } from '../../../../src/domain/types/QuestionnaireSchema';
 
 describe('ScoringPayloadValidator', () => {
   let validator: ScoringPayloadValidator;
@@ -211,14 +212,18 @@ describe('ScoringPayloadValidator', () => {
       };
 
       const result = validator.validate(payload);
-      expect(result.valid).toBe(true); // Still valid — soft warning
+      expect(result.valid).toBe(true); // Schema valid, but structural issues
       expect(result.warnings.length).toBeGreaterThan(0);
       expect(result.warnings).toContainEqual(
         expect.stringContaining("unknown sub-score name 'made_up_score'")
       );
+      // Unknown sub-score excluded from sum -> sum=0 vs score=20 -> structural violation
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('sub-score sum 0 differs from dimension score 20')
+      );
     });
 
-    it('should warn on invalid sub-score value', () => {
+    it('should flag invalid sub-score value as structural violation', () => {
       const payload = createValidPayload();
       const clinicalIdx = payload.dimensionScores.findIndex(
         (d: any) => d.dimension === 'clinical_risk'
@@ -234,16 +239,16 @@ describe('ScoringPayloadValidator', () => {
       };
 
       const result = validator.validate(payload);
-      expect(result.valid).toBe(true); // Still valid — soft warning
-      expect(result.warnings).toContainEqual(
+      expect(result.valid).toBe(true); // Still valid — structural violation, not hard error
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining("sub-score 'evidence_quality_score' has value 17")
       );
-      expect(result.warnings).toContainEqual(
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('allowed values: [0, 10, 20, 30, 40]')
       );
     });
 
-    it('should warn when sub-score sum differs from dimension score', () => {
+    it('should flag sub-score sum mismatch as structural violation', () => {
       const payload = createValidPayload();
       const clinicalIdx = payload.dimensionScores.findIndex(
         (d: any) => d.dimension === 'clinical_risk'
@@ -262,7 +267,7 @@ describe('ScoringPayloadValidator', () => {
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      expect(result.warnings).toContainEqual(
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('sub-score sum 30 differs from dimension score 50')
       );
     });
@@ -290,7 +295,7 @@ describe('ScoringPayloadValidator', () => {
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
       // Sum is 45, dimension is 46, diff is 1 — within tolerance
-      expect(result.warnings.filter(w => w.includes('sub-score sum'))).toHaveLength(0);
+      expect(result.structuralViolations.filter(v => v.includes('sub-score sum'))).toHaveLength(0);
     });
 
     it('should skip sub-score validation for dimensions without rules', () => {
@@ -318,7 +323,7 @@ describe('ScoringPayloadValidator', () => {
       expect(result.warnings).toHaveLength(0);
     });
 
-    it('should validate sub-scores across multiple dimensions', () => {
+    it('should validate sub-scores across multiple dimensions (violations + warnings)', () => {
       const payload = createValidPayload();
       const clinicalIdx = payload.dimensionScores.findIndex(
         (d: any) => d.dimension === 'clinical_risk'
@@ -327,7 +332,7 @@ describe('ScoringPayloadValidator', () => {
         (d: any) => d.dimension === 'privacy_risk'
       );
 
-      // Invalid sub-score value on clinical_risk
+      // Invalid sub-score value on clinical_risk -> structural violation
       payload.dimensionScores[clinicalIdx].score = 99;
       (payload.dimensionScores[clinicalIdx] as any).findings = {
         subScores: [
@@ -338,7 +343,7 @@ describe('ScoringPayloadValidator', () => {
         evidenceRefs: [],
       };
 
-      // Unknown sub-score name on privacy_risk
+      // Unknown sub-score name on privacy_risk -> soft warning
       payload.dimensionScores[privacyIdx].score = 10;
       (payload.dimensionScores[privacyIdx] as any).findings = {
         subScores: [
@@ -351,11 +356,13 @@ describe('ScoringPayloadValidator', () => {
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      // Should have warnings from both dimensions
-      expect(result.warnings.length).toBeGreaterThanOrEqual(2);
-      expect(result.warnings).toContainEqual(
+      // Invalid value -> structural violation for clinical_risk
+      expect(result.structuralViolations.length).toBeGreaterThanOrEqual(1);
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('clinical_risk')
       );
+      // Unknown name -> soft warning for privacy_risk
+      expect(result.warnings.length).toBeGreaterThanOrEqual(1);
       expect(result.warnings).toContainEqual(
         expect.stringContaining('privacy_risk')
       );
@@ -619,6 +626,112 @@ describe('ScoringPayloadValidator', () => {
       // Should have multiple ISO warnings
       const isoWarnings = result.warnings.filter(w => w.includes('isoClauseReferences'));
       expect(isoWarnings.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  describe('composite score validation (structural violation)', () => {
+    /**
+     * Helper: compute expected composite score for a given payload + solutionType.
+     */
+    const computeExpectedComposite = (
+      dimensionScores: Array<{ dimension: string; score: number }>,
+      solutionType: SolutionType
+    ): number => {
+      const weights = DIMENSION_WEIGHTS[solutionType];
+      let total = 0;
+      for (const dim of Object.keys(weights) as RiskDimension[]) {
+        const w = weights[dim];
+        if (w <= 0) continue;
+        const entry = dimensionScores.find(ds => ds.dimension === dim);
+        if (!entry) continue;
+        const config = DIMENSION_CONFIG[dim];
+        const riskEq = config.type === 'capability' ? 100 - entry.score : entry.score;
+        total += (w * riskEq) / 100;
+      }
+      return Math.round(total);
+    };
+
+    it('should skip composite validation when solutionType not provided', () => {
+      const payload = createValidPayload();
+      // compositeScore=75 won't match the weighted average, but without solutionType it's skipped
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.structuralViolations).toHaveLength(0);
+    });
+
+    it('should accept payload with matching composite score', () => {
+      const payload = createValidPayload();
+      const expected = computeExpectedComposite(payload.dimensionScores, 'clinical_ai');
+      payload.compositeScore = expected;
+
+      const result = validator.validate(payload, 'clinical_ai');
+      expect(result.valid).toBe(true);
+      const compositeViolations = result.structuralViolations.filter(v => v.includes('Composite score'));
+      expect(compositeViolations).toHaveLength(0);
+    });
+
+    it('should accept composite within tolerance', () => {
+      const payload = createValidPayload();
+      const expected = computeExpectedComposite(payload.dimensionScores, 'administrative_ai');
+      payload.compositeScore = Math.min(100, expected + 2);
+
+      const result = validator.validate(payload, 'administrative_ai');
+      expect(result.valid).toBe(true);
+      const compositeViolations = result.structuralViolations.filter(v => v.includes('Composite score'));
+      expect(compositeViolations).toHaveLength(0);
+    });
+
+    it('should produce structural violation when composite deviates beyond tolerance', () => {
+      const payload = createValidPayload();
+      const expected = computeExpectedComposite(payload.dimensionScores, 'clinical_ai');
+      // Set composite to something far from expected
+      payload.compositeScore = Math.min(100, expected + 20);
+
+      const result = validator.validate(payload, 'clinical_ai');
+      expect(result.valid).toBe(true); // Structural violation, not hard error
+      expect(result.errors).toHaveLength(0);
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('Composite score')
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('deviates from expected')
+      );
+    });
+
+    it('should not run composite validation when compositeScore is invalid', () => {
+      const payload = createValidPayload();
+      payload.compositeScore = 101; // invalid score
+      const result = validator.validate(payload, 'clinical_ai');
+      // Should have a hard error for compositeScore, but no composite structural violation
+      expect(result.valid).toBe(false);
+      const compositeViolations = result.structuralViolations.filter(v => v.includes('Composite score'));
+      expect(compositeViolations).toHaveLength(0);
+    });
+
+    it('should validate differently per solution type', () => {
+      const payload = createValidPayload();
+      // Set specific dimension scores to create divergence
+      const clinicalIdx = payload.dimensionScores.findIndex(
+        (d: any) => d.dimension === 'clinical_risk'
+      );
+      payload.dimensionScores[clinicalIdx].score = 90;
+
+      const clinicalExpected = computeExpectedComposite(payload.dimensionScores, 'clinical_ai');
+      const adminExpected = computeExpectedComposite(payload.dimensionScores, 'administrative_ai');
+
+      // Set composite to match clinical_ai
+      payload.compositeScore = clinicalExpected;
+      const clinicalResult = validator.validate(payload, 'clinical_ai');
+      const clinicalViolations = clinicalResult.structuralViolations.filter(v => v.includes('Composite score'));
+      expect(clinicalViolations).toHaveLength(0);
+
+      // Same composite may not match administrative_ai
+      if (Math.abs(clinicalExpected - adminExpected) > 3) {
+        const adminResult = validator.validate(payload, 'administrative_ai');
+        expect(adminResult.structuralViolations).toContainEqual(
+          expect.stringContaining('Composite score')
+        );
+      }
     });
   });
 });

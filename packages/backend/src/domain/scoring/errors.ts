@@ -17,6 +17,7 @@ export type ScoringErrorCode =
   | 'RATE_LIMITED'
   | 'DUPLICATE_FILE'
   | 'SCORING_FAILED'
+  | 'STRUCTURAL_VALIDATION_FAILED' // Retry-on-structural-fail: scores violate rubric arithmetic
   | 'STORAGE_FAILED'; // Epic 20.2.1: Transaction failure during score storage
 
 /**

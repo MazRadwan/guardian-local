@@ -28,6 +28,7 @@ import type { ScoringProgressEvent } from '../../../../src/domain/scoring/types.
 import type { ScoringStorageService } from '../../../../src/application/services/ScoringStorageService.js'
 import type { ScoringLLMService } from '../../../../src/application/services/ScoringLLMService.js'
 import type { ScoringQueryService } from '../../../../src/application/services/ScoringQueryService.js'
+import type { ScoringRetryService } from '../../../../src/application/services/ScoringRetryService.js'
 import { Conversation } from '../../../../src/domain/entities/Conversation.js'
 
 describe('ScoringService', () => {
@@ -40,6 +41,7 @@ describe('ScoringService', () => {
   let mockStorageService: jest.Mocked<ScoringStorageService>
   let mockLLMService: jest.Mocked<ScoringLLMService>
   let mockQueryService: jest.Mocked<ScoringQueryService>
+  let mockRetryService: jest.Mocked<ScoringRetryService>
   let validator: ScoringPayloadValidator
 
   const testUserId = 'user-1'
@@ -48,8 +50,10 @@ describe('ScoringService', () => {
   const testConversationId = 'conv-1'
 
   // Valid scoring payload matching all 10 dimensions
+  // compositeScore=63 matches weighted average for clinical_ai with all scores=75:
+  // risk dims: 40%*75 + 20%*75 + 15%*75 = 56.25; capability dims: 15%*(100-75) + 10%*(100-75) = 6.25
   const validPayload = {
-    compositeScore: 75,
+    compositeScore: 63,
     recommendation: 'conditional' as const,
     overallRiskRating: 'medium' as const,
     executiveSummary: 'Test summary for the assessment with adequate length.',
@@ -205,6 +209,10 @@ describe('ScoringService', () => {
       getResultForConversation: jest.fn().mockResolvedValue(null),
     } as unknown as jest.Mocked<ScoringQueryService>
 
+    mockRetryService = {
+      retryWithCorrection: jest.fn(),
+    } as unknown as jest.Mocked<ScoringRetryService>
+
     validator = new ScoringPayloadValidator()
 
     service = new ScoringService(
@@ -216,7 +224,8 @@ describe('ScoringService', () => {
       validator,
       mockStorageService,
       mockLLMService,
-      mockQueryService
+      mockQueryService,
+      mockRetryService
     )
   })
 
@@ -265,7 +274,7 @@ describe('ScoringService', () => {
           { status: 'scoring', message: 'Analyzing vendor responses against risk rubric...', progress: 60 },
           { status: 'validating', message: 'Validating scoring results...', progress: 90 },
           { status: 'validating', message: 'Storing assessment results...', progress: 95 },
-          { status: 'complete', message: 'Risk assessment complete -- score: 75/100', progress: 100 },
+          { status: 'complete', message: 'Risk assessment complete -- score: 63/100', progress: 100 },
         ]
 
         for (const exp of expected) {
@@ -1048,6 +1057,120 @@ describe('ScoringService', () => {
 
       // Aborting after success should not throw
       expect(() => service.abort(testConversationId)).not.toThrow()
+    })
+  })
+
+  describe('structural violation retry orchestration', () => {
+    const defaultInput = {
+      assessmentId: testAssessmentId,
+      conversationId: testConversationId,
+      fileId: testFileId,
+      userId: testUserId,
+    }
+
+    it('should call retryWithCorrection when structural violations are present', async () => {
+      // Return payload that passes schema but has structural violations
+      const payloadWithViolations = { ...validPayload }
+      // Mock validator to return valid=true but with structural violations
+      const origValidate = validator.validate.bind(validator)
+      jest.spyOn(validator, 'validate').mockImplementation((payload, solutionType) => {
+        const base = origValidate(payload, solutionType)
+        // First call: inject structural violations
+        if (mockRetryService.retryWithCorrection.mock.calls.length === 0) {
+          return { ...base, structuralViolations: ['sub-score sum mismatch'] }
+        }
+        return base
+      })
+
+      // Mock retry service to succeed
+      mockRetryService.retryWithCorrection.mockResolvedValue({
+        validationResult: {
+          valid: true,
+          errors: [],
+          warnings: [],
+          structuralViolations: [],
+          sanitized: validPayload,
+        },
+        llmResult: {
+          narrativeReport: 'Corrected narrative',
+          payload: validPayload,
+        },
+      })
+
+      const result = await service.score(defaultInput, jest.fn())
+
+      expect(result.success).toBe(true)
+      expect(mockRetryService.retryWithCorrection).toHaveBeenCalledTimes(1)
+      expect(mockRetryService.retryWithCorrection).toHaveBeenCalledWith(
+        ['sub-score sum mismatch'],
+        expect.objectContaining({ vendorName: 'Test Vendor', solutionType: 'clinical_ai' })
+      )
+    })
+
+    it('should use corrected narrative from retry result', async () => {
+      jest.spyOn(validator, 'validate').mockReturnValueOnce({
+        valid: true,
+        errors: [],
+        warnings: [],
+        structuralViolations: ['composite mismatch'],
+        sanitized: validPayload,
+      })
+
+      mockRetryService.retryWithCorrection.mockResolvedValue({
+        validationResult: {
+          valid: true,
+          errors: [],
+          warnings: [],
+          structuralViolations: [],
+          sanitized: validPayload,
+        },
+        llmResult: {
+          narrativeReport: 'Corrected narrative after retry',
+          payload: validPayload,
+        },
+      })
+
+      const result = await service.score(defaultInput, jest.fn())
+
+      expect(result.success).toBe(true)
+      // storeScores should receive the corrected narrative
+      expect(mockStorageService.storeScores).toHaveBeenCalledWith(
+        testAssessmentId,
+        expect.any(String),
+        validPayload,
+        'Corrected narrative after retry',
+        expect.any(Number)
+      )
+    })
+
+    it('should return STRUCTURAL_VALIDATION_FAILED when retry fails', async () => {
+      const { ScoringError: ScoringErrorClass } = await import('../../../../src/domain/scoring/errors.js')
+
+      jest.spyOn(validator, 'validate').mockReturnValueOnce({
+        valid: true,
+        errors: [],
+        warnings: [],
+        structuralViolations: ['sub-score value not in allowed set'],
+        sanitized: validPayload,
+      })
+
+      mockRetryService.retryWithCorrection.mockRejectedValue(
+        new ScoringErrorClass('STRUCTURAL_VALIDATION_FAILED', 'Structural violations persist after retry')
+      )
+
+      const result = await service.score(defaultInput, jest.fn())
+
+      expect(result.success).toBe(false)
+      expect(result.code).toBe('STRUCTURAL_VALIDATION_FAILED')
+      expect(result.error).toContain('Structural violations persist')
+      expect(mockStorageService.storeScores).not.toHaveBeenCalled()
+    })
+
+    it('should not call retryService when no structural violations', async () => {
+      const result = await service.score(defaultInput, jest.fn())
+
+      expect(result.success).toBe(true)
+      expect(mockRetryService.retryWithCorrection).not.toHaveBeenCalled()
     })
   })
 

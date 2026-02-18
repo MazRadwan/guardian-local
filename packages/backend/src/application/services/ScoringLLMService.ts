@@ -7,7 +7,7 @@
  * Epic 37: Added ISO control injection via IPromptBuilder optional methods.
  */
 
-import { ILLMClient } from '../interfaces/ILLMClient.js';
+import { ILLMClient, ContentBlockForPrompt } from '../interfaces/ILLMClient.js';
 import { IPromptBuilder } from '../interfaces/IPromptBuilder.js';
 import { scoringCompleteTool } from '../../domain/scoring/tools/scoringComplete.js';
 import { SolutionType } from '../../domain/scoring/rubric.js';
@@ -79,12 +79,13 @@ export class ScoringLLMService {
     solutionType: SolutionType,
     abortSignal: AbortSignal,
     onMessage: (message: string) => void,
-    isoOptions?: ISOScoringOptions
+    isoOptions?: ISOScoringOptions,
+    correctionPrompt?: string
   ): Promise<ScoreWithClaudeResult> {
     // Build prompts using port (not infrastructure import)
     // System prompt is static and fully cacheable (no ISO controls) - Story 39.3.3
     const systemPrompt = this.promptBuilder.buildScoringSystemPrompt();
-    const userPrompt = this.promptBuilder.buildScoringUserPrompt({
+    let userPrompt = this.promptBuilder.buildScoringUserPrompt({
       vendorName,
       solutionName,
       solutionType,
@@ -97,6 +98,11 @@ export class ScoringLLMService {
       isoControls: isoOptions?.applicableControls,
       isoCatalog: isoOptions?.catalogControls,
     });
+
+    // Append correction prompt for retry-on-structural-fail
+    if (correctionPrompt) {
+      userPrompt = this.appendCorrectionPrompt(userPrompt, correctionPrompt);
+    }
 
     // Call LLM via port (not ClaudeClient directly)
     let narrativeReport = '';
@@ -154,5 +160,20 @@ export class ScoringLLMService {
     }
 
     return { narrativeReport, payload: toolPayload, metrics };
+  }
+
+  /**
+   * Append correction prompt to user prompt (string or multi-block).
+   * Used by retry-on-structural-fail to include violation feedback.
+   */
+  private appendCorrectionPrompt(
+    userPrompt: string | ContentBlockForPrompt[],
+    correctionPrompt: string
+  ): string | ContentBlockForPrompt[] {
+    if (typeof userPrompt === 'string') {
+      return userPrompt + '\n\n' + correctionPrompt;
+    }
+    // Multi-block: append as a new non-cacheable text block
+    return [...userPrompt, { type: 'text' as const, text: correctionPrompt, cacheable: false }];
   }
 }

@@ -151,6 +151,12 @@ function buildVendorSection(params: UserPromptParams): string {
 **IMPORTANT:** Use these weights for the composite score calculation:
 ${weightedDimensions}
 
+**Composite Formula:**
+- For RISK dimensions (clinical_risk, privacy_risk, security_risk): use score directly (lower = less risk)
+- For CAPABILITY dimensions (technical_credibility, operational_excellence): convert to risk-equivalent = (100 - score)
+- Composite = sum of (weight% x risk_equivalent_score) for all weighted dimensions
+- Example: if clinical_risk=20 (weight 40%) and technical_credibility=80 (weight 15%): contribution = 20x0.40 + (100-80)x0.15 = 8 + 3 = 11
+
 All other dimensions are scored but do NOT contribute to the composite score.
 
 ## Questionnaire Responses

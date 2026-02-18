@@ -139,10 +139,12 @@ export class ScoringStorageService {
 
     if (!solutionType) {
       // Default to clinical_ai for healthcare assessments
+      console.log('[ScoringStorageService] No solutionType set on assessment, defaulting to clinical_ai');
       return 'clinical_ai';
     }
 
     if (validTypes.includes(solutionType as SolutionType)) {
+      console.log('[ScoringStorageService] Using solutionType:', solutionType);
       return solutionType as SolutionType;
     }
 

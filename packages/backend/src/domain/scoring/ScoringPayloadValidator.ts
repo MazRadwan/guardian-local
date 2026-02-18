@@ -1,8 +1,9 @@
 import { ScoringCompletePayload, RiskRating, Recommendation, DimensionScoreData } from './types';
-import { ALL_DIMENSIONS } from './rubric';
+import { ALL_DIMENSIONS, SolutionType } from './rubric';
 import { RiskDimension } from '../types/QuestionnaireSchema';
 import { SubScoreValidator } from './SubScoreValidator';
 import { ScoringConfidenceValidator } from './ScoringConfidenceValidator';
+import { compositeScoreValidator } from './CompositeScoreValidator';
 
 /**
  * Validation result
@@ -11,6 +12,7 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
+  structuralViolations: string[];
   sanitized?: ScoringCompletePayload;
 }
 
@@ -28,15 +30,16 @@ export class ScoringPayloadValidator {
   private confidenceValidator = new ScoringConfidenceValidator();
 
   /**
-   * Validate a payload from Claude's scoring_complete tool call
+   * Validate a payload from Claude's scoring_complete tool call.
+   * When solutionType is provided, also validates composite score arithmetic.
    */
-  validate(payload: unknown): ValidationResult {
+  validate(payload: unknown, solutionType?: SolutionType): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     // Check if payload is an object
     if (!payload || typeof payload !== 'object') {
-      return { valid: false, errors: ['Payload must be an object'], warnings: [] };
+      return { valid: false, errors: ['Payload must be an object'], warnings: [], structuralViolations: [] };
     }
 
     const p = payload as Record<string, unknown>;
@@ -77,10 +80,12 @@ export class ScoringPayloadValidator {
     const dimensionErrors = this.validateDimensionScores(p.dimensionScores);
     errors.push(...dimensionErrors);
 
-    // Validate sub-scores within dimension findings (soft warnings)
+    // Validate sub-scores within dimension findings
+    const structuralViolations: string[] = [];
     if (Array.isArray(p.dimensionScores)) {
-      const subScoreWarnings = this.subScoreValidator.validateAllSubScores(p.dimensionScores);
-      warnings.push(...subScoreWarnings);
+      const subScoreResult = this.subScoreValidator.validateAllSubScores(p.dimensionScores);
+      structuralViolations.push(...subScoreResult.structuralViolations);
+      warnings.push(...subScoreResult.softWarnings);
 
       // Validate assessmentConfidence within dimension findings (soft warnings)
       const confidenceWarnings = this.confidenceValidator.validateAllConfidence(p.dimensionScores);
@@ -91,8 +96,20 @@ export class ScoringPayloadValidator {
       warnings.push(...isoWarnings);
     }
 
+    // Validate composite score arithmetic (structural violation)
+    if (solutionType && Array.isArray(p.dimensionScores) && this.isValidScore(p.compositeScore)) {
+      const compositeResult = compositeScoreValidator.validate(
+        p.compositeScore as number,
+        p.dimensionScores as Array<{ dimension: string; score: number }>,
+        solutionType
+      );
+      if (!compositeResult.valid && compositeResult.violation) {
+        structuralViolations.push(compositeResult.violation);
+      }
+    }
+
     if (errors.length > 0) {
-      return { valid: false, errors, warnings };
+      return { valid: false, errors, warnings, structuralViolations };
     }
 
     // Build sanitized payload
@@ -106,7 +123,7 @@ export class ScoringPayloadValidator {
       dimensionScores: p.dimensionScores as DimensionScoreData[],
     };
 
-    return { valid: true, errors: [], warnings, sanitized };
+    return { valid: true, errors: [], warnings, structuralViolations, sanitized };
   }
 
   /**

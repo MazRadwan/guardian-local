@@ -13,22 +13,14 @@ import { ScoringError, ScoringErrorCode, UnauthorizedError } from '../../domain/
 import { ScoringStorageService } from './ScoringStorageService.js';
 import { ScoringLLMService } from './ScoringLLMService.js';
 import { ScoringQueryService } from './ScoringQueryService.js';
+import { ScoringRetryService } from './ScoringRetryService.js';
 import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 
 // Re-export for backward compatibility
 export { ScoringError, UnauthorizedError };
 export type { ScoringErrorCode };
 
-/**
- * ScoringService orchestrates the scoring workflow:
- * 1. Fetch uploaded file (with authorization)
- * 2. Parse document to extract responses
- * 3. Send to Claude with scoring prompt (via ScoringLLMService)
- * 4. Validate and store results (via ScoringStorageService)
- *
- * Epic 37 Sprint 1: Delegates to ScoringStorageService, ScoringLLMService,
- * and ScoringQueryService for separation of concerns.
- */
+/** Orchestrates scoring: file auth, parse, LLM scoring, validation (with retry), storage. */
 export class ScoringService implements IScoringService {
   private abortControllers = new Map<string, AbortController>();
 
@@ -41,7 +33,8 @@ export class ScoringService implements IScoringService {
     private validator: ScoringPayloadValidator,
     private storageService: ScoringStorageService,
     private llmService: ScoringLLMService,
-    private queryService: ScoringQueryService
+    private queryService: ScoringQueryService,
+    private retryService: ScoringRetryService
   ) {}
 
   async score(
@@ -57,8 +50,7 @@ export class ScoringService implements IScoringService {
     this.abortControllers.set(conversationId, abortController);
 
     try {
-      // 1. AUTHORIZATION: Verify user owns the file
-      // Epic 18: Move file retrieval before assessment check since assessmentId may come from file
+      // 1. Verify user owns the file
       onProgress({ status: 'parsing', message: 'Processing uploaded document...', progress: 5 });
       const fileRecord = await this.fileRepo.findByIdAndUser(fileId, userId);
       if (!fileRecord) {
@@ -73,10 +65,7 @@ export class ScoringService implements IScoringService {
       const fileBuffer = await this.fileStorage.retrieve(fileRecord.storagePath);
 
       // 3. Parse document to extract assessmentId and responses
-      // Epic 18: Parse first to extract assessmentId from document when not provided in input
       onProgress({ status: 'parsing', message: 'Extracting text from document...', progress: 10 });
-
-      // Build full DocumentMetadata as required by IScoringDocumentParser
       const documentMetadata: DocumentMetadata = {
         filename: fileRecord.filename,
         mimeType: fileRecord.mimeType,
@@ -87,13 +76,11 @@ export class ScoringService implements IScoringService {
         uploadedBy: userId,
       };
 
-      // Epic 18: Only set expectedAssessmentId if provided in input
-      // Story 20.3.3: Pass abort signal to parser
       const parseOptions: ScoringParseOptions = {
-        expectedAssessmentId: inputAssessmentId, // May be undefined - that's OK
+        expectedAssessmentId: inputAssessmentId,
         minConfidence: 0.7,
         abortSignal: abortController.signal,
-        onProgress, // Story 39.2.4: Thread progress to parser
+        onProgress,
       };
       onProgress({ status: 'parsing', message: 'Analyzing document format...', progress: 15 });
       const parseResult = await this.documentParser.parseForResponses(
@@ -102,12 +89,10 @@ export class ScoringService implements IScoringService {
         parseOptions
       );
 
-      // Story 20.3.3: Check if parsing was aborted
       if (!parseResult.success && parseResult.error === 'Parse aborted') {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // Epic 18: Determine assessmentId - use from document if not provided in input
       const assessmentId = inputAssessmentId || parseResult.assessmentId;
 
       if (!assessmentId) {
@@ -117,7 +102,6 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // Validate assessment ID match if both provided
       if (inputAssessmentId && parseResult.assessmentId && parseResult.assessmentId !== inputAssessmentId) {
         throw new ScoringError(
           'PARSE_FAILED',
@@ -129,8 +113,7 @@ export class ScoringService implements IScoringService {
         throw new ScoringError('PARSE_FAILED', 'No responses found in document');
       }
 
-      // 4. VALIDATION GATE: Check parse confidence >= 0.7
-      // Epic 15 Story 5a.4: Quality - reject low-confidence parses
+      // 4. Reject low-confidence parses
       const minConfidence = 0.7;
       if (parseResult.confidence < minConfidence) {
         throw new ScoringError(
@@ -139,22 +122,17 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 5. AUTHORIZATION: Verify assessment exists and user owns it
-      // Epic 18: Moved after parsing since assessmentId may come from document
-      // Story 20.3.4: Combined lookup fetches assessment + vendor in single query
+      // 5. Verify assessment exists and user owns it
       const assessmentWithVendor = await this.assessmentRepo.findByIdWithVendor(assessmentId);
       if (!assessmentWithVendor) {
         throw new ScoringError('ASSESSMENT_NOT_FOUND', `Assessment not found: ${assessmentId}`);
       }
       const { assessment, vendor } = assessmentWithVendor;
-      // Assessment entity uses 'createdBy' for the owner
       if (assessment.createdBy !== userId) {
         throw new ScoringError('UNAUTHORIZED_ASSESSMENT', `User ${userId} does not own assessment ${assessmentId}`);
       }
 
-      // 6. VALIDATION GATE: Check assessment status >= 'exported'
-      // Epic 15 Story 5a.4: Security - prevent scoring non-exported assessments
-      // Only 'exported' and 'scored' are valid - cannot score before export
+      // 6. Check assessment status >= 'exported'
       const validStatuses = ['exported', 'scored'];
       if (!validStatuses.includes(assessment.status)) {
         throw new ScoringError(
@@ -163,8 +141,7 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 7. VALIDATION GATE: Rate limit (5 per day per assessment)
-      // Epic 15 Story 5a.4: Cost - prevent abuse
+      // 7. Rate limit (5 per day per assessment)
       const todayCount = await this.assessmentResultRepo.countTodayForAssessment(assessmentId);
       if (todayCount >= 5) {
         throw new ScoringError(
@@ -173,40 +150,29 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 6. VALIDATION GATE: File hash de-duplication (1 hour window)
-      // Epic 15 Story 5a.4: Cost - prevent duplicate scoring of same file
-      // Note: fileHash would need to be computed from fileBuffer
-      // For MVP, we'll skip this check (would require crypto.createHash)
-      // TODO: Implement file hash de-duplication when needed
-
+      // TODO: File hash de-duplication (1 hour window) - skipped for MVP
       if (abortController.signal.aborted) {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // 5. Store responses (delegated to ScoringStorageService)
+      // 8. Store responses
       onProgress({ status: 'parsing', message: `Found ${parseResult.parsedQuestionCount} of ${parseResult.expectedQuestionCount ?? '?'} responses`, progress: 50 });
       await this.storageService.storeResponses(parseResult, assessmentId, batchId, fileId);
 
-      // 6. Determine solution type for correct weighting (delegated to ScoringStorageService)
-      // Note: vendor already fetched via findByIdWithVendor (Story 20.3.4)
+      // 9. Determine solution type for composite score weighting
       const solutionType = this.storageService.determineSolutionType(assessment);
 
-      // 8. Fetch ISO controls via ScoringLLMService (Epic 37: ISO enrichment)
-      // Graceful degradation: ISO enrichment is optional — fallback to empty arrays on failure
+      // 10. Fetch ISO controls (graceful degradation on failure)
       onProgress({ status: 'scoring', message: 'Loading compliance controls...', progress: 55 });
       let catalogControls: ISOControlForPrompt[] = [];
       try {
         catalogControls = await this.llmService.fetchISOCatalog();
       } catch (err) {
-        // ISO enrichment failure is non-critical — baseline scoring still runs
-        console.warn('[ScoringService] ISO catalog fetch failed, proceeding without ISO enrichment:', err);
+        console.warn('[ScoringService] ISO catalog fetch failed, proceeding without:', err);
       }
       onProgress({ status: 'scoring', message: 'Analyzing vendor responses against risk rubric...', progress: 60 });
 
-      // 9. Score with Claude (delegated to ScoringLLMService)
-      // The ISO catalog is provided via catalogControls for its own cached block.
-      // applicableControls is empty to avoid duplicating the catalog in the uncached
-      // vendor response block — Claude references the cached catalog block directly.
+      // 11. Score with Claude
       const { narrativeReport, payload } = await this.llmService.scoreWithClaude(
         parseResult,
         vendor.name,
@@ -221,16 +187,34 @@ export class ScoringService implements IScoringService {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // 9. Validate payload
+      // 12. Validate payload (with structural retry)
       onProgress({ status: 'validating', message: 'Validating scoring results...', progress: 90 });
-      const validationResult = this.validator.validate(payload);
+      let validationResult = this.validator.validate(payload, solutionType);
+      let finalNarrative = narrativeReport;
 
       if (!validationResult.valid) {
         console.error('Scoring payload validation failed:', validationResult.errors);
-        throw new Error(`Invalid scoring payload: ${validationResult.errors.join(', ')}`);
+        throw new ScoringError('SCORING_FAILED', `Invalid scoring payload: ${validationResult.errors.join(', ')}`);
       }
 
-      // Log sub-score warnings (soft validation — does not reject payload)
+      // Retry once on structural violations (sub-score values, sum mismatch, composite arithmetic)
+      if (validationResult.structuralViolations.length > 0) {
+        const isoOptions = { catalogControls, applicableControls: [] as ISOControlForPrompt[] };
+        const retryResult = await this.retryService.retryWithCorrection(
+          validationResult.structuralViolations,
+          {
+            parseResult, vendorName: vendor.name,
+            solutionName: assessment.solutionName || 'Unknown Solution',
+            solutionType, abortSignal: abortController.signal,
+            onMessage: (msg) => onProgress({ status: 'validating', message: msg, progress: 92 }),
+            isoOptions,
+          }
+        );
+        validationResult = retryResult.validationResult;
+        finalNarrative = retryResult.llmResult.narrativeReport;
+      }
+
+      // Log sub-score warnings (soft validation -- does not reject payload)
       if (validationResult.warnings.length > 0) {
         console.warn(
           `[ScoringService] Sub-score validation warnings for assessment ${assessmentId}:`,
@@ -238,25 +222,21 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 10. Store scores (delegated to ScoringStorageService)
+      // 13. Store scores
       onProgress({ status: 'validating', message: 'Storing assessment results...', progress: 95 });
       await this.storageService.storeScores(
-        assessmentId,
-        batchId,
-        validationResult.sanitized!,
-        narrativeReport,
-        Date.now() - startTime
+        assessmentId, batchId, validationResult.sanitized!,
+        finalNarrative, Date.now() - startTime
       );
 
-      // 11. Update assessment status
+      // 14. Update assessment status
       await this.assessmentRepo.updateStatus(assessmentId, 'scored');
 
-      // 12. Build report data
+      // 15. Build report data
       const report: ScoringReportData = {
-        assessmentId,
-        batchId,
+        assessmentId, batchId,
         payload: validationResult.sanitized!,
-        narrativeReport,
+        narrativeReport: finalNarrative,
         rubricVersion: RUBRIC_VERSION,
         modelId: this.llmService.getModelId(),
         scoringDurationMs: Date.now() - startTime,
@@ -267,7 +247,6 @@ export class ScoringService implements IScoringService {
 
       return { success: true, batchId, report };
     } catch (error) {
-      // Epic 15 Story 5a.4: Propagate structured error codes
       if (error instanceof ScoringError) {
         onProgress({ status: 'error', message: error.message, error: error.message });
         return { success: false, batchId, error: error.message, code: error.code };
@@ -289,10 +268,7 @@ export class ScoringService implements IScoringService {
     }
   }
 
-  /**
-   * Epic 22.1.1: Get scoring result for a conversation.
-   * Delegates to ScoringQueryService.
-   */
+  /** Get scoring result for a conversation. */
   async getResultForConversation(
     conversationId: string,
     userId: string
