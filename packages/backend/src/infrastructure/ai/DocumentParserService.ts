@@ -202,7 +202,7 @@ export class DocumentParserService
           options?.onProgress?.({
             status: 'parsing',
             message: `Matching responses... section ${i + 1} of ${sections.length}`,
-            progress: 15 + Math.round((i / sections.length) * 35),
+            progress: 15 + Math.round(((i + 1) / sections.length) * 35),
           });
         }
         // Apply per-response truncation to regex results too

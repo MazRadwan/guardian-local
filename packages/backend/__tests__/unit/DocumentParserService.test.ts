@@ -921,7 +921,7 @@ describe('DocumentParserService', () => {
         );
 
         expect(sectionCalls).toHaveLength(3);
-        expect(sectionCalls[0]).toEqual({ status: 'parsing', message: 'Matching responses... section 1 of 3', progress: 15 });
+        expect(sectionCalls[0]).toEqual({ status: 'parsing', message: 'Matching responses... section 1 of 3', progress: 27 });
         expect(sectionCalls[1]).toEqual({ status: 'parsing', message: 'Matching responses... section 2 of 3', progress: expect.any(Number) });
         expect(sectionCalls[2]).toEqual({ status: 'parsing', message: 'Matching responses... section 3 of 3', progress: expect.any(Number) });
       });

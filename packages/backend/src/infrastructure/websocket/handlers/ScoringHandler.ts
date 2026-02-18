@@ -190,12 +190,12 @@ export class ScoringHandler {
           continue;
         }
 
-        // Emit initial progress
+        // Emit initial progress (must be below ScoringService's first 5% event)
         socket.emit('scoring_progress', {
           conversationId,
           fileId,
           status: 'parsing',
-          progress: 10,
+          progress: 2,
           message: 'Analyzing questionnaire responses...',
         } as ScoringProgressEvent);
 

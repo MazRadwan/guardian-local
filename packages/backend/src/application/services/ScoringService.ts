@@ -211,7 +211,7 @@ export class ScoringService implements IScoringService {
         assessment.solutionName || 'Unknown Solution',
         solutionType,
         abortController.signal,
-        (message) => onProgress({ status: 'scoring', message }),
+        (message) => onProgress({ status: 'scoring', message, progress: 65 }),
         { catalogControls, applicableControls: catalogControls }
       );
 
