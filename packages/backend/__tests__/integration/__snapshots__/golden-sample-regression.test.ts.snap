@@ -309,37 +309,21 @@ For Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability
 
 ## ISO Messaging Rules
 - Use "ISO-traceable" or "ISO-informed" language
-- Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements"
-
-## ISO Standards Reference Catalog
-
-The following ISO-traceable controls inform your assessment. Reference relevant clauses in your dimension analysis.
-These are Guardian's interpretive criteria referencing ISO clause numbers.
-
-**IMPORTANT:** Use "ISO-traceable" or "ISO-informed" language. Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements".
-
-**Guardian-Native Dimensions:** Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability are assessed using Guardian healthcare-specific criteria (no ISO mapping available in current framework scope).
-
-### Controls by Domain
-
-#### Data management
-
-- **A.6.2.6** (ISO/IEC 42001): Data quality management for AI systems
-  Criteria: Organization implements systematic data quality processes.
-  Guidance: Evaluate data quality processes.
-  Dimensions: regulatory_compliance
-
-#### Risk management
-
-- **6.3** (ISO/IEC 23894): Risk treatment for AI systems
-  Criteria: Organization applies systematic risk treatment.
-  Dimensions: regulatory_compliance, operational_excellence
-
-"
+- Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements""
 `;
 
 exports[`Golden Sample Regression (SC-6) User Prompt Stability should match user prompt structure snapshot 1`] = `
-"## Vendor Assessment
+"## Applicable ISO Controls for This Assessment
+
+Consider these ISO-traceable controls when scoring the relevant dimensions:
+
+- A.6.2.6 (ISO/IEC 42001): Data quality management for AI systems -> [regulatory_compliance]
+- 6.3 (ISO/IEC 23894): Risk treatment for AI systems -> [regulatory_compliance, operational_excellence]
+
+
+---
+
+## Vendor Assessment
 
 **Vendor:** TestVendor
 **Solution:** TestSolution
@@ -365,14 +349,6 @@ All other dimensions are scored but do NOT contribute to the composite score.
 ### Section 2, Question 3
 **Q:** Q2
 **A:** A2
-
-## Applicable ISO Controls for This Assessment
-
-Consider these ISO-traceable controls when scoring the relevant dimensions:
-
-- A.6.2.6 (ISO/IEC 42001): Data quality management for AI systems -> [regulatory_compliance]
-- 6.3 (ISO/IEC 23894): Risk treatment for AI systems -> [regulatory_compliance, operational_excellence]
-
 
 ---
 

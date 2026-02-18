@@ -80,38 +80,41 @@ const sampleControls: ISOControlForPrompt[] = [
 describe('ISO Messaging Compliance (SC-8)', () => {
   describe('System Prompt', () => {
     it('should not contain any prohibited ISO terms as guidance', () => {
-      const prompt = buildScoringSystemPrompt(sampleControls)
+      // Story 39.3.3: System prompt is static (no ISO controls param)
+      const prompt = buildScoringSystemPrompt()
       for (const term of PROHIBITED_TERMS) {
         const occurrences = countOccurrences(prompt, term)
         // Prohibited terms may appear in "Do NOT use" instruction contexts only.
-        // The system prompt contains ISO messaging rules + the catalog section,
-        // both of which include a prohibition instruction, so up to 2 is acceptable.
-        // Every occurrence must be verified as appearing in prohibition context.
         verifyAllOccurrencesInProhibitionContext(prompt, term, occurrences)
       }
     })
 
     it('should contain all required ISO messaging terms', () => {
-      const prompt = buildScoringSystemPrompt(sampleControls)
+      // System prompt still contains ISO messaging rules in CONFIDENCE_AND_ISO_INSTRUCTIONS
+      const prompt = buildScoringSystemPrompt()
       for (const term of REQUIRED_TERMS) {
         expect(prompt).toContain(term)
       }
     })
 
     it('should contain ISO clause reference instructions', () => {
-      const prompt = buildScoringSystemPrompt(sampleControls)
+      const prompt = buildScoringSystemPrompt()
       expect(prompt).toContain('isoClauseReferences')
       expect(prompt).toContain('aligned')
       expect(prompt).toContain('partial')
       expect(prompt).toContain('not_evidenced')
     })
 
-    it('should not use prohibited terms even without ISO controls', () => {
+    it('should be static with no per-assessment variation (39.3.3)', () => {
+      const call1 = buildScoringSystemPrompt()
+      const call2 = buildScoringSystemPrompt()
+      expect(call1).toBe(call2)
+    })
+
+    it('should not contain ISO catalog content (moved to user prompt)', () => {
       const prompt = buildScoringSystemPrompt()
-      for (const term of PROHIBITED_TERMS) {
-        const occurrences = countOccurrences(prompt, term)
-        verifyAllOccurrencesInProhibitionContext(prompt, term, occurrences)
-      }
+      expect(prompt).not.toContain('ISO Standards Reference Catalog')
+      expect(prompt).not.toContain('Controls by Domain')
     })
   })
 
@@ -238,11 +241,33 @@ describe('ISO Messaging Compliance (SC-8)', () => {
       })
       expect(prompt).toContain('ISO-traceable')
     })
+
+    it('should not contain prohibited terms when isoCatalog provided (39.3.3)', () => {
+      const prompt = buildScoringUserPrompt({
+        ...baseParams,
+        isoCatalog: sampleControls,
+      })
+      for (const term of PROHIBITED_TERMS) {
+        const occurrences = countOccurrences(prompt, term)
+        // Catalog section includes "Do NOT use" instruction context
+        verifyAllOccurrencesInProhibitionContext(prompt, term, occurrences)
+      }
+    })
+
+    it('should contain ISO catalog section when isoCatalog provided (39.3.3)', () => {
+      const prompt = buildScoringUserPrompt({
+        ...baseParams,
+        isoCatalog: sampleControls,
+      })
+      expect(prompt).toContain('ISO Standards Reference Catalog')
+      expect(prompt).toContain('A.6.2.6')
+    })
   })
 
   describe('Full Prompt Composition Audit', () => {
     it('should maintain compliance across system + user prompts combined', () => {
-      const system = buildScoringSystemPrompt(sampleControls)
+      // Story 39.3.3: System prompt is static; ISO catalog goes to user prompt
+      const system = buildScoringSystemPrompt()
       const user = buildScoringUserPrompt({
         vendorName: 'AuditVendor',
         solutionName: 'AuditSolution',
@@ -252,6 +277,7 @@ describe('ISO Messaging Compliance (SC-8)', () => {
           { sectionNumber: 2, questionNumber: 1, questionText: 'Q2', responseText: 'A2' },
         ],
         isoControls: sampleControls,
+        isoCatalog: sampleControls,
       })
 
       // Combine both prompts as Claude would see them

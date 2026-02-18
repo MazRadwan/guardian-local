@@ -6,6 +6,10 @@
  *
  * Bridge between the repository layer and the prompt layer.
  * Returns ISOControlForPrompt[] — the format consumed by prompt builders.
+ *
+ * Includes in-memory caching with configurable TTL (default 5 min).
+ * ISO catalog changes rarely, so caching eliminates repeated DB queries
+ * during scoring runs.
  */
 
 import type {
@@ -18,30 +22,63 @@ import type { RiskDimension } from '../../domain/types/QuestionnaireSchema.js'
 
 export type { ISOControlForPrompt } from '../../domain/compliance/types.js'
 
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+}
+
 export class ISOControlRetrievalService {
+  private static readonly MAX_CACHE_ENTRIES = 50
+
+  private fullCatalogCache: CacheEntry<ISOControlForPrompt[]> | null = null
+  private applicableControlsCache = new Map<string, CacheEntry<ISOControlForPrompt[]>>()
+  private readonly cacheTTLMs: number
+
   constructor(
     private readonly mappingRepo: IDimensionControlMappingRepository,
     private readonly criteriaRepo: IInterpretiveCriteriaRepository,
-    private readonly criteriaVersion: string = 'guardian-iso42001-v1.0'
-  ) {}
+    private readonly criteriaVersion: string = 'guardian-iso42001-v1.0',
+    cacheTTLMs?: number
+  ) {
+    this.cacheTTLMs = cacheTTLMs ?? DEFAULT_CACHE_TTL_MS
+  }
 
   /**
    * Get all mapped controls for the static ISO catalog (system prompt).
    * Returns deduped controls across all dimensions.
+   * Results are cached in memory until TTL expires.
    */
   async getFullCatalog(): Promise<ISOControlForPrompt[]> {
+    if (this.fullCatalogCache && !this.isExpired(this.fullCatalogCache)) {
+      return this.fullCatalogCache.data
+    }
     const allMappings = await this.mappingRepo.findAllMappings()
-    return this.buildControlList(allMappings)
+    const result = await this.buildControlList(allMappings)
+    this.fullCatalogCache = { data: result, timestamp: Date.now() }
+    return result
   }
 
   /**
    * Get controls applicable to specific dimensions (user prompt).
    * Returns deduped controls that map to any of the given dimensions.
    * Uses a single batch query instead of one query per dimension.
+   * Results are cached per dimension set (sorted key) until TTL expires.
    */
   async getApplicableControls(dimensions: string[]): Promise<ISOControlForPrompt[]> {
+    const cacheKey = [...dimensions].sort().join(',')
+    const cached = this.applicableControlsCache.get(cacheKey)
+    if (cached && !this.isExpired(cached)) {
+      return cached.data
+    }
     const allMappings = await this.mappingRepo.findByDimensions(dimensions)
-    return this.buildControlList(allMappings)
+    const result = await this.buildControlList(allMappings)
+    if (this.applicableControlsCache.size >= ISOControlRetrievalService.MAX_CACHE_ENTRIES) {
+      this.applicableControlsCache.clear()
+    }
+    this.applicableControlsCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
   }
 
   /**
@@ -107,6 +144,21 @@ export class ISOControlRetrievalService {
     }
 
     return results
+  }
+
+  /**
+   * Clear all cached data. Useful for tests and after framework updates.
+   */
+  clearCache(): void {
+    this.fullCatalogCache = null
+    this.applicableControlsCache.clear()
+  }
+
+  /**
+   * Check if a cache entry has exceeded its TTL.
+   */
+  private isExpired(entry: CacheEntry<unknown>): boolean {
+    return Date.now() - entry.timestamp > this.cacheTTLMs
   }
 
   /**

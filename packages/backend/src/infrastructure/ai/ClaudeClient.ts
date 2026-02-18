@@ -701,6 +701,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       abortSignal,
       onTextDelta,
       onToolUse,
+      onUsage,
     } = options;
 
     // Convert tool definitions to Claude format
@@ -710,10 +711,15 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       input_schema: t.input_schema,
     }));
 
-    // Build messages
-    const messages: ClaudeMessage[] = [
-      { role: 'user', content: userPrompt },
-    ];
+    // Build user message content: string passthrough or ContentBlockForPrompt[] (Story 39.3.4)
+    // Map vendor-neutral cacheable hint to Anthropic-specific cache_control
+    const userContent = typeof userPrompt === 'string'
+      ? userPrompt
+      : userPrompt.map(block => ({
+          type: block.type,
+          text: block.text,
+          ...(block.cacheable ? { cache_control: { type: 'ephemeral' as const } } : {}),
+        }));
 
     // Format system prompt for caching if enabled
     const system = this.buildSystemPrompt(systemPrompt, usePromptCache);
@@ -737,10 +743,7 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
           model: this.model,
           max_tokens: maxTokens,  // Configurable for different use cases (default: 8192)
           system,
-          messages: messages.map((msg) => ({
-            role: msg.role,
-            content: msg.content,
-          })),
+          messages: [{ role: 'user' as const, content: userContent }],
           tools: claudeTools.length > 0 ? claudeTools : undefined,
           // tool_choice forces Claude to use the tool - essential for structured output
           ...(tool_choice && { tool_choice }),
@@ -817,6 +820,16 @@ export class ClaudeClient implements IClaudeClient, IVisionClient, ILLMClient {
       const finalStopReason = stream.currentMessage?.stop_reason || 'unavailable';
       const usage = stream.currentMessage?.usage;
       console.log(`[ClaudeClient] streamWithTool complete — stop_reason: ${finalStopReason}, messageStopSeen: ${messageStopSeen}, textLength: ${textLength}, toolCallStarted: ${toolCallStarted}, toolJsonLength: ${toolJsonLength}, usage: ${JSON.stringify(usage)}`);
+
+      // Epic 39: Invoke onUsage callback for metrics collection
+      if (usage && onUsage) {
+        onUsage({
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+          cache_read_input_tokens: (usage as Record<string, unknown>).cache_read_input_tokens as number | undefined,
+          cache_creation_input_tokens: (usage as Record<string, unknown>).cache_creation_input_tokens as number | undefined,
+        });
+      }
     } catch (error) {
       if (abortSignal?.aborted) {
         console.log('[ClaudeClient] streamWithTool aborted during request');

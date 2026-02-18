@@ -17,6 +17,17 @@ export interface ILLMClient {
 }
 
 /**
+ * Content block for multi-block user prompts (Story 39.3.4).
+ * Enables per-block caching hints on user messages, e.g. caching the
+ * ISO catalog block separately from vendor responses.
+ */
+export interface ContentBlockForPrompt {
+  type: 'text';
+  text: string;
+  cacheable?: boolean;  // Vendor-neutral hint; infrastructure decides how to implement
+}
+
+/**
  * Tool choice configuration for LLM API
  * Matches Anthropic SDK's ToolChoice type for strict compatibility
  */
@@ -27,7 +38,8 @@ export type LLMToolChoice =
 
 export interface StreamWithToolOptions {
   systemPrompt: string;
-  userPrompt: string;
+  /** User prompt: plain string or multi-block array with per-block caching hints (Story 39.3.4) */
+  userPrompt: string | ContentBlockForPrompt[];
   tools: ToolDefinition[];
   /** Force Claude to use a specific tool - essential for structured output */
   tool_choice?: LLMToolChoice;
@@ -41,6 +53,13 @@ export interface StreamWithToolOptions {
   abortSignal?: AbortSignal;
   onTextDelta?: (delta: string) => void;
   onToolUse?: (toolName: string, input: unknown) => void;
+  /** Callback invoked at end of streaming with token usage data (for metrics collection) */
+  onUsage?: (usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  }) => void;
 }
 
 /**

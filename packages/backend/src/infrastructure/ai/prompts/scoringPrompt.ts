@@ -43,20 +43,16 @@ For Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability
 - Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements"`;
 
 /**
- * Build scoring system prompt with full rubric criteria
- * @param isoControls - Optional ISO control catalog for system prompt injection
+ * Build scoring system prompt with full rubric criteria.
+ * Static and fully cacheable -- no per-assessment variation.
+ * ISO controls have been moved to the user prompt (Story 39.3.3).
  */
-export function buildScoringSystemPrompt(isoControls?: ISOControlForPrompt[]): string {
+export function buildScoringSystemPrompt(): string {
   const dimensionList = buildDimensionList();
   const disqualifyingList = buildDisqualifyingList();
   const rubricCriteria = buildRubricCriteria();
 
-  // Build ISO catalog section from provided controls or empty fallback
-  const isoCatalog = isoControls
-    ? buildISOCatalogSection(isoControls)
-    : buildISOCatalogSection();
-
-  const prompt = `You are Guardian, a healthcare AI governance expert conducting a vendor risk assessment for NLHS (Newfoundland & Labrador Health Services).
+  return `You are Guardian, a healthcare AI governance expert conducting a vendor risk assessment for NLHS (Newfoundland & Labrador Health Services).
 
 ## Your Task
 
@@ -112,15 +108,10 @@ ${disqualifyingList}
    - Key risks and recommendations
 
 2. **Then**: Call \`scoring_complete\` tool with structured scores${CONFIDENCE_AND_ISO_INSTRUCTIONS}`;
-
-  return isoCatalog ? `${prompt}\n\n${isoCatalog}` : prompt;
 }
 
-/**
- * Build user prompt with responses
- * @param params - Vendor info, responses, and optional ISO applicability controls
- */
-export function buildScoringUserPrompt(params: {
+/** User prompt params shared by buildScoringUserPrompt and buildScoringUserPromptParts */
+interface UserPromptParams {
   vendorName: string;
   solutionName: string;
   solutionType: SolutionType;
@@ -131,19 +122,25 @@ export function buildScoringUserPrompt(params: {
     responseText: string;
   }>;
   isoControls?: ISOControlForPrompt[];
-}): string {
-  const { vendorName, solutionName, solutionType, responses, isoControls } = params;
+  isoCatalog?: ISOControlForPrompt[];
+}
 
+/** Build the vendor/applicability section (everything except ISO catalog) */
+function buildVendorSection(params: UserPromptParams): string {
+  const { vendorName, solutionName, solutionType, responses, isoControls } = params;
   const weightedDimensions = buildWeightedDimensions(solutionType);
   const responsesText = formatResponsesForPrompt(responses);
 
-  // Build ISO applicability section from provided controls or empty fallback
   const isoApplicability = isoControls
     ? buildISOApplicabilitySection(isoControls)
     : buildISOApplicabilitySection();
-  const isoSection = isoApplicability ? `\n\n${isoApplicability}` : '';
 
-  return `## Vendor Assessment
+  let section = '';
+  if (isoApplicability) {
+    section += `${isoApplicability}\n\n---\n\n`;
+  }
+
+  section += `## Vendor Assessment
 
 **Vendor:** ${vendorName}
 **Solution:** ${solutionName}
@@ -158,9 +155,49 @@ All other dimensions are scored but do NOT contribute to the composite score.
 
 ## Questionnaire Responses
 
-${responsesText}${isoSection}
+${responsesText}
 
 ---
 
 Please analyze these responses and provide your risk assessment.`;
+
+  return section;
+}
+
+/**
+ * Build user prompt with responses (single string).
+ * @param params - Vendor info, responses, optional ISO catalog and applicability controls
+ */
+export function buildScoringUserPrompt(params: UserPromptParams): string {
+  const catalogSection = params.isoCatalog?.length
+    ? buildISOCatalogSection(params.isoCatalog)
+    : '';
+
+  let prompt = '';
+  if (catalogSection) {
+    prompt += `${catalogSection}\n\n---\n\n`;
+  }
+  prompt += buildVendorSection(params);
+  return prompt;
+}
+
+/**
+ * Build user prompt as separate parts for multi-block caching (Story 39.3.4).
+ * Returns ISO catalog and vendor sections separately so ScoringPromptBuilder
+ * can wrap the catalog in a cached ContentBlock.
+ *
+ * @param params - Must include isoCatalog with at least one control
+ * @returns { catalogSection, vendorSection } for multi-block assembly
+ */
+export function buildScoringUserPromptParts(params: UserPromptParams): {
+  catalogSection: string;
+  vendorSection: string;
+} {
+  const catalogSection = params.isoCatalog?.length
+    ? buildISOCatalogSection(params.isoCatalog)
+    : '';
+
+  const vendorSection = buildVendorSection(params);
+
+  return { catalogSection, vendorSection };
 }

@@ -94,7 +94,7 @@ describe('ScoringLLMService', () => {
   });
 
   describe('scoreWithClaude', () => {
-    it('should call promptBuilder.buildScoringSystemPrompt()', async () => {
+    it('should call promptBuilder.buildScoringSystemPrompt() with no args (static)', async () => {
       // Setup: streamWithTool calls onToolUse to provide payload
       mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
         options.onToolUse?.('scoring_complete', mockToolPayload);
@@ -113,6 +113,8 @@ describe('ScoringLLMService', () => {
       );
 
       expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledTimes(1);
+      // Story 39.3.3: System prompt is static, no ISO controls passed
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith();
     });
 
     it('should call promptBuilder.buildScoringUserPrompt() with correct params', async () => {
@@ -476,9 +478,14 @@ describe('ScoringLLMService', () => {
         { catalogControls, applicableControls }
       );
 
-      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith(catalogControls);
+      // System prompt receives NO ISO controls (static, cacheable) - Story 39.3.3
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith();
+      // ISO catalog now passed to user prompt alongside applicable controls
       expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({ isoControls: applicableControls })
+        expect.objectContaining({
+          isoControls: applicableControls,
+          isoCatalog: catalogControls,
+        })
       );
     });
 
@@ -498,7 +505,92 @@ describe('ScoringLLMService', () => {
       );
 
       expect(result.payload).toEqual(mockToolPayload);
-      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith(undefined);
+      // System prompt is always called with no args (static)
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith();
+      // User prompt receives undefined for both ISO params
+      expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isoControls: undefined,
+          isoCatalog: undefined,
+        })
+      );
+    });
+
+    it('should return metrics when onUsage callback provides usage data', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+        // Simulate usage callback from ClaudeClient
+        options.onUsage?.({
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 4000,
+          cache_creation_input_tokens: 0,
+        });
+      });
+
+      const abortController = new AbortController();
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const result = await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      expect(result.metrics).toBeDefined();
+      expect(result.metrics!.inputTokens).toBe(1000);
+      expect(result.metrics!.outputTokens).toBe(500);
+      expect(result.metrics!.cacheReadInputTokens).toBe(4000);
+      expect(result.metrics!.cacheCreationInputTokens).toBe(0);
+      expect(result.metrics!.cacheHitRate).toBe(0.8);
+      expect(result.metrics!.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(result.metrics!.estimatedCostUSD).toBeGreaterThan(0);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should return undefined metrics when onUsage is not called', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+        // No onUsage callback - simulates client that does not provide usage
+      });
+
+      const abortController = new AbortController();
+
+      const result = await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      expect(result.metrics).toBeUndefined();
+    });
+
+    it('should pass onUsage callback in streamWithTool options', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      const callArgs = mockLLMClient.streamWithTool.mock.calls[0][0];
+      expect(callArgs.onUsage).toBeDefined();
+      expect(typeof callArgs.onUsage).toBe('function');
     });
   });
 

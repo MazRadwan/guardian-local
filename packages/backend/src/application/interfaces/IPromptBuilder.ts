@@ -1,37 +1,37 @@
 import { SolutionType } from '../../domain/scoring/rubric.js';
 import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
+import type { ContentBlockForPrompt } from './ILLMClient.js';
 
 /**
  * Port for prompt building - application layer abstraction
  * Allows prompt construction without infrastructure dependency
  *
- * CACHING NOTE: The infrastructure implementation (ScoringPromptBuilder)
- * should use PromptCacheManager.ensureCached() for the system prompt.
- * The rubric text is static per version and benefits from prompt caching.
- *
- * Implementation should:
- * - Call PromptCacheManager.ensureCached('scoring') to get cached entry
- * - Use entry.systemPrompt for the prompt text
- * - Set cache_control: { type: 'ephemeral' } if entry.usePromptCache is true
+ * CACHING NOTE: The system prompt is static (rubric only, no ISO controls)
+ * and fully cacheable across all scoring calls (Story 39.3.3).
+ * ISO controls are now included in the user prompt via isoCatalog param.
+ * Story 39.3.4: User prompt may return multi-block content for per-block caching.
  */
 export interface IPromptBuilder {
   /**
-   * Build the scoring system prompt with rubric
-   * Accepts optional ISO catalog controls for inclusion in static prompt.
+   * Build the scoring system prompt with rubric.
+   * Returns a static, fully cacheable prompt (no per-assessment variation).
+   * ISO controls have been moved to the user prompt (Story 39.3.3).
    *
-   * @param isoControls - Full ISO control catalog (cacheable, same across assessments)
    * @returns System prompt with rubric criteria
    */
-  buildScoringSystemPrompt(isoControls?: ISOControlForPrompt[]): string;
+  buildScoringSystemPrompt(): string;
 
   /**
-   * Build user prompt with vendor responses
-   * This is NOT cached (varies per assessment)
+   * Build user prompt with vendor responses.
+   *
+   * Returns string when no ISO catalog is provided (backward compatible).
+   * Returns ContentBlockForPrompt[] when ISO catalog is provided, enabling
+   * per-block cache_control on the ISO catalog block (Story 39.3.4).
    *
    * IMPORTANT: solutionType is REQUIRED - it determines composite score weights.
    *
    * @param params - Vendor info, solution type, questionnaire responses, and optional ISO controls
-   * @returns User prompt with responses and weighting instructions
+   * @returns User prompt as string or multi-block array with cache_control
    */
   buildScoringUserPrompt(params: {
     vendorName: string;
@@ -44,10 +44,11 @@ export interface IPromptBuilder {
       responseText: string;
     }>;
     isoControls?: ISOControlForPrompt[];
-  }): string;
+    isoCatalog?: ISOControlForPrompt[];
+  }): string | ContentBlockForPrompt[];
 
   /**
-   * Optional: Fetch the full ISO control catalog for system prompt injection.
+   * Optional: Fetch the full ISO control catalog for user prompt injection.
    * Implemented by ScoringPromptBuilder when ISOControlRetrievalService is available.
    * Called by ScoringLLMService through the interface -- no concrete dependency needed.
    */

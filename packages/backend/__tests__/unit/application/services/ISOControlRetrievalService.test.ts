@@ -49,6 +49,24 @@ function makeCriteriaDTO(overrides: {
   }
 }
 
+function createMockRepos() {
+  const mockMappingRepo: jest.Mocked<IDimensionControlMappingRepository> = {
+    findByDimension: jest.fn(),
+    findByDimensions: jest.fn(),
+    findAllMappings: jest.fn(),
+    create: jest.fn(),
+    createBatch: jest.fn(),
+  }
+  const mockCriteriaRepo: jest.Mocked<IInterpretiveCriteriaRepository> = {
+    findByControlId: jest.fn(),
+    findApprovedByVersion: jest.fn(),
+    create: jest.fn(),
+    createBatch: jest.fn(),
+    updateReviewStatus: jest.fn(),
+  }
+  return { mockMappingRepo, mockCriteriaRepo }
+}
+
 describe('ISOControlRetrievalService', () => {
   let service: ISOControlRetrievalService
   let mockMappingRepo: jest.Mocked<IDimensionControlMappingRepository>
@@ -102,20 +120,9 @@ describe('ISOControlRetrievalService', () => {
   ]
 
   beforeEach(() => {
-    mockMappingRepo = {
-      findByDimension: jest.fn(),
-      findByDimensions: jest.fn(),
-      findAllMappings: jest.fn(),
-      create: jest.fn(),
-      createBatch: jest.fn(),
-    }
-    mockCriteriaRepo = {
-      findByControlId: jest.fn(),
-      findApprovedByVersion: jest.fn(),
-      create: jest.fn(),
-      createBatch: jest.fn(),
-      updateReviewStatus: jest.fn(),
-    }
+    const repos = createMockRepos()
+    mockMappingRepo = repos.mockMappingRepo
+    mockCriteriaRepo = repos.mockCriteriaRepo
 
     mockCriteriaRepo.findApprovedByVersion.mockResolvedValue(criteria)
 
@@ -298,6 +305,184 @@ describe('ISOControlRetrievalService', () => {
       const ctrl1 = result.find((r) => r.clauseRef === 'A.4.2')!
       expect(ctrl1.relevanceWeights['regulatory_compliance']).toBe(0.8)
       expect(ctrl1.relevanceWeights['operational_excellence']).toBe(0.6)
+    })
+  })
+
+  describe('getFullCatalog caching', () => {
+    it('should return data from DB on first call', async () => {
+      mockMappingRepo.findAllMappings.mockResolvedValue(mappings)
+
+      const result = await service.getFullCatalog()
+
+      expect(result).toHaveLength(3)
+      expect(mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(1)
+      expect(mockCriteriaRepo.findApprovedByVersion).toHaveBeenCalledTimes(1)
+    })
+
+    it('should return cached data on second call without hitting DB again', async () => {
+      mockMappingRepo.findAllMappings.mockResolvedValue(mappings)
+
+      const first = await service.getFullCatalog()
+      const second = await service.getFullCatalog()
+
+      expect(first).toEqual(second)
+      expect(mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(1)
+      expect(mockCriteriaRepo.findApprovedByVersion).toHaveBeenCalledTimes(1)
+    })
+
+    it('should refresh cache after TTL expires', async () => {
+      // Use a short TTL (50ms) to test expiration without fake timers
+      const shortTTLService = new ISOControlRetrievalService(
+        mockMappingRepo,
+        mockCriteriaRepo,
+        'guardian-iso42001-v1.0',
+        50 // 50ms TTL
+      )
+
+      mockMappingRepo.findAllMappings.mockResolvedValue(mappings)
+
+      await shortTTLService.getFullCatalog()
+      expect(mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(1)
+
+      // Wait for TTL to expire
+      await new Promise((resolve) => setTimeout(resolve, 60))
+
+      await shortTTLService.getFullCatalog()
+      expect(mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('getApplicableControls caching', () => {
+    it('should cache per dimension set', async () => {
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0], mappings[1]])
+
+      const dims = ['regulatory_compliance', 'operational_excellence']
+
+      await service.getApplicableControls(dims)
+      await service.getApplicableControls(dims)
+
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(1)
+    })
+
+    it('should use order-independent cache key (sorted dimensions)', async () => {
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0], mappings[1]])
+
+      await service.getApplicableControls([
+        'operational_excellence',
+        'regulatory_compliance',
+      ])
+      await service.getApplicableControls([
+        'regulatory_compliance',
+        'operational_excellence',
+      ])
+
+      // Same dimensions in different order should produce one DB call
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(1)
+    })
+
+    it('should cache different dimension sets independently', async () => {
+      mockMappingRepo.findByDimensions
+        .mockResolvedValueOnce([mappings[0]])
+        .mockResolvedValueOnce([mappings[3]])
+
+      await service.getApplicableControls(['regulatory_compliance'])
+      await service.getApplicableControls(['security_risk'])
+
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(2)
+    })
+
+    it('should refresh after TTL expires', async () => {
+      const shortTTLService = new ISOControlRetrievalService(
+        mockMappingRepo,
+        mockCriteriaRepo,
+        'guardian-iso42001-v1.0',
+        50 // 50ms TTL
+      )
+
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0]])
+
+      await shortTTLService.getApplicableControls(['regulatory_compliance'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(1)
+
+      await new Promise((resolve) => setTimeout(resolve, 60))
+
+      await shortTTLService.getApplicableControls(['regulatory_compliance'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(2)
+    })
+
+    it('should evict all entries when cache exceeds MAX_CACHE_ENTRIES (50)', async () => {
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0]])
+
+      // Fill cache to MAX_CACHE_ENTRIES (50 unique dimension sets)
+      for (let i = 0; i < 50; i++) {
+        await service.getApplicableControls([`dimension_${i}`])
+      }
+
+      // 50 unique calls = 50 DB hits
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(50)
+
+      // Verify one of the early entries is cached (no extra DB call)
+      await service.getApplicableControls(['dimension_0'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(50) // still 50
+
+      // Adding the 51st entry should trigger eviction (clear all)
+      await service.getApplicableControls(['dimension_50'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(51) // new DB call
+
+      // After eviction, previously cached entry should require a DB call
+      await service.getApplicableControls(['dimension_0'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(52) // re-fetched
+    })
+  })
+
+  describe('clearCache', () => {
+    it('should force next getFullCatalog call to hit DB', async () => {
+      mockMappingRepo.findAllMappings.mockResolvedValue(mappings)
+
+      await service.getFullCatalog()
+      expect(mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(1)
+
+      service.clearCache()
+
+      await service.getFullCatalog()
+      expect(mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(2)
+    })
+
+    it('should force next getApplicableControls call to hit DB', async () => {
+      mockMappingRepo.findByDimensions.mockResolvedValue([mappings[0]])
+
+      await service.getApplicableControls(['regulatory_compliance'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(1)
+
+      service.clearCache()
+
+      await service.getApplicableControls(['regulatory_compliance'])
+      expect(mockMappingRepo.findByDimensions).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('different criteriaVersion instances do not share cache', () => {
+    it('should not share cache between service instances with different versions', async () => {
+      const repos = createMockRepos()
+      repos.mockMappingRepo.findAllMappings.mockResolvedValue(mappings)
+      repos.mockCriteriaRepo.findApprovedByVersion.mockResolvedValue(criteria)
+
+      const serviceV1 = new ISOControlRetrievalService(
+        repos.mockMappingRepo,
+        repos.mockCriteriaRepo,
+        'guardian-iso42001-v1.0'
+      )
+      const serviceV2 = new ISOControlRetrievalService(
+        repos.mockMappingRepo,
+        repos.mockCriteriaRepo,
+        'guardian-iso42001-v2.0'
+      )
+
+      await serviceV1.getFullCatalog()
+      await serviceV2.getFullCatalog()
+
+      // Each service instance has its own cache, so both hit DB
+      expect(repos.mockMappingRepo.findAllMappings).toHaveBeenCalledTimes(2)
     })
   })
 })
