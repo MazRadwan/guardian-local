@@ -734,4 +734,62 @@ describe('ScoringPayloadValidator', () => {
       }
     });
   });
+
+  describe('disqualifying factor enforcement (structural violation)', () => {
+    it('should produce structural violation when disqualifiers present but recommendation is not decline', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['cross_border_data_transfer_without_safeguards'];
+      payload.recommendation = 'approve';
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true); // Schema valid
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("disqualifyingFactors present")
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("must be 'decline'")
+      );
+    });
+
+    it('should produce structural violation when disqualifiers present with conditional', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['no_encryption_for_phi'];
+      payload.recommendation = 'conditional';
+
+      const result = validator.validate(payload);
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("disqualifyingFactors present")
+      );
+    });
+
+    it('should accept decline with disqualifiers', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['no_encryption_for_phi', 'no_incident_response_plan'];
+      payload.recommendation = 'decline';
+
+      const result = validator.validate(payload);
+      const dqViolations = result.structuralViolations.filter(v => v.includes('disqualifyingFactors'));
+      expect(dqViolations).toHaveLength(0);
+    });
+
+    it('should accept approve with empty disqualifiers', () => {
+      const payload = createValidPayload();
+      payload.disqualifyingFactors = [];
+      payload.recommendation = 'approve';
+
+      const result = validator.validate(payload);
+      const dqViolations = result.structuralViolations.filter(v => v.includes('disqualifyingFactors'));
+      expect(dqViolations).toHaveLength(0);
+    });
+
+    it('should accept when disqualifiers undefined and recommendation is approve', () => {
+      const payload = createValidPayload();
+      delete (payload as any).disqualifyingFactors;
+      payload.recommendation = 'approve';
+
+      const result = validator.validate(payload);
+      const dqViolations = result.structuralViolations.filter(v => v.includes('disqualifyingFactors'));
+      expect(dqViolations).toHaveLength(0);
+    });
+  });
 });

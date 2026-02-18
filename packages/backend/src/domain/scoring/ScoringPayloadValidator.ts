@@ -96,6 +96,15 @@ export class ScoringPayloadValidator {
       warnings.push(...isoWarnings);
     }
 
+    // Validate disqualifying factor / recommendation coherence (structural violation)
+    const disqualifiers = Array.isArray(p.disqualifyingFactors) ? p.disqualifyingFactors as string[] : [];
+    if (disqualifiers.length > 0 && p.recommendation !== 'decline') {
+      structuralViolations.push(
+        `disqualifyingFactors present (${disqualifiers.join(', ')}) ` +
+        `but recommendation is '${p.recommendation}' — must be 'decline'`
+      );
+    }
+
     // Validate composite score arithmetic (structural violation)
     if (solutionType && Array.isArray(p.dimensionScores) && this.isValidScore(p.compositeScore)) {
       const compositeResult = compositeScoreValidator.validate(
