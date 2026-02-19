@@ -121,13 +121,13 @@ export const RECOMMENDATION_THRESHOLDS = {
     maxOverallRisk: 30,
     maxCriticalDimensions: 0,
     maxHighDimensions: 1,
-    requireNoDisqualifiers: true,
+    requireNoDisqualifiersOfAnyTier: true,
   },
   conditional: {
     maxOverallRisk: 50,
     maxCriticalDimensions: 0,
     maxHighDimensions: Infinity,
-    requireNoDisqualifiers: true,
+    requireNoHardDisqualifiers: true,
   },
   decline: {
     minOverallRisk: 51,
@@ -163,3 +163,39 @@ export const DISQUALIFYING_FACTORS = {
  * Flatten all disqualifying factors for validation
  */
 export const ALL_DISQUALIFYING_FACTORS: string[] = Object.values(DISQUALIFYING_FACTORS).flat()
+
+/**
+ * Disqualifier tier classification
+ *
+ * - hard_decline: fundamental safety/architecture gaps -> must recommend 'decline'
+ * - remediable_blocker: process/documentation gaps fixable in 30-90 days -> blocks 'approve', allows 'conditional'
+ */
+export type DisqualifierTier = 'hard_decline' | 'remediable_blocker'
+
+export const DISQUALIFIER_TIER: Record<string, DisqualifierTier> = {
+  // Clinical (all hard — fundamental safety gaps)
+  no_clinical_validation_for_diagnosis_treatment_ai: 'hard_decline',
+  false_negative_rate_above_2_percent_for_triage_ai: 'hard_decline',
+  no_clinician_override_for_clinical_decision_support: 'hard_decline',
+  regulatory_approval_required_but_not_obtained: 'hard_decline',
+  // Privacy (2 hard, 2 remediable)
+  no_privacy_impact_assessment_for_phi_processing: 'remediable_blocker',
+  cross_border_data_transfer_without_safeguards: 'hard_decline',
+  non_compliance_with_pipeda_atipp: 'hard_decline',
+  no_breach_notification_process: 'remediable_blocker',
+  // Security (2 hard, 2 remediable)
+  no_encryption_for_phi: 'hard_decline',
+  no_penetration_testing_ever_conducted: 'remediable_blocker',
+  no_incident_response_plan: 'remediable_blocker',
+  critical_vulnerabilities_unfixed_over_90_days: 'hard_decline',
+}
+
+/** All factors classified as hard_decline — must recommend 'decline' */
+export const HARD_DISQUALIFIERS: string[] = Object.entries(DISQUALIFIER_TIER)
+  .filter(([, tier]) => tier === 'hard_decline')
+  .map(([factor]) => factor)
+
+/** All factors classified as remediable_blocker — blocks 'approve', allows 'conditional' */
+export const REMEDIABLE_BLOCKERS: string[] = Object.entries(DISQUALIFIER_TIER)
+  .filter(([, tier]) => tier === 'remediable_blocker')
+  .map(([factor]) => factor)

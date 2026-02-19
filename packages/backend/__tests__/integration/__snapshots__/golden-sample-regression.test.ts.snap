@@ -250,20 +250,26 @@ Analyze the vendor's completed questionnaire responses and produce:
 
 ---
 
-## Disqualifying Factors (automatic DECLINE)
+## Disqualifying Factors (Two-Tier System)
 
-- [clinical_risk] no clinical validation for diagnosis treatment ai
-- [clinical_risk] false negative rate above 2 percent for triage ai
-- [clinical_risk] no clinician override for clinical decision support
-- [clinical_risk] regulatory approval required but not obtained
-- [privacy_risk] no privacy impact assessment for phi processing
-- [privacy_risk] cross border data transfer without safeguards
-- [privacy_risk] non compliance with pipeda atipp
-- [privacy_risk] no breach notification process
-- [security_risk] no encryption for phi
-- [security_risk] no penetration testing ever conducted
-- [security_risk] no incident response plan
-- [security_risk] critical vulnerabilities unfixed over 90 days
+Each factor below is classified by tier. Use the exact canonical key (underscore_separated) in the disqualifyingFactors array.
+
+- [clinical_risk] no_clinical_validation_for_diagnosis_treatment_ai — AUTOMATIC DECLINE
+- [clinical_risk] false_negative_rate_above_2_percent_for_triage_ai — AUTOMATIC DECLINE
+- [clinical_risk] no_clinician_override_for_clinical_decision_support — AUTOMATIC DECLINE
+- [clinical_risk] regulatory_approval_required_but_not_obtained — AUTOMATIC DECLINE
+- [privacy_risk] no_privacy_impact_assessment_for_phi_processing — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [privacy_risk] cross_border_data_transfer_without_safeguards — AUTOMATIC DECLINE
+- [privacy_risk] non_compliance_with_pipeda_atipp — AUTOMATIC DECLINE
+- [privacy_risk] no_breach_notification_process — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [security_risk] no_encryption_for_phi — AUTOMATIC DECLINE
+- [security_risk] no_penetration_testing_ever_conducted — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [security_risk] no_incident_response_plan — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [security_risk] critical_vulnerabilities_unfixed_over_90_days — AUTOMATIC DECLINE
+
+**Tier rules:**
+- **AUTOMATIC DECLINE** factors represent fundamental safety/architecture gaps that cannot be remediated. If ANY are present, you MUST recommend 'decline'.
+- **REQUIRES REMEDIATION PLAN** factors represent process/documentation gaps fixable in 30-90 days. If ONLY these are present (no AUTOMATIC DECLINE factors), recommend 'conditional' with specific remediation items and timelines.
 
 ---
 
@@ -272,14 +278,15 @@ Analyze the vendor's completed questionnaire responses and produce:
 **APPROVE** (overall risk <=30):
 - No CRITICAL dimensions
 - Maximum 1 HIGH dimension
-- No disqualifying factors
+- No disqualifying factors of any tier
 
 **CONDITIONAL** (overall risk 31-50):
-- No disqualifying factors
+- No AUTOMATIC DECLINE disqualifying factors
+- REQUIRES REMEDIATION PLAN factors allowed (must include remediation items)
 - Gaps are remediable within reasonable timeframe
 
 **DECLINE** (overall risk >50 OR):
-- Any disqualifying factor present
+- Any AUTOMATIC DECLINE disqualifying factor present
 - Multiple CRITICAL dimensions
 
 **MORE_INFO**:

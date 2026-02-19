@@ -11,6 +11,7 @@ import {
   DIMENSION_CONFIG,
   ALL_DIMENSIONS,
   DISQUALIFYING_FACTORS,
+  DISQUALIFIER_TIER,
   DIMENSION_WEIGHTS,
   SolutionType,
 } from '../../../domain/scoring/rubric.js';
@@ -26,12 +27,18 @@ export function buildDimensionList(): string {
 }
 
 /**
- * Build disqualifying factors list for system prompt.
- * e.g. "- [clinical_risk] no clinical validation for diagnosis treatment ai"
+ * Build disqualifying factors list for system prompt with tier annotations.
+ * Each factor is annotated as AUTOMATIC DECLINE or REQUIRES REMEDIATION PLAN.
  */
 export function buildDisqualifyingList(): string {
   return Object.entries(DISQUALIFYING_FACTORS)
-    .flatMap(([dimension, factors]) => factors.map(f => `- [${dimension}] ${f.replace(/_/g, ' ')}`))
+    .flatMap(([dimension, factors]) => factors.map(f => {
+      const tier = DISQUALIFIER_TIER[f] ?? 'hard_decline';
+      const label = tier === 'hard_decline'
+        ? 'AUTOMATIC DECLINE'
+        : 'REQUIRES REMEDIATION PLAN (conditional eligible)';
+      return `- [${dimension}] ${f} — ${label}`;
+    }))
     .join('\n');
 }
 

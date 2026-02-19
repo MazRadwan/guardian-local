@@ -19,12 +19,15 @@ describe('scoringPrompt - stability regression', () => {
       }
     });
 
-    it('should contain disqualifying factors section', () => {
-      expect(systemPrompt).toContain('Disqualifying Factors (automatic DECLINE)');
-      // Spot-check specific factors
-      expect(systemPrompt).toContain('no clinical validation for diagnosis treatment ai');
-      expect(systemPrompt).toContain('no encryption for phi');
-      expect(systemPrompt).toContain('cross border data transfer without safeguards');
+    it('should contain disqualifying factors section with tier annotations', () => {
+      expect(systemPrompt).toContain('Disqualifying Factors (Two-Tier System)');
+      // Spot-check specific factors with canonical keys
+      expect(systemPrompt).toContain('no_clinical_validation_for_diagnosis_treatment_ai');
+      expect(systemPrompt).toContain('no_encryption_for_phi');
+      expect(systemPrompt).toContain('cross_border_data_transfer_without_safeguards');
+      // Spot-check tier labels
+      expect(systemPrompt).toContain('AUTOMATIC DECLINE');
+      expect(systemPrompt).toContain('REQUIRES REMEDIATION PLAN');
     });
 
     it('should contain output format instructions', () => {

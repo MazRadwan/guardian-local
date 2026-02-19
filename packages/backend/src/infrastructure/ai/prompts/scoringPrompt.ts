@@ -74,9 +74,15 @@ ${rubricCriteria}
 
 ---
 
-## Disqualifying Factors (automatic DECLINE)
+## Disqualifying Factors (Two-Tier System)
+
+Each factor below is classified by tier. Use the exact canonical key (underscore_separated) in the disqualifyingFactors array.
 
 ${disqualifyingList}
+
+**Tier rules:**
+- **AUTOMATIC DECLINE** factors represent fundamental safety/architecture gaps that cannot be remediated. If ANY are present, you MUST recommend 'decline'.
+- **REQUIRES REMEDIATION PLAN** factors represent process/documentation gaps fixable in 30-90 days. If ONLY these are present (no AUTOMATIC DECLINE factors), recommend 'conditional' with specific remediation items and timelines.
 
 ---
 
@@ -85,14 +91,15 @@ ${disqualifyingList}
 **APPROVE** (overall risk <=30):
 - No CRITICAL dimensions
 - Maximum 1 HIGH dimension
-- No disqualifying factors
+- No disqualifying factors of any tier
 
 **CONDITIONAL** (overall risk 31-50):
-- No disqualifying factors
+- No AUTOMATIC DECLINE disqualifying factors
+- REQUIRES REMEDIATION PLAN factors allowed (must include remediation items)
 - Gaps are remediable within reasonable timeframe
 
 **DECLINE** (overall risk >50 OR):
-- Any disqualifying factor present
+- Any AUTOMATIC DECLINE disqualifying factor present
 - Multiple CRITICAL dimensions
 
 **MORE_INFO**:

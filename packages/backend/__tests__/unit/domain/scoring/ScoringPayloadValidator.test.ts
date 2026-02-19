@@ -735,50 +735,152 @@ describe('ScoringPayloadValidator', () => {
     });
   });
 
-  describe('disqualifying factor enforcement (structural violation)', () => {
-    it('should produce structural violation when disqualifiers present but recommendation is not decline', () => {
+  describe('tiered disqualifying factor enforcement (structural violation)', () => {
+    // --- Hard decline tier ---
+    it('should accept hard_decline factor with decline recommendation', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = ['cross_border_data_transfer_without_safeguards'];
-      payload.recommendation = 'approve';
+      payload.recommendation = 'decline';
 
       const result = validator.validate(payload);
-      expect(result.valid).toBe(true); // Schema valid
+      const dqViolations = result.structuralViolations.filter(v =>
+        v.includes('hard_decline') || v.includes('remediable_blocker')
+      );
+      expect(dqViolations).toHaveLength(0);
+    });
+
+    it('should produce structural violation for hard_decline factor with conditional', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['no_encryption_for_phi'];
+      payload.recommendation = 'conditional';
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
       expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("disqualifyingFactors present")
+        expect.stringContaining('hard_decline')
       );
       expect(result.structuralViolations).toContainEqual(
         expect.stringContaining("must be 'decline'")
       );
     });
 
-    it('should produce structural violation when disqualifiers present with conditional', () => {
+    it('should produce structural violation for hard_decline factor with approve', () => {
       const payload = createValidPayload();
-      (payload as any).disqualifyingFactors = ['no_encryption_for_phi'];
+      (payload as any).disqualifyingFactors = ['cross_border_data_transfer_without_safeguards'];
+      payload.recommendation = 'approve';
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('hard_decline')
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("must be 'decline'")
+      );
+    });
+
+    // --- Remediable blocker tier ---
+    it('should accept remediable_blocker factor with conditional', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['no_incident_response_plan'];
+      payload.recommendation = 'conditional';
+
+      const result = validator.validate(payload);
+      const dqViolations = result.structuralViolations.filter(v =>
+        v.includes('hard_decline') || v.includes('remediable_blocker')
+      );
+      expect(dqViolations).toHaveLength(0);
+    });
+
+    it('should produce structural violation for remediable_blocker factor with approve', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['no_penetration_testing_ever_conducted'];
+      payload.recommendation = 'approve';
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('remediable_blocker')
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("must be 'conditional' or 'decline'")
+      );
+    });
+
+    it('should accept remediable_blocker factor with decline', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['no_breach_notification_process'];
+      payload.recommendation = 'decline';
+
+      const result = validator.validate(payload);
+      const dqViolations = result.structuralViolations.filter(v =>
+        v.includes('hard_decline') || v.includes('remediable_blocker')
+      );
+      expect(dqViolations).toHaveLength(0);
+    });
+
+    // --- Mixed tiers ---
+    it('should accept mixed hard + remediable with decline', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = [
+        'no_encryption_for_phi',           // hard_decline
+        'no_incident_response_plan',       // remediable_blocker
+      ];
+      payload.recommendation = 'decline';
+
+      const result = validator.validate(payload);
+      const dqViolations = result.structuralViolations.filter(v =>
+        v.includes('hard_decline') || v.includes('remediable_blocker')
+      );
+      expect(dqViolations).toHaveLength(0);
+    });
+
+    it('should produce structural violation for mixed hard + remediable with conditional', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = [
+        'no_encryption_for_phi',           // hard_decline
+        'no_incident_response_plan',       // remediable_blocker
+      ];
       payload.recommendation = 'conditional';
 
       const result = validator.validate(payload);
       expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("disqualifyingFactors present")
+        expect.stringContaining('hard_decline')
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("must be 'decline'")
       );
     });
 
-    it('should accept decline with disqualifiers', () => {
+    // --- Unknown factors (fail safe) ---
+    it('should treat unknown factor as hard_decline and produce warning', () => {
       const payload = createValidPayload();
-      (payload as any).disqualifyingFactors = ['no_encryption_for_phi', 'no_incident_response_plan'];
-      payload.recommendation = 'decline';
+      (payload as any).disqualifyingFactors = ['some_unknown_factor'];
+      payload.recommendation = 'conditional';
 
       const result = validator.validate(payload);
-      const dqViolations = result.structuralViolations.filter(v => v.includes('disqualifyingFactors'));
-      expect(dqViolations).toHaveLength(0);
+      expect(result.valid).toBe(true);
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining("Unknown disqualifying factor 'some_unknown_factor'")
+      );
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('hard_decline')
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("must be 'decline'")
+      );
     });
 
+    // --- Empty / undefined ---
     it('should accept approve with empty disqualifiers', () => {
       const payload = createValidPayload();
       payload.disqualifyingFactors = [];
       payload.recommendation = 'approve';
 
       const result = validator.validate(payload);
-      const dqViolations = result.structuralViolations.filter(v => v.includes('disqualifyingFactors'));
+      const dqViolations = result.structuralViolations.filter(v =>
+        v.includes('hard_decline') || v.includes('remediable_blocker')
+      );
       expect(dqViolations).toHaveLength(0);
     });
 
@@ -788,8 +890,23 @@ describe('ScoringPayloadValidator', () => {
       payload.recommendation = 'approve';
 
       const result = validator.validate(payload);
-      const dqViolations = result.structuralViolations.filter(v => v.includes('disqualifyingFactors'));
+      const dqViolations = result.structuralViolations.filter(v =>
+        v.includes('hard_decline') || v.includes('remediable_blocker')
+      );
       expect(dqViolations).toHaveLength(0);
     });
+  });
+});
+
+describe('scoringComplete tool schema contract', () => {
+  it('should have disqualifyingFactors enum matching ALL_DISQUALIFYING_FACTORS', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { scoringCompleteTool } = require('../../../../src/domain/scoring/tools/scoringComplete');
+    const { ALL_DISQUALIFYING_FACTORS } = require('../../../../src/domain/scoring/rubric');
+
+    const enumValues =
+      scoringCompleteTool.input_schema.properties.disqualifyingFactors.items.enum;
+    expect(enumValues).toBeDefined();
+    expect(enumValues).toEqual(ALL_DISQUALIFYING_FACTORS);
   });
 });
