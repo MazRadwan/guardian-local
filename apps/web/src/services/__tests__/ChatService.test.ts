@@ -27,10 +27,11 @@ describe('ChatService', () => {
   });
 
   // Helper to create mock messages
-  const createMessage = (role: 'user' | 'assistant', content: string): ChatMessage => ({
+  const createMessage = (role: 'user' | 'assistant', content: string, attachments?: ChatMessage['attachments']): ChatMessage => ({
     role,
     content,
     timestamp: new Date(),
+    ...(attachments && { attachments }),
   });
 
   describe('sendMessage', () => {
@@ -180,12 +181,37 @@ describe('ChatService', () => {
 
       service.regenerateMessage(1, 'conv-123', messages);
 
-      // Story 24.1: Verify isRegenerate flag is passed
+      // Story 24.1: Verify isRegenerate flag is passed (no attachments = undefined)
       expect(adapter.sendMessage).toHaveBeenCalledWith(
         'Explain photosynthesis',
         'conv-123',
         undefined,
         true  // isRegenerate flag
+      );
+    });
+
+    it('should pass attachments from previous user message when regenerating file-only messages', () => {
+      const adapter = createMockAdapter();
+      const store = createMockStore();
+      const service = new ChatService(adapter, store);
+
+      const fileAttachments = [
+        { fileId: 'file-1', filename: 'questionnaire.pdf', mimeType: 'application/pdf', size: 1024 },
+      ];
+
+      const messages: ChatMessage[] = [
+        createMessage('user', '', fileAttachments),
+        createMessage('assistant', 'Scoring result...'),
+      ];
+
+      service.regenerateMessage(1, 'conv-123', messages);
+
+      // Bug fix: Should pass attachments so backend doesn't reject empty payload
+      expect(adapter.sendMessage).toHaveBeenCalledWith(
+        '',
+        'conv-123',
+        fileAttachments,
+        true
       );
     });
 
