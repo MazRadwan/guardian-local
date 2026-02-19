@@ -852,19 +852,32 @@ describe('ScoringPayloadValidator', () => {
       );
     });
 
-    // --- Unknown factors (fail safe) ---
-    it('should treat unknown factor as hard_decline and produce warning', () => {
+    // --- Unknown factors (structural violation) ---
+    it('should produce structural violation for unknown factor even when recommendation is decline', () => {
+      const payload = createValidPayload();
+      (payload as any).disqualifyingFactors = ['some_unknown_factor'];
+      payload.recommendation = 'decline';
+
+      const result = validator.validate(payload);
+      expect(result.valid).toBe(true);
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining("Unknown disqualifying factor 'some_unknown_factor'")
+      );
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('canonical key')
+      );
+    });
+
+    it('should produce two structural violations for unknown factor with non-decline recommendation', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = ['some_unknown_factor'];
       payload.recommendation = 'conditional';
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      expect(result.warnings).toContainEqual(
-        expect.stringContaining("Unknown disqualifying factor 'some_unknown_factor'")
-      );
-      expect(result.warnings).toContainEqual(
-        expect.stringContaining('hard_decline')
+      // Two violations: unknown key + hard gate (must decline)
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('canonical key')
       );
       expect(result.structuralViolations).toContainEqual(
         expect.stringContaining("must be 'decline'")

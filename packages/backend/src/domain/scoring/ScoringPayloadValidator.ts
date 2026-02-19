@@ -236,8 +236,10 @@ export class ScoringPayloadValidator {
 
     for (const factor of disqualifiers) {
       if (!ALL_DISQUALIFYING_FACTORS.includes(factor)) {
-        // Unknown factor — fail safe as hard_decline
-        warnings.push(`Unknown disqualifying factor '${factor}' — treating as hard_decline`);
+        // Unknown factor — structural violation (must use canonical keys)
+        structuralViolations.push(
+          `Unknown disqualifying factor '${factor}' — must use canonical key from rubric`
+        );
         hasHard = true;
         hardFactors.push(factor);
         continue;
