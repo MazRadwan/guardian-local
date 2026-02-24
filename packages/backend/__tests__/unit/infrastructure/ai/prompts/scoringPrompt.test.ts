@@ -19,12 +19,15 @@ describe('scoringPrompt - stability regression', () => {
       }
     });
 
-    it('should contain disqualifying factors section', () => {
-      expect(systemPrompt).toContain('Disqualifying Factors (automatic DECLINE)');
-      // Spot-check specific factors
-      expect(systemPrompt).toContain('no clinical validation for diagnosis treatment ai');
-      expect(systemPrompt).toContain('no encryption for phi');
-      expect(systemPrompt).toContain('cross border data transfer without safeguards');
+    it('should contain disqualifying factors section with tier annotations', () => {
+      expect(systemPrompt).toContain('Disqualifying Factors (Two-Tier System)');
+      // Spot-check specific factors with canonical keys
+      expect(systemPrompt).toContain('no_clinical_validation_for_diagnosis_treatment_ai');
+      expect(systemPrompt).toContain('no_encryption_for_phi');
+      expect(systemPrompt).toContain('cross_border_data_transfer_without_safeguards');
+      // Spot-check tier labels
+      expect(systemPrompt).toContain('AUTOMATIC DECLINE');
+      expect(systemPrompt).toContain('REQUIRES REMEDIATION PLAN');
     });
 
     it('should contain output format instructions', () => {
@@ -53,10 +56,16 @@ describe('scoringPrompt - stability regression', () => {
       expect(systemPrompt).toContain('guardian-v1.0');
     });
 
-    it('should not contain ISO content yet (placeholders return empty)', () => {
-      // The ISO catalog section is empty, so it should not append anything extra
-      // The prompt should end with the output format section
+    it('should not contain ISO content (moved to user prompt in 39.3.3)', () => {
+      // System prompt is static and fully cacheable -- no ISO controls
       expect(systemPrompt).toContain('scoring_complete` tool with structured scores');
+      expect(systemPrompt).not.toContain('ISO Standards Reference Catalog');
+    });
+
+    it('should return identical content on every call (cache-friendly)', () => {
+      const call1 = buildScoringSystemPrompt();
+      const call2 = buildScoringSystemPrompt();
+      expect(call1).toBe(call2);
     });
   });
 
@@ -107,10 +116,110 @@ describe('scoringPrompt - stability regression', () => {
       expect(userPrompt).toContain('Please analyze these responses and provide your risk assessment.');
     });
 
-    it('should not contain ISO applicability content yet (placeholder)', () => {
-      // The ISO section is empty, so no extra content appended
-      // Responses should be directly followed by the separator
-      expect(userPrompt).toContain('AES-256 at rest and TLS 1.3 in transit.\n\n---');
+    it('should not contain ISO content when none provided', () => {
+      // No isoCatalog or isoControls provided -- no ISO sections
+      expect(userPrompt).not.toContain('ISO Standards Reference Catalog');
+      expect(userPrompt).not.toContain('Applicable ISO Controls');
+    });
+
+    it('should include ISO catalog when isoCatalog provided', () => {
+      const withCatalog = buildScoringUserPrompt({
+        vendorName: 'TestVendor',
+        solutionName: 'TestSolution',
+        solutionType: 'clinical_ai',
+        responses: [
+          {
+            sectionNumber: 1,
+            questionNumber: 1,
+            questionText: 'What data do you collect?',
+            responseText: 'We collect patient demographic data.',
+          },
+        ],
+        isoCatalog: [
+          {
+            clauseRef: 'A.6.1',
+            domain: 'Data management',
+            title: 'Data governance',
+            framework: 'ISO/IEC 42001',
+            criteriaText: 'Data governance processes.',
+            dimensions: ['regulatory_compliance'],
+            relevanceWeights: { regulatory_compliance: 0.8 },
+          },
+        ],
+      });
+
+      // ISO catalog should appear before vendor responses
+      expect(withCatalog).toContain('ISO Standards Reference Catalog');
+      expect(withCatalog).toContain('A.6.1');
+      expect(withCatalog).toContain('Data governance');
+      // Catalog should come before vendor section
+      const catalogIdx = withCatalog.indexOf('ISO Standards Reference Catalog');
+      const vendorIdx = withCatalog.indexOf('## Vendor Assessment');
+      expect(catalogIdx).toBeLessThan(vendorIdx);
+    });
+
+    it('should include both ISO catalog and applicable controls when both provided', () => {
+      const withBoth = buildScoringUserPrompt({
+        vendorName: 'TestVendor',
+        solutionName: 'TestSolution',
+        solutionType: 'clinical_ai',
+        responses: [
+          {
+            sectionNumber: 1,
+            questionNumber: 1,
+            questionText: 'Q?',
+            responseText: 'A.',
+          },
+        ],
+        isoCatalog: [
+          {
+            clauseRef: 'A.6.1',
+            domain: 'Data',
+            title: 'Data governance',
+            framework: 'ISO/IEC 42001',
+            criteriaText: 'Test',
+            dimensions: ['regulatory_compliance'],
+            relevanceWeights: {},
+          },
+        ],
+        isoControls: [
+          {
+            clauseRef: 'A.7.1',
+            domain: 'Privacy',
+            title: 'Privacy controls',
+            framework: 'ISO/IEC 42001',
+            criteriaText: 'Test',
+            dimensions: ['privacy_risk'],
+            relevanceWeights: {},
+          },
+        ],
+      });
+
+      expect(withBoth).toContain('ISO Standards Reference Catalog');
+      expect(withBoth).toContain('Applicable ISO Controls');
+      expect(withBoth).toContain('A.6.1');
+      expect(withBoth).toContain('A.7.1');
+    });
+
+    it('should work without ISO data (backward compatible)', () => {
+      const withoutISO = buildScoringUserPrompt({
+        vendorName: 'TestVendor',
+        solutionName: 'TestSolution',
+        solutionType: 'clinical_ai',
+        responses: [
+          {
+            sectionNumber: 1,
+            questionNumber: 1,
+            questionText: 'Q?',
+            responseText: 'A.',
+          },
+        ],
+      });
+
+      expect(withoutISO).toContain('## Vendor Assessment');
+      expect(withoutISO).toContain('TestVendor');
+      expect(withoutISO).not.toContain('ISO Standards Reference Catalog');
+      expect(withoutISO).not.toContain('Applicable ISO Controls');
     });
   });
 });

@@ -62,7 +62,8 @@ describe('Scoring Rehydration Integration (Epic 22.1.1)', () => {
       validator,
       {} as any, // storageService - not needed for rehydration
       {} as any, // llmService - not needed for rehydration
-      queryService
+      queryService,
+      {} as any  // retryService - not needed for rehydration
     )
   })
 

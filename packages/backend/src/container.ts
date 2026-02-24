@@ -25,6 +25,7 @@ import { ScoringService } from './application/services/ScoringService.js';
 import { ScoringStorageService } from './application/services/ScoringStorageService.js';
 import { ScoringLLMService } from './application/services/ScoringLLMService.js';
 import { ScoringQueryService } from './application/services/ScoringQueryService.js';
+import { ScoringRetryService } from './application/services/ScoringRetryService.js';
 import { VendorValidationService } from './application/services/VendorValidationService.js';
 import { TitleGenerationService } from './application/services/TitleGenerationService.js';
 import { ISOControlRetrievalService } from './application/services/ISOControlRetrievalService.js';
@@ -52,6 +53,7 @@ import { ClaudeClient } from './infrastructure/ai/ClaudeClient.js';
 import { ScoringPromptBuilder } from './infrastructure/ai/ScoringPromptBuilder.js';
 import { PromptCacheManager } from './infrastructure/ai/PromptCacheManager.js';
 import { DocumentParserService } from './infrastructure/ai/DocumentParserService.js';
+import { IntakeDocumentParser } from './infrastructure/ai/IntakeDocumentParser.js';
 import { VisionContentBuilder } from './infrastructure/ai/VisionContentBuilder.js';
 import { getSystemPrompt } from './infrastructure/ai/prompts.js';
 import { ExportNarrativePromptBuilder } from './infrastructure/ai/ExportNarrativePromptBuilder.js';
@@ -106,7 +108,6 @@ if (!ANTHROPIC_API_KEY && process.env.NODE_ENV === 'test') {
   console.warn('[App] ANTHROPIC_API_KEY not set - Claude features will fail in tests');
 }
 
-// Epic 33: Web search configuration
 const JINA_API_KEY = process.env.JINA_API_KEY || '';
 const ENABLE_WEB_SEARCH = process.env.ENABLE_WEB_SEARCH !== 'false'; // Default: true
 if (!JINA_API_KEY && ENABLE_WEB_SEARCH && process.env.NODE_ENV !== 'test') {
@@ -212,9 +213,14 @@ export const scoringExportService = new ScoringExportService(
 // File storage and validation (Epic 16)
 export const fileStorage = createFileStorage();
 export const fileValidationService = new FileValidationService();
+export const intakeDocumentParser = new IntakeDocumentParser(
+  claudeClient,  // IClaudeClient
+  claudeClient,  // IVisionClient - ClaudeClient implements both
+);
 export const documentParserService = new DocumentParserService(
   claudeClient,  // IClaudeClient
-  claudeClient   // IVisionClient - ClaudeClient implements both
+  claudeClient,  // IVisionClient - ClaudeClient implements both
+  questionRepo   // IQuestionRepository - for regex extraction routing (Epic 39)
 );
 
 // Epic 30: VisionContentBuilder for Vision API image processing
@@ -249,6 +255,7 @@ const scoringQueryService = new ScoringQueryService(
   dimensionScoreRepo,
   conversationRepo       // Epic 22: IConversationRepository for scoring rehydration
 );
+const scoringRetryService = new ScoringRetryService(scoringPayloadValidator, scoringLLMService);
 export const scoringService = new ScoringService(
   assessmentResultRepo,
   assessmentRepo,
@@ -258,7 +265,8 @@ export const scoringService = new ScoringService(
   scoringPayloadValidator,
   scoringStorageService,
   scoringLLMService,
-  scoringQueryService
+  scoringQueryService,
+  scoringRetryService
 );
 
 // ============================================================
@@ -274,7 +282,6 @@ export const scoringExportController = new ScoringExportController(
   assessmentRepo
 );
 
-// Epic 22.1.1: Scoring rehydration controller
 export const scoringRehydrationController = new ScoringRehydrationController(scoringService);
 
 // ============================================================

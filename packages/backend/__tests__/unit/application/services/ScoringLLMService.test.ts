@@ -94,7 +94,7 @@ describe('ScoringLLMService', () => {
   });
 
   describe('scoreWithClaude', () => {
-    it('should call promptBuilder.buildScoringSystemPrompt()', async () => {
+    it('should call promptBuilder.buildScoringSystemPrompt() with no args (static)', async () => {
       // Setup: streamWithTool calls onToolUse to provide payload
       mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
         options.onToolUse?.('scoring_complete', mockToolPayload);
@@ -113,6 +113,8 @@ describe('ScoringLLMService', () => {
       );
 
       expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledTimes(1);
+      // Story 39.3.3: System prompt is static, no ISO controls passed
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith();
     });
 
     it('should call promptBuilder.buildScoringUserPrompt() with correct params', async () => {
@@ -285,7 +287,7 @@ describe('ScoringLLMService', () => {
       }
     });
 
-    it('should emit progress when narrative length is multiple of 500', async () => {
+    it('should emit progress once when narrative reaches 500 chars', async () => {
       mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
         // Send exactly 500 chars to trigger progress callback
         const chunk = 'a'.repeat(500);
@@ -305,7 +307,132 @@ describe('ScoringLLMService', () => {
         onMessage
       );
 
+      expect(onMessage).toHaveBeenCalledTimes(1);
       expect(onMessage).toHaveBeenCalledWith('Generating risk assessment...');
+    });
+
+    it('should NOT emit progress for narrative under 500 chars', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        // Send 499 chars - should NOT trigger progress
+        options.onTextDelta?.('a'.repeat(499));
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const onMessage = jest.fn();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        onMessage
+      );
+
+      expect(onMessage).not.toHaveBeenCalled();
+    });
+
+    it('should emit progress exactly once for 500-999 char narrative', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        // Send 750 chars total in variable chunks
+        options.onTextDelta?.('a'.repeat(200));
+        options.onTextDelta?.('b'.repeat(300));  // crosses 500 threshold
+        options.onTextDelta?.('c'.repeat(250));  // total 750, still under 1000
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const onMessage = jest.fn();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        onMessage
+      );
+
+      expect(onMessage).toHaveBeenCalledTimes(1);
+      expect(onMessage).toHaveBeenCalledWith('Generating risk assessment...');
+    });
+
+    it('should emit progress twice for 1000-1499 char narrative', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        // Send 1200 chars total in variable chunks
+        options.onTextDelta?.('a'.repeat(300));
+        options.onTextDelta?.('b'.repeat(250));  // crosses 500 → first fire
+        options.onTextDelta?.('c'.repeat(300));  // 850 total, no fire
+        options.onTextDelta?.('d'.repeat(350));  // crosses 1000 → second fire
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const onMessage = jest.fn();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        onMessage
+      );
+
+      expect(onMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle variable chunk sizes with consistent threshold firing', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        // Realistic chunk simulation: [10, 200, 3, 287, 500, 1] = 1001 chars total
+        options.onTextDelta?.('a'.repeat(10));    // total: 10
+        options.onTextDelta?.('b'.repeat(200));   // total: 210
+        options.onTextDelta?.('c'.repeat(3));     // total: 213
+        options.onTextDelta?.('d'.repeat(287));   // total: 500 → first fire
+        options.onTextDelta?.('e'.repeat(500));   // total: 1000 → second fire
+        options.onTextDelta?.('f'.repeat(1));     // total: 1001, no fire
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const onMessage = jest.fn();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        onMessage
+      );
+
+      expect(onMessage).toHaveBeenCalledTimes(2);
+    });
+
+    it('should fire multiple times for a large single chunk', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        // One large chunk of 1500 chars crosses both 500 and 1000 thresholds
+        // but only fires once (since delta is evaluated once per call)
+        options.onTextDelta?.('a'.repeat(1500));
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const onMessage = jest.fn();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        onMessage
+      );
+
+      // A single chunk of 1500 chars: length(1500) - lastReported(0) >= 500 → fires once
+      // lastReportedLength becomes 1500, so the next threshold is 2000
+      expect(onMessage).toHaveBeenCalledTimes(1);
     });
 
     it('should ignore tool calls for non-scoring_complete tools', async () => {
@@ -351,9 +478,14 @@ describe('ScoringLLMService', () => {
         { catalogControls, applicableControls }
       );
 
-      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith(catalogControls);
+      // System prompt receives NO ISO controls (static, cacheable) - Story 39.3.3
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith();
+      // ISO catalog now passed to user prompt alongside applicable controls
       expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
-        expect.objectContaining({ isoControls: applicableControls })
+        expect.objectContaining({
+          isoControls: applicableControls,
+          isoCatalog: catalogControls,
+        })
       );
     });
 
@@ -373,7 +505,92 @@ describe('ScoringLLMService', () => {
       );
 
       expect(result.payload).toEqual(mockToolPayload);
-      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith(undefined);
+      // System prompt is always called with no args (static)
+      expect(mockPromptBuilder.buildScoringSystemPrompt).toHaveBeenCalledWith();
+      // User prompt receives undefined for both ISO params
+      expect(mockPromptBuilder.buildScoringUserPrompt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isoControls: undefined,
+          isoCatalog: undefined,
+        })
+      );
+    });
+
+    it('should return metrics when onUsage callback provides usage data', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+        // Simulate usage callback from ClaudeClient
+        options.onUsage?.({
+          input_tokens: 1000,
+          output_tokens: 500,
+          cache_read_input_tokens: 4000,
+          cache_creation_input_tokens: 0,
+        });
+      });
+
+      const abortController = new AbortController();
+      const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      const result = await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      expect(result.metrics).toBeDefined();
+      expect(result.metrics!.inputTokens).toBe(1000);
+      expect(result.metrics!.outputTokens).toBe(500);
+      expect(result.metrics!.cacheReadInputTokens).toBe(4000);
+      expect(result.metrics!.cacheCreationInputTokens).toBe(0);
+      expect(result.metrics!.cacheHitRate).toBe(0.8);
+      expect(result.metrics!.latencyMs).toBeGreaterThanOrEqual(0);
+      expect(result.metrics!.estimatedCostUSD).toBeGreaterThan(0);
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should return undefined metrics when onUsage is not called', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+        // No onUsage callback - simulates client that does not provide usage
+      });
+
+      const abortController = new AbortController();
+
+      const result = await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      expect(result.metrics).toBeUndefined();
+    });
+
+    it('should pass onUsage callback in streamWithTool options', async () => {
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+
+      await service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        jest.fn()
+      );
+
+      const callArgs = mockLLMClient.streamWithTool.mock.calls[0][0];
+      expect(callArgs.onUsage).toBeDefined();
+      expect(typeof callArgs.onUsage).toBe('function');
     });
   });
 

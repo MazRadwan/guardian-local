@@ -28,6 +28,12 @@ Analyze the vendor's completed questionnaire responses and produce:
 
 ## GUARDIAN RUBRIC CRITERIA
 
+## SCORING RULES (MANDATORY)
+
+1. **Dimension score = sum of sub-scores.** For each dimension below, the dimension score MUST equal the sum of all its sub-scores. Do NOT estimate dimension scores independently.
+2. **Use only defined point values.** Each sub-score MUST be exactly one of the defined point values listed for that sub-score. Do NOT interpolate or use intermediate values.
+3. **Show your arithmetic.** In the narrative, show the sub-score breakdown that produces each dimension score.
+
 ### CLINICAL RISK (0-100, lower is better)
 
 **Sub-scores:**
@@ -244,20 +250,26 @@ Analyze the vendor's completed questionnaire responses and produce:
 
 ---
 
-## Disqualifying Factors (automatic DECLINE)
+## Disqualifying Factors (Two-Tier System)
 
-- [clinical_risk] no clinical validation for diagnosis treatment ai
-- [clinical_risk] false negative rate above 2 percent for triage ai
-- [clinical_risk] no clinician override for clinical decision support
-- [clinical_risk] regulatory approval required but not obtained
-- [privacy_risk] no privacy impact assessment for phi processing
-- [privacy_risk] cross border data transfer without safeguards
-- [privacy_risk] non compliance with pipeda atipp
-- [privacy_risk] no breach notification process
-- [security_risk] no encryption for phi
-- [security_risk] no penetration testing ever conducted
-- [security_risk] no incident response plan
-- [security_risk] critical vulnerabilities unfixed over 90 days
+Each factor below is classified by tier. Use the exact canonical key (underscore_separated) in the disqualifyingFactors array.
+
+- [clinical_risk] no_clinical_validation_for_diagnosis_treatment_ai — AUTOMATIC DECLINE
+- [clinical_risk] false_negative_rate_above_2_percent_for_triage_ai — AUTOMATIC DECLINE
+- [clinical_risk] no_clinician_override_for_clinical_decision_support — AUTOMATIC DECLINE
+- [clinical_risk] regulatory_approval_required_but_not_obtained — AUTOMATIC DECLINE
+- [privacy_risk] no_privacy_impact_assessment_for_phi_processing — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [privacy_risk] cross_border_data_transfer_without_safeguards — AUTOMATIC DECLINE
+- [privacy_risk] non_compliance_with_pipeda_atipp — AUTOMATIC DECLINE
+- [privacy_risk] no_breach_notification_process — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [security_risk] no_encryption_for_phi — AUTOMATIC DECLINE
+- [security_risk] no_penetration_testing_ever_conducted — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [security_risk] no_incident_response_plan — REQUIRES REMEDIATION PLAN (conditional eligible)
+- [security_risk] critical_vulnerabilities_unfixed_over_90_days — AUTOMATIC DECLINE
+
+**Tier rules:**
+- **AUTOMATIC DECLINE** factors represent fundamental safety/architecture gaps that cannot be remediated. If ANY are present, you MUST recommend 'decline'.
+- **REQUIRES REMEDIATION PLAN** factors represent process/documentation gaps fixable in 30-90 days. If ONLY these are present (no AUTOMATIC DECLINE factors), recommend 'conditional' with specific remediation items and timelines.
 
 ---
 
@@ -266,14 +278,15 @@ Analyze the vendor's completed questionnaire responses and produce:
 **APPROVE** (overall risk <=30):
 - No CRITICAL dimensions
 - Maximum 1 HIGH dimension
-- No disqualifying factors
+- No disqualifying factors of any tier
 
 **CONDITIONAL** (overall risk 31-50):
-- No disqualifying factors
+- No AUTOMATIC DECLINE disqualifying factors
+- REQUIRES REMEDIATION PLAN factors allowed (must include remediation items)
 - Gaps are remediable within reasonable timeframe
 
 **DECLINE** (overall risk >50 OR):
-- Any disqualifying factor present
+- Any AUTOMATIC DECLINE disqualifying factor present
 - Multiple CRITICAL dimensions
 
 **MORE_INFO**:
@@ -309,37 +322,21 @@ For Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability
 
 ## ISO Messaging Rules
 - Use "ISO-traceable" or "ISO-informed" language
-- Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements"
-
-## ISO Standards Reference Catalog
-
-The following ISO-traceable controls inform your assessment. Reference relevant clauses in your dimension analysis.
-These are Guardian's interpretive criteria referencing ISO clause numbers.
-
-**IMPORTANT:** Use "ISO-traceable" or "ISO-informed" language. Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements".
-
-**Guardian-Native Dimensions:** Clinical Risk, Vendor Capability, Ethical Considerations, and Sustainability are assessed using Guardian healthcare-specific criteria (no ISO mapping available in current framework scope).
-
-### Controls by Domain
-
-#### Data management
-
-- **A.6.2.6** (ISO/IEC 42001): Data quality management for AI systems
-  Criteria: Organization implements systematic data quality processes.
-  Guidance: Evaluate data quality processes.
-  Dimensions: regulatory_compliance
-
-#### Risk management
-
-- **6.3** (ISO/IEC 23894): Risk treatment for AI systems
-  Criteria: Organization applies systematic risk treatment.
-  Dimensions: regulatory_compliance, operational_excellence
-
-"
+- Do NOT use "ISO-compliant", "ISO-certified", or "meets ISO requirements""
 `;
 
 exports[`Golden Sample Regression (SC-6) User Prompt Stability should match user prompt structure snapshot 1`] = `
-"## Vendor Assessment
+"## Applicable ISO Controls for This Assessment
+
+Consider these ISO-traceable controls when scoring the relevant dimensions:
+
+- A.6.2.6 (ISO/IEC 42001): Data quality management for AI systems -> [regulatory_compliance]
+- 6.3 (ISO/IEC 23894): Risk treatment for AI systems -> [regulatory_compliance, operational_excellence]
+
+
+---
+
+## Vendor Assessment
 
 **Vendor:** TestVendor
 **Solution:** TestSolution
@@ -354,6 +351,12 @@ exports[`Golden Sample Regression (SC-6) User Prompt Stability should match user
   - Technical Credibility: 15%
   - Operational Excellence: 10%
 
+**Composite Formula:**
+- For RISK dimensions (clinical_risk, privacy_risk, security_risk): use score directly (lower = less risk)
+- For CAPABILITY dimensions (technical_credibility, operational_excellence): convert to risk-equivalent = (100 - score)
+- Composite = sum of (weight% x risk_equivalent_score) for all weighted dimensions
+- Example: if clinical_risk=20 (weight 40%) and technical_credibility=80 (weight 15%): contribution = 20x0.40 + (100-80)x0.15 = 8 + 3 = 11
+
 All other dimensions are scored but do NOT contribute to the composite score.
 
 ## Questionnaire Responses
@@ -365,14 +368,6 @@ All other dimensions are scored but do NOT contribute to the composite score.
 ### Section 2, Question 3
 **Q:** Q2
 **A:** A2
-
-## Applicable ISO Controls for This Assessment
-
-Consider these ISO-traceable controls when scoring the relevant dimensions:
-
-- A.6.2.6 (ISO/IEC 42001): Data quality management for AI systems -> [regulatory_compliance]
-- 6.3 (ISO/IEC 23894): Risk treatment for AI systems -> [regulatory_compliance, operational_excellence]
-
 
 ---
 

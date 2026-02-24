@@ -120,30 +120,32 @@ describe('Golden Sample Regression (SC-6)', () => {
       expect(prompt).toContain('ISO-informed')
     })
 
-    it('should preserve rubric when ISO catalog is appended', () => {
-      const basePrompt = buildScoringSystemPrompt()
-      const enrichedPrompt = buildScoringSystemPrompt(sampleControls)
+    it('should be static with no ISO catalog (moved to user prompt in 39.3.3)', () => {
+      const prompt = buildScoringSystemPrompt()
 
-      // Enriched prompt should contain everything the base has
-      expect(enrichedPrompt).toContain('CLINICAL RISK')
-      expect(enrichedPrompt).toContain('PRIVACY RISK')
-      expect(enrichedPrompt).toContain('SECURITY RISK')
-      expect(enrichedPrompt).toContain('TECHNICAL CREDIBILITY')
-      expect(enrichedPrompt).toContain('OPERATIONAL EXCELLENCE')
-      expect(enrichedPrompt).toContain('Disqualifying Factors')
-      expect(enrichedPrompt).toContain('APPROVE')
-      expect(enrichedPrompt).toContain(RUBRIC_VERSION)
+      // System prompt contains rubric but NOT ISO catalog
+      expect(prompt).toContain('CLINICAL RISK')
+      expect(prompt).toContain('PRIVACY RISK')
+      expect(prompt).toContain('SECURITY RISK')
+      expect(prompt).toContain('TECHNICAL CREDIBILITY')
+      expect(prompt).toContain('OPERATIONAL EXCELLENCE')
+      expect(prompt).toContain('Disqualifying Factors')
+      expect(prompt).toContain('APPROVE')
+      expect(prompt).toContain(RUBRIC_VERSION)
 
-      // Plus ISO content
-      expect(enrichedPrompt).toContain('A.6.2.6')
-      expect(enrichedPrompt).toContain('ISO Standards Reference Catalog')
+      // ISO catalog no longer in system prompt
+      expect(prompt).not.toContain('ISO Standards Reference Catalog')
+      expect(prompt).not.toContain('Controls by Domain')
+    })
 
-      // Enriched is strictly longer (additive)
-      expect(enrichedPrompt.length).toBeGreaterThan(basePrompt.length)
+    it('should be identical across multiple calls (cacheable)', () => {
+      const call1 = buildScoringSystemPrompt()
+      const call2 = buildScoringSystemPrompt()
+      expect(call1).toBe(call2)
     })
 
     it('should match prompt structure snapshot', () => {
-      const prompt = buildScoringSystemPrompt(sampleControls)
+      const prompt = buildScoringSystemPrompt()
       expect(prompt.length).toBeGreaterThan(0)
       expect(prompt).toMatchSnapshot()
     })
@@ -198,6 +200,31 @@ describe('Golden Sample Regression (SC-6)', () => {
       // ISO content additive
       expect(enrichedPrompt).toContain('A.6.2.6')
       expect(enrichedPrompt).toContain('Applicable ISO Controls')
+    })
+
+    it('should include ISO catalog in user prompt when provided (39.3.3)', () => {
+      const enrichedPrompt = buildScoringUserPrompt({
+        ...baseParams,
+        isoCatalog: sampleControls,
+        isoControls: sampleControls,
+      })
+
+      // Catalog section (moved from system prompt)
+      expect(enrichedPrompt).toContain('ISO Standards Reference Catalog')
+      expect(enrichedPrompt).toContain('A.6.2.6')
+      expect(enrichedPrompt).toContain('Data quality management for AI systems')
+
+      // Applicability section
+      expect(enrichedPrompt).toContain('Applicable ISO Controls')
+
+      // Base content preserved
+      expect(enrichedPrompt).toContain('TestVendor')
+      expect(enrichedPrompt).toContain('COMPOSITE SCORE WEIGHTING')
+
+      // Catalog comes before vendor assessment
+      const catalogIdx = enrichedPrompt.indexOf('ISO Standards Reference Catalog')
+      const vendorIdx = enrichedPrompt.indexOf('## Vendor Assessment')
+      expect(catalogIdx).toBeLessThan(vendorIdx)
     })
 
     it('should match user prompt structure snapshot', () => {

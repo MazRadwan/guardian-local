@@ -4,7 +4,7 @@
  * Claude tool for submitting structured scoring results after narrative analysis.
  */
 
-import { ALL_DIMENSIONS } from '../rubric'
+import { ALL_DIMENSIONS, ALL_DISQUALIFYING_FACTORS } from '../rubric'
 
 /** Claude tool definition for structured score extraction */
 export const scoringCompleteTool = {
@@ -33,7 +33,9 @@ export const scoringCompleteTool = {
         type: 'array', items: { type: 'string' }, description: 'Top 3-5 key findings',
       },
       disqualifyingFactors: {
-        type: 'array', items: { type: 'string' }, description: 'Factors that automatically fail the assessment',
+        type: 'array',
+        items: { type: 'string', enum: ALL_DISQUALIFYING_FACTORS },
+        description: 'Canonical disqualifying factor keys. Use exact keys from the rubric.',
       },
       dimensionScores: {
         type: 'array',

@@ -152,7 +152,9 @@ export class ChatService {
     this.store.setLoading(true);
     try {
       // Story 24.1: Pass isRegenerate: true to get different response from LLM
-      this.adapter.sendMessage(previousMessage.content, conversationId, undefined, true);
+      // Bug fix: Pass attachments from previous message to avoid empty payload rejection
+      // on file-only messages (backend requires text OR attachments)
+      this.adapter.sendMessage(previousMessage.content, conversationId, previousMessage.attachments, true);
     } catch (err) {
       this.store.setError('Failed to regenerate response');
       this.store.setLoading(false);

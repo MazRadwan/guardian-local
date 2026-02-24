@@ -321,8 +321,8 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
               </div>
             )}
 
-            {/* Epic 18 Story 18.2.5: Progress-in-chat UX - shows during parsing/scoring */}
-            {scoringProgress && (scoringProgress.status === 'parsing' || scoringProgress.status === 'scoring') && (
+            {/* Epic 18 Story 18.2.5 + Story 39.2.3: Progress-in-chat UX - shows for all non-terminal statuses */}
+            {scoringProgress && scoringProgress.status !== 'idle' && scoringProgress.status !== 'complete' && scoringProgress.status !== 'error' && (
               <div className="py-4" data-testid="scoring-progress">
                 <ProgressMessage
                   status={scoringProgress.status}

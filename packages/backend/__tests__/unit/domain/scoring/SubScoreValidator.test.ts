@@ -20,13 +20,14 @@ describe('SubScoreValidator', () => {
     }));
 
   describe('validateAllSubScores', () => {
-    it('should return empty warnings when no findings are present', () => {
+    it('should return empty results when no findings are present', () => {
       const dimensionScores = createBaseDimensionScores();
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toHaveLength(0);
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toHaveLength(0);
+      expect(result.softWarnings).toHaveLength(0);
     });
 
-    it('should return empty warnings for valid sub-scores', () => {
+    it('should return empty results for valid sub-scores', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       dimensionScores[clinicalIdx].score = 45;
@@ -43,11 +44,12 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toHaveLength(0);
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toHaveLength(0);
+      expect(result.softWarnings).toHaveLength(0);
     });
 
-    it('should warn on unknown sub-score name', () => {
+    it('should produce soft warning on unknown sub-score name', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       dimensionScores[clinicalIdx].score = 20;
@@ -60,14 +62,39 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings.length).toBeGreaterThan(0);
-      expect(warnings).toContainEqual(
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.softWarnings.length).toBeGreaterThan(0);
+      expect(result.softWarnings).toContainEqual(
         expect.stringContaining("unknown sub-score name 'made_up_score'")
       );
     });
 
-    it('should warn on invalid sub-score value', () => {
+    it('should exclude unknown sub-scores from sum check (causes sum mismatch)', () => {
+      const dimensionScores = createBaseDimensionScores();
+      const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
+      // Only unknown sub-score provided -> excluded from sum -> sum=0 vs score=20
+      dimensionScores[clinicalIdx].score = 20;
+      (dimensionScores[clinicalIdx] as any).findings = {
+        subScores: [
+          { name: 'made_up_score', score: 20, maxScore: 40, notes: 'Unknown name' },
+        ],
+        keyRisks: [],
+        mitigations: [],
+        evidenceRefs: [],
+      };
+
+      const result = validator.validateAllSubScores(dimensionScores);
+      // Unknown name produces soft warning
+      expect(result.softWarnings).toContainEqual(
+        expect.stringContaining("unknown sub-score name 'made_up_score'")
+      );
+      // Unknown score excluded from sum -> sum=0 vs dimension=20 -> structural violation
+      expect(result.structuralViolations).toContainEqual(
+        expect.stringContaining('sub-score sum 0 differs from dimension score 20')
+      );
+    });
+
+    it('should produce structural violation on invalid sub-score value', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       dimensionScores[clinicalIdx].score = 17;
@@ -80,16 +107,16 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toContainEqual(
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining("sub-score 'evidence_quality_score' has value 17")
       );
-      expect(warnings).toContainEqual(
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('allowed values: [0, 10, 20, 30, 40]')
       );
     });
 
-    it('should warn when sub-score sum differs from dimension score', () => {
+    it('should produce structural violation when sub-score sum differs from dimension score', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       // Set dimension score to 50, but sub-scores sum to 30
@@ -104,8 +131,8 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toContainEqual(
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('sub-score sum 30 differs from dimension score 50')
       );
     });
@@ -124,11 +151,12 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toHaveLength(0);
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toHaveLength(0);
+      expect(result.softWarnings).toHaveLength(0);
     });
 
-    it('should not warn when sub-score sum is within +/-2 tolerance', () => {
+    it('should not produce violation when sub-score sum is within +/-2 tolerance', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       // Sub-scores sum to 45, dimension score 46 -- within tolerance
@@ -146,12 +174,12 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
+      const result = validator.validateAllSubScores(dimensionScores);
       // Sum is 45, dimension is 46, diff is 1 -- within tolerance
-      expect(warnings.filter(w => w.includes('sub-score sum'))).toHaveLength(0);
+      expect(result.structuralViolations.filter(v => v.includes('sub-score sum'))).toHaveLength(0);
     });
 
-    it('should warn when sub-score sum exceeds +/-2 tolerance', () => {
+    it('should produce structural violation when sub-score sum exceeds +/-2 tolerance', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       // Sub-scores sum to 45, dimension score 48 -- diff is 3, beyond tolerance
@@ -169,16 +197,17 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toContainEqual(
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('sub-score sum 45 differs from dimension score 48')
       );
     });
 
     it('should skip entries that are null or not objects', () => {
       const dimensionScores = [null, undefined, 'string', 42];
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toHaveLength(0);
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toHaveLength(0);
+      expect(result.softWarnings).toHaveLength(0);
     });
 
     it('should skip dimensions without findings', () => {
@@ -191,8 +220,9 @@ describe('SubScoreValidator', () => {
         evidenceRefs: [],
       };
 
-      const warnings = validator.validateAllSubScores(dimensionScores);
-      expect(warnings).toHaveLength(0);
+      const result = validator.validateAllSubScores(dimensionScores);
+      expect(result.structuralViolations).toHaveLength(0);
+      expect(result.softWarnings).toHaveLength(0);
     });
   });
 });

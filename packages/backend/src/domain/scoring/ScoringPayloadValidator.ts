@@ -1,8 +1,10 @@
 import { ScoringCompletePayload, RiskRating, Recommendation, DimensionScoreData } from './types';
-import { ALL_DIMENSIONS } from './rubric';
+import { ALL_DIMENSIONS, ALL_DISQUALIFYING_FACTORS, DISQUALIFIER_TIER, SolutionType } from './rubric';
 import { RiskDimension } from '../types/QuestionnaireSchema';
 import { SubScoreValidator } from './SubScoreValidator';
 import { ScoringConfidenceValidator } from './ScoringConfidenceValidator';
+import { compositeScoreValidator } from './CompositeScoreValidator';
+import { validateISOReferences } from './ISOClauseValidator';
 
 /**
  * Validation result
@@ -11,6 +13,7 @@ export interface ValidationResult {
   valid: boolean;
   errors: string[];
   warnings: string[];
+  structuralViolations: string[];
   sanitized?: ScoringCompletePayload;
 }
 
@@ -28,15 +31,16 @@ export class ScoringPayloadValidator {
   private confidenceValidator = new ScoringConfidenceValidator();
 
   /**
-   * Validate a payload from Claude's scoring_complete tool call
+   * Validate a payload from Claude's scoring_complete tool call.
+   * When solutionType is provided, also validates composite score arithmetic.
    */
-  validate(payload: unknown): ValidationResult {
+  validate(payload: unknown, solutionType?: SolutionType): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
 
     // Check if payload is an object
     if (!payload || typeof payload !== 'object') {
-      return { valid: false, errors: ['Payload must be an object'], warnings: [] };
+      return { valid: false, errors: ['Payload must be an object'], warnings: [], structuralViolations: [] };
     }
 
     const p = payload as Record<string, unknown>;
@@ -77,22 +81,41 @@ export class ScoringPayloadValidator {
     const dimensionErrors = this.validateDimensionScores(p.dimensionScores);
     errors.push(...dimensionErrors);
 
-    // Validate sub-scores within dimension findings (soft warnings)
+    // Validate sub-scores within dimension findings
+    const structuralViolations: string[] = [];
     if (Array.isArray(p.dimensionScores)) {
-      const subScoreWarnings = this.subScoreValidator.validateAllSubScores(p.dimensionScores);
-      warnings.push(...subScoreWarnings);
+      const subScoreResult = this.subScoreValidator.validateAllSubScores(p.dimensionScores);
+      structuralViolations.push(...subScoreResult.structuralViolations);
+      warnings.push(...subScoreResult.softWarnings);
 
       // Validate assessmentConfidence within dimension findings (soft warnings)
       const confidenceWarnings = this.confidenceValidator.validateAllConfidence(p.dimensionScores);
       warnings.push(...confidenceWarnings);
 
       // Validate ISO clause references (soft warnings)
-      const isoWarnings = this.validateISOReferences(p.dimensionScores);
-      warnings.push(...isoWarnings);
+      warnings.push(...validateISOReferences(p.dimensionScores));
+    }
+
+    // Validate disqualifying factor / recommendation coherence (tiered)
+    const disqualifiers = Array.isArray(p.disqualifyingFactors) ? p.disqualifyingFactors as string[] : [];
+    if (disqualifiers.length > 0) {
+      this.validateTieredDisqualifiers(disqualifiers, p.recommendation as string, structuralViolations, warnings);
+    }
+
+    // Validate composite score arithmetic (structural violation)
+    if (solutionType && Array.isArray(p.dimensionScores) && this.isValidScore(p.compositeScore)) {
+      const compositeResult = compositeScoreValidator.validate(
+        p.compositeScore as number,
+        p.dimensionScores as Array<{ dimension: string; score: number }>,
+        solutionType
+      );
+      if (!compositeResult.valid && compositeResult.violation) {
+        structuralViolations.push(compositeResult.violation);
+      }
     }
 
     if (errors.length > 0) {
-      return { valid: false, errors, warnings };
+      return { valid: false, errors, warnings, structuralViolations };
     }
 
     // Build sanitized payload
@@ -106,7 +129,7 @@ export class ScoringPayloadValidator {
       dimensionScores: p.dimensionScores as DimensionScoreData[],
     };
 
-    return { valid: true, errors: [], warnings, sanitized };
+    return { valid: true, errors: [], warnings, structuralViolations, sanitized };
   }
 
   /**
@@ -195,49 +218,52 @@ export class ScoringPayloadValidator {
   }
 
   /**
-   * Validate ISO clause references across all dimension scores (soft warnings only).
+   * Validate disqualifying factors using tiered classification.
+   *
+   * - Unknown factors → treated as hard_decline (fail safe) + warning
+   * - Any hard_decline factor → recommendation must be 'decline'
+   * - Only remediable_blocker factors → recommendation must not be 'approve'
    */
-  private validateISOReferences(dimensionScores: unknown[]): string[] {
-    const warnings: string[] = [];
-    const VALID_STATUSES = ['aligned', 'partial', 'not_evidenced', 'not_applicable'];
+  private validateTieredDisqualifiers(
+    disqualifiers: string[],
+    recommendation: string,
+    structuralViolations: string[],
+    warnings: string[]
+  ): void {
+    let hasHard = false;
+    const hardFactors: string[] = [];
+    const remediableFactors: string[] = [];
 
-    for (let i = 0; i < dimensionScores.length; i++) {
-      const ds = dimensionScores[i] as Record<string, unknown> | null;
-      if (!ds || typeof ds !== 'object') continue;
-
-      const dimension = ds.dimension as string;
-      const findings = ds.findings as Record<string, unknown> | undefined;
-      if (!findings || typeof findings !== 'object') continue;
-
-      const refs = findings.isoClauseReferences as Array<Record<string, unknown>> | undefined;
-      if (!Array.isArray(refs)) continue;
-
-      const prefix = `dimensionScores[${i}] (${dimension})`;
-
-      for (let j = 0; j < refs.length; j++) {
-        const ref = refs[j];
-        if (!ref || typeof ref !== 'object') {
-          warnings.push(`${prefix}: isoClauseReferences[${j}] must be an object`);
-          continue;
-        }
-        if (typeof ref.clauseRef !== 'string' || ref.clauseRef.trim().length === 0) {
-          warnings.push(`${prefix}: isoClauseReferences[${j}].clauseRef is required`);
-        }
-        if (typeof ref.title !== 'string' || ref.title.trim().length === 0) {
-          warnings.push(`${prefix}: isoClauseReferences[${j}].title is required`);
-        }
-        if (typeof ref.status !== 'string' || !VALID_STATUSES.includes(ref.status)) {
-          warnings.push(
-            `${prefix}: isoClauseReferences[${j}].status must be one of [${VALID_STATUSES.join(', ')}]`
-          );
-        }
-        if (typeof ref.framework !== 'string' || ref.framework.trim().length === 0) {
-          warnings.push(`${prefix}: isoClauseReferences[${j}].framework is required`);
-        }
+    for (const factor of disqualifiers) {
+      if (!ALL_DISQUALIFYING_FACTORS.includes(factor)) {
+        // Unknown factor — structural violation (must use canonical keys)
+        structuralViolations.push(
+          `Unknown disqualifying factor '${factor}' — must use canonical key from rubric`
+        );
+        hasHard = true;
+        hardFactors.push(factor);
+        continue;
+      }
+      const tier = DISQUALIFIER_TIER[factor] ?? 'hard_decline';
+      if (tier === 'hard_decline') {
+        hasHard = true;
+        hardFactors.push(factor);
+      } else {
+        remediableFactors.push(factor);
       }
     }
 
-    return warnings;
+    if (hasHard && recommendation !== 'decline') {
+      structuralViolations.push(
+        `hard_decline disqualifier(s) present (${hardFactors.join(', ')}) ` +
+        `but recommendation is '${recommendation}' — must be 'decline'`
+      );
+    } else if (!hasHard && remediableFactors.length > 0 && recommendation === 'approve') {
+      structuralViolations.push(
+        `remediable_blocker disqualifier(s) present (${remediableFactors.join(', ')}) ` +
+        `but recommendation is 'approve' — must be 'conditional' or 'decline'`
+      );
+    }
   }
 
 }

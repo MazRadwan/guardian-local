@@ -36,6 +36,7 @@ import {
   scoringService,
   fileStorage,
   textExtractionService,
+  intakeDocumentParser,
   documentParserService,
   vendorValidationService,
   titleGenerationService,
@@ -100,7 +101,7 @@ const chatServer = new ChatServer(
   scoringService,           // Epic 15
   fileStorage,              // Epic 18: Context injection fallback
   textExtractionService,    // Epic 18: Context injection fallback
-  documentParserService,    // Epic 18: Background enrichment (implements IIntakeDocumentParser)
+  intakeDocumentParser,     // Epic 18: Background enrichment (IIntakeDocumentParser)
   vendorValidationService,  // Epic 18.4: Vendor validation for multi-vendor clarification
   titleGenerationService,   // Story 28.11.1: LLM-based title generation
   visionContentBuilder,     // Epic 30 Sprint 3: Vision API for image files
@@ -115,8 +116,8 @@ const chatNamespace = server.getIO().of('/chat');
 const documentUploadController = new DocumentUploadController(
   fileStorage,
   fileValidationService,
-  documentParserService,  // IIntakeDocumentParser
-  documentParserService,  // IScoringDocumentParser (same implementation)
+  intakeDocumentParser,    // IIntakeDocumentParser (Story 39.4.1: separate implementation)
+  documentParserService,   // IScoringDocumentParser
   conversationService,    // Ownership validation + save assistant messages
   chatNamespace,
   fileRepo,               // Epic 16.6.9: File registration in database

@@ -16,6 +16,7 @@ import { ScoringService, ScoringError } from '../../src/application/services/Sco
 import { ScoringStorageService } from '../../src/application/services/ScoringStorageService.js'
 import { ScoringLLMService } from '../../src/application/services/ScoringLLMService.js'
 import { ScoringQueryService } from '../../src/application/services/ScoringQueryService.js'
+import { ScoringRetryService } from '../../src/application/services/ScoringRetryService.js'
 import type { IScoringService, ScoringInput } from '../../src/application/interfaces/IScoringService.js'
 import type { IResponseRepository } from '../../src/application/interfaces/IResponseRepository.js'
 import type { IDimensionScoreRepository } from '../../src/application/interfaces/IDimensionScoreRepository.js'
@@ -220,8 +221,9 @@ class MockLLMClient implements ILLMClient {
         'vendor_capability', 'ai_transparency', 'ethical_considerations',
         'regulatory_compliance', 'operational_excellence', 'sustainability'
       ]
+      // compositeScore=63 matches weighted average for clinical_ai with all scores=75
       _options.onToolUse('scoring_complete', {
-        compositeScore: 75,
+        compositeScore: 63,
         recommendation: 'approve',
         overallRiskRating: 'low',
         executiveSummary: 'Mock summary',
@@ -296,17 +298,20 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
       mockDimensionScoreRepo
     )
 
-    // Initialize service with new 9-param constructor
+    // Initialize service with 10-param constructor
+    const validator = new ScoringPayloadValidator()
+    const retryService = new ScoringRetryService(validator, llmService)
     scoringService = new ScoringService(
       mockAssessmentResultRepo,
       mockAssessmentRepo,
       mockFileRepo,
       new MockFileStorage(),
       mockDocumentParser,
-      new ScoringPayloadValidator(),
+      validator,
       storageService,
       llmService,
-      queryService
+      queryService,
+      retryService
     )
   })
 
@@ -819,7 +824,7 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
 
       expect(result.success).toBe(true)
       expect(result.report).toBeDefined()
-      expect(result.report?.payload.compositeScore).toBe(75)
+      expect(result.report?.payload.compositeScore).toBe(63)
       expect(result.code).toBeUndefined()
     })
   })

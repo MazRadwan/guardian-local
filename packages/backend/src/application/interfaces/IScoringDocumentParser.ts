@@ -20,6 +20,7 @@ import {
   DocumentMetadata,
   DocumentParseError,
 } from './IDocumentParser.js';
+import type { ScoringStatus } from '../../domain/scoring/types.js';
 
 // Re-export for convenience
 export { DocumentParseError };
@@ -100,6 +101,10 @@ export interface ScoringParseOptions extends ParseOptions {
 
   /** Maximum characters per response before truncation (default: 2000, Story 20.4.2) */
   maxResponseChars?: number;
+
+  /** Progress callback for granular extraction updates (Story 39.2.4).
+   *  Uses ScoringStatus type for type safety. */
+  onProgress?: (event: { status: ScoringStatus; message: string; progress?: number }) => void;
 }
 
 /**

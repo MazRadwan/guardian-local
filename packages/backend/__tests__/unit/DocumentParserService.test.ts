@@ -5,6 +5,10 @@ import {
   QuestionnaireMismatchError,
 } from '../../src/application/interfaces/IScoringDocumentParser.js';
 
+// NOTE (Story 39.4.1): Intake tests (parseForContext) moved to
+// __tests__/unit/infrastructure/ai/IntakeDocumentParser.test.ts.
+// This file now only tests scoring (parseForResponses).
+
 // Mock pdf-parse module (v2 class-based API)
 // Default content includes Guardian markers to pass pre-check (Story 20.4.1)
 jest.mock('pdf-parse', () => ({
@@ -29,6 +33,9 @@ GUARDIAN Security Assessment
 Section 1: Clinical Risk
 Question 1.1 - How do you validate AI outputs?`,
   }),
+  convertToHtml: jest.fn().mockResolvedValue({
+    value: '<p>mock html</p>',
+  }),
 }));
 
 // Mock dependencies
@@ -42,26 +49,13 @@ const mockVisionClient = {
   prepareDocument: jest.fn(),
 };
 
-// Helper to create valid intake extraction response
-function createIntakeExtractionResponse(overrides = {}) {
-  return {
-    vendorName: 'Test Vendor',
-    solutionName: 'Test Solution',
-    solutionType: 'Clinical Decision Support',
-    industry: 'Healthcare',
-    features: ['Feature 1', 'Feature 2'],
-    claims: ['Claim 1'],
-    integrations: ['Epic', 'Cerner'],
-    complianceMentions: ['HIPAA', 'SOC2'],
-    securityMentions: ['AES-256 encryption'],
-    architectureNotes: ['Cloud-based'],
-    confidence: 0.9,
-    suggestedQuestions: ['How do you handle PHI?'],
-    coveredCategories: ['privacy_risk', 'security_risk'],
-    gapCategories: ['clinical_risk'],
-    ...overrides,
-  };
-}
+const mockQuestionRepo = {
+  bulkCreate: jest.fn(),
+  findByAssessmentId: jest.fn().mockResolvedValue([]),
+  findById: jest.fn(),
+  deleteByAssessmentId: jest.fn(),
+  replaceAllForAssessment: jest.fn(),
+};
 
 // Helper to create valid scoring extraction response
 function createScoringExtractionResponse(overrides = {}) {
@@ -123,177 +117,19 @@ describe('DocumentParserService', () => {
 
     service = new DocumentParserService(
       mockClaudeClient as any,
-      mockVisionClient as any
+      mockVisionClient as any,
+      mockQuestionRepo as any
     );
 
-    // Default mock for Claude text-based response
+    // Default mock for Claude text-based response (scoring)
     mockClaudeClient.sendMessage.mockResolvedValue({
-      content: JSON.stringify(createIntakeExtractionResponse()),
-    });
-
-    // Default mock for Vision response
-    mockVisionClient.analyzeImages.mockResolvedValue({
-      content: JSON.stringify(createIntakeExtractionResponse()),
-      usage: { inputTokens: 1000, outputTokens: 500 },
-      stopReason: 'end_turn',
+      content: JSON.stringify(createScoringExtractionResponse()),
     });
 
     mockVisionClient.prepareDocument.mockResolvedValue([]);
   });
 
-  describe('parseForContext (Intake)', () => {
-    it('extracts context from PDF document using text-based API', async () => {
-      const metadata = createMetadata();
-      const buffer = Buffer.from('PDF content');
-
-      const result = await service.parseForContext(buffer, metadata);
-
-      expect(result.success).toBe(true);
-      expect(result.confidence).toBe(0.9);
-      expect(result.context).toEqual(expect.objectContaining({
-        vendorName: 'Test Vendor',
-        solutionName: 'Test Solution',
-        features: ['Feature 1', 'Feature 2'],
-      }));
-      expect(result.suggestedQuestions).toEqual(['How do you handle PHI?']);
-      expect(result.coveredCategories).toEqual(['privacy_risk', 'security_risk']);
-      expect(result.gapCategories).toEqual(['clinical_risk']);
-    });
-
-    it('extracts context from DOCX document', async () => {
-      const metadata = createMetadata({
-        filename: 'test.docx',
-        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        documentType: 'docx',
-      });
-      const buffer = Buffer.from('DOCX content');
-
-      const result = await service.parseForContext(buffer, metadata);
-
-      expect(result.success).toBe(true);
-      expect(result.context?.vendorName).toBe('Test Vendor');
-    });
-
-    it('uses Vision API for image documents', async () => {
-      mockVisionClient.prepareDocument.mockResolvedValue([
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: 'image/png', data: 'base64data' },
-        },
-      ]);
-
-      const metadata = createMetadata({
-        filename: 'screenshot.png',
-        mimeType: 'image/png',
-        documentType: 'image',
-      });
-      const buffer = Buffer.from('PNG content');
-
-      const result = await service.parseForContext(buffer, metadata);
-
-      expect(mockVisionClient.analyzeImages).toHaveBeenCalled();
-      expect(mockVisionClient.prepareDocument).toHaveBeenCalledWith(buffer, 'image/png');
-      expect(result.success).toBe(true);
-    });
-
-    it('handles JSON response in markdown code block', async () => {
-      mockClaudeClient.sendMessage.mockResolvedValue({
-        content: '```json\n' + JSON.stringify(createIntakeExtractionResponse()) + '\n```',
-      });
-
-      const result = await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata()
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.context?.vendorName).toBe('Test Vendor');
-    });
-
-    it('returns failed result on JSON parse error', async () => {
-      mockClaudeClient.sendMessage.mockResolvedValue({
-        content: 'Invalid JSON response',
-      });
-
-      const result = await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata()
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('Failed to parse extraction response');
-      expect(result.context).toBeNull();
-    });
-
-    it('returns failed result on API error', async () => {
-      mockClaudeClient.sendMessage.mockRejectedValue(new Error('API timeout'));
-
-      const result = await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata()
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.error).toBe('API timeout');
-      expect(result.confidence).toBe(0);
-    });
-
-    it('includes raw text excerpt in context', async () => {
-      const result = await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata()
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.context?.rawTextExcerpt).toBeDefined();
-    });
-
-    it('includes storage path in context', async () => {
-      const result = await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata({ storagePath: '/uploads/vendor-doc.pdf' })
-      );
-
-      expect(result.success).toBe(true);
-      expect(result.context?.sourceFilePath).toBe('/uploads/vendor-doc.pdf');
-    });
-
-    it('passes focus categories to prompt builder', async () => {
-      await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata(),
-        { focusCategories: ['privacy_risk', 'security_risk'] }
-      );
-
-      expect(mockClaudeClient.sendMessage).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({
-            content: expect.stringContaining('privacy_risk'),
-          }),
-        ]),
-        expect.any(Object)
-      );
-    });
-
-    it('tracks parse time in result', async () => {
-      const result = await service.parseForContext(
-        Buffer.from('content'),
-        createMetadata()
-      );
-
-      // parseTimeMs can be 0 on fast execution; check it's a valid non-negative number
-      expect(result.parseTimeMs).toBeGreaterThanOrEqual(0);
-      expect(typeof result.parseTimeMs).toBe('number');
-    });
-  });
-
   describe('parseForResponses (Scoring)', () => {
-    beforeEach(() => {
-      mockClaudeClient.sendMessage.mockResolvedValue({
-        content: JSON.stringify(createScoringExtractionResponse()),
-      });
-    });
-
     it('extracts responses from PDF questionnaire', async () => {
       const metadata = createMetadata();
       const buffer = Buffer.from('PDF content');
@@ -491,12 +327,12 @@ describe('DocumentParserService', () => {
   });
 
   describe('Document type handling', () => {
-    it('rejects unsupported document types', async () => {
+    it('rejects unsupported document types via parseForResponses', async () => {
       const metadata = createMetadata({
         documentType: 'xlsx' as any, // Unsupported
       });
 
-      const result = await service.parseForContext(
+      const result = await service.parseForResponses(
         Buffer.from('content'),
         metadata
       );
@@ -508,12 +344,6 @@ describe('DocumentParserService', () => {
 
   // Story 20.3.3: Abort support for parsing
   describe('Abort support (Story 20.3.3)', () => {
-    beforeEach(() => {
-      mockClaudeClient.sendMessage.mockResolvedValue({
-        content: JSON.stringify(createScoringExtractionResponse()),
-      });
-    });
-
     it('returns failed result when aborted before extraction', async () => {
       const abortController = new AbortController();
       abortController.abort(); // Abort immediately
@@ -789,6 +619,176 @@ describe('DocumentParserService', () => {
       expect(result.error).toBe(
         'Document does not appear to be a Guardian questionnaire. Please upload an exported questionnaire PDF or Word document.'
       );
+    });
+  });
+
+  // Story 39.2.4: Extraction Progress Events
+  describe('Extraction Progress Events (Story 39.2.4)', () => {
+    // Guardian text that passes pre-check (needed because earlier tests may override pdf-parse mock)
+    const guardianBuffer = Buffer.from(
+      `Assessment ID: 12345678-1234-1234-1234-123456789012\nGUARDIAN Security Assessment\nSection 1: Clinical Risk\nQuestion 1.1 - How do you validate?`
+    );
+
+    describe('Claude fallback path', () => {
+      beforeEach(() => {
+        // Reset pdf-parse mock to use buffer content (may have been overridden)
+        const { PDFParse } = require('pdf-parse');
+        PDFParse.mockImplementation((opts: { data: Buffer }) => ({
+          getText: jest.fn().mockResolvedValue({
+            text: opts.data.toString(),
+            total: 1,
+            pages: [],
+          }),
+          destroy: jest.fn().mockResolvedValue(undefined),
+        }));
+        // Must mock scoring extraction response for Claude fallback
+        mockClaudeClient.sendMessage.mockResolvedValue({
+          content: JSON.stringify(createScoringExtractionResponse()),
+        });
+      });
+
+      it('emits "Processing document with AI..." progress at 15% on Claude fallback', async () => {
+        const onProgress = jest.fn();
+
+        await service.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { onProgress }
+        );
+
+        expect(onProgress).toHaveBeenCalledWith({
+          status: 'parsing',
+          message: 'Processing document with AI...',
+          progress: 15,
+        });
+      });
+
+      it('does not crash when onProgress is not provided', async () => {
+        const result = await service.parseForResponses(
+          guardianBuffer,
+          createMetadata()
+        );
+
+        expect(result.success).toBe(true);
+      });
+
+      it('does not crash when options provided without onProgress', async () => {
+        const result = await service.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { minConfidence: 0.7 }
+        );
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe('regex path', () => {
+      beforeEach(() => {
+        // Reset pdf-parse mock to use buffer content
+        const { PDFParse } = require('pdf-parse');
+        PDFParse.mockImplementation((opts: { data: Buffer }) => ({
+          getText: jest.fn().mockResolvedValue({
+            text: opts.data.toString(),
+            total: 1,
+            pages: [],
+          }),
+          destroy: jest.fn().mockResolvedValue(undefined),
+        }));
+      });
+
+      it('emits per-section progress messages during regex extraction', async () => {
+        const customService = new DocumentParserService(
+          mockClaudeClient as any,
+          mockVisionClient as any,
+          mockQuestionRepo as any
+        );
+
+        const mockRegexResult = {
+          result: {
+            success: true, confidence: 0.95, metadata: createMetadata(), parseTimeMs: 50,
+            assessmentId: 'assessment-123', vendorName: 'Test Vendor', solutionName: null,
+            responses: [
+              { sectionNumber: 1, sectionTitle: null, questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 1, sectionTitle: null, questionNumber: 2, questionText: 'Q2', responseText: 'A2', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 2, sectionTitle: null, questionNumber: 1, questionText: 'Q3', responseText: 'A3', confidence: 0.90, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 3, sectionTitle: null, questionNumber: 1, questionText: 'Q4', responseText: 'A4', confidence: 0.90, hasVisualContent: false, visualContentDescription: null },
+            ],
+            expectedQuestionCount: 4, parsedQuestionCount: 4, unparsedQuestions: [], isComplete: true,
+          },
+          method: 'regex',
+          confidence: { confident: true, overallScore: 0.95 },
+        };
+
+        (customService as any).routingService = {
+          tryRegexExtraction: jest.fn().mockResolvedValue(mockRegexResult),
+        };
+
+        const onProgress = jest.fn();
+        const result = await customService.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { onProgress }
+        );
+
+        expect(result.success).toBe(true);
+
+        const progressCalls = onProgress.mock.calls.map((c: any[]) => c[0]);
+        const sectionCalls = progressCalls.filter((c: any) =>
+          c.message && c.message.startsWith('Matching responses...')
+        );
+
+        expect(sectionCalls).toHaveLength(3);
+        expect(sectionCalls[0]).toEqual({ status: 'parsing', message: 'Matching responses... section 1 of 3', progress: 27 });
+        expect(sectionCalls[1]).toEqual({ status: 'parsing', message: 'Matching responses... section 2 of 3', progress: expect.any(Number) });
+        expect(sectionCalls[2]).toEqual({ status: 'parsing', message: 'Matching responses... section 3 of 3', progress: expect.any(Number) });
+      });
+
+      it('interpolates progress between 15% and 50%', async () => {
+        const customService = new DocumentParserService(
+          mockClaudeClient as any,
+          mockVisionClient as any,
+          mockQuestionRepo as any
+        );
+
+        const mockRegexResult = {
+          result: {
+            success: true, confidence: 0.95, metadata: createMetadata(), parseTimeMs: 50,
+            assessmentId: 'assessment-123', vendorName: 'Test Vendor', solutionName: null,
+            responses: [
+              { sectionNumber: 1, sectionTitle: null, questionNumber: 1, questionText: 'Q1', responseText: 'A1', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 2, sectionTitle: null, questionNumber: 1, questionText: 'Q2', responseText: 'A2', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 3, sectionTitle: null, questionNumber: 1, questionText: 'Q3', responseText: 'A3', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+              { sectionNumber: 4, sectionTitle: null, questionNumber: 1, questionText: 'Q4', responseText: 'A4', confidence: 0.95, hasVisualContent: false, visualContentDescription: null },
+            ],
+            expectedQuestionCount: 4, parsedQuestionCount: 4, unparsedQuestions: [], isComplete: true,
+          },
+          method: 'regex',
+          confidence: { confident: true, overallScore: 0.95 },
+        };
+
+        (customService as any).routingService = {
+          tryRegexExtraction: jest.fn().mockResolvedValue(mockRegexResult),
+        };
+
+        const onProgress = jest.fn();
+        await customService.parseForResponses(
+          guardianBuffer,
+          createMetadata(),
+          { onProgress }
+        );
+
+        const progressCalls = onProgress.mock.calls.map((c: any[]) => c[0]);
+        const sectionCalls = progressCalls.filter((c: any) =>
+          c.message && c.message.startsWith('Matching responses...')
+        );
+
+        // All progress values should be >= 15 and <= 50
+        for (const call of sectionCalls) {
+          expect(call.progress).toBeGreaterThanOrEqual(15);
+          expect(call.progress).toBeLessThanOrEqual(50);
+        }
+      });
     });
   });
 

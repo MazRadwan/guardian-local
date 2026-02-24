@@ -305,13 +305,14 @@ export function useWebSocketEvents({
 
     // Story 14.1.5: Mark questionnaire stream as complete and update index
     // This gates download bubble visibility until streaming finishes
+    // IMPORTANT: Access messages from store directly to avoid infinite re-render loop
+    // (messages.length in deps causes Maximum update depth exceeded — same fix as handleMessageStream)
     const state = useChatStore.getState();
     if (state.pendingQuestionnaire) {
-      // Update index to current messages length (download bubble renders AFTER questionnaire)
-      state.setQuestionnaireMessageIndex(messages.length);
+      state.setQuestionnaireMessageIndex(state.messages.length);
       state.setQuestionnaireStreamComplete(true);
     }
-  }, [finishStreaming, setLoading, setRegeneratingMessageIndex, focusComposer, messages.length]);
+  }, [finishStreaming, setLoading, setRegeneratingMessageIndex, focusComposer]);
 
   // Handler 6: Update conversations list
   const handleConversationsList = useCallback(

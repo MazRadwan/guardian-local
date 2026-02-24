@@ -7,17 +7,21 @@
  * Epic 37: Added ISO control injection via IPromptBuilder optional methods.
  */
 
-import { ILLMClient } from '../interfaces/ILLMClient.js';
+import { ILLMClient, ContentBlockForPrompt } from '../interfaces/ILLMClient.js';
 import { IPromptBuilder } from '../interfaces/IPromptBuilder.js';
 import { scoringCompleteTool } from '../../domain/scoring/tools/scoringComplete.js';
 import { SolutionType } from '../../domain/scoring/rubric.js';
 import { ScoringParseResult } from '../interfaces/IScoringDocumentParser.js';
 import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
+import type { ScoringCallMetrics, ClaudeUsageData } from './ScoringMetricsCollector.js';
+import { ScoringMetricsCollector } from './ScoringMetricsCollector.js';
 
 /** Result of LLM scoring - narrative text + structured tool payload */
 export interface ScoreWithClaudeResult {
   narrativeReport: string;
   payload: unknown;
+  /** Scoring metrics (cache hit rate, cost, latency). Undefined if usage unavailable. */
+  metrics?: ScoringCallMetrics;
 }
 
 /** Optional ISO control data passed to scoreWithClaude */
@@ -75,13 +79,13 @@ export class ScoringLLMService {
     solutionType: SolutionType,
     abortSignal: AbortSignal,
     onMessage: (message: string) => void,
-    isoOptions?: ISOScoringOptions
+    isoOptions?: ISOScoringOptions,
+    correctionPrompt?: string
   ): Promise<ScoreWithClaudeResult> {
     // Build prompts using port (not infrastructure import)
-    const systemPrompt = this.promptBuilder.buildScoringSystemPrompt(
-      isoOptions?.catalogControls
-    );
-    const userPrompt = this.promptBuilder.buildScoringUserPrompt({
+    // System prompt is static and fully cacheable (no ISO controls) - Story 39.3.3
+    const systemPrompt = this.promptBuilder.buildScoringSystemPrompt();
+    let userPrompt = this.promptBuilder.buildScoringUserPrompt({
       vendorName,
       solutionName,
       solutionType,
@@ -92,11 +96,20 @@ export class ScoringLLMService {
         responseText: r.responseText,
       })),
       isoControls: isoOptions?.applicableControls,
+      isoCatalog: isoOptions?.catalogControls,
     });
+
+    // Append correction prompt for retry-on-structural-fail
+    if (correctionPrompt) {
+      userPrompt = this.appendCorrectionPrompt(userPrompt, correctionPrompt);
+    }
 
     // Call LLM via port (not ClaudeClient directly)
     let narrativeReport = '';
     let toolPayload: unknown = null;
+    let lastReportedLength = 0;
+    let capturedUsage: ClaudeUsageData | undefined;
+    const startTime = Date.now();
 
     await this.llmClient.streamWithTool({
       systemPrompt,
@@ -104,14 +117,15 @@ export class ScoringLLMService {
       tools: [scoringCompleteTool],
       tool_choice: { type: 'any' },
       usePromptCache: true,
-      // Epic 37→38: Increased to 16384 — ISO-enriched scoring produces longer
+      // Epic 37->38: Increased to 16384 -- ISO-enriched scoring produces longer
       // narrative + 10 dimension tool payload with confidence + ISO clause refs
       maxTokens: 16384,
       temperature: 0,
       abortSignal,
       onTextDelta: (delta) => {
         narrativeReport += delta;
-        if (narrativeReport.length % 500 === 0) {
+        if (narrativeReport.length - lastReportedLength >= 500) {
+          lastReportedLength = narrativeReport.length;
           onMessage('Generating risk assessment...');
         }
       },
@@ -119,6 +133,9 @@ export class ScoringLLMService {
         if (toolName === 'scoring_complete') {
           toolPayload = input;
         }
+      },
+      onUsage: (usage) => {
+        capturedUsage = usage;
       },
     });
 
@@ -134,6 +151,29 @@ export class ScoringLLMService {
       );
     }
 
-    return { narrativeReport, payload: toolPayload };
+    // Epic 39: Calculate scoring metrics if usage data available
+    let metrics: ScoringCallMetrics | undefined;
+    if (capturedUsage) {
+      const latencyMs = Date.now() - startTime;
+      metrics = ScoringMetricsCollector.fromUsage(capturedUsage, latencyMs);
+      ScoringMetricsCollector.log(metrics);
+    }
+
+    return { narrativeReport, payload: toolPayload, metrics };
+  }
+
+  /**
+   * Append correction prompt to user prompt (string or multi-block).
+   * Used by retry-on-structural-fail to include violation feedback.
+   */
+  private appendCorrectionPrompt(
+    userPrompt: string | ContentBlockForPrompt[],
+    correctionPrompt: string
+  ): string | ContentBlockForPrompt[] {
+    if (typeof userPrompt === 'string') {
+      return userPrompt + '\n\n' + correctionPrompt;
+    }
+    // Multi-block: append as a new non-cacheable text block
+    return [...userPrompt, { type: 'text' as const, text: correctionPrompt, cacheable: false }];
   }
 }

@@ -18,6 +18,22 @@ jest.mock('../QuestionnaireMessage', () => ({
   ),
 }));
 
+// Mock ProgressMessage component (Story 39.2.3)
+jest.mock('../ProgressMessage', () => ({
+  ProgressMessage: ({ status, progress, message }: { status: string; progress?: number; message: string }) => (
+    <div data-testid="progress-message" data-status={status} data-progress={progress}>
+      {message}
+    </div>
+  ),
+}));
+
+// Mock ScoringResultCard to avoid complex rendering
+jest.mock('../ScoringResultCard', () => ({
+  ScoringResultCard: () => (
+    <div data-testid="scoring-result-card">Mocked Scoring Result</div>
+  ),
+}));
+
 // Mock IntersectionObserver
 let mockIntersectionObserverCallback: IntersectionObserverCallback;
 const mockObserve = jest.fn();
@@ -846,6 +862,133 @@ describe('MessageList', () => {
       // Scroll should have been triggered because typing indicator just appeared
       // Even though isNearBottom is false, the typing indicator appearance forces scroll
       expect(scrollContainer.scrollTop).toBe(1000); // scrollTop set to scrollHeight
+    });
+  });
+
+  // Story 39.2.3: Scoring Progress Visibility Tests
+  describe('Scoring Progress Rendering (Story 39.2.3)', () => {
+    const baseMessages: ChatMessageType[] = [
+      { role: 'user', content: 'Score my document', timestamp: new Date() },
+    ];
+
+    it('renders progress indicator when status is "parsing"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'parsing', message: 'Extracting responses...', progress: 35 }}
+        />
+      );
+
+      expect(screen.getByTestId('scoring-progress')).toBeInTheDocument();
+      expect(screen.getByTestId('progress-message')).toBeInTheDocument();
+      expect(screen.getByText('Extracting responses...')).toBeInTheDocument();
+    });
+
+    it('renders progress indicator when status is "scoring"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'scoring', message: 'Scoring AI Ethics...', progress: 60 }}
+        />
+      );
+
+      expect(screen.getByTestId('scoring-progress')).toBeInTheDocument();
+      expect(screen.getByTestId('progress-message')).toHaveAttribute('data-status', 'scoring');
+    });
+
+    it('renders progress indicator when status is "validating"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'validating', message: 'Validating results...', progress: 90 }}
+        />
+      );
+
+      expect(screen.getByTestId('scoring-progress')).toBeInTheDocument();
+      expect(screen.getByTestId('progress-message')).toHaveAttribute('data-status', 'validating');
+      expect(screen.getByText('Validating results...')).toBeInTheDocument();
+    });
+
+    it('renders progress indicator when status is "uploading"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'uploading', message: 'Uploading document...', progress: 10 }}
+        />
+      );
+
+      expect(screen.getByTestId('scoring-progress')).toBeInTheDocument();
+      expect(screen.getByTestId('progress-message')).toHaveAttribute('data-status', 'uploading');
+    });
+
+    it('does NOT render progress indicator when status is "idle"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'idle', message: '' }}
+        />
+      );
+
+      expect(screen.queryByTestId('scoring-progress')).not.toBeInTheDocument();
+    });
+
+    it('does NOT render progress indicator when status is "complete"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'complete', message: 'Scoring complete!' }}
+        />
+      );
+
+      expect(screen.queryByTestId('scoring-progress')).not.toBeInTheDocument();
+    });
+
+    it('does NOT render progress indicator when status is "error"', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'error', message: 'An error occurred', error: 'Failed' }}
+        />
+      );
+
+      expect(screen.queryByTestId('scoring-progress')).not.toBeInTheDocument();
+    });
+
+    it('does NOT render progress indicator when scoringProgress is undefined', () => {
+      render(<MessageList messages={baseMessages} />);
+
+      expect(screen.queryByTestId('scoring-progress')).not.toBeInTheDocument();
+    });
+
+    it('passes progress percentage to ProgressMessage component', () => {
+      render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'scoring', message: 'Scoring...', progress: 55 }}
+        />
+      );
+
+      expect(screen.getByTestId('progress-message')).toHaveAttribute('data-progress', '55');
+    });
+
+    it('transitions from active to terminal status hides progress', () => {
+      const { rerender } = render(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'validating', message: 'Validating...', progress: 95 }}
+        />
+      );
+
+      expect(screen.getByTestId('scoring-progress')).toBeInTheDocument();
+
+      rerender(
+        <MessageList
+          messages={baseMessages}
+          scoringProgress={{ status: 'complete', message: 'Done!' }}
+        />
+      );
+
+      expect(screen.queryByTestId('scoring-progress')).not.toBeInTheDocument();
     });
   });
 });
