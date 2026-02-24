@@ -37,7 +37,7 @@ export const assessmentResults = pgTable(
     narrativeError: text('narrative_error'),
 
     // Provenance (for auditability)
-    rubricVersion: text('rubric_version').notNull(), // 'guardian-v1.0'
+    rubricVersion: text('rubric_version').notNull(), // 'guardian-v1.1'
     modelId: text('model_id').notNull(), // 'claude-sonnet-4-5-20250929'
     rawToolPayload: jsonb('raw_tool_payload'), // Original scoring_complete payload
 

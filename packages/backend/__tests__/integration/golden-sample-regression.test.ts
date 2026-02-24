@@ -3,7 +3,7 @@
  *
  * Validates that ISO prompt enrichment (Epic 37) does not degrade
  * existing scoring quality. Captures prompt structure and verifies:
- * - Rubric content is preserved (all 5 scored dimensions)
+ * - Rubric content is preserved (all 10 scored dimensions)
  * - Disqualifying factors remain present
  * - Recommendation logic is unchanged
  * - ISO/confidence sections are additive, not replacing
@@ -42,13 +42,18 @@ const sampleControls: ISOControlForPrompt[] = [
 
 describe('Golden Sample Regression (SC-6)', () => {
   describe('System Prompt Stability', () => {
-    it('should contain all 5 scored dimension rubric criteria', () => {
+    it('should contain all 10 scored dimension rubric criteria', () => {
       const prompt = buildScoringSystemPrompt()
       expect(prompt).toContain('CLINICAL RISK')
       expect(prompt).toContain('PRIVACY RISK')
       expect(prompt).toContain('SECURITY RISK')
       expect(prompt).toContain('TECHNICAL CREDIBILITY')
       expect(prompt).toContain('OPERATIONAL EXCELLENCE')
+      expect(prompt).toContain('VENDOR CAPABILITY')
+      expect(prompt).toContain('AI TRANSPARENCY')
+      expect(prompt).toContain('ETHICAL CONSIDERATIONS')
+      expect(prompt).toContain('REGULATORY COMPLIANCE')
+      expect(prompt).toContain('SUSTAINABILITY')
     })
 
     it('should contain sub-score definitions for each scored dimension', () => {
@@ -178,11 +183,19 @@ describe('Golden Sample Regression (SC-6)', () => {
       expect(prompt).toContain('COMPOSITE SCORE WEIGHTING')
     })
 
-    it('should contain weighted dimension percentages for clinical_ai', () => {
+    it('should contain weighted dimension percentages for clinical_ai (v1.1)', () => {
       const prompt = buildScoringUserPrompt(baseParams)
-      expect(prompt).toContain('Clinical Risk: 40%')
-      expect(prompt).toContain('Privacy Risk: 20%')
+      expect(prompt).toContain('Clinical Risk: 25%')
+      expect(prompt).toContain('Privacy Risk: 15%')
       expect(prompt).toContain('Security Risk: 15%')
+      // v1.1: all 10 dimensions have non-zero weights
+      expect(prompt).toContain('Technical Credibility: 10%')
+      expect(prompt).toContain('Operational Excellence: 10%')
+      expect(prompt).toContain('Vendor Capability: 5%')
+      expect(prompt).toContain('AI Transparency: 5%')
+      expect(prompt).toContain('Ethical Considerations: 5%')
+      expect(prompt).toContain('Regulatory Compliance: 5%')
+      expect(prompt).toContain('Sustainability: 5%')
     })
 
     it('should preserve content when ISO applicability is appended', () => {

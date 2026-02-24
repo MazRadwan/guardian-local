@@ -410,7 +410,7 @@ describe('DrizzleResponseRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -525,7 +525,7 @@ describe('DrizzleResponseRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -621,7 +621,7 @@ describe('DrizzleResponseRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 

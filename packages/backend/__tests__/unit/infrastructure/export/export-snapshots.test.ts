@@ -137,7 +137,7 @@ function buildDeterministicFixture(): ScoringExportData {
         ],
       },
       narrativeReport: '# Assessment Overview\n\nThis vendor was evaluated across all 10 Guardian dimensions.\n\n## Key Strengths\n\n- **Privacy controls** are well-documented\n- Technical architecture is sound',
-      rubricVersion: 'guardian-v1.0',
+      rubricVersion: 'guardian-v1.1',
       modelId: 'claude-sonnet-4.5',
       scoringDurationMs: 18500,
     },

@@ -85,7 +85,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         executiveSummary: 'Overall medium risk with some concerns.',
         keyFindings: ['Strong privacy controls', 'Weak incident response', 'Good data encryption'],
         disqualifyingFactors: ['No SOC 2 certification'],
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
         rawToolPayload: {
           dimensions: [{ name: 'privacy', score: 85 }],
@@ -106,7 +106,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
       expect(created.executiveSummary).toContain('medium risk')
       expect(created.keyFindings).toHaveLength(3)
       expect(created.disqualifyingFactors).toHaveLength(1)
-      expect(created.rubricVersion).toBe('guardian-v1.0')
+      expect(created.rubricVersion).toBe('guardian-v1.1')
       expect(created.modelId).toBe('claude-sonnet-4-5-20250929')
       expect(created.rawToolPayload).toBeDefined()
       expect(created.scoringDurationMs).toBe(15234)
@@ -121,7 +121,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 92,
         recommendation: 'approve',
         overallRiskRating: 'low',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       }
 
@@ -146,7 +146,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 78,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -158,7 +158,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
           compositeScore: 85,
           recommendation: 'approve',
           overallRiskRating: 'low',
-          rubricVersion: 'guardian-v1.0',
+          rubricVersion: 'guardian-v1.1',
           modelId: 'claude-sonnet-4-5-20250929',
         })
       ).rejects.toThrow()
@@ -175,7 +175,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 78,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -206,7 +206,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 78,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -250,7 +250,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 78,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -293,7 +293,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 70,
         recommendation: 'conditional',
         overallRiskRating: 'high',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -305,7 +305,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 78,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -363,7 +363,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 85,
         recommendation: 'approve',
         overallRiskRating: 'low',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -396,7 +396,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -417,7 +417,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -438,7 +438,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -463,7 +463,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -495,7 +495,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -516,7 +516,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -545,7 +545,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -575,7 +575,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -599,7 +599,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -620,7 +620,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -647,7 +647,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -667,7 +667,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -704,7 +704,7 @@ describe('DrizzleAssessmentResultRepository (Integration)', () => {
         compositeScore: 75,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 

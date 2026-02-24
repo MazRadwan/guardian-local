@@ -30,7 +30,7 @@ describe('ScoringRehydrationController', () => {
     keyFindings: ['Finding 1', 'Finding 2'],
     dimensionScores: [
       { dimension: 'clinical_risk', score: 80, riskRating: 'low' },
-      { dimension: 'data_governance', score: 70, riskRating: 'medium' },
+      { dimension: 'privacy_risk', score: 70, riskRating: 'medium' },
     ],
     batchId: testBatchId,
     assessmentId: testAssessmentId,

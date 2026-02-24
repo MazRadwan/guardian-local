@@ -88,30 +88,38 @@ describe('CompositeScoreValidator', () => {
 
   describe('capability dimension inversion', () => {
     it('should invert capability scores to risk scale', () => {
-      // clinical_ai weights: clinical_risk(40), privacy_risk(20), security_risk(15),
-      //   technical_credibility(15), operational_excellence(10)
+      // clinical_ai v1.1 weights: clinical_risk(25), privacy_risk(15), security_risk(15),
+      //   technical_credibility(10), operational_excellence(10),
+      //   vendor_capability(5), ai_transparency(5), ethical_considerations(5),
+      //   regulatory_compliance(5), sustainability(5)
       // clinical_risk, privacy_risk, security_risk are 'risk' type
-      // technical_credibility and operational_excellence are 'capability' type
+      // All others are 'capability' type
       const scores = ALL_DIMENSIONS.map(dim => ({
         dimension: dim,
         score: dim === 'technical_credibility' ? 80 : 50,
       }));
 
-      // For technical_credibility (capability, weight 15 in clinical_ai):
+      // For technical_credibility (capability, weight 10 in clinical_ai):
       //   risk_equivalent = 100 - 80 = 20
-      //   contribution = 15 * 20 / 100 = 3
-      // Other weighted dimensions at 50:
-      //   clinical_risk: 40 * 50 / 100 = 20
-      //   privacy_risk: 20 * 50 / 100 = 10
+      //   contribution = 10 * 20 / 100 = 2
+      // Risk dimensions at 50:
+      //   clinical_risk: 25 * 50 / 100 = 12.5
+      //   privacy_risk: 15 * 50 / 100 = 7.5
       //   security_risk: 15 * 50 / 100 = 7.5
-      //   operational_excellence (capability): 10 * (100-50) / 100 = 5
-      // Total = 20 + 10 + 7.5 + 3 + 5 = 45.5 -> rounds to 46
+      // Other capability dimensions at 50 (risk_eq = 50):
+      //   operational_excellence: 10 * 50 / 100 = 5
+      //   vendor_capability: 5 * 50 / 100 = 2.5
+      //   ai_transparency: 5 * 50 / 100 = 2.5
+      //   ethical_considerations: 5 * 50 / 100 = 2.5
+      //   regulatory_compliance: 5 * 50 / 100 = 2.5
+      //   sustainability: 5 * 50 / 100 = 2.5
+      // Total = 12.5 + 7.5 + 7.5 + 2 + 5 + 2.5 + 2.5 + 2.5 + 2.5 + 2.5 = 47 -> rounds to 47
       const expected = computeExpected(scores, 'clinical_ai');
-      expect(expected).toBe(46);
+      expect(expected).toBe(47);
 
       const result = validator.validate(expected, scores, 'clinical_ai');
       expect(result.valid).toBe(true);
-      expect(result.expected).toBe(46);
+      expect(result.expected).toBe(47);
     });
 
     it('should handle all-zero risk scores (best case) correctly', () => {
@@ -185,7 +193,7 @@ describe('CompositeScoreValidator', () => {
 
   describe('missing weighted dimensions', () => {
     it('should report violation when a weighted dimension is missing', () => {
-      // Remove clinical_risk which has weight 40 in clinical_ai
+      // Remove clinical_risk which has weight 25 in clinical_ai v1.1
       const scores = ALL_DIMENSIONS
         .filter(d => d !== 'clinical_risk')
         .map(dim => ({ dimension: dim, score: 50 }));
@@ -193,20 +201,21 @@ describe('CompositeScoreValidator', () => {
       const result = validator.validate(50, scores, 'clinical_ai');
       expect(result.valid).toBe(false);
       expect(result.violation).toContain("Missing dimension 'clinical_risk'");
-      expect(result.violation).toContain('weight 40%');
+      expect(result.violation).toContain('weight 25%');
       expect(result.expected).toBe(-1);
     });
 
-    it('should not report violation for missing zero-weight dimensions', () => {
-      // vendor_capability has weight 0 in all solution types
-      // Remove it -- should still validate correctly
+    it('should report violation for any missing weighted dimension (v1.1: all 10 have weight)', () => {
+      // In v1.1, all 10 dimensions have non-zero weights for all solution types.
+      // Remove vendor_capability (weight 5 in clinical_ai) -- should report violation.
       const scores = ALL_DIMENSIONS
         .filter(d => d !== 'vendor_capability')
         .map(dim => ({ dimension: dim, score: 50 }));
 
-      const expected = computeExpected(scores, 'clinical_ai');
-      const result = validator.validate(expected, scores, 'clinical_ai');
-      expect(result.valid).toBe(true);
+      const result = validator.validate(50, scores, 'clinical_ai');
+      expect(result.valid).toBe(false);
+      expect(result.violation).toContain("Missing dimension 'vendor_capability'");
+      expect(result.violation).toContain('weight 5%');
     });
   });
 
@@ -243,7 +252,7 @@ describe('CompositeScoreValidator', () => {
       const adminExpected = computeExpected(scores, 'administrative_ai');
       const patientExpected = computeExpected(scores, 'patient_facing');
 
-      // clinical_ai weights clinical_risk at 40%, admin weights privacy_risk at 30%
+      // clinical_ai weights clinical_risk at 25%, admin weights privacy_risk at 20%
       // With clinical_risk=80 and privacy_risk=20, these should diverge
       expect(clinicalExpected).not.toBe(adminExpected);
 
@@ -255,19 +264,19 @@ describe('CompositeScoreValidator', () => {
   });
 
   describe('weight verification', () => {
-    it('should use only non-zero weight dimensions', () => {
-      // For clinical_ai, only 5 dimensions have non-zero weights
+    it('should use all 10 non-zero weight dimensions', () => {
+      // For clinical_ai v1.1, all 10 dimensions have non-zero weights
       const weights = DIMENSION_WEIGHTS['clinical_ai'];
       const nonZeroDims = Object.entries(weights).filter(([, w]) => w > 0);
-      expect(nonZeroDims).toHaveLength(5);
+      expect(nonZeroDims).toHaveLength(10);
 
       // Total weights should sum to 100
       const totalWeight = nonZeroDims.reduce((sum, [, w]) => sum + w, 0);
       expect(totalWeight).toBe(100);
     });
 
-    it('should produce valid results regardless of extra zero-weight dimension scores', () => {
-      // All 10 dimensions present, but only 5 have weight in clinical_ai
+    it('should produce valid results with all 10 dimensions present', () => {
+      // All 10 dimensions present and all have weight in clinical_ai v1.1
       const scores = buildUniformScores(50);
       const expected = computeExpected(scores, 'clinical_ai');
       const result = validator.validate(expected, scores, 'clinical_ai');

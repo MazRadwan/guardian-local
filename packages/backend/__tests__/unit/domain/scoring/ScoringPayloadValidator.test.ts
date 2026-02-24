@@ -298,16 +298,20 @@ describe('ScoringPayloadValidator', () => {
       expect(result.structuralViolations.filter(v => v.includes('sub-score sum'))).toHaveLength(0);
     });
 
-    it('should skip sub-score validation for dimensions without rules', () => {
+    it('should validate vendor_capability sub-scores against defined rules', () => {
       const payload = createValidPayload();
-      // vendor_capability has no sub-score rules
+      // vendor_capability now has sub-score rules defined
       const vendorIdx = payload.dimensionScores.findIndex(
         (d: any) => d.dimension === 'vendor_capability'
       );
       payload.dimensionScores[vendorIdx].score = 60;
       (payload.dimensionScores[vendorIdx] as any).findings = {
         subScores: [
-          { name: 'any_name', score: 60, maxScore: 100, notes: 'No rules defined' },
+          { name: 'company_stability_score', score: 25, maxScore: 25, notes: '' },
+          { name: 'healthcare_experience_score', score: 15, maxScore: 25, notes: '' },
+          { name: 'customer_references_score', score: 12, maxScore: 20, notes: '' },
+          { name: 'support_capability_score', score: 5, maxScore: 15, notes: '' },
+          { name: 'roadmap_credibility_score', score: 5, maxScore: 15, notes: '' },
         ],
         keyRisks: [],
         mitigations: [],
@@ -320,6 +324,7 @@ describe('ScoringPayloadValidator', () => {
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
+      // Sub-scores sum to 62, dimension score is 60, diff is 2 -- within tolerance
       expect(result.warnings).toHaveLength(0);
     });
 
