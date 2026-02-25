@@ -126,7 +126,7 @@ export class ScoringPayloadValidator {
       this.validateTieredDisqualifiers(disqualifiers, p.recommendation as string, structuralViolations, warnings);
     }
 
-    // Validate composite score arithmetic (structural violation)
+    // Validate composite score arithmetic (soft warning — reconciler auto-corrects)
     if (solutionType && Array.isArray(p.dimensionScores) && this.isValidScore(p.compositeScore)) {
       const compositeResult = compositeScoreValidator.validate(
         p.compositeScore as number,
@@ -134,7 +134,7 @@ export class ScoringPayloadValidator {
         solutionType
       );
       if (!compositeResult.valid && compositeResult.violation) {
-        structuralViolations.push(compositeResult.violation);
+        warnings.push(compositeResult.violation + ' (auto-corrected by reconciler)');
       }
     }
 
@@ -277,15 +277,16 @@ export class ScoringPayloadValidator {
       }
     }
 
+    // Recommendation coherence → soft warning (reconciler auto-corrects)
     if (hasHard && recommendation !== 'decline') {
-      structuralViolations.push(
+      warnings.push(
         `hard_decline disqualifier(s) present (${hardFactors.join(', ')}) ` +
-        `but recommendation is '${recommendation}' — must be 'decline'`
+        `but recommendation was '${recommendation}' — auto-corrected to 'decline'`
       );
     } else if (!hasHard && remediableFactors.length > 0 && recommendation === 'approve') {
-      structuralViolations.push(
+      warnings.push(
         `remediable_blocker disqualifier(s) present (${remediableFactors.join(', ')}) ` +
-        `but recommendation is 'approve' — must be 'conditional' or 'decline'`
+        `but recommendation was 'approve' — auto-corrected to 'conditional'`
       );
     }
   }

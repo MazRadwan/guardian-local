@@ -583,19 +583,19 @@ describe('ScoringService', () => {
         expect(result.error).toContain('Invalid scoring payload')
       })
 
-      it('should fail if compositeScore is out of range', async () => {
+      it('should auto-correct compositeScore via reconciler when out of range', async () => {
         mockLLMService.scoreWithClaude.mockResolvedValue({
           narrativeReport: 'Report',
           payload: {
             ...validPayload,
-            compositeScore: 150, // Invalid - over 100
+            compositeScore: 150, // Invalid - but reconciler recalculates from weighted average
           },
         })
 
         const result = await service.score(defaultInput, jest.fn())
 
-        expect(result.success).toBe(false)
-        expect(result.error).toContain('Invalid scoring payload')
+        // Reconciler corrects compositeScore to correct weighted average, so scoring succeeds
+        expect(result.success).toBe(true)
       })
 
       it('should fail if missing required dimensions', async () => {

@@ -5,9 +5,9 @@
  */
 
 import { Router } from 'express';
-import { ScoringExportController } from '../controllers/ScoringExportController';
-import { AuthService } from '../../../application/services/AuthService';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { ScoringExportController } from '../controllers/ScoringExportController.js';
+import { AuthService } from '../../../application/services/AuthService.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 export function createScoringExportRoutes(
   controller: ScoringExportController,

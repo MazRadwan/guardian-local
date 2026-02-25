@@ -7,6 +7,7 @@ import { DocumentMetadata } from '../interfaces/IDocumentParser.js';
 import { IFileRepository } from '../interfaces/IFileRepository.js';
 import { IFileStorage } from '../interfaces/IFileStorage.js';
 import { ScoringPayloadValidator } from '../../domain/scoring/ScoringPayloadValidator.js';
+import { reconcilePayload } from '../../domain/scoring/ScoringPayloadReconciler.js';
 import { ScoringReportData, ScoringProgressEvent } from '../../domain/scoring/types.js';
 import { RUBRIC_VERSION } from '../../domain/scoring/rubric.js';
 import { ScoringError, ScoringErrorCode, UnauthorizedError } from '../../domain/scoring/errors.js';
@@ -109,6 +110,19 @@ export class ScoringService implements IScoringService {
         );
       }
 
+      // Diagnostic: log parseResult summary to trace extraction failures
+      console.log('[ScoringService] parseResult:', {
+        success: parseResult.success,
+        error: parseResult.error,
+        assessmentId: parseResult.assessmentId,
+        vendorName: parseResult.vendorName,
+        confidence: parseResult.confidence,
+        responsesCount: parseResult.responses.length,
+        parsedQuestionCount: parseResult.parsedQuestionCount,
+        expectedQuestionCount: parseResult.expectedQuestionCount,
+        isComplete: parseResult.isComplete,
+      });
+
       if (parseResult.responses.length === 0) {
         throw new ScoringError('PARSE_FAILED', 'No responses found in document');
       }
@@ -187,10 +201,14 @@ export class ScoringService implements IScoringService {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // 12. Normalize + validate payload (with structural retry)
+      // 12. Normalize, reconcile math, then validate payload (with structural retry)
       onProgress({ status: 'validating', message: 'Validating scoring results...', progress: 90 });
       const normalizedPayload = this.validator.normalizePayload(payload);
-      let validationResult = this.validator.validate(normalizedPayload, solutionType);
+      const { payload: reconciledPayload, corrections } = reconcilePayload(normalizedPayload, solutionType);
+      if (corrections.length > 0) {
+        console.info(`[ScoringService] Reconciler applied ${corrections.length} math correction(s)`);
+      }
+      let validationResult = this.validator.validate(reconciledPayload, solutionType);
       let finalNarrative = narrativeReport;
 
       if (!validationResult.valid) {

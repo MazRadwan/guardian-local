@@ -5,12 +5,12 @@
  */
 
 import { Router } from 'express'
-import { AuthController } from '../controllers/AuthController'
+import { AuthController } from '../controllers/AuthController.js'
 import {
   validateBody,
   registerSchema,
   loginSchema,
-} from '../middleware/validation.middleware'
+} from '../middleware/validation.middleware.js'
 
 export function createAuthRoutes(authController: AuthController): Router {
   const router = Router()

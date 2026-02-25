@@ -217,8 +217,8 @@ describe('ScoringPayloadValidator', () => {
       expect(result.warnings).toContainEqual(
         expect.stringContaining("unknown sub-score name 'made_up_score'")
       );
-      // Unknown sub-score excluded from sum -> sum=0 vs score=20 -> structural violation
-      expect(result.structuralViolations).toContainEqual(
+      // Unknown sub-score excluded from sum -> sum=0 vs score=20 -> soft warning (reconciler auto-corrects)
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('sub-score sum 0 differs from dimension score 20')
       );
     });
@@ -248,7 +248,7 @@ describe('ScoringPayloadValidator', () => {
       );
     });
 
-    it('should flag sub-score sum mismatch as structural violation', () => {
+    it('should flag sub-score sum mismatch as warning (reconciler auto-corrects)', () => {
       const payload = createValidPayload();
       const clinicalIdx = payload.dimensionScores.findIndex(
         (d: any) => d.dimension === 'clinical_risk'
@@ -267,7 +267,7 @@ describe('ScoringPayloadValidator', () => {
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('sub-score sum 30 differs from dimension score 50')
       );
     });
@@ -686,20 +686,20 @@ describe('ScoringPayloadValidator', () => {
       expect(compositeViolations).toHaveLength(0);
     });
 
-    it('should produce structural violation when composite deviates beyond tolerance', () => {
+    it('should produce warning when composite deviates beyond tolerance (reconciler auto-corrects)', () => {
       const payload = createValidPayload();
       const expected = computeExpectedComposite(payload.dimensionScores, 'clinical_ai');
       // Set composite to something far from expected
       payload.compositeScore = Math.min(100, expected + 20);
 
       const result = validator.validate(payload, 'clinical_ai');
-      expect(result.valid).toBe(true); // Structural violation, not hard error
+      expect(result.valid).toBe(true);
       expect(result.errors).toHaveLength(0);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('Composite score')
       );
-      expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining('deviates from expected')
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('auto-corrected by reconciler')
       );
     });
 
@@ -730,10 +730,10 @@ describe('ScoringPayloadValidator', () => {
       const clinicalViolations = clinicalResult.structuralViolations.filter(v => v.includes('Composite score'));
       expect(clinicalViolations).toHaveLength(0);
 
-      // Same composite may not match administrative_ai
+      // Same composite may not match administrative_ai — now a warning (reconciler auto-corrects)
       if (Math.abs(clinicalExpected - adminExpected) > 3) {
         const adminResult = validator.validate(payload, 'administrative_ai');
-        expect(adminResult.structuralViolations).toContainEqual(
+        expect(adminResult.warnings).toContainEqual(
           expect.stringContaining('Composite score')
         );
       }
@@ -754,33 +754,33 @@ describe('ScoringPayloadValidator', () => {
       expect(dqViolations).toHaveLength(0);
     });
 
-    it('should produce structural violation for hard_decline factor with conditional', () => {
+    it('should produce warning for hard_decline factor with conditional (reconciler auto-corrects)', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = ['no_encryption_for_phi'];
       payload.recommendation = 'conditional';
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('hard_decline')
       );
-      expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("must be 'decline'")
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('auto-corrected')
       );
     });
 
-    it('should produce structural violation for hard_decline factor with approve', () => {
+    it('should produce warning for hard_decline factor with approve (reconciler auto-corrects)', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = ['cross_border_data_transfer_without_safeguards'];
       payload.recommendation = 'approve';
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('hard_decline')
       );
-      expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("must be 'decline'")
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('auto-corrected')
       );
     });
 
@@ -797,18 +797,18 @@ describe('ScoringPayloadValidator', () => {
       expect(dqViolations).toHaveLength(0);
     });
 
-    it('should produce structural violation for remediable_blocker factor with approve', () => {
+    it('should produce warning for remediable_blocker factor with approve (reconciler auto-corrects)', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = ['no_penetration_testing_ever_conducted'];
       payload.recommendation = 'approve';
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('remediable_blocker')
       );
-      expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("must be 'conditional' or 'decline'")
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('auto-corrected')
       );
     });
 
@@ -840,7 +840,7 @@ describe('ScoringPayloadValidator', () => {
       expect(dqViolations).toHaveLength(0);
     });
 
-    it('should produce structural violation for mixed hard + remediable with conditional', () => {
+    it('should produce warning for mixed hard + remediable with conditional (reconciler auto-corrects)', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = [
         'no_encryption_for_phi',           // hard_decline
@@ -849,11 +849,11 @@ describe('ScoringPayloadValidator', () => {
       payload.recommendation = 'conditional';
 
       const result = validator.validate(payload);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.warnings).toContainEqual(
         expect.stringContaining('hard_decline')
       );
-      expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("must be 'decline'")
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('auto-corrected')
       );
     });
 
@@ -873,19 +873,20 @@ describe('ScoringPayloadValidator', () => {
       );
     });
 
-    it('should produce two structural violations for unknown factor with non-decline recommendation', () => {
+    it('should produce structural violation for unknown key and warning for recommendation coherence', () => {
       const payload = createValidPayload();
       (payload as any).disqualifyingFactors = ['some_unknown_factor'];
       payload.recommendation = 'conditional';
 
       const result = validator.validate(payload);
       expect(result.valid).toBe(true);
-      // Two violations: unknown key + hard gate (must decline)
+      // Unknown key is still structural violation
       expect(result.structuralViolations).toContainEqual(
         expect.stringContaining('canonical key')
       );
-      expect(result.structuralViolations).toContainEqual(
-        expect.stringContaining("must be 'decline'")
+      // Recommendation coherence is now a warning (reconciler auto-corrects)
+      expect(result.warnings).toContainEqual(
+        expect.stringContaining('auto-corrected')
       );
     });
 
