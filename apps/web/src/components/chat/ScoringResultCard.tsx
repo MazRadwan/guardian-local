@@ -267,13 +267,7 @@ export function ScoringResultCard({
           exportType="scoring"
           label="Export Word"
         />
-        <DownloadButton
-          assessmentId={result.assessmentId}
-          batchId={result.batchId}
-          format="excel"
-          exportType="scoring"
-          label="Export Excel"
-        />
+        {/* Excel removed per Epic 32.2 - backend sends it but UI removed Excel support */}
       </div>
     </div>
   );

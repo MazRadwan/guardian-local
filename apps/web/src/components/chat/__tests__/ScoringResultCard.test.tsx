@@ -73,23 +73,19 @@ describe('ScoringResultCard', () => {
   it('passes batchId to all DownloadButton components', () => {
     render(<ScoringResultCard result={baseScoringResult} />);
 
-    // There should be three DownloadButton instances (PDF, Word, and Excel)
+    // There should be two DownloadButton instances (PDF and Word - Excel removed per Epic 32.2)
     const pdfButton = screen.getByTestId('download-pdf');
     const wordButton = screen.getByTestId('download-word');
-    const excelButton = screen.getByTestId('download-excel');
 
     expect(pdfButton).toHaveAttribute('data-batch-id', 'batch-xyz-789');
     expect(wordButton).toHaveAttribute('data-batch-id', 'batch-xyz-789');
-    expect(excelButton).toHaveAttribute('data-batch-id', 'batch-xyz-789');
 
     // Verify through captured props
-    expect(mockDownloadButtonCalls).toHaveLength(3);
+    expect(mockDownloadButtonCalls).toHaveLength(2);
     const pdfCall = mockDownloadButtonCalls.find((c) => c.format === 'pdf');
     const wordCall = mockDownloadButtonCalls.find((c) => c.format === 'word');
-    const excelCall = mockDownloadButtonCalls.find((c) => c.format === 'excel');
     expect(pdfCall?.batchId).toBe('batch-xyz-789');
     expect(wordCall?.batchId).toBe('batch-xyz-789');
-    expect(excelCall?.batchId).toBe('batch-xyz-789');
   });
 
   it('passes assessmentId to all DownloadButton components', () => {
@@ -97,11 +93,9 @@ describe('ScoringResultCard', () => {
 
     const pdfButton = screen.getByTestId('download-pdf');
     const wordButton = screen.getByTestId('download-word');
-    const excelButton = screen.getByTestId('download-excel');
 
     expect(pdfButton).toHaveAttribute('data-assessment-id', 'assess-abc-123');
     expect(wordButton).toHaveAttribute('data-assessment-id', 'assess-abc-123');
-    expect(excelButton).toHaveAttribute('data-assessment-id', 'assess-abc-123');
   });
 
   it('renders DownloadButton without batchId when batchId is empty string', () => {
@@ -114,10 +108,8 @@ describe('ScoringResultCard', () => {
 
     const pdfCall = mockDownloadButtonCalls.find((c) => c.format === 'pdf');
     const wordCall = mockDownloadButtonCalls.find((c) => c.format === 'word');
-    const excelCall = mockDownloadButtonCalls.find((c) => c.format === 'excel');
     expect(pdfCall?.batchId).toBe('');
     expect(wordCall?.batchId).toBe('');
-    expect(excelCall?.batchId).toBe('');
   });
 
   it('renders executive summary text', () => {
@@ -139,31 +131,14 @@ describe('ScoringResultCard', () => {
     expect(screen.getByTestId('score-dashboard')).toHaveTextContent('2 dimensions');
   });
 
-  describe('Excel download button', () => {
-    it('renders the Excel download button', () => {
-      render(<ScoringResultCard result={baseScoringResult} />);
-
-      const excelButton = screen.getByTestId('download-excel');
-      expect(excelButton).toBeInTheDocument();
-      expect(excelButton).toHaveTextContent('Export Excel');
-    });
-
-    it('passes format="excel" and exportType="scoring" to DownloadButton', () => {
-      render(<ScoringResultCard result={baseScoringResult} />);
-
-      const excelCall = mockDownloadButtonCalls.find((c) => c.format === 'excel');
-      expect(excelCall).toBeDefined();
-      expect(excelCall?.exportType).toBe('scoring');
-      expect(excelCall?.label).toBe('Export Excel');
-    });
-
-    it('renders all three export buttons (PDF, Word, Excel)', () => {
+  describe('Export buttons (Excel removed per Epic 32.2)', () => {
+    it('renders only PDF and Word download buttons', () => {
       render(<ScoringResultCard result={baseScoringResult} />);
 
       expect(screen.getByTestId('download-pdf')).toBeInTheDocument();
       expect(screen.getByTestId('download-word')).toBeInTheDocument();
-      expect(screen.getByTestId('download-excel')).toBeInTheDocument();
-      expect(mockDownloadButtonCalls).toHaveLength(3);
+      expect(screen.queryByTestId('download-excel')).not.toBeInTheDocument();
+      expect(mockDownloadButtonCalls).toHaveLength(2);
     });
   });
 

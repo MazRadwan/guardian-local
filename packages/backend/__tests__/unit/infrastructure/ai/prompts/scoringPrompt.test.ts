@@ -36,12 +36,17 @@ describe('scoringPrompt - stability regression', () => {
       expect(systemPrompt).toContain('scoring_complete');
     });
 
-    it('should contain rubric criteria for all scored dimensions', () => {
+    it('should contain rubric criteria for all 10 scored dimensions', () => {
       expect(systemPrompt).toContain('### CLINICAL RISK');
       expect(systemPrompt).toContain('### PRIVACY RISK');
       expect(systemPrompt).toContain('### SECURITY RISK');
       expect(systemPrompt).toContain('### TECHNICAL CREDIBILITY');
       expect(systemPrompt).toContain('### OPERATIONAL EXCELLENCE');
+      expect(systemPrompt).toContain('### VENDOR CAPABILITY');
+      expect(systemPrompt).toContain('### AI TRANSPARENCY');
+      expect(systemPrompt).toContain('### ETHICAL CONSIDERATIONS');
+      expect(systemPrompt).toContain('### REGULATORY COMPLIANCE');
+      expect(systemPrompt).toContain('### SUSTAINABILITY');
     });
 
     it('should contain recommendation logic', () => {
@@ -53,7 +58,7 @@ describe('scoringPrompt - stability regression', () => {
     });
 
     it('should contain rubric version', () => {
-      expect(systemPrompt).toContain('guardian-v1.0');
+      expect(systemPrompt).toContain('guardian-v1.1');
     });
 
     it('should not contain ISO content (moved to user prompt in 39.3.3)', () => {
@@ -107,8 +112,8 @@ describe('scoringPrompt - stability regression', () => {
 
     it('should contain composite score weighting for clinical_ai', () => {
       expect(userPrompt).toContain('## COMPOSITE SCORE WEIGHTING');
-      expect(userPrompt).toContain('Clinical Risk: 40%');
-      expect(userPrompt).toContain('Privacy Risk: 20%');
+      expect(userPrompt).toContain('Clinical Risk: 25%');
+      expect(userPrompt).toContain('Privacy Risk: 15%');
       expect(userPrompt).toContain('Security Risk: 15%');
     });
 
@@ -220,6 +225,56 @@ describe('scoringPrompt - stability regression', () => {
       expect(withoutISO).toContain('TestVendor');
       expect(withoutISO).not.toContain('ISO Standards Reference Catalog');
       expect(withoutISO).not.toContain('Applicable ISO Controls');
+    });
+  });
+
+  describe('composite formula - dynamic dimension lists (Story 40.1.3)', () => {
+    const prompt = buildScoringUserPrompt({
+      vendorName: 'TestVendor',
+      solutionName: 'TestSolution',
+      solutionType: 'clinical_ai',
+      responses: [
+        { sectionNumber: 1, questionNumber: 1, questionText: 'Q?', responseText: 'A.' },
+      ],
+    });
+
+    it('should contain all risk dimension names in the composite formula', () => {
+      const riskDims = ALL_DIMENSIONS.filter(d => DIMENSION_CONFIG[d].type === 'risk');
+      for (const dim of riskDims) {
+        expect(prompt).toContain(dim);
+      }
+      // Verify they appear in the RISK dimensions line
+      expect(prompt).toContain('RISK dimensions (clinical_risk, privacy_risk, security_risk)');
+    });
+
+    it('should contain all capability dimension names in the composite formula', () => {
+      const capabilityDims = ALL_DIMENSIONS.filter(d => DIMENSION_CONFIG[d].type === 'capability');
+      for (const dim of capabilityDims) {
+        expect(prompt).toContain(dim);
+      }
+      // Verify they appear in the CAPABILITY dimensions line
+      expect(prompt).toContain('CAPABILITY dimensions (technical_credibility');
+      expect(prompt).toContain('vendor_capability');
+      expect(prompt).toContain('ai_transparency');
+      expect(prompt).toContain('ethical_considerations');
+      expect(prompt).toContain('regulatory_compliance');
+      expect(prompt).toContain('operational_excellence');
+      expect(prompt).toContain('sustainability');
+    });
+
+    it('should NOT contain the old "do NOT contribute" line', () => {
+      expect(prompt).not.toContain('do NOT contribute');
+      expect(prompt).not.toContain('do not contribute');
+    });
+
+    it('should state all 10 dimensions contribute', () => {
+      expect(prompt).toContain('All 10 dimensions contribute to the composite score');
+    });
+
+    it('should use v1.1 weight values in the example', () => {
+      expect(prompt).toContain('weight 25%');
+      expect(prompt).toContain('weight 5%');
+      expect(prompt).toContain('5.0 + 1.0 = 6.0');
     });
   });
 });

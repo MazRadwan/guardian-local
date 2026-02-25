@@ -155,7 +155,7 @@ describe('Scoring Rehydration Integration (Epic 22.1.1)', () => {
         id: randomUUID(),
         assessmentId: testAssessmentId,
         batchId: testBatchId,
-        dimension: 'data_governance',
+        dimension: 'privacy_risk',
         score: 70,
         riskRating: 'medium',
       },
@@ -204,9 +204,9 @@ describe('Scoring Rehydration Integration (Epic 22.1.1)', () => {
         riskRating: 'low',
       })
 
-      const dataGov = result?.dimensionScores.find(d => d.dimension === 'data_governance')
-      expect(dataGov).toEqual({
-        dimension: 'data_governance',
+      const privacyRisk = result?.dimensionScores.find(d => d.dimension === 'privacy_risk')
+      expect(privacyRisk).toEqual({
+        dimension: 'privacy_risk',
         score: 70,
         riskRating: 'medium',
       })

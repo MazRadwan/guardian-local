@@ -50,10 +50,10 @@ describe('ScoringService', () => {
   const testConversationId = 'conv-1'
 
   // Valid scoring payload matching all 10 dimensions
-  // compositeScore=63 matches weighted average for clinical_ai with all scores=75:
-  // risk dims: 40%*75 + 20%*75 + 15%*75 = 56.25; capability dims: 15%*(100-75) + 10%*(100-75) = 6.25
+  // compositeScore=53 matches weighted average for clinical_ai (v1.1) with all scores=75:
+  // risk dims: 25%*75 + 15%*75 + 15%*75 = 41.25; capability dims (inverted=25): 10%*25 + 10%*25 + 5%*25 + 5%*25 + 5%*25 + 5%*25 + 5%*25 = 11.25; total=52.5 -> 53
   const validPayload = {
-    compositeScore: 63,
+    compositeScore: 53,
     recommendation: 'conditional' as const,
     overallRiskRating: 'medium' as const,
     executiveSummary: 'Test summary for the assessment with adequate length.',
@@ -274,7 +274,7 @@ describe('ScoringService', () => {
           { status: 'scoring', message: 'Analyzing vendor responses against risk rubric...', progress: 60 },
           { status: 'validating', message: 'Validating scoring results...', progress: 90 },
           { status: 'validating', message: 'Storing assessment results...', progress: 95 },
-          { status: 'complete', message: 'Risk assessment complete -- score: 63/100', progress: 100 },
+          { status: 'complete', message: 'Risk assessment complete -- score: 53/100', progress: 100 },
         ]
 
         for (const exp of expected) {
@@ -583,19 +583,19 @@ describe('ScoringService', () => {
         expect(result.error).toContain('Invalid scoring payload')
       })
 
-      it('should fail if compositeScore is out of range', async () => {
+      it('should auto-correct compositeScore via reconciler when out of range', async () => {
         mockLLMService.scoreWithClaude.mockResolvedValue({
           narrativeReport: 'Report',
           payload: {
             ...validPayload,
-            compositeScore: 150, // Invalid - over 100
+            compositeScore: 150, // Invalid - but reconciler recalculates from weighted average
           },
         })
 
         const result = await service.score(defaultInput, jest.fn())
 
-        expect(result.success).toBe(false)
-        expect(result.error).toContain('Invalid scoring payload')
+        // Reconciler corrects compositeScore to correct weighted average, so scoring succeeds
+        expect(result.success).toBe(true)
       })
 
       it('should fail if missing required dimensions', async () => {

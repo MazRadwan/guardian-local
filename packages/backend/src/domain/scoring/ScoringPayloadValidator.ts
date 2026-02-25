@@ -31,6 +31,30 @@ export class ScoringPayloadValidator {
   private confidenceValidator = new ScoringConfidenceValidator();
 
   /**
+   * Normalize common LLM output variations before validation.
+   * Claude sometimes returns dimensionScores as an object keyed by dimension
+   * name instead of an array. Coerce to array if possible.
+   */
+  normalizePayload(payload: unknown): unknown {
+    if (!payload || typeof payload !== 'object') return payload;
+    const p = payload as Record<string, unknown>;
+
+    if (p.dimensionScores && !Array.isArray(p.dimensionScores) && typeof p.dimensionScores === 'object') {
+      const obj = p.dimensionScores as Record<string, unknown>;
+      // Object keyed by dimension name → convert to array with dimension field
+      p.dimensionScores = Object.entries(obj).map(([key, value]) => {
+        if (value && typeof value === 'object') {
+          return { ...(value as Record<string, unknown>), dimension: key };
+        }
+        return value;
+      });
+      console.warn('[ScoringPayloadValidator] Coerced dimensionScores from object to array');
+    }
+
+    return payload;
+  }
+
+  /**
    * Validate a payload from Claude's scoring_complete tool call.
    * When solutionType is provided, also validates composite score arithmetic.
    */
@@ -102,7 +126,7 @@ export class ScoringPayloadValidator {
       this.validateTieredDisqualifiers(disqualifiers, p.recommendation as string, structuralViolations, warnings);
     }
 
-    // Validate composite score arithmetic (structural violation)
+    // Validate composite score arithmetic (soft warning — reconciler auto-corrects)
     if (solutionType && Array.isArray(p.dimensionScores) && this.isValidScore(p.compositeScore)) {
       const compositeResult = compositeScoreValidator.validate(
         p.compositeScore as number,
@@ -110,7 +134,7 @@ export class ScoringPayloadValidator {
         solutionType
       );
       if (!compositeResult.valid && compositeResult.violation) {
-        structuralViolations.push(compositeResult.violation);
+        warnings.push(compositeResult.violation + ' (auto-corrected by reconciler)');
       }
     }
 
@@ -253,15 +277,16 @@ export class ScoringPayloadValidator {
       }
     }
 
+    // Recommendation coherence → soft warning (reconciler auto-corrects)
     if (hasHard && recommendation !== 'decline') {
-      structuralViolations.push(
+      warnings.push(
         `hard_decline disqualifier(s) present (${hardFactors.join(', ')}) ` +
-        `but recommendation is '${recommendation}' — must be 'decline'`
+        `but recommendation was '${recommendation}' — auto-corrected to 'decline'`
       );
     } else if (!hasHard && remediableFactors.length > 0 && recommendation === 'approve') {
-      structuralViolations.push(
+      warnings.push(
         `remediable_blocker disqualifier(s) present (${remediableFactors.join(', ')}) ` +
-        `but recommendation is 'approve' — must be 'conditional' or 'decline'`
+        `but recommendation was 'approve' — auto-corrected to 'conditional'`
       );
     }
   }

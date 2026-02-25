@@ -96,7 +96,7 @@ function buildFullFixture(): ScoringExportData {
         dimensionScores,
       },
       narrativeReport: '## Analysis\n\nDetailed narrative report content.',
-      rubricVersion: 'guardian-v1.0',
+      rubricVersion: 'guardian-v1.1',
       modelId: 'claude-sonnet-4-20250514',
       scoringDurationMs: 45000,
     },

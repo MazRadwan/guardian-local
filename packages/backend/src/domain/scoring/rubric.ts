@@ -12,15 +12,17 @@ import { RiskRating } from './types'
 /**
  * Current rubric version - stored with results for auditability
  */
-export const RUBRIC_VERSION = 'guardian-v1.0'
+export const RUBRIC_VERSION = 'guardian-v1.1'
 
 /**
  * Solution types that determine dimension weighting in composite score calculation.
  *
- * These are the authoritative values for scoring weight selection:
- * - `clinical_ai`: Clinical decision support systems - weights clinical_risk highest (40%)
- * - `administrative_ai`: Administrative/workflow tools - weights privacy_risk highest (30%)
- * - `patient_facing`: Patient engagement platforms - weights privacy_risk highest (35%)
+ * These are the authoritative values for scoring weight selection (v1.1):
+ * - `clinical_ai`: Clinical decision support systems - weights clinical_risk highest (25%)
+ * - `administrative_ai`: Administrative/workflow tools - weights privacy_risk highest (20%)
+ * - `patient_facing`: Patient engagement platforms - weights privacy_risk highest (20%)
+ *
+ * All 10 dimensions have non-zero weights for all 3 solution types.
  *
  * @see DIMENSION_WEIGHTS for full weight mappings
  * @see docs/design/architecture/scoring-solution-type.md for field semantics
@@ -52,40 +54,40 @@ export const RISK_THRESHOLDS: Record<string, { max: number; rating: RiskRating }
  */
 export const DIMENSION_WEIGHTS: Record<SolutionType, Record<RiskDimension, number>> = {
   clinical_ai: {
-    clinical_risk: 40,
-    privacy_risk: 20,
+    clinical_risk: 25,
+    privacy_risk: 15,
     security_risk: 15,
-    technical_credibility: 15,
+    technical_credibility: 10,
     operational_excellence: 10,
-    vendor_capability: 0,
-    ai_transparency: 0,
-    ethical_considerations: 0,
-    regulatory_compliance: 0,
-    sustainability: 0,
+    vendor_capability: 5,
+    ai_transparency: 5,
+    ethical_considerations: 5,
+    regulatory_compliance: 5,
+    sustainability: 5,
   },
   administrative_ai: {
-    privacy_risk: 30,
-    security_risk: 25,
-    operational_excellence: 20,
-    technical_credibility: 15,
-    clinical_risk: 10,
-    vendor_capability: 0,
-    ai_transparency: 0,
-    ethical_considerations: 0,
-    regulatory_compliance: 0,
-    sustainability: 0,
+    clinical_risk: 5,
+    privacy_risk: 20,
+    security_risk: 18,
+    technical_credibility: 10,
+    operational_excellence: 12,
+    vendor_capability: 8,
+    ai_transparency: 5,
+    ethical_considerations: 5,
+    regulatory_compliance: 10,
+    sustainability: 7,
   },
   patient_facing: {
-    privacy_risk: 35,
-    clinical_risk: 25,
-    security_risk: 20,
-    technical_credibility: 12,
-    operational_excellence: 8,
-    vendor_capability: 0,
-    ai_transparency: 0,
-    ethical_considerations: 0,
-    regulatory_compliance: 0,
-    sustainability: 0,
+    clinical_risk: 10,
+    privacy_risk: 20,
+    security_risk: 15,
+    technical_credibility: 10,
+    operational_excellence: 5,
+    vendor_capability: 5,
+    ai_transparency: 10,
+    ethical_considerations: 10,
+    regulatory_compliance: 10,
+    sustainability: 5,
   },
 }
 

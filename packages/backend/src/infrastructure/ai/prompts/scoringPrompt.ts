@@ -7,7 +7,7 @@
  * SOURCE: GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md Part IV
  */
 
-import { RUBRIC_VERSION, SolutionType } from '../../../domain/scoring/rubric.js';
+import { RUBRIC_VERSION, SolutionType, ALL_DIMENSIONS, DIMENSION_CONFIG } from '../../../domain/scoring/rubric.js';
 import type { ISOControlForPrompt } from '../../../domain/compliance/types.js';
 import {
   buildDimensionList,
@@ -159,12 +159,11 @@ function buildVendorSection(params: UserPromptParams): string {
 ${weightedDimensions}
 
 **Composite Formula:**
-- For RISK dimensions (clinical_risk, privacy_risk, security_risk): use score directly (lower = less risk)
-- For CAPABILITY dimensions (technical_credibility, operational_excellence): convert to risk-equivalent = (100 - score)
-- Composite = sum of (weight% x risk_equivalent_score) for all weighted dimensions
-- Example: if clinical_risk=20 (weight 40%) and technical_credibility=80 (weight 15%): contribution = 20x0.40 + (100-80)x0.15 = 8 + 3 = 11
-
-All other dimensions are scored but do NOT contribute to the composite score.
+- For RISK dimensions (${ALL_DIMENSIONS.filter(d => DIMENSION_CONFIG[d].type === 'risk').join(', ')}): use score directly (lower = less risk)
+- For CAPABILITY dimensions (${ALL_DIMENSIONS.filter(d => DIMENSION_CONFIG[d].type === 'capability').join(', ')}): convert to risk-equivalent = (100 - score)
+- Composite = sum of (weight% x risk_equivalent_score) for ALL dimensions listed above
+- All 10 dimensions contribute to the composite score
+- Example: if clinical_risk=20 (weight 25%) and vendor_capability=80 (weight 5%): contribution = 20x0.25 + (100-80)x0.05 = 5.0 + 1.0 = 6.0
 
 ## Questionnaire Responses
 

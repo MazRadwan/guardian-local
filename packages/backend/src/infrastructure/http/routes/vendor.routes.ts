@@ -5,9 +5,9 @@
  */
 
 import { Router } from 'express'
-import { VendorController } from '../controllers/VendorController'
-import { AuthService } from '../../../application/services/AuthService'
-import { authMiddleware } from '../middleware/auth.middleware'
+import { VendorController } from '../controllers/VendorController.js'
+import { AuthService } from '../../../application/services/AuthService.js'
+import { authMiddleware } from '../middleware/auth.middleware.js'
 
 export function createVendorRoutes(
   controller: VendorController,

@@ -99,13 +99,13 @@ export class SubScoreValidator {
       }
     }
 
-    // Sub-score sum mismatch -> structural violation
+    // Sub-score sum mismatch -> soft warning (reconciler auto-corrects dimension score)
     if (subScores.length > 0 && typeof dimensionScore === 'number') {
       const tolerance = 2;
       if (Math.abs(subScoreSum - dimensionScore) > tolerance) {
-        structuralViolations.push(
+        softWarnings.push(
           `${prefix}: sub-score sum ${subScoreSum} differs from ` +
-          `dimension score ${dimensionScore} (tolerance: +/-${tolerance})`
+          `dimension score ${dimensionScore} (auto-corrected by reconciler)`
         );
       }
     }

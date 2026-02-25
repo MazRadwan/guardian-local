@@ -33,7 +33,7 @@ describe('ExportNarrativePromptBuilder', () => {
 
     it('includes rubric version', () => {
       const prompt = builder.buildNarrativeSystemPrompt();
-      expect(prompt).toContain('guardian-v1.0');
+      expect(prompt).toContain('guardian-v1.1');
     });
 
     it('includes all 10 risk dimensions', () => {
@@ -145,8 +145,8 @@ describe('ExportNarrativePromptBuilder', () => {
 
     it('includes dimension weighting for solution type', () => {
       const prompt = builder.buildNarrativeUserPrompt(baseParams);
-      expect(prompt).toContain('Clinical Risk: 40%');
-      expect(prompt).toContain('Privacy Risk: 20%');
+      expect(prompt).toContain('Clinical Risk: 25%');
+      expect(prompt).toContain('Privacy Risk: 15%');
     });
 
     it('includes executive summary', () => {
@@ -207,15 +207,15 @@ describe('ExportNarrativePromptBuilder', () => {
         ...baseParams,
         solutionType: 'administrative_ai',
       });
-      expect(adminPrompt).toContain('Privacy Risk: 30%');
-      expect(adminPrompt).toContain('Security Risk: 25%');
+      expect(adminPrompt).toContain('Privacy Risk: 20%');
+      expect(adminPrompt).toContain('Security Risk: 18%');
 
       const patientPrompt = builder.buildNarrativeUserPrompt({
         ...baseParams,
         solutionType: 'patient_facing',
       });
-      expect(patientPrompt).toContain('Privacy Risk: 35%');
-      expect(patientPrompt).toContain('Clinical Risk: 25%');
+      expect(patientPrompt).toContain('Privacy Risk: 20%');
+      expect(patientPrompt).toContain('Clinical Risk: 10%');
     });
   });
 

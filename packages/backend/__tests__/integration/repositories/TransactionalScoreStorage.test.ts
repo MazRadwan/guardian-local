@@ -108,7 +108,7 @@ describe('Transactional Score Storage (Integration)', () => {
         compositeScore: 78,
         recommendation: 'conditional',
         overallRiskRating: 'medium',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       }
 
@@ -147,7 +147,7 @@ describe('Transactional Score Storage (Integration)', () => {
         compositeScore: 65,
         recommendation: 'decline',
         overallRiskRating: 'high',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -181,7 +181,7 @@ describe('Transactional Score Storage (Integration)', () => {
         compositeScore: 50,
         recommendation: 'decline',
         overallRiskRating: 'high',
-        rubricVersion: 'guardian-v1.0',
+        rubricVersion: 'guardian-v1.1',
         modelId: 'claude-sonnet-4-5-20250929',
       })
 
@@ -200,7 +200,7 @@ describe('Transactional Score Storage (Integration)', () => {
               compositeScore: 78,
               recommendation: 'conditional',
               overallRiskRating: 'medium',
-              rubricVersion: 'guardian-v1.0',
+              rubricVersion: 'guardian-v1.1',
               modelId: 'claude-sonnet-4-5-20250929',
             },
             tx
@@ -244,7 +244,7 @@ describe('Transactional Score Storage (Integration)', () => {
               compositeScore: 78,
               recommendation: 'conditional',
               overallRiskRating: 'medium',
-              rubricVersion: 'guardian-v1.0',
+              rubricVersion: 'guardian-v1.1',
               modelId: 'claude-sonnet-4-5-20250929',
             },
             tx
@@ -301,7 +301,7 @@ describe('Transactional Score Storage (Integration)', () => {
               compositeScore: 78,
               recommendation: 'conditional',
               overallRiskRating: 'medium',
-              rubricVersion: 'guardian-v1.0',
+              rubricVersion: 'guardian-v1.1',
               modelId: 'claude-sonnet-4-5-20250929',
             },
             tx

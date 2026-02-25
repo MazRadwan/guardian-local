@@ -5,9 +5,9 @@
  */
 
 import { Router } from 'express'
-import { ExportController } from '../controllers/ExportController'
-import { AuthService } from '../../../application/services/AuthService'
-import { authMiddleware } from '../middleware/auth.middleware'
+import { ExportController } from '../controllers/ExportController.js'
+import { AuthService } from '../../../application/services/AuthService.js'
+import { authMiddleware } from '../middleware/auth.middleware.js'
 
 export function createExportRoutes(
   exportController: ExportController,

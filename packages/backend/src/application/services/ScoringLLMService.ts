@@ -15,6 +15,12 @@ import { ScoringParseResult } from '../interfaces/IScoringDocumentParser.js';
 import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 import type { ScoringCallMetrics, ClaudeUsageData } from './ScoringMetricsCollector.js';
 import { ScoringMetricsCollector } from './ScoringMetricsCollector.js';
+import { ClaudeClientBase } from '../../infrastructure/ai/ClaudeClientBase.js';
+
+/** Max transport-level retry attempts for transient stream failures */
+const TRANSIENT_RETRY_ATTEMPTS = 2;
+/** Exponential backoff delays (ms) per retry attempt */
+const TRANSIENT_RETRY_DELAYS = [2000, 4000];
 
 /** Result of LLM scoring - narrative text + structured tool payload */
 export interface ScoreWithClaudeResult {
@@ -104,40 +110,70 @@ export class ScoringLLMService {
       userPrompt = this.appendCorrectionPrompt(userPrompt, correctionPrompt);
     }
 
-    // Call LLM via port (not ClaudeClient directly)
+    // Call LLM via port with transport-level retry for transient failures.
+    // State is fully reset between attempts to avoid duplicate narrative/payload.
     let narrativeReport = '';
     let toolPayload: unknown = null;
     let lastReportedLength = 0;
     let capturedUsage: ClaudeUsageData | undefined;
     const startTime = Date.now();
 
-    await this.llmClient.streamWithTool({
-      systemPrompt,
-      userPrompt,
-      tools: [scoringCompleteTool],
-      tool_choice: { type: 'any' },
-      usePromptCache: true,
-      // Epic 37->38: Increased to 16384 -- ISO-enriched scoring produces longer
-      // narrative + 10 dimension tool payload with confidence + ISO clause refs
-      maxTokens: 16384,
-      temperature: 0,
-      abortSignal,
-      onTextDelta: (delta) => {
-        narrativeReport += delta;
-        if (narrativeReport.length - lastReportedLength >= 500) {
-          lastReportedLength = narrativeReport.length;
-          onMessage('Generating risk assessment...');
+    for (let attempt = 0; attempt <= TRANSIENT_RETRY_ATTEMPTS; attempt++) {
+      // Reset all accumulators before each attempt (idempotency)
+      narrativeReport = '';
+      toolPayload = null;
+      lastReportedLength = 0;
+      capturedUsage = undefined;
+
+      try {
+        await this.llmClient.streamWithTool({
+          systemPrompt,
+          userPrompt,
+          tools: [scoringCompleteTool],
+          tool_choice: { type: 'any' },
+          usePromptCache: true,
+          maxTokens: 16384,
+          temperature: 0,
+          abortSignal,
+          onTextDelta: (delta) => {
+            narrativeReport += delta;
+            if (narrativeReport.length - lastReportedLength >= 500) {
+              lastReportedLength = narrativeReport.length;
+              onMessage('Generating risk assessment...');
+            }
+          },
+          onToolUse: (toolName, input) => {
+            if (toolName === 'scoring_complete') {
+              toolPayload = input;
+            }
+          },
+          onUsage: (usage) => {
+            capturedUsage = usage;
+          },
+        });
+        break; // Success — exit retry loop
+      } catch (error) {
+        // Never retry on abort
+        if (abortSignal.aborted) {
+          throw error;
         }
-      },
-      onToolUse: (toolName, input) => {
-        if (toolName === 'scoring_complete') {
-          toolPayload = input;
+
+        const isTransient = ClaudeClientBase.isTransientError(error);
+        const isLastAttempt = attempt >= TRANSIENT_RETRY_ATTEMPTS;
+
+        if (!isTransient || isLastAttempt) {
+          throw error; // Non-transient or exhausted retries — propagate
         }
-      },
-      onUsage: (usage) => {
-        capturedUsage = usage;
-      },
-    });
+
+        const delay = TRANSIENT_RETRY_DELAYS[attempt] ?? 4000;
+        console.warn(
+          `[ScoringLLMService] Transient stream error (attempt ${attempt + 1}/${TRANSIENT_RETRY_ATTEMPTS + 1}), ` +
+          `retrying in ${delay}ms: ${(error as Error).message}`
+        );
+        onMessage('Connection interrupted, retrying...');
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
 
     // P2 Fix: Check if abort caused the missing tool payload
     if (!toolPayload) {

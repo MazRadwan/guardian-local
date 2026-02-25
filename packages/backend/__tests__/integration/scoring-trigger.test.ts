@@ -221,9 +221,9 @@ class MockLLMClient implements ILLMClient {
         'vendor_capability', 'ai_transparency', 'ethical_considerations',
         'regulatory_compliance', 'operational_excellence', 'sustainability'
       ]
-      // compositeScore=63 matches weighted average for clinical_ai with all scores=75
+      // compositeScore=53 matches weighted average for clinical_ai (v1.1) with all scores=75
       _options.onToolUse('scoring_complete', {
-        compositeScore: 63,
+        compositeScore: 53,
         recommendation: 'approve',
         overallRiskRating: 'low',
         executiveSummary: 'Mock summary',
@@ -824,7 +824,7 @@ describe('Story 5a.4: Scoring Mode Trigger - Validation Gates', () => {
 
       expect(result.success).toBe(true)
       expect(result.report).toBeDefined()
-      expect(result.report?.payload.compositeScore).toBe(63)
+      expect(result.report?.payload.compositeScore).toBe(53)
       expect(result.code).toBeUndefined()
     })
   })

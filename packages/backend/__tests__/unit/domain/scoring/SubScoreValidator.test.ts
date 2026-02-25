@@ -88,8 +88,8 @@ describe('SubScoreValidator', () => {
       expect(result.softWarnings).toContainEqual(
         expect.stringContaining("unknown sub-score name 'made_up_score'")
       );
-      // Unknown score excluded from sum -> sum=0 vs dimension=20 -> structural violation
-      expect(result.structuralViolations).toContainEqual(
+      // Unknown score excluded from sum -> sum=0 vs dimension=20 -> soft warning (reconciler auto-corrects)
+      expect(result.softWarnings).toContainEqual(
         expect.stringContaining('sub-score sum 0 differs from dimension score 20')
       );
     });
@@ -116,7 +116,7 @@ describe('SubScoreValidator', () => {
       );
     });
 
-    it('should produce structural violation when sub-score sum differs from dimension score', () => {
+    it('should produce soft warning when sub-score sum differs from dimension score', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       // Set dimension score to 50, but sub-scores sum to 30
@@ -132,19 +132,23 @@ describe('SubScoreValidator', () => {
       };
 
       const result = validator.validateAllSubScores(dimensionScores);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.softWarnings).toContainEqual(
         expect.stringContaining('sub-score sum 30 differs from dimension score 50')
       );
     });
 
-    it('should skip dimensions without rules', () => {
+    it('should validate vendor_capability sub-scores against rules', () => {
       const dimensionScores = createBaseDimensionScores();
-      // vendor_capability has no sub-score rules
+      // vendor_capability now has sub-score rules defined
       const vendorIdx = dimensionScores.findIndex(d => d.dimension === 'vendor_capability');
       dimensionScores[vendorIdx].score = 60;
       (dimensionScores[vendorIdx] as any).findings = {
         subScores: [
-          { name: 'any_name', score: 60, maxScore: 100, notes: 'No rules defined' },
+          { name: 'company_stability_score', score: 25, maxScore: 25, notes: '' },
+          { name: 'healthcare_experience_score', score: 15, maxScore: 25, notes: '' },
+          { name: 'customer_references_score', score: 12, maxScore: 20, notes: '' },
+          { name: 'support_capability_score', score: 5, maxScore: 15, notes: '' },
+          { name: 'roadmap_credibility_score', score: 5, maxScore: 15, notes: '' },
         ],
         keyRisks: [],
         mitigations: [],
@@ -152,6 +156,7 @@ describe('SubScoreValidator', () => {
       };
 
       const result = validator.validateAllSubScores(dimensionScores);
+      // Sub-scores sum to 62, dimension score is 60, diff is 2 -- within tolerance
       expect(result.structuralViolations).toHaveLength(0);
       expect(result.softWarnings).toHaveLength(0);
     });
@@ -179,7 +184,7 @@ describe('SubScoreValidator', () => {
       expect(result.structuralViolations.filter(v => v.includes('sub-score sum'))).toHaveLength(0);
     });
 
-    it('should produce structural violation when sub-score sum exceeds +/-2 tolerance', () => {
+    it('should produce soft warning when sub-score sum exceeds +/-2 tolerance', () => {
       const dimensionScores = createBaseDimensionScores();
       const clinicalIdx = dimensionScores.findIndex(d => d.dimension === 'clinical_risk');
       // Sub-scores sum to 45, dimension score 48 -- diff is 3, beyond tolerance
@@ -198,7 +203,7 @@ describe('SubScoreValidator', () => {
       };
 
       const result = validator.validateAllSubScores(dimensionScores);
-      expect(result.structuralViolations).toContainEqual(
+      expect(result.softWarnings).toContainEqual(
         expect.stringContaining('sub-score sum 45 differs from dimension score 48')
       );
     });

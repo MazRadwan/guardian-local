@@ -5,9 +5,9 @@
  */
 
 import { Router } from 'express'
-import { AssessmentController } from '../controllers/AssessmentController'
-import { AuthService } from '../../../application/services/AuthService'
-import { authMiddleware } from '../middleware/auth.middleware'
+import { AssessmentController } from '../controllers/AssessmentController.js'
+import { AuthService } from '../../../application/services/AuthService.js'
+import { authMiddleware } from '../middleware/auth.middleware.js'
 
 export function createAssessmentRoutes(
   controller: AssessmentController,
