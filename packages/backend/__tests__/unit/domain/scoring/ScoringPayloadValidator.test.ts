@@ -927,4 +927,68 @@ describe('scoringComplete tool schema contract', () => {
     expect(enumValues).toBeDefined();
     expect(enumValues).toEqual(ALL_DISQUALIFYING_FACTORS);
   });
+
+});
+
+describe('ScoringPayloadValidator.normalizePayload', () => {
+  const validator = new ScoringPayloadValidator();
+
+  it('should coerce dimensionScores object to array', () => {
+    const objectPayload = {
+      compositeScore: 75,
+      recommendation: 'conditional',
+      overallRiskRating: 'medium',
+      executiveSummary: 'This vendor shows moderate risk.',
+      dimensionScores: {
+        clinical_risk: { score: 30, riskRating: 'medium' },
+        privacy_risk: { score: 40, riskRating: 'medium' },
+      },
+    };
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const normalized = validator.normalizePayload(objectPayload) as any;
+    expect(Array.isArray(normalized.dimensionScores)).toBe(true);
+    expect(normalized.dimensionScores).toHaveLength(2);
+    expect(normalized.dimensionScores[0]).toEqual({
+      dimension: 'clinical_risk',
+      score: 30,
+      riskRating: 'medium',
+    });
+    expect(normalized.dimensionScores[1]).toEqual({
+      dimension: 'privacy_risk',
+      score: 40,
+      riskRating: 'medium',
+    });
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Coerced dimensionScores'));
+    warnSpy.mockRestore();
+  });
+
+  it('should leave dimensionScores array unchanged', () => {
+    const payload = {
+      dimensionScores: [{ dimension: 'clinical_risk', score: 30, riskRating: 'medium' }],
+    };
+    const original = [...payload.dimensionScores];
+    const normalized = validator.normalizePayload(payload) as any;
+    expect(normalized.dimensionScores).toEqual(original);
+  });
+
+  it('should handle null/undefined payload gracefully', () => {
+    expect(validator.normalizePayload(null)).toBeNull();
+    expect(validator.normalizePayload(undefined)).toBeUndefined();
+    expect(validator.normalizePayload('string')).toBe('string');
+  });
+
+  it('should preserve dimension field from object key, not from nested value', () => {
+    const objectPayload = {
+      dimensionScores: {
+        security_risk: { dimension: 'wrong_name', score: 50, riskRating: 'high' },
+      },
+    };
+
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const normalized = validator.normalizePayload(objectPayload) as any;
+    // Object key overwrites nested dimension field
+    expect(normalized.dimensionScores[0].dimension).toBe('security_risk');
+    jest.restoreAllMocks();
+  });
 });

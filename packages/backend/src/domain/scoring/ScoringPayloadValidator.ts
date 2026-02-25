@@ -31,6 +31,30 @@ export class ScoringPayloadValidator {
   private confidenceValidator = new ScoringConfidenceValidator();
 
   /**
+   * Normalize common LLM output variations before validation.
+   * Claude sometimes returns dimensionScores as an object keyed by dimension
+   * name instead of an array. Coerce to array if possible.
+   */
+  normalizePayload(payload: unknown): unknown {
+    if (!payload || typeof payload !== 'object') return payload;
+    const p = payload as Record<string, unknown>;
+
+    if (p.dimensionScores && !Array.isArray(p.dimensionScores) && typeof p.dimensionScores === 'object') {
+      const obj = p.dimensionScores as Record<string, unknown>;
+      // Object keyed by dimension name → convert to array with dimension field
+      p.dimensionScores = Object.entries(obj).map(([key, value]) => {
+        if (value && typeof value === 'object') {
+          return { ...(value as Record<string, unknown>), dimension: key };
+        }
+        return value;
+      });
+      console.warn('[ScoringPayloadValidator] Coerced dimensionScores from object to array');
+    }
+
+    return payload;
+  }
+
+  /**
    * Validate a payload from Claude's scoring_complete tool call.
    * When solutionType is provided, also validates composite score arithmetic.
    */

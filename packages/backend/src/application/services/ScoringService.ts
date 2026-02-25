@@ -187,9 +187,10 @@ export class ScoringService implements IScoringService {
         return { success: false, batchId, error: 'Scoring aborted' };
       }
 
-      // 12. Validate payload (with structural retry)
+      // 12. Normalize + validate payload (with structural retry)
       onProgress({ status: 'validating', message: 'Validating scoring results...', progress: 90 });
-      let validationResult = this.validator.validate(payload, solutionType);
+      const normalizedPayload = this.validator.normalizePayload(payload);
+      let validationResult = this.validator.validate(normalizedPayload, solutionType);
       let finalNarrative = narrativeReport;
 
       if (!validationResult.valid) {
