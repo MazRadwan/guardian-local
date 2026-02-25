@@ -93,6 +93,63 @@ export function useWebSocket({
   const onAuthErrorRef = useRef(onAuthError);
   onAuthErrorRef.current = onAuthError;
 
+  // Refs for ALL remaining callback handlers to prevent re-subscription during streaming.
+  // This is the load-bearing invariant: the event listener useEffect (below) depends ONLY
+  // on [isConnected] and dispatches through refs. Handlers are always registered unconditionally
+  // via ref.current?.() so late callback prop changes still work without re-subscribing.
+  // DO NOT reintroduce conditional registration or add callbacks to the useEffect deps —
+  // that would cause "Maximum update depth exceeded" during high-frequency streaming.
+  const onMessageRef = useRef(onMessage);
+  onMessageRef.current = onMessage;
+  const onMessageStreamRef = useRef(onMessageStream);
+  onMessageStreamRef.current = onMessageStream;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  const onHistoryRef = useRef(onHistory);
+  onHistoryRef.current = onHistory;
+  const onStreamCompleteRef = useRef(onStreamComplete);
+  onStreamCompleteRef.current = onStreamComplete;
+  const onConversationsListRef = useRef(onConversationsList);
+  onConversationsListRef.current = onConversationsList;
+  const onConversationCreatedRef = useRef(onConversationCreated);
+  onConversationCreatedRef.current = onConversationCreated;
+  const onConversationTitleUpdatedRef = useRef(onConversationTitleUpdated);
+  onConversationTitleUpdatedRef.current = onConversationTitleUpdated;
+  const onStreamAbortedRef = useRef(onStreamAborted);
+  onStreamAbortedRef.current = onStreamAborted;
+  const onConversationDeletedRef = useRef(onConversationDeleted);
+  onConversationDeletedRef.current = onConversationDeleted;
+  const onConversationModeUpdatedRef = useRef(onConversationModeUpdated);
+  onConversationModeUpdatedRef.current = onConversationModeUpdated;
+  const onExportReadyRef = useRef(onExportReady);
+  onExportReadyRef.current = onExportReady;
+  const onExtractionFailedRef = useRef(onExtractionFailed);
+  onExtractionFailedRef.current = onExtractionFailed;
+  const onQuestionnaireReadyRef = useRef(onQuestionnaireReady);
+  onQuestionnaireReadyRef.current = onQuestionnaireReady;
+  const onGenerationPhaseRef = useRef(onGenerationPhase);
+  onGenerationPhaseRef.current = onGenerationPhase;
+  const onExportStatusNotFoundRef = useRef(onExportStatusNotFound);
+  onExportStatusNotFoundRef.current = onExportStatusNotFound;
+  const onExportStatusErrorRef = useRef(onExportStatusError);
+  onExportStatusErrorRef.current = onExportStatusError;
+  const onScoringStartedRef = useRef(onScoringStarted);
+  onScoringStartedRef.current = onScoringStarted;
+  const onScoringProgressRef = useRef(onScoringProgress);
+  onScoringProgressRef.current = onScoringProgress;
+  const onScoringCompleteRef = useRef(onScoringComplete);
+  onScoringCompleteRef.current = onScoringComplete;
+  const onScoringErrorRef = useRef(onScoringError);
+  onScoringErrorRef.current = onScoringError;
+  const onVendorClarificationNeededRef = useRef(onVendorClarificationNeeded);
+  onVendorClarificationNeededRef.current = onVendorClarificationNeeded;
+  const onFileProcessingErrorRef = useRef(onFileProcessingError);
+  onFileProcessingErrorRef.current = onFileProcessingError;
+  const onQuestionnaireProgressRef = useRef(onQuestionnaireProgress);
+  onQuestionnaireProgressRef.current = onQuestionnaireProgress;
+  const onToolStatusRef = useRef(onToolStatus);
+  onToolStatusRef.current = onToolStatus;
+
   const connect = useCallback(async () => {
     // Guard: Don't connect if already connected or connecting
     if (isConnecting || isConnected) return;
@@ -123,11 +180,11 @@ export function useWebSocket({
       setIsConnected(true);
     } catch (error) {
       console.error('[useWebSocket] Connection failed:', error);
-      onError?.('Failed to connect to server');
+      onErrorRef.current?.('Failed to connect to server');
     } finally {
       setIsConnecting(false);
     }
-  }, [url, token, conversationId, isConnecting, isConnected, onError]);
+  }, [url, token, conversationId, isConnecting, isConnected]);
 
   const disconnect = useCallback(() => {
     if (clientRef.current) {
@@ -225,224 +282,137 @@ export function useWebSocket({
     clientRef.current.selectVendor(conversationId, vendorName);
   }, [isConnected]);
 
-  // Setup event listeners
+  // Setup event listeners — ALL dispatched through refs to prevent re-subscription.
+  // INVARIANT: This effect depends ONLY on [isConnected]. All handlers are registered
+  // unconditionally and dispatch via ref.current?.() so callback prop changes propagate
+  // without re-subscribing. DO NOT add callback props to the dep array — that causes
+  // "Maximum update depth exceeded" during high-frequency streaming (token events).
   useEffect(() => {
     if (!clientRef.current || !isConnected) return;
 
     const client = clientRef.current;
     const unsubscribers: Array<() => void> = [];
 
-    if (onMessage) {
-      const unsub = client.onMessage((message: ChatMessage) => {
-        // Message already normalized by WebSocketClient
-        onMessage(message);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onMessage((message: ChatMessage) => {
+      onMessageRef.current?.(message);
+    }));
 
-    if (onMessageStream) {
-      const unsub = client.onMessageStream((event: StreamEvent) => {
-        onMessageStream(event.chunk, event.conversationId, event.messageId);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onMessageStream((event: StreamEvent) => {
+      onMessageStreamRef.current?.(event.chunk, event.conversationId, event.messageId);
+    }));
 
-    if (onError) {
-      const unsub = client.onError((error: string) => {
-        // Error already normalized by WebSocketClient (just the error string)
-        onError(error);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onError((error: string) => {
+      onErrorRef.current?.(error);
+    }));
 
-    if (onHistory) {
-      const unsub = client.onHistory((messages) => {
-        onHistory(messages);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onHistory((messages) => {
+      onHistoryRef.current?.(messages);
+    }));
 
-    if (onStreamComplete) {
-      const unsub = client.onStreamComplete((data) => {
-        onStreamComplete(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onStreamComplete((data) => {
+      onStreamCompleteRef.current?.(data);
+    }));
 
-    // CRITICAL FIX: Register conversation callbacks dynamically to prevent stale closures
-    if (onConversationsList) {
-      const unsub = client.onConversationsList((conversations) => {
-        onConversationsList(conversations);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onConversationsList((conversations) => {
+      onConversationsListRef.current?.(conversations);
+    }));
 
-    if (onConversationCreated) {
-      const unsub = client.onConversationCreated((conversation) => {
-        onConversationCreated(conversation);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onConversationCreated((conversation) => {
+      onConversationCreatedRef.current?.(conversation);
+    }));
 
-    if (onConversationTitleUpdated) {
-      const unsub = client.onConversationTitleUpdated((conversationId, title) => {
-        onConversationTitleUpdated(conversationId, title);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onConversationTitleUpdated((conversationId, title) => {
+      onConversationTitleUpdatedRef.current?.(conversationId, title);
+    }));
 
-    if (onStreamAborted) {
-      const unsub = client.onStreamAborted((conversationId) => {
-        onStreamAborted(conversationId);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onStreamAborted((conversationId) => {
+      onStreamAbortedRef.current?.(conversationId);
+    }));
 
-    if (onConversationDeleted) {
-      const unsub = client.onConversationDeleted((conversationId) => {
-        onConversationDeleted(conversationId);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onConversationDeleted((conversationId) => {
+      onConversationDeletedRef.current?.(conversationId);
+    }));
 
-    if (onConversationModeUpdated) {
-      const unsub = client.onConversationModeUpdated((data) => {
-        onConversationModeUpdated(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onConversationModeUpdated((data) => {
+      onConversationModeUpdatedRef.current?.(data);
+    }));
 
-    if (onExportReady) {
-      const unsub = client.onExportReady((data) => {
-        onExportReady(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onExportReady((data) => {
+      onExportReadyRef.current?.(data);
+    }));
 
-    if (onExtractionFailed) {
-      const unsub = client.onExtractionFailed((data) => {
-        onExtractionFailed(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onExtractionFailed((data) => {
+      onExtractionFailedRef.current?.(data);
+    }));
 
-    if (onQuestionnaireReady) {
-      const unsub = client.onQuestionnaireReady((data) => {
-        onQuestionnaireReady(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onQuestionnaireReady((data) => {
+      onQuestionnaireReadyRef.current?.(data);
+    }));
 
-    if (onGenerationPhase) {
-      const unsub = client.onGenerationPhase((data) => {
-        onGenerationPhase(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onGenerationPhase((data) => {
+      onGenerationPhaseRef.current?.(data);
+    }));
 
     // NOTE: onConnectionReady is registered in connect() BEFORE the socket connects
     // to ensure we don't miss the server's immediate connection_ready event.
-    // It's not registered here to avoid double-registration.
 
-    // Story 13.9.2: Export status resume subscriptions
-    if (onExportStatusNotFound) {
-      const unsub = client.onExportStatusNotFound((data) => {
-        onExportStatusNotFound(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onExportStatusNotFound((data) => {
+      onExportStatusNotFoundRef.current?.(data);
+    }));
 
-    if (onExportStatusError) {
-      const unsub = client.onExportStatusError((data) => {
-        onExportStatusError(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onExportStatusError((data) => {
+      onExportStatusErrorRef.current?.(data);
+    }));
 
-    // Epic 15 Story 5a.7: Scoring event subscriptions
-    if (onScoringStarted) {
-      const unsub = client.onScoringStarted((data) => {
-        onScoringStarted(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onScoringStarted((data) => {
+      onScoringStartedRef.current?.(data);
+    }));
 
-    if (onScoringProgress) {
-      const unsub = client.onScoringProgress((data) => {
-        onScoringProgress(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onScoringProgress((data) => {
+      onScoringProgressRef.current?.(data);
+    }));
 
-    if (onScoringComplete) {
-      const unsub = client.onScoringComplete((data) => {
-        onScoringComplete(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onScoringComplete((data) => {
+      onScoringCompleteRef.current?.(data);
+    }));
 
-    if (onScoringError) {
-      const unsub = client.onScoringError((data) => {
-        onScoringError(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onScoringError((data) => {
+      onScoringErrorRef.current?.(data);
+    }));
 
-    // Epic 18.4.2b: Vendor clarification subscription
-    if (onVendorClarificationNeeded) {
-      const unsub = client.onVendorClarificationNeeded((data) => {
-        onVendorClarificationNeeded(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onVendorClarificationNeeded((data) => {
+      onVendorClarificationNeededRef.current?.(data);
+    }));
 
-    // Epic 31.2.2: File processing error subscription
-    if (onFileProcessingError) {
-      const unsub = client.onFileProcessingError((data) => {
-        onFileProcessingError(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onFileProcessingError((data) => {
+      onFileProcessingErrorRef.current?.(data);
+    }));
 
-    // Epic 32.2.1: Questionnaire progress subscription
-    if (onQuestionnaireProgress) {
-      const unsub = client.onQuestionnaireProgress((data) => {
-        onQuestionnaireProgress(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onQuestionnaireProgress((data) => {
+      onQuestionnaireProgressRef.current?.(data);
+    }));
 
-    // Epic 33.3.2: Tool status subscription
-    if (onToolStatus) {
-      const unsub = client.onToolStatus((data) => {
-        onToolStatus(data);
-      });
-      unsubscribers.push(unsub);
-    }
+    unsubscribers.push(client.onToolStatus((data) => {
+      onToolStatusRef.current?.(data);
+    }));
 
     // Epic 32.2.3: Wire reconnection state to chatStore
-    // Always register these to track reconnection state
-    const disconnectUnsub = client.onDisconnect((reason) => {
+    unsubscribers.push(client.onDisconnect((reason) => {
       console.log('[useWebSocket] Disconnect detected, setting reconnecting=true, reason:', reason);
       useChatStore.getState().setReconnecting(true);
-      // Epic 33.3.2: Clear tool status on disconnect
       useChatStore.getState().setToolStatus('idle');
-    });
-    unsubscribers.push(disconnectUnsub);
+    }));
 
-    const reconnectUnsub = client.onReconnect((attemptNumber) => {
+    unsubscribers.push(client.onReconnect((attemptNumber) => {
       console.log('[useWebSocket] Reconnect successful after', attemptNumber, 'attempts, setting reconnecting=false');
       useChatStore.getState().setReconnecting(false);
-      // Epic 33.3.2: Clear any stale tool status on reconnect
       useChatStore.getState().setToolStatus('idle');
-    });
-    unsubscribers.push(reconnectUnsub);
+    }));
 
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     };
-  // NOTE: onConnectionReady is NOT in deps - it's registered in connect() before the socket connects
-  }, [isConnected, onMessage, onMessageStream, onError, onHistory, onStreamComplete, onConversationsList, onConversationCreated, onConversationTitleUpdated, onStreamAborted, onConversationDeleted, onConversationModeUpdated, onExportReady, onExtractionFailed, onQuestionnaireReady, onGenerationPhase, onExportStatusNotFound, onExportStatusError, onScoringStarted, onScoringProgress, onScoringComplete, onScoringError, onVendorClarificationNeeded, onFileProcessingError, onQuestionnaireProgress, onToolStatus]);
+  }, [isConnected]);
 
   // Effect 1: Auto-connect when token becomes available
   useEffect(() => {
