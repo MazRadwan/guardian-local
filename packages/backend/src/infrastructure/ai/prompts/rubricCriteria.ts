@@ -16,6 +16,7 @@ export function buildRubricCriteria(): string {
 1. **Dimension score = sum of sub-scores.** For each dimension below, the dimension score MUST equal the sum of all its sub-scores. Do NOT estimate dimension scores independently.
 2. **Use only defined point values.** Each sub-score MUST be exactly one of the defined point values listed for that sub-score. Do NOT interpolate or use intermediate values.
 3. **Show your arithmetic.** In the narrative, show the sub-score breakdown that produces each dimension score.
+4. **riskRating values.** Every dimension's riskRating MUST be exactly one of: \`low\`, \`medium\`, \`high\`, \`critical\`. Never use words like "good", "excellent", "adequate", or "poor" for riskRating.
 
 ${existingCriteria}`;
 

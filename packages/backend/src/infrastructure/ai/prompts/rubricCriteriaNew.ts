@@ -45,11 +45,11 @@ export function buildNewDimensionCriteria(): string {
   - vague_roadmap: 5 points (moderate)
   - no_roadmap: 0 points (poor)
 
-**Vendor Capability Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Adequate
-- 0-39: Poor
+**Vendor Capability Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical
 
 ---
 
@@ -86,11 +86,11 @@ export function buildNewDimensionCriteria(): string {
   - limited_interpretability: 5 points (moderate)
   - black_box_model: 0 points (poor)
 
-**AI Transparency Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Adequate
-- 0-39: Poor
+**AI Transparency Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical
 
 ---
 
@@ -127,11 +127,11 @@ export function buildNewDimensionCriteria(): string {
   - informal_accountability: 5 points (moderate)
   - no_accountability_framework: 0 points (poor)
 
-**Ethical Considerations Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Adequate
-- 0-39: Poor
+**Ethical Considerations Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical
 
 ---
 
@@ -168,11 +168,11 @@ export function buildNewDimensionCriteria(): string {
   - vague_regulatory_plan: 5 points (moderate)
   - no_regulatory_plan: 0 points (poor)
 
-**Regulatory Compliance Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Adequate
-- 0-39: Poor
+**Regulatory Compliance Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical
 
 ---
 
@@ -209,9 +209,9 @@ export function buildNewDimensionCriteria(): string {
   - tco_unclear: 5 points (moderate)
   - tco_unreasonable: 0 points (poor)
 
-**Sustainability Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Adequate
-- 0-39: Poor`;
+**Sustainability Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical`;
 }

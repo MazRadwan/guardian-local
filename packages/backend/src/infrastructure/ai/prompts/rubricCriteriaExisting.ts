@@ -46,11 +46,11 @@ export function buildExistingDimensionCriteria(): string {
   - difficult_to_override: 8 points
   - no_override_capability: 10 points
 
-**Clinical Risk Rating:**
-- 0-20: Low Risk
-- 21-40: Medium Risk
-- 41-60: High Risk
-- 61-100: Critical Risk
+**Clinical Risk Rating (riskRating):**
+- 0-20: low
+- 21-40: medium
+- 41-60: high
+- 61-100: critical
 
 ---
 
@@ -86,11 +86,11 @@ export function buildExistingDimensionCriteria(): string {
   - partial_rights_supported: 5 points
   - no_rights_mechanism: 10 points
 
-**Privacy Risk Rating:**
-- 0-20: Low Risk
-- 21-40: Medium Risk
-- 41-60: High Risk
-- 61-100: Critical Risk
+**Privacy Risk Rating (riskRating):**
+- 0-20: low
+- 21-40: medium
+- 41-60: high
+- 61-100: critical
 
 ---
 
@@ -132,11 +132,11 @@ export function buildExistingDimensionCriteria(): string {
   - minimal_phi_controls: 8 points
   - no_phi_specific_controls: 10 points
 
-**Security Risk Rating:**
-- 0-20: Low Risk
-- 21-40: Medium Risk
-- 41-60: High Risk
-- 61-100: Critical Risk
+**Security Risk Rating (riskRating):**
+- 0-20: low
+- 21-40: medium
+- 41-60: high
+- 61-100: critical
 
 ---
 
@@ -173,11 +173,11 @@ export function buildExistingDimensionCriteria(): string {
   - limited_explainability: 6 points
   - black_box: 0 points
 
-**Technical Credibility Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Adequate
-- 0-39: Poor
+**Technical Credibility Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical
 
 ---
 
@@ -215,11 +215,11 @@ export function buildExistingDimensionCriteria(): string {
   - fte_requirements_challenging: 5 points
   - fte_requirements_unrealistic: 0 points
 
-**Operational Excellence Rating:**
-- 80-100: Excellent
-- 60-79: Good
-- 40-59: Concerning
-- 0-39: Inadequate
+**Operational Excellence Rating (riskRating):**
+- 80-100: low
+- 60-79: medium
+- 40-59: high
+- 0-39: critical
 
 **NLHS Minimum Acceptable Standards:**
 - ITIL4: Level 3 (Defined) minimum
