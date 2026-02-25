@@ -68,15 +68,53 @@ export class ClaudeClientBase {
   }
 
   /**
-   * Check if an error is retryable (overloaded, rate limit, etc.)
+   * Check if an error is retryable (overloaded, rate limit, transient transport).
+   * Inspects both message text and structured error codes (error.code, cause.code).
    */
   protected isRetryableError(errorMessage: string): boolean {
+    const msg = errorMessage.toLowerCase();
     return (
-      errorMessage.includes('overloaded') ||
-      errorMessage.includes('rate_limit') ||
-      errorMessage.includes('529') ||
-      errorMessage.includes('503')
+      msg.includes('overloaded') ||
+      msg.includes('rate_limit') ||
+      msg.includes('529') ||
+      msg.includes('503') ||
+      msg.includes('premature close') ||
+      msg.includes('econnreset') ||
+      msg.includes('socket hang up') ||
+      msg.includes('etimedout') ||
+      msg.includes('und_err_socket')
     );
+  }
+
+  /**
+   * Static version for use outside subclasses (e.g., ScoringLLMService).
+   */
+  static isTransientError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+
+    // Check message text
+    if (
+      msg.includes('premature close') ||
+      msg.includes('econnreset') ||
+      msg.includes('socket hang up') ||
+      msg.includes('etimedout') ||
+      msg.includes('und_err_socket') ||
+      msg.includes('overloaded') ||
+      msg.includes('rate_limit') ||
+      msg.includes('529') ||
+      msg.includes('503')
+    ) {
+      return true;
+    }
+
+    // Check structured error code / cause.code
+    const errCode = (error as { code?: string })?.code?.toLowerCase();
+    const causeCode = ((error as { cause?: { code?: string } })?.cause?.code)?.toLowerCase();
+    const transientCodes = ['econnreset', 'etimedout', 'epipe', 'und_err_socket'];
+    if (errCode && transientCodes.includes(errCode)) return true;
+    if (causeCode && transientCodes.includes(causeCode)) return true;
+
+    return false;
   }
 
   /**

@@ -594,6 +594,137 @@ describe('ScoringLLMService', () => {
     });
   });
 
+  describe('transient stream retry', () => {
+    beforeEach(() => { jest.useFakeTimers(); });
+    afterEach(() => { jest.useRealTimers(); });
+
+    // Helper: flush pending setTimeout calls without waiting real time.
+    // Each retry iteration involves: await streamWithTool() rejection → catch →
+    // await setTimeout(delay). We need multiple microtask ticks between timer
+    // advances so the async control flow can schedule the next setTimeout.
+    const flushRetryDelays = async () => {
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 5; j++) await Promise.resolve();
+        jest.runAllTimers();
+      }
+    };
+
+    it('should retry once on transient ClaudeAPIError and succeed', async () => {
+      let callCount = 0;
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('streamWithTool failed: Premature close');
+        }
+        // Second attempt succeeds
+        options.onTextDelta?.('Retry narrative');
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const onMessage = jest.fn();
+
+      const promise = service.scoreWithClaude(
+        mockParseResult,
+        testVendorName,
+        testSolutionName,
+        testSolutionType,
+        abortController.signal,
+        onMessage
+      );
+      await flushRetryDelays();
+      const result = await promise;
+
+      expect(callCount).toBe(2);
+      expect(result.payload).toEqual(mockToolPayload);
+      // Narrative should only contain attempt 2's text (state was reset)
+      expect(result.narrativeReport).toBe('Retry narrative');
+      // onMessage should have been called with retry notification
+      expect(onMessage).toHaveBeenCalledWith('Connection interrupted, retrying...');
+    });
+
+    it('should reset state between attempts — no duplicate narrative', async () => {
+      let callCount = 0;
+      mockLLMClient.streamWithTool.mockImplementation(async (options: StreamWithToolOptions) => {
+        callCount++;
+        if (callCount === 1) {
+          // Attempt 1: partial text streamed, then fails
+          options.onTextDelta?.('Attempt 1 partial text');
+          throw new Error('streamWithTool failed: ECONNRESET');
+        }
+        // Attempt 2: fresh text + success
+        options.onTextDelta?.('Attempt 2 clean text');
+        options.onToolUse?.('scoring_complete', mockToolPayload);
+      });
+
+      const abortController = new AbortController();
+      const promise = service.scoreWithClaude(
+        mockParseResult, testVendorName, testSolutionName, testSolutionType,
+        abortController.signal, jest.fn()
+      );
+      await flushRetryDelays();
+      const result = await promise;
+
+      // CRITICAL: narrative must NOT contain attempt 1's partial text
+      expect(result.narrativeReport).toBe('Attempt 2 clean text');
+      expect(result.narrativeReport).not.toContain('Attempt 1');
+    });
+
+    it('should NOT retry on abort', async () => {
+      const abortController = new AbortController();
+      mockLLMClient.streamWithTool.mockImplementation(async () => {
+        abortController.abort();
+        throw new Error('streamWithTool failed: Premature close');
+      });
+
+      await expect(
+        service.scoreWithClaude(
+          mockParseResult, testVendorName, testSolutionName, testSolutionType,
+          abortController.signal, jest.fn()
+        )
+      ).rejects.toThrow('Premature close');
+
+      // Should only be called once (no retry after abort)
+      expect(mockLLMClient.streamWithTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT retry on non-transient errors', async () => {
+      mockLLMClient.streamWithTool.mockRejectedValue(
+        new Error('Invalid API key')
+      );
+
+      const abortController = new AbortController();
+
+      await expect(
+        service.scoreWithClaude(
+          mockParseResult, testVendorName, testSolutionName, testSolutionType,
+          abortController.signal, jest.fn()
+        )
+      ).rejects.toThrow('Invalid API key');
+
+      expect(mockLLMClient.streamWithTool).toHaveBeenCalledTimes(1);
+    });
+
+    it('should propagate after exhausting all retry attempts', async () => {
+      // All 3 attempts (1 initial + 2 retries) fail with transient error
+      mockLLMClient.streamWithTool.mockRejectedValue(
+        new Error('streamWithTool failed: Premature close')
+      );
+
+      const abortController = new AbortController();
+
+      const promise = service.scoreWithClaude(
+        mockParseResult, testVendorName, testSolutionName, testSolutionType,
+        abortController.signal, jest.fn()
+      );
+      await flushRetryDelays();
+      await expect(promise).rejects.toThrow('Premature close');
+
+      // 1 initial + 2 retries = 3 total
+      expect(mockLLMClient.streamWithTool).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe('fetchISOCatalog', () => {
     it('should delegate to promptBuilder.fetchISOCatalog()', async () => {
       const controls = [{ clauseRef: 'A.6.1', domain: 'D', title: 'T', framework: 'F', criteriaText: 'C', dimensions: [], relevanceWeights: {} }];
