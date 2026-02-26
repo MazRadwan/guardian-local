@@ -43,6 +43,7 @@ flowchart TB
       ModeSwitchHandler["ModeSwitchHandler"]
       QuestionnaireHandler["QuestionnaireHandler"]
       ScoringHandler["ScoringHandler"]
+      ScoringPostProcessor["ScoringPostProcessor\n(narrative, title, export)"]
       ModeRouter["ModeRouter (mode config flags)"]
     end
 
@@ -57,19 +58,22 @@ flowchart TB
 
     subgraph ContextBuilders["Context Builders (Epic 30 Vision)"]
       ConversationContextBuilder["ConversationContextBuilder"]
-      FileContextBuilder["FileContextBuilder\nbuildWithImages() → FileContextResult"]
+      FileContextBuilder["FileContextBuilder\nbuildWithImages() -> FileContextResult"]
     end
 
     StreamingHandler["StreamingHandler"]
     ToolUseRegistry["ToolUseRegistry"]
 
-    subgraph Extraction["Extraction Infrastructure (Epic 31)"]
+    subgraph Extraction["Extraction Infrastructure (Epic 31/39)"]
       BackgroundExtractor["BackgroundExtractor\n(async text extraction)"]
       TextExtractionService["TextExtractionService"]
+      ExtractionRoutingService["ExtractionRoutingService\n(Claude vs Regex routing)"]
+      RegexResponseExtractor["RegexResponseExtractor\n(fast regex pipeline)"]
+      ExtractionConfidenceCalculator["ExtractionConfidenceCalculator"]
     end
 
-    HttpRoutes["HTTP routes:\n/api/auth\n/api/vendors\n/api/assessments\n/api/questions\n/api/assessments/:id/export/{pdf|word|excel}"]
-    Controllers["Auth / Vendor / Assessment /\nQuestion / Export / Document Controllers"]
+    HttpRoutes["HTTP routes:\n/api/auth\n/api/vendors\n/api/assessments\n/api/questions\n/api/assessments/:id/export/{pdf|word|excel}\n/api/export/scoring/:id/{pdf|word|excel}"]
+    Controllers["Auth / Vendor / Assessment /\nQuestion / Export / Document /\nScoringExport Controllers"]
   end
 
   subgraph Services["Application Services"]
@@ -81,24 +85,54 @@ flowchart TB
     QuestionnaireReadyService
     QuestionnaireGenerationService
     ExportService
-    ScoringService["ScoringService"]
+    ScoringService["ScoringService\n(orchestrator)"]
+    ScoringLLMService["ScoringLLMService\n(Claude streaming + tool)"]
+    ScoringStorageService["ScoringStorageService\n(persist scores + results)"]
+    ScoringQueryService["ScoringQueryService\n(rehydration + lookups)"]
+    ScoringRetryService["ScoringRetryService\n(fail-closed retry)"]
+    ScoringMetricsCollector["ScoringMetricsCollector\n(timing + diagnostics)"]
     ScoringExportService["ScoringExportService"]
+    ISOControlRetrievalService["ISOControlRetrievalService\n(ISO control lookups)"]
     WebSearchToolService["WebSearchToolService\n(Jina search + read)"]
   end
 
-  subgraph Domain["Domain Entities"]
-    User
-    Conversation
-    Assessment
-    Vendor
-    Question
-    Message
+  subgraph Domain["Domain Layer"]
+    subgraph DomainEntities["Entities"]
+      User
+      Conversation
+      Assessment
+      Vendor
+      Question
+      Message
+    end
+
+    subgraph ScoringDomain["Scoring (Epic 39/40)"]
+      ScoringPayloadValidator["ScoringPayloadValidator"]
+      ScoringPayloadReconciler["ScoringPayloadReconciler\n(auto-correct arithmetic)"]
+      SubScoreValidator["SubScoreValidator\n(sub-score invariants)"]
+      CompositeScoreValidator["CompositeScoreValidator\n(weighted average check)"]
+      subScoreRules["subScoreRules\n(10-dimension rules)"]
+      Rubric["rubric.ts\n(v1.1: weights, thresholds,\ndisqualifier tiers)"]
+    end
+
+    subgraph ComplianceDomain["Compliance (ISO 27001)"]
+      ComplianceFramework["ComplianceFramework"]
+      FrameworkVersion["FrameworkVersion"]
+      FrameworkControl["FrameworkControl"]
+      InterpretiveCriteria["InterpretiveCriteria"]
+      DimensionControlMapping["DimensionControlMapping"]
+    end
   end
 
-  subgraph AI["AI & Rendering (Epic 30 Vision)"]
-    ClaudeClient["ClaudeClient (Sonnet 4.5)\nstreamMessage(msgs, opts, imageBlocks?)"]
+  subgraph AI["AI & Rendering"]
+    ClaudeClient["ClaudeClient (facade)\nimplements IClaudeClient + IVisionClient + ILLMClient"]
+    ClaudeClientBase["ClaudeClientBase\n(shared Anthropic SDK logic)"]
+    ClaudeStreamClient["ClaudeStreamClient\n(streaming responses)"]
+    ClaudeTextClient["ClaudeTextClient\n(single-shot responses)"]
+    ClaudeVisionClient["ClaudeVisionClient\n(Vision API)"]
     PromptCacheManager["PromptCacheManager (tool-aware)"]
-    VisionContentBuilder["VisionContentBuilder\n(Epic 30: Image → ImageContentBlock)"]
+    VisionContentBuilder["VisionContentBuilder\n(Image -> ImageContentBlock)"]
+    ScoringPromptBuilder["ScoringPromptBuilder\n(rubric + ISO prompts)"]
     assessmentModeTools["assessmentModeTools\n(questionnaire_ready tool)"]
     questionnaireOutputTool["questionnaireOutputTool\n(structured JSON)"]
     questionGenPrompt["questionGeneration prompt"]
@@ -114,8 +148,20 @@ flowchart TB
     VendorRepo
     AssessmentRepo
     QuestionRepo
-    Tables["users, conversations,\nmessages, vendors,\nassessments, questions"]
-    Exporters["PDFExporter / WordExporter / ExcelExporter"]
+    ResponseRepo["ResponseRepo"]
+    DimensionScoreRepo["DimensionScoreRepo"]
+    AssessmentResultRepo["AssessmentResultRepo"]
+
+    subgraph ISORepos["ISO Compliance Repos"]
+      ComplianceFrameworkRepo["ComplianceFrameworkRepo"]
+      FrameworkControlRepo["FrameworkControlRepo"]
+      DimensionControlMappingRepo["DimensionControlMappingRepo"]
+      InterpretiveCriteriaRepo["InterpretiveCriteriaRepo"]
+    end
+
+    Tables["users, conversations, messages,\nvendors, assessments, questions,\nfiles, responses,\ndimension_scores, assessment_results"]
+    ISOTables["compliance_frameworks,\nframework_versions,\nframework_controls,\ninterpretive_criteria,\ndimension_control_mappings,\nassessment_compliance_results"]
+    Exporters["PDFExporter / WordExporter / ExcelExporter\nScoringPDFExporter / ScoringWordExporter\nScoringExcelExporter"]
     JWTProvider
   end
 
@@ -202,6 +248,9 @@ flowchart TB
   %% QuestionnaireHandler uses StreamingHandler (only remaining consumer)
   QuestionnaireHandler --> StreamingHandler
 
+  %% ScoringHandler to ScoringPostProcessor (Epic 39)
+  ScoringHandler --> ScoringPostProcessor
+
   %% Epic 30: Vision API Pipeline
   FileContextBuilder --> VisionContentBuilder
   ConnectionHandler --> VisionContentBuilder
@@ -213,13 +262,21 @@ flowchart TB
   QuestionnaireHandler --> QuestionnaireGenerationService
   ScoringHandler --> ScoringService
 
-  %% Epic 31: Async Extraction Pipeline
+  %% Epic 39: Extraction Pipeline (Regex + Claude routing)
+  ExtractionRoutingService --> RegexResponseExtractor
+  ExtractionRoutingService --> ExtractionConfidenceCalculator
   Controllers --> BackgroundExtractor
   BackgroundExtractor --> TextExtractionService
 
   %% ChatServer to AI
   ChatServer --> PromptCacheManager
   PromptCacheManager --> ClaudeClient
+
+  %% ClaudeClient decomposition (Epic 39: 300 LOC split)
+  ClaudeClient --> ClaudeClientBase
+  ClaudeStreamClient --> ClaudeClientBase
+  ClaudeTextClient --> ClaudeClientBase
+  ClaudeVisionClient --> ClaudeClientBase
 
   %% ClaudeStreamingService to AI
   ClaudeStreamingService --> ClaudeClient
@@ -233,6 +290,43 @@ flowchart TB
   Controllers --> QuestionService
   Controllers --> ExportService
 
+  %% ScoringService decomposition (Epic 39: 300 LOC split)
+  ScoringService --> ScoringLLMService
+  ScoringService --> ScoringStorageService
+  ScoringService --> ScoringQueryService
+  ScoringService --> ScoringRetryService
+  ScoringService --> ScoringPayloadReconciler
+  ScoringService --> ScoringPayloadValidator
+  ScoringLLMService --> ClaudeClient
+  ScoringLLMService --> ScoringPromptBuilder
+  ScoringStorageService --> AssessmentResultRepo
+  ScoringStorageService --> DimensionScoreRepo
+  ScoringStorageService --> ResponseRepo
+  ScoringQueryService --> AssessmentResultRepo
+  ScoringQueryService --> DimensionScoreRepo
+  ScoringMetricsCollector --> ScoringService
+
+  %% ScoringPayloadReconciler uses domain rules
+  ScoringPayloadReconciler --> subScoreRules
+  ScoringPayloadReconciler --> Rubric
+  ScoringPayloadValidator --> SubScoreValidator
+  ScoringPayloadValidator --> CompositeScoreValidator
+  SubScoreValidator --> subScoreRules
+  CompositeScoreValidator --> Rubric
+
+  %% ISO Compliance pipeline
+  ISOControlRetrievalService --> ComplianceFrameworkRepo
+  ISOControlRetrievalService --> FrameworkControlRepo
+  ISOControlRetrievalService --> DimensionControlMappingRepo
+  ISOControlRetrievalService --> InterpretiveCriteriaRepo
+  ScoringPromptBuilder --> ISOControlRetrievalService
+
+  %% ISO Repos to Tables
+  ComplianceFrameworkRepo --> ISOTables
+  FrameworkControlRepo --> ISOTables
+  DimensionControlMappingRepo --> ISOTables
+  InterpretiveCriteriaRepo --> ISOTables
+
   %% Services to Data/AI
   AuthService --> JWTProvider
   ConversationService --> ConversationRepo --> Tables
@@ -244,8 +338,8 @@ flowchart TB
   QuestionnaireGenerationService --> VendorService
   QuestionnaireGenerationService --> questionnaireToMarkdown
   ExportService --> Exporters
-  ScoringService --> ClaudeClient
   ScoringService --> AssessmentRepo
   ScoringExportService --> ScoringService
+  ScoringExportService --> Exporters
   Controllers --> ScoringExportService
   ClaudeClient <--> ClaudeAPI

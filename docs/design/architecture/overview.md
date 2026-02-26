@@ -1,7 +1,7 @@
 # Guardian App - Project Overview
 
-**Version:** 1.2
-**Last Updated:** 2026-01-29
+**Version:** 1.3
+**Last Updated:** 2026-02-26
 **Status:** Production MVP
 
 ---
@@ -93,14 +93,14 @@ The Guardian system prompt works well in Claude.ai Projects for **one-off assess
 
 **Scalable Architecture**
 - Pay-per-assessment API model (Anthropic Claude API)
-- Deterministic scoring algorithms (no AI needed for calculations)
+- ScoringPayloadReconciler handles all arithmetic deterministically (Claude interprets, code calculates)
 - Modular report generation (only generate sections viewed)
-- Cost-effective at scale ($0.25-0.40 per assessment vs subscription)
+- Prompt caching reduces repeat scoring costs (cache hit rate tracked by ScoringMetricsCollector)
 
 **Integration & Automation**
 - API-first design enables integration with procurement systems
 - Automated renewal reminders based on assessment age
-- Exportable data (CSV, JSON, PDF reports)
+- Exportable data (PDF, Word, Excel scoring reports; PDF, Word, Excel questionnaire exports; CSV, JSON)
 - Webhook notifications for governance workflows
 
 ---
@@ -122,26 +122,33 @@ The Guardian system prompt works well in Claude.ai Projects for **one-off assess
 - **Flexible Scope:** Analysts can request Guardian add/remove question sections based on relevance
 - **Document Upload:** PDF and Word documents for intake parsing and scoring
 
-### Risk Analysis (10 Dimensions)
-- **Clinical Risk:** Patient safety, care quality, clinical decision support
-- **Privacy Risk:** PIPEDA, ATIPP, personal information handling
-- **Security Risk:** Architecture, encryption, vulnerability management
-- **Technical Credibility:** Stack quality, development practices, testing
-- **Vendor Capability:** Financial stability, experience, certifications
-- **AI Transparency:** Explainability, bias testing, human oversight
-- **Ethical Considerations:** Fairness, accountability, governance
-- **Regulatory Compliance:** Healthcare standards, audit readiness
-- **Operational Excellence:** ITIL maturity, support model, SLAs
-- **Sustainability:** Maintainability, cost, knowledge transfer
+### Risk Analysis (10 Dimensions, Rubric v1.1)
 
-Each dimension scored 0-100 with severity rating (Low, Adequate, Concern, High Risk, Critical).
+All 10 dimensions are scored 0-100 with rubric-defined sub-scores. Each dimension has 4-6 named sub-score components with explicit point allocations that sum to the dimension total. Dimensions are classified as either **risk** (lower is better) or **capability** (higher is better):
+
+**Risk Dimensions (lower is better):**
+- **Clinical Risk:** Evidence quality, regulatory status, patient safety, population relevance, workflow integration
+- **Privacy Risk:** PIPEDA compliance, ATIPP compliance, PHI protection, consent mechanisms, data subject rights
+- **Security Risk:** Security architecture, access control, vulnerability management, incident response, certifications, PHI-specific controls
+
+**Capability Dimensions (higher is better):**
+- **Technical Credibility:** AI architecture, development practices, validation/testing, documentation, explainability
+- **Vendor Capability:** Company stability, healthcare experience, customer references, support capability, roadmap credibility
+- **AI Transparency:** Model explainability, audit trail, confidence scoring, limitations documentation, interpretability
+- **Ethical Considerations:** Bias testing, population fairness, equity impact, Indigenous/rural health, algorithmic justice
+- **Regulatory Compliance:** Health Canada status, QMS maturity, clinical evidence, post-market surveillance, regulatory roadmap
+- **Operational Excellence:** ITIL4 maturity, NIST CSF tier, support model, change management, FTE sustainability
+- **Sustainability:** ITIL4 service maturity, NIST CSF alignment, support model sustainability, BCP/disaster recovery, total cost of ownership
+
+Severity ratings use risk-type thresholds (0-20 Low, 21-40 Medium, 41-60 High, 61-100 Critical) for risk dimensions and inverted thresholds for capability dimensions (80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor).
 
 ### Report Generation
 - **Interactive Web Reports:** Primary display as rich web view with risk dashboards, expandable sections, charts, and real-time streaming from Claude
-- **Internal Decision Report:** Comprehensive analysis for leadership (executive summary, risk dashboard, critical findings, gap analysis, compliance assessment, recommendation)
+- **Internal Decision Report:** Comprehensive analysis for leadership (executive summary, risk dashboard, critical findings, gap analysis, compliance assessment with ISO/IEC 42001 references, recommendation)
 - **Vendor Feedback Package:** Professional external communication (strengths acknowledged, required remediations, actionable guidance)
 - **Modular Sections:** Generate full report or individual sections on-demand (streaming, cached for 24 hours)
-- **Multi-Format Export:** PDF (professional sharing), Word (editable), Excel (data analysis)
+- **Multi-Format Scoring Export:** PDF (ScoringPDFExporter), Word with ISO clause sections (ScoringWordExporter), Excel with dimension breakdowns (ScoringExcelExporter)
+- **Multi-Format Questionnaire Export:** PDF, Word, Excel for generated questionnaires
 - **Email Delivery:** Direct email to leadership or vendors with PDF attachments and professional messaging
 - **Customizable Templates:** Adapt reports to organizational branding
 
@@ -153,11 +160,12 @@ Each dimension scored 0-100 with severity rating (Low, Adequate, Concern, High R
 - **Renewal Tracking:** Alerts for assessments older than 12 months
 
 ### Compliance Frameworks
-- **PIPEDA (Federal):** 10 Fair Information Principles assessment
-- **ATIPP (NL Provincial):** Public body obligations, PIA requirements
-- **NIST Cybersecurity Framework:** Tier assessment (1-4)
-- **ITIL4 Service Management:** Maturity level assessment (1-5)
-- **Custom Frameworks:** Extensible for additional compliance requirements
+- **ISO/IEC 42001 (AI Management Systems):** Full domain model with ComplianceFramework, FrameworkVersion, FrameworkControl, InterpretiveCriteria, and DimensionControlMapping entities. Controls are mapped to risk dimensions and injected into scoring prompts via ISOControlRetrievalService.
+- **PIPEDA (Federal):** 10 Fair Information Principles assessment (mapped to privacy_risk dimension sub-scores)
+- **ATIPP (NL Provincial):** Public body obligations, PIA requirements (mapped to privacy_risk dimension sub-scores)
+- **NIST Cybersecurity Framework:** Tier assessment (1-4), mapped to operational_excellence and sustainability sub-scores
+- **ITIL4 Service Management:** Maturity level assessment (1-5), mapped to operational_excellence and sustainability sub-scores
+- **Custom Frameworks:** Extensible via ComplianceFramework domain entities
 
 ### Collaboration & Workflow
 - **Role-Based Access:** Admin, Analyst, Reviewer, Read-Only Viewer
@@ -224,7 +232,7 @@ Each dimension scored 0-100 with severity rating (Low, Adequate, Concern, High R
 - **API Pattern:** WebSocket (Socket.IO v4.8.1) for streaming chat + REST for CRUD operations
 - **Authentication:** Passport.js with JWT tokens
 - **AI Integration:** Anthropic Claude API (Sonnet 4.5 via @anthropic-ai/sdk)
-- **Architecture:** Lightweight Clean Architecture (4 layers: Presentation, Application, Domain, Infrastructure)
+- **Architecture:** Lightweight Clean Architecture (4 layers: Presentation, Application, Domain, Infrastructure). Max 300 LOC per source file enforced -- services and clients decomposed into focused modules.
 
 ### Database
 - **Primary:** PostgreSQL 17.x (relational data, improved JSONB performance for chat messages)
@@ -242,10 +250,15 @@ Each dimension scored 0-100 with severity rating (Low, Adequate, Concern, High R
 
 ### AI & Scoring
 - **LLM API:** Anthropic Claude API (Sonnet 4.5 20250929)
+- **Claude Client Decomposition:** ClaudeClientBase (shared SDK/retry), ClaudeTextClient (non-streaming), ClaudeStreamClient (streaming with tool use), ClaudeVisionClient (image analysis)
 - **Conversation Management:** Claude for natural language interaction, intent detection, question generation
-- **Scoring Logic:** Hybrid - TypeScript for deterministic calculations, Claude for nuanced interpretation
-- **Compliance Data:** PostgreSQL (PIPEDA/ATIPP/NIST frameworks stored as data, retrieved as needed in conversation)
+- **Scoring Pipeline:** normalize -> reconcile -> validate -> store (ScoringPayloadReconciler auto-corrects Claude's arithmetic before validation)
+- **Scoring Service Decomposition:** ScoringService (orchestrator), ScoringLLMService (prompt building + streaming), ScoringStorageService (response/score persistence), ScoringQueryService (read-only queries), ScoringRetryService (structural violation retry), ScoringMetricsCollector (cache hit rate, cost, latency)
+- **Rubric Version:** guardian-v1.1 -- all 10 dimensions have sub-score rules, dimension weights per solution type
+- **Compliance Domain:** ISO compliance framework entities (ComplianceFramework, FrameworkVersion, FrameworkControl, InterpretiveCriteria, DimensionControlMapping) with ISOControlRetrievalService for prompt injection
+- **Extraction Pipeline:** ExtractionRoutingService routes between RegexResponseExtractor (fast path) and Claude fallback, with ExtractionConfidenceCalculator evaluating extraction quality
 - **Report Generation:** Claude API (narrative, interpretation, recommendations, vendor feedback)
+- **Export Formats:** PDF (ScoringPDFExporter), Word (ScoringWordExporter), Excel (ScoringExcelExporter) for scoring reports; PDF, Word, Excel for questionnaires
 
 ---
 
@@ -270,62 +283,74 @@ The application is built around a conversational interface where Guardian (power
 - Redis cache for conversation context and frequently accessed data
 - Real-time auto-save of assessment progress
 
-**3. Analysis Engine (Hybrid: Deterministic + AI)**
-- **Deterministic:** Risk score calculations using TypeScript algorithms
-- **AI:** Claude interprets complex responses, generates narratives, provides recommendations
-- **Compliance:** Rule-based checks enhanced by Claude's understanding of frameworks
-- **Report Generation:** Claude composes professional prose, deterministic code structures data
+**3. Analysis Engine ("Claude Interprets, Code Calculates")**
+- **AI (ScoringLLMService):** Claude interprets qualitative responses against rubric, assigns sub-scores, identifies disqualifiers, generates narrative reports with ISO/IEC 42001 references
+- **Reconciliation (ScoringPayloadReconciler):** Auto-corrects dimension totals from sub-score sums, enforces recommendation/disqualifier coherence, recomputes composite from weighted averages
+- **Validation (ScoringPayloadValidator):** Hard errors reject payload, structural violations trigger retry, soft warnings are logged
+- **Compliance (ISOControlRetrievalService):** Retrieves ISO controls from database and injects into scoring prompts; ComplianceFramework domain entities model ISO/IEC 42001 structure
+- **Report Generation:** Claude composes professional prose, deterministic code structures data, multi-format export (PDF, Word, Excel)
 
 **4. Presentation Layer (Chat + Dashboards)**
 - Primary: Chat interface with rich message components (forms, buttons, charts embedded)
 - Secondary: Portfolio dashboard views (accessible via chat or navigation)
-- Exports: PDF reports, CSV data, YAML compatibility
+- Exports: Multi-format scoring reports (PDF, Word, Excel), questionnaire exports, CSV data
 
 **Why This Approach?**
 - **Natural Interaction:** Users converse with an expert, not fill out forms
 - **Flexibility:** Guardian adapts questions to context, explains concepts on-demand
 - **Efficiency:** Structured workflows embedded in conversation prevent context exhaustion
 - **Persistence:** Database stores both conversations and structured data
-- **Cost-Effective:** ~50 assessments/year means token cost ($0.50-1.00 per assessment) is acceptable
+- **Cost-Effective:** ~50 assessments/year means token cost ($0.50-1.00 per assessment) is acceptable. ScoringMetricsCollector tracks per-call cache hit rates and estimated cost (Sonnet 4.5 pricing: $3/MTok input, $15/MTok output, $0.30/MTok cache read).
 
-### Hybrid Intelligence: Deterministic + AI
+### Hybrid Intelligence: "Claude Interprets, Code Calculates"
 
-**Deterministic (TypeScript/PostgreSQL):**
-- Risk score calculations (rule-based deductions/bonuses)
+The scoring architecture enforces a strict separation: Claude provides qualitative interpretation against the rubric, while TypeScript handles all arithmetic and validation. The ScoringPayloadReconciler embodies this principle by auto-correcting any mathematical inconsistencies in Claude's output before validation.
+
+**Claude (LLM) Responsibilities:**
+- Interprets qualitative vendor responses against the Guardian rubric
+- Assigns sub-scores within each dimension based on evidence quality
+- Identifies disqualifying factors from vendor responses
+- Generates narrative reports (executive summary, critical findings, vendor feedback)
+- Provides recommendation rationale with evidence citations
+- Maps vendor responses to ISO/IEC 42001 compliance controls
+
+**TypeScript (Deterministic) Responsibilities:**
+- ScoringPayloadReconciler: Recalculates dimension totals from sub-score sums, enforces recommendation consistency with disqualifier tiers, recomputes composite score from weighted averages
+- ScoringPayloadValidator: Validates payload structure, enum values, sub-score ranges; distinguishes hard errors from structural violations and soft warnings
 - Compliance checklist evaluation (boolean/enum matching)
 - Portfolio aggregations (SQL queries, averages, trends)
 - Assessment comparisons (diff algorithms)
 
-**AI (Claude API):**
-- Executive summary prose
-- Critical findings narrative with evidence citations
-- Recommendation rationale (why approve/conditional/decline)
-- Vendor feedback package (professional, constructive tone)
-- Nuanced interpretation of complex, open-ended responses
-
 **Benefits:**
-- Instant scoring (no API latency)
+- Claude never does arithmetic it can get wrong -- code recalculates deterministically
+- Reconciler corrections are logged for auditability
 - Predictable costs (most operations are local computation)
-- Auditability (scoring methodology is transparent code)
-- Claude focused on what it's best at (interpretation, narrative, judgment)
+- Structural violations trigger one LLM retry; soft warnings are logged but do not reject the payload
 
 ### Modular Report Generation
 
 **Always Generated (Small, Fast):**
 - Executive summary (2 pages)
-- Risk dashboard (scores + ratings)
-- Final recommendation (approve/conditional/decline)
+- Risk dashboard (10-dimension scores + ratings + sub-score breakdowns)
+- Final recommendation (approve/conditional/decline) with disqualifier analysis
 
 **On-Demand (Large, Optional):**
-- Detailed findings per dimension (generate when user clicks dimension)
-- Full compliance analysis (generate when requested)
+- Detailed findings per dimension with sub-score evidence (generate when user clicks dimension)
+- Full compliance analysis with ISO/IEC 42001 clause references (generate when requested)
 - Gap analysis table (derived from scores)
 - Vendor feedback package (generate when user clicks "Create Feedback")
+
+**Multi-Format Export (ScoringExportService):**
+- PDF: Professional formatted reports via ScoringPDFExporter
+- Word: Editable documents with ISO clause sections, narrative parsing via ScoringWordExporter
+- Excel: Data-oriented dimension breakdowns via ScoringExcelExporter
+- On-demand narrative generation with concurrency-safe claim pattern
 
 **Benefits:**
 - 60-70% reduction in API costs (users don't always need full 40-page report)
 - Faster initial results (executive summary in 20-30 seconds)
 - Pay only for what users actually view
+- ScoringMetricsCollector tracks cache hit rates, token usage, and cost per scoring run
 
 ### Chat-First API Design
 
@@ -397,102 +422,126 @@ Guardian dynamically:
 
 ### Scoring & Analysis Workflow
 
-**Step 1: AI Interpretation (Claude)**
+The scoring pipeline processes uploaded questionnaire documents through a multi-stage flow. Each stage has a distinct responsibility, and the pipeline is orchestrated by ScoringService which delegates to focused sub-services.
+
+**Step 1: Document Extraction**
 ```
-Input: Qualitative vendor responses (open-ended text)
+Input: Uploaded questionnaire document (PDF, Word, Excel)
 
-Claude analyzes:
-- "We follow secure coding practices. Kevin does code reviews..."
+ExtractionRoutingService:
+  1. RegexResponseExtractor attempts fast-path extraction
+  2. ExtractionConfidenceCalculator evaluates quality
+  3. If confidence >= threshold -> use regex result
+  4. If below threshold -> fall back to Claude Vision
 
-Against rubric:
-- Security testing maturity (Tier 1-4 NIST CSF)
-- Vulnerability management (Proactive/Reactive/None)
-- Code review coverage (Comprehensive/Partial/Minimal)
-
-Output: Structured risk factors
-{
-  security_testing_tier: "Tier 1 - Partial",
-  vuln_management: "Reactive",
-  code_review_coverage: "Partial",
-  evidence: "Manual reviews on major features, periodic npm audit",
-  confidence: "Medium"
-}
+Output: ScoringParseResult (assessmentId, vendorName, responses[])
 ```
 
-**Step 2: Deterministic Calculation (TypeScript)**
-```typescript
-function calculateSecurityScore(factors: RiskFactors): number {
-  let score = 100 // Start perfect, deduct for gaps
+**Step 2: AI Interpretation (Claude via ScoringLLMService)**
+```
+Input: Extracted vendor responses + Guardian rubric + ISO controls
 
-  if (factors.security_testing_tier === "Tier 1") score -= 30
-  if (factors.security_testing_tier === "Tier 2") score -= 20
-  if (factors.vuln_management === "Reactive") score -= 20
-  if (factors.vuln_management === "None") score -= 35
-  if (factors.code_review_coverage === "Partial") score -= 15
-  if (factors.code_review_coverage === "Minimal") score -= 25
+Claude evaluates each dimension using rubric-defined sub-scores:
+- security_architecture_score: 0-25 points
+- access_control_score: 0-20 points
+- vulnerability_management_score: 0-20 points
+- incident_response_score: 0-15 points
+- certifications_score: 0-10 points
+- phi_specific_controls_score: 0-10 points
 
-  return Math.max(0, score) // Floor at 0
-}
-
-// Result: 100 - 30 - 20 - 15 = 35/100 (High Risk)
+Output: scoring_complete tool call with:
+  - 10 dimension scores (each with sub-scores, findings, ISO references)
+  - Composite score, recommendation, disqualifying factors
+  - Narrative report with evidence citations
 ```
 
-**Why Hybrid:**
-- AI handles **meaning extraction** from qualitative text
-- Code handles **arithmetic** on extracted factors
-- **Auditability:** Scoring logic is transparent, versioned code
-- **Consistency:** Same factors = same score, always
-- **Cost-effective:** Most operations don't require API calls
+**Step 3: Normalize -> Reconcile -> Validate (TypeScript)**
+```
+Pipeline: normalize -> reconcile -> validate -> store
 
-### 10 Risk Dimensions (Scoring Reference)
+1. Normalize: Coerce LLM output variations (e.g., object -> array)
+2. Reconcile (ScoringPayloadReconciler):
+   - Dimension scores = sum of valid sub-scores
+   - Recommendation = auto-corrected from disqualifier tiers
+     (hard_decline -> must be 'decline', remediable_blocker -> cannot be 'approve')
+   - Composite score = recalculated from weighted average
+3. Validate (ScoringPayloadValidator):
+   - Hard errors: missing fields, invalid enums, wrong dimension count
+   - Structural violations: sub-score values not in allowed set (triggers retry)
+   - Soft warnings: logged but do not reject payload
+4. Store: Persist scores, narrative, and rubric version for auditability
+```
 
-Each dimension scored **0-100** with severity rating based on thresholds:
+**Step 4: Retry on Structural Violations (ScoringRetryService)**
+```
+If structural violations found:
+  1. Re-prompt Claude with specific correction instructions
+  2. Re-run normalize -> reconcile -> validate pipeline
+  3. If still invalid -> fail closed with error
+```
 
-**Lower is better (risk scores):**
-1. **Clinical Risk** (0-100) - Patient safety, validation evidence, regulatory approval
-   - 0-20: Low 🟢 | 21-40: Medium 🟡 | 41-60: High 🟠 | 61-100: Critical 🔴
+**Why This Design:**
+- Claude handles **qualitative interpretation** (what the rubric means in context)
+- Code handles **all arithmetic** (sub-score sums, weighted averages, recommendation logic)
+- Reconciler corrects Claude's math before validation even runs
+- Every correction is logged for auditability
+- Rubric version (guardian-v1.1) stored with results for reproducibility
 
-2. **Privacy Risk** (0-100) - PIPEDA, ATIPP, PHIA compliance, data protection
-   - 0-20: Low 🟢 | 21-40: Medium 🟡 | 41-60: High 🟠 | 61-100: Critical 🔴
+### 10 Risk Dimensions (Scoring Reference, Rubric v1.1)
 
-3. **Security Risk** (0-100) - Architecture, encryption, vulnerability management
-   - 0-20: Low 🟢 | 21-40: Medium 🟡 | 41-60: High 🟠 | 61-100: Critical 🔴
+Each dimension scored **0-100** using rubric-defined sub-scores. All 10 dimensions have explicit sub-score rules with named components and allowed point values (see `subScoreRules.ts`).
 
-**Higher is better (capability scores):**
-4. **Technical Credibility** (0-100) - AI architecture, development practices, testing
-   - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Adequate 🟠 | 0-39: Poor 🔴
+**Risk Dimensions (lower is better):**
 
-5. **Vendor Capability** (0-100) - Stability, healthcare experience, references
-   - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Concern 🟠 | 0-39: Poor 🔴
+| # | Dimension | Sub-scores | Max | Thresholds |
+|---|-----------|------------|-----|------------|
+| 1 | **Clinical Risk** | evidence_quality (40), regulatory_status (20), patient_safety (20), population_relevance (10), workflow_integration (10) | 100 | 0-20 Low, 21-40 Medium, 41-60 High, 61-100 Critical |
+| 2 | **Privacy Risk** | pipeda_compliance (30), atipp_compliance (25), phi_protection (20), consent_mechanism (15), data_subject_rights (10) | 100 | 0-20 Low, 21-40 Medium, 41-60 High, 61-100 Critical |
+| 3 | **Security Risk** | security_architecture (25), access_control (20), vulnerability_management (20), incident_response (15), certifications (10), phi_specific_controls (10) | 100 | 0-20 Low, 21-40 Medium, 41-60 High, 61-100 Critical |
 
-6. **AI Transparency** (0-100) - Explainability, decision transparency, audit trail
-   - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Limited 🟠 | 0-39: Black Box 🔴
+**Capability Dimensions (higher is better):**
 
-7. **Ethical Considerations** (0-100) - Fairness, bias mitigation, equity
-   - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Concern 🟠 | 0-39: Poor 🔴
+| # | Dimension | Sub-scores | Max | Thresholds |
+|---|-----------|------------|-----|------------|
+| 4 | **Technical Credibility** | ai_architecture (25), development_practices (20), validation_testing (20), documentation (15), explainability (20) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
+| 5 | **Vendor Capability** | company_stability (25), healthcare_experience (25), customer_references (20), support_capability (15), roadmap_credibility (15) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
+| 6 | **AI Transparency** | model_explainability (25), audit_trail (25), confidence_scoring (20), limitations_documentation (15), interpretability (15) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
+| 7 | **Ethical Considerations** | bias_testing (25), population_fairness (25), equity_impact (20), indigenous_rural_health (15), algorithmic_justice (15) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
+| 8 | **Regulatory Compliance** | health_canada_status (25), qms_maturity (25), clinical_evidence (20), post_market_surveillance (15), regulatory_roadmap (15) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
+| 9 | **Operational Excellence** | itil4_maturity (30), nist_csf_tier (25), support_model (20), change_management (15), fte_sustainability (10) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
+| 10 | **Sustainability** | itil4_service_maturity (25), nist_csf_alignment (20), support_model_sustainability (20), bcp_disaster_recovery (20), total_cost_of_ownership (15) | 100 | 80-100 Excellent, 60-79 Good, 40-59 Adequate, 0-39 Poor |
 
-8. **Regulatory Compliance** (0-100) - Health Canada, FDA, professional standards
-   - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Gaps 🟠 | 0-39: Non-compliant 🔴
+**Composite Score Calculation (Rubric v1.1):**
 
-9. **Operational Excellence** (0-100) - ITIL4 maturity, NIST CSF tier, support model
-   - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Concern 🟠 | 0-39: Inadequate 🔴
+All 10 dimensions receive non-zero weights for every solution type. Risk dimensions are converted to risk-equivalent (capability scores inverted: 100 - score) before weighting.
 
-10. **Sustainability** (0-100) - TCO, FTE requirements, vendor lock-in risk
-    - 80-100: Excellent 🟢 | 60-79: Good 🟡 | 40-59: Challenging 🟠 | 0-39: Unsustainable 🔴
+| Dimension | Clinical AI | Administrative AI | Patient-Facing |
+|-----------|-------------|-------------------|----------------|
+| Clinical Risk | **25%** | 5% | 10% |
+| Privacy Risk | 15% | **20%** | **20%** |
+| Security Risk | 15% | 18% | 15% |
+| Technical Credibility | 10% | 10% | 10% |
+| Operational Excellence | 10% | 12% | 5% |
+| Vendor Capability | 5% | 8% | 5% |
+| AI Transparency | 5% | 5% | 10% |
+| Ethical Considerations | 5% | 5% | 10% |
+| Regulatory Compliance | 5% | 10% | 10% |
+| Sustainability | 5% | 7% | 5% |
 
-**Composite Score Calculation:**
-- Weighted average based on solution type (clinical vs administrative vs patient-facing)
-- Clinical AI: Clinical Risk 40%, Privacy 20%, Security 15%, Technical 15%, Ops 10%
-- Administrative AI: Privacy 30%, Security 25%, Ops 20%, Technical 15%, Clinical 10%
-- Patient-Facing: Privacy 35%, Clinical 25%, Security 20%, Technical 12%, Ops 8%
+**Disqualifying Factors (Two-Tier System):**
+- **Hard Decline:** Fundamental safety/architecture gaps that force a "decline" recommendation (e.g., no encryption for PHI, cross-border data transfer without safeguards, no clinical validation for diagnosis AI)
+- **Remediable Blockers:** Process/documentation gaps fixable in 30-90 days that block "approve" but allow "conditional" (e.g., no PIA for PHI processing, no penetration testing ever conducted, no incident response plan)
 
-**Detailed scoring rubrics:** See `.claude/documentation/GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md` (lines 446-684)
+The ScoringPayloadReconciler enforces recommendation coherence: hard_decline factors force "decline", remediable_blockers prevent "approve".
+
+**Detailed scoring rubrics:** See `packages/backend/src/domain/scoring/rubric.ts` and `subScoreRules.ts`
 
 ### Data Storage
 
 **Storage:**
 - PostgreSQL stores structured assessment data (normalized tables)
-- JSONB columns for flexible response storage (questions, findings, metadata)
+- JSONB columns for flexible response storage (questions, findings with sub-scores, ISO references, assessment confidence, metadata)
+- ISO compliance framework data stored in dedicated tables (compliance_frameworks, framework_versions, framework_controls, interpretive_criteria, dimension_control_mappings) with in-memory caching in ISOControlRetrievalService (5-min TTL)
 - Document uploads stored in S3-compatible object storage
 - Extracted text cached in database for fast context injection
 
@@ -563,10 +612,11 @@ Each dimension scored **0-100** with severity rating based on thresholds:
 - ✅ Audit trail captures all actions including full conversation history
 
 ### Quality & Reliability
-- ✅ Risk scoring is deterministic (same inputs = same scores, always)
+- ✅ Risk scoring is deterministic after reconciliation (ScoringPayloadReconciler corrects Claude's arithmetic; same sub-scores = same dimension totals and composite, always)
 - ✅ Reports are professional quality (ready for executive review without editing)
 - ✅ No data loss (auto-save, transaction safety)
 - ✅ Claude API failures degrade gracefully (show cached scores, retry later)
+- ✅ Rubric version (guardian-v1.1) stored with every result for auditability and reproducibility
 
 ### Validation Approach
 - **Compare outputs:** Run same assessment through Claude.ai Project and Guardian App, compare quality
@@ -591,6 +641,7 @@ Each dimension scored **0-100** with severity rating based on thresholds:
 | 1.8 | 2025-01-04 | Updated | Clarified report generation as interactive web-first with multi-format export (PDF, Word, Excel, email delivery). YAML is import/export only, not primary interface. Assessment is conversational Q&A, not forms. |
 | 1.9 | 2025-01-04 | Updated | system-design.md split into 3 focused documents (architecture-layers.md, implementation-guide.md, deployment-guide.md). Updated related documents section. Added architecture/README.md index. |
 | 1.10 | 2026-01-29 | Updated | Epic 30-32 complete. Added Vision API for image analysis, parallel file upload with background extraction, questionnaire progress streaming. Production MVP status. |
+| 1.11 | 2026-02-26 | Updated | Epic 37-40 complete. Rubric v1.1: all 10 dimensions have sub-score rules and dimension weights per solution type. ScoringPayloadReconciler auto-corrects Claude's arithmetic (normalize -> reconcile -> validate -> store). ScoringService decomposed into 5 focused services. ClaudeClient decomposed into 4 focused clients. ISO compliance domain (ComplianceFramework, FrameworkVersion, FrameworkControl, InterpretiveCriteria, DimensionControlMapping). ExtractionRoutingService with regex fast-path and confidence calculator. Two-tier disqualifying factor system. Multi-format scoring exports (PDF, Word, Excel). ScoringMetricsCollector for cost tracking. |
 
 ---
 
@@ -606,6 +657,9 @@ Each dimension scored **0-100** with severity rating based on thresholds:
 - **Data Design:**
   - `docs/design/data/database-schema.md` - Database schema (6 MVP tables, Phase 2 extensions)
 - **Quick Reference:** `CLAUDE.md` (guardrails for Claude sessions)
+- **Scoring Rubric:** `packages/backend/src/domain/scoring/rubric.ts` (weights, thresholds, disqualifiers)
+- **Sub-Score Rules:** `packages/backend/src/domain/scoring/subScoreRules.ts` (all 10 dimensions)
+- **Reconciler:** `packages/backend/src/domain/scoring/ScoringPayloadReconciler.ts`
 - **System Prompt Reference:** `.claude/documentation/GUARDIAN_Security_Privacy_Analyst_v1_0_COMPLETE.md`
 
 ---

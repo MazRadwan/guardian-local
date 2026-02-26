@@ -1,7 +1,7 @@
 # Guardian Implementation Guide
 
-**Version:** 1.2
-**Last Updated:** 2026-01-29
+**Version:** 1.3
+**Last Updated:** 2026-02-26
 **Status:** Active Development Reference
 
 ---
@@ -50,20 +50,28 @@ guardian-app/
 │   │       ├── application/         # Application Layer
 │   │       │   ├── services/
 │   │       │   │   ├── AssessmentService.ts
-│   │       │   │   ├── AnalysisService.ts
-│   │       │   │   ├── ReportService.ts
 │   │       │   │   ├── ConversationService.ts
+│   │       │   │   ├── QuestionnaireGenerationService.ts
+│   │       │   │   ├── ScoringService.ts            # Orchestrator (delegates to below)
+│   │       │   │   ├── ScoringLLMService.ts         # Claude API calls for scoring
+│   │       │   │   ├── ScoringStorageService.ts     # DB persistence (responses + scores)
+│   │       │   │   ├── ScoringQueryService.ts       # Score retrieval / rehydration
+│   │       │   │   ├── ScoringRetryService.ts       # Retry on structural failures
+│   │       │   │   ├── ScoringMetricsCollector.ts   # Timing, cache hit rate, cost
+│   │       │   │   ├── ScoringExportService.ts      # Export orchestration
 │   │       │   │   ├── PortfolioService.ts
 │   │       │   │   └── AuthService.ts
 │   │       │   ├── interfaces/      # Ports (contracts for infrastructure)
 │   │       │   │   ├── IAssessmentRepository.ts
 │   │       │   │   ├── IQuestionGenerator.ts
-│   │       │   │   ├── IReportGenerator.ts
+│   │       │   │   ├── ILLMClient.ts                # Port for LLM interaction
+│   │       │   │   ├── IPromptBuilder.ts            # Port for prompt construction
 │   │       │   │   ├── IClaudeClient.ts
-│   │       │   │   └── IVisionContentBuilder.ts  # Epic 30: Vision content interface
+│   │       │   │   ├── IScoringService.ts
+│   │       │   │   ├── IScoringDocumentParser.ts
+│   │       │   │   └── IVisionContentBuilder.ts
 │   │       │   └── dtos/            # Data Transfer Objects
 │   │       │       ├── CreateAssessmentDTO.ts
-│   │       │       ├── AnalysisResultDTO.ts
 │   │       │       └── ReportDTO.ts
 │   │       │
 │   │       ├── domain/              # Domain Layer (Business Logic)
@@ -78,12 +86,26 @@ guardian-app/
 │   │       │   │   ├── VendorName.ts
 │   │       │   │   ├── RiskLevel.ts
 │   │       │   │   └── ComplianceStatus.ts
-│   │       │   ├── business-rules/
-│   │       │   │   ├── calculateClinicalRisk.ts
-│   │       │   │   ├── calculatePrivacyRisk.ts
-│   │       │   │   ├── calculateSecurityRisk.ts
-│   │       │   │   ├── [... 7 more risk calculators]
-│   │       │   │   └── calculateCompositeScore.ts
+│   │       │   ├── scoring/          # Rubric v1.1: Scoring domain (Epics 37-40)
+│   │       │   │   ├── rubric.ts                    # Weights, thresholds, disqualifiers
+│   │       │   │   ├── subScoreRules.ts             # Allowed sub-score values per dimension
+│   │       │   │   ├── ScoringPayloadReconciler.ts  # Auto-corrects Claude's arithmetic
+│   │       │   │   ├── ScoringPayloadValidator.ts   # Schema + structural validation
+│   │       │   │   ├── SubScoreValidator.ts         # Sub-score value validation
+│   │       │   │   ├── CompositeScoreValidator.ts   # Weighted average verification
+│   │       │   │   ├── ScoringConfidenceValidator.ts # Confidence field validation
+│   │       │   │   ├── ISOClauseValidator.ts        # ISO reference validation
+│   │       │   │   ├── types.ts                     # ScoringCompletePayload, etc.
+│   │       │   │   ├── errors.ts                    # ScoringError, error codes
+│   │       │   │   └── tools/
+│   │       │   │       └── scoringComplete.ts       # Tool schema for Claude
+│   │       │   ├── compliance/       # ISO Compliance domain (Epic 37)
+│   │       │   │   ├── ComplianceFramework.ts
+│   │       │   │   ├── FrameworkVersion.ts
+│   │       │   │   ├── FrameworkControl.ts
+│   │       │   │   ├── InterpretiveCriteria.ts
+│   │       │   │   ├── DimensionControlMapping.ts
+│   │       │   │   └── types.ts
 │   │       │   └── errors/
 │   │       │       ├── DomainError.ts
 │   │       │       └── ValidationError.ts
@@ -119,37 +141,55 @@ guardian-app/
 │   │       │   │   └── client.ts
 │   │       │   │
 │   │       │   ├── ai/
-│   │       │   │   ├── ClaudeClient.ts           # Anthropic SDK wrapper (LLM + Vision)
-│   │       │   │   ├── VisionContentBuilder.ts   # Epic 30: Image → ImageContentBlock
+│   │       │   │   ├── ClaudeClientBase.ts        # Shared config, retry, stream processing
+│   │       │   │   ├── ClaudeClient.ts            # Legacy facade (delegates to below)
+│   │       │   │   ├── ClaudeStreamClient.ts      # Streaming chat (extends Base)
+│   │       │   │   ├── ClaudeTextClient.ts        # Single-shot text (extends Base)
+│   │       │   │   ├── ClaudeVisionClient.ts      # Document analysis (extends Base)
+│   │       │   │   ├── VisionContentBuilder.ts    # Image → ImageContentBlock
 │   │       │   │   ├── ClaudeQuestionGenerator.ts
 │   │       │   │   ├── ClaudeResponseInterpreter.ts
-│   │       │   │   └── types/                    # Epic 30: Vision API types
+│   │       │   │   └── types/                     # Vision API types
 │   │       │   │       ├── index.ts
-│   │       │   │       ├── vision.ts             # ImageContentBlock, ContentBlock
-│   │       │   │       └── message.ts            # ClaudeApiMessage
+│   │       │   │       ├── vision.ts              # ImageContentBlock, ContentBlock
+│   │       │   │       └── message.ts             # ClaudeApiMessage
 │   │       │   │
 │   │       │   ├── websocket/
 │   │       │   │   ├── ChatServer.ts
 │   │       │   │   ├── StreamingHandler.ts
 │   │       │   │   ├── handlers/                 # Epic 28: Modular handlers
-│   │       │   │   │   ├── ConnectionHandler.ts  # Epic 30: Clears vision cache on disconnect
-│   │       │   │   │   ├── ModeRouter.ts         # Epic 36: Mode config flags (replaces mode strategies)
+│   │       │   │   │   ├── ConnectionHandler.ts  # Clears vision cache on disconnect
+│   │       │   │   │   ├── ModeRouter.ts         # Mode config flags
+│   │       │   │   │   ├── ScoringPostProcessor.ts # Post-scoring operations
 │   │       │   │   │   └── ...
-│   │       │   │   ├── services/                 # Epic 36: Send message pipeline
+│   │       │   │   ├── services/                 # Send message pipeline
 │   │       │   │   │   ├── SendMessageOrchestrator.ts  # 7-step pipeline
 │   │       │   │   │   ├── SendMessageValidator.ts     # Validation + file readiness
 │   │       │   │   │   ├── ClaudeStreamingService.ts   # Claude API streaming + tool loop
 │   │       │   │   │   ├── ConsultToolLoopService.ts   # Web search tool loop (max 3 iterations)
 │   │       │   │   │   ├── TitleUpdateService.ts       # Title generation
 │   │       │   │   │   └── BackgroundEnrichmentService.ts # File enrichment
-│   │       │   │   └── context/                  # Epic 28: Context builders
-│   │       │   │       ├── FileContextBuilder.ts # Epic 30: buildWithImages() returns FileContextResult
+│   │       │   │   └── context/                  # Context builders
+│   │       │   │       ├── FileContextBuilder.ts # buildWithImages() returns FileContextResult
 │   │       │   │       └── ConversationContextBuilder.ts
 │   │       │   │
+│   │       │   ├── extraction/            # Document extraction pipeline (Epic 39)
+│   │       │   │   ├── ExtractionRoutingService.ts      # Routes regex vs Claude extraction
+│   │       │   │   ├── RegexResponseExtractor.ts        # Fast-path regex extraction
+│   │       │   │   ├── ExtractionConfidenceCalculator.ts # 5-check confidence evaluation
+│   │       │   │   ├── TextExtractionService.ts         # Raw text extraction (PDF, DOCX)
+│   │       │   │   ├── TextPreprocessor.ts              # Text normalization
+│   │       │   │   ├── DocxImageDetector.ts             # Image detection in DOCX files
+│   │       │   │   ├── BackgroundExtractor.ts           # Async background extraction
+│   │       │   │   └── DocumentClassifier.ts            # Questionnaire vs document detection
+│   │       │   │
 │   │       │   ├── export/
-│   │       │   │   ├── PDFExporter.ts        # Puppeteer/Playwright
-│   │       │   │   ├── WordExporter.ts       # HTML to .docx
-│   │       │   │   ├── ExcelExporter.ts      # ExcelJS
+│   │       │   │   ├── ScoringPDFExporter.ts    # Scoring report → PDF
+│   │       │   │   ├── ScoringWordExporter.ts   # Scoring report → DOCX
+│   │       │   │   ├── ScoringExcelExporter.ts  # Scoring data → XLSX
+│   │       │   │   ├── PDFExporter.ts           # General PDF export
+│   │       │   │   ├── WordExporter.ts          # General Word export
+│   │       │   │   ├── ExcelExporter.ts         # General Excel export
 │   │       │   │   └── JSONSerializer.ts
 │   │       │   │
 │   │       │   └── external/
@@ -441,34 +481,97 @@ guardian-app/
 
 ---
 
-### Example 3: Analysis Workflow
+### Example 3: Scoring Pipeline (Epics 37-40)
+
+The scoring pipeline follows a strict **normalize -> reconcile -> validate -> store** sequence.
+Claude provides qualitative interpretation (dimension scores, narrative); TypeScript code
+auto-corrects arithmetic and validates the payload before persisting.
 
 ```
-1. User submits completed assessment (Presentation)
+1. User uploads completed questionnaire (Presentation)
    ↓
-2. POST /api/assessments/:id/analyze (Presentation → Infrastructure)
+2. WebSocket triggers ScoringHandler (Presentation → Infrastructure)
    ↓
-3. AnalysisController calls AnalysisService.analyze() (Infrastructure → Application)
+3. ScoringService.score() orchestrates the full pipeline (Application)
    ↓
-4. AnalysisService retrieves assessment (Application → Infrastructure → Domain)
+4. Verify file ownership + retrieve from storage (Application → Infrastructure)
    ↓
-5. For each response, calls ClaudeClient.interpretResponse() (Application → Infrastructure)
+5. Parse document via ExtractionRoutingService (Infrastructure)
+   - Try RegexResponseExtractor (fast path, ~10ms)
+   - ExtractionConfidenceCalculator evaluates 5 checks
+   - If confident → use regex result
+   - If not confident → fall back to Claude-based extraction
    ↓
-6. Claude returns structured risk factors (Infrastructure → Application)
+6. Verify assessment ownership + status (Application → Infrastructure → Domain)
    ↓
-7. AnalysisService calls domain scoring functions (Application → Domain)
-   - calculatePrivacyRisk(factors) → 75/100
-   - calculateSecurityRisk(factors) → 65/100
-   - [... all 10 dimensions]
+7. Store extracted responses to DB (Application → Infrastructure)
    ↓
-8. Domain returns scores (Domain → Application)
+8. Determine solution type for weight selection (Application → Domain)
+   - Maps assessment.solutionType → rubric SolutionType
+   - Selects DIMENSION_WEIGHTS[solutionType] (rubric.ts)
    ↓
-9. AnalysisService saves analysis result (Application → Infrastructure)
+9. Score with Claude via ScoringLLMService (Application → Infrastructure)
+   - Builds system + user prompts via IPromptBuilder port
+   - Streams LLM response via ILLMClient port
+   - Extracts scoring_complete tool payload + narrative
+   - Transport-level retry (2 attempts) for transient failures
    ↓
-10. Returns analysis to controller (Application → Infrastructure → Presentation)
+10. NORMALIZE: ScoringPayloadValidator.normalizePayload() (Domain)
+    - Coerces dimensionScores from object → array if needed
     ↓
-11. Frontend displays risk dashboard (Presentation)
+11. RECONCILE: reconcilePayload() — auto-corrects Claude's arithmetic (Domain)
+    - Step 1: Dimension score = sum of valid sub-scores (subScoreRules.ts)
+    - Step 2: Recommendation from disqualifier tiers (hard_decline vs remediable_blocker)
+    - Step 3: Composite score = recalculated weighted average (DIMENSION_WEIGHTS)
+    - Logs all corrections applied
+    ↓
+12. VALIDATE: ScoringPayloadValidator.validate() (Domain)
+    - Schema validation (10 dimensions, score ranges, enum values)
+    - SubScoreValidator: values in allowed sets per dimension
+    - CompositeScoreValidator: weighted average with risk/capability inversion
+    - ISOClauseValidator: ISO reference format validation
+    - Returns: { valid, errors, warnings, structuralViolations, sanitized }
+    ↓
+13. If structural violations remain → ScoringRetryService retries ONCE (Application)
+    - Builds correction prompt listing specific violations
+    - Re-invokes Claude via ScoringLLMService
+    - Re-validates; if still failing → throws STRUCTURAL_VALIDATION_FAILED
+    ↓
+14. STORE: ScoringStorageService.storeScores() in DB transaction (Application → Infrastructure)
+    - Dimension scores + assessment result written atomically
+    ↓
+15. ScoringPostProcessor handles post-scoring operations (Infrastructure)
+    - Emits scoring_complete event via WebSocket
+    - Persists narrative as assistant message
+    - Links assessment to conversation
+    - Optionally streams follow-up query response
+    ↓
+16. Frontend displays scoring card + risk dashboard (Presentation)
 ```
+
+**Key Design Principle — "Claude interprets, code calculates":**
+
+Claude is responsible for _qualitative interpretation_ — reading vendor responses, applying
+the Guardian rubric, assigning dimension scores, identifying disqualifying factors, and
+writing the narrative report. TypeScript code is responsible for _arithmetic correctness_ —
+ensuring dimension scores equal sub-score sums, recommendations align with disqualifier
+tiers, and composite scores match the weighted average formula.
+
+The `ScoringPayloadReconciler` is the key implementation of this pattern. It runs AFTER
+Claude's response and BEFORE validation, silently correcting any arithmetic errors while
+preserving Claude's qualitative judgments. This eliminates a class of validation failures
+that would otherwise require costly LLM retries.
+
+**ScoringService decomposition (300 LOC limit):**
+
+| Service | Responsibility |
+|---------|---------------|
+| `ScoringService` | Orchestrator — owns the pipeline, delegates to all others |
+| `ScoringLLMService` | Claude API calls — prompt building, streaming, tool extraction |
+| `ScoringStorageService` | DB persistence — responses, scores, document type derivation |
+| `ScoringQueryService` | Read-only queries — score rehydration after page refresh |
+| `ScoringRetryService` | Retry on structural failures — builds correction prompt, re-invokes Claude |
+| `ScoringMetricsCollector` | Timing, cache hit rate, cost calculation from usage data |
 
 ---
 
@@ -560,128 +663,147 @@ guardian-app/
 
 ---
 
-### Example 6: Error Recovery - Claude API Failure
+### Example 6: Scoring Error Recovery
+
+The scoring pipeline has two distinct retry mechanisms:
+
+**1. Transport-level retry (ScoringLLMService)** - for transient network/API failures:
 
 ```
-1. User submits assessment for analysis (Presentation)
+1. User uploads questionnaire for scoring (Presentation)
    ↓
-2. AnalysisService begins Claude interpretation (Application → Infrastructure)
+2. ScoringLLMService.scoreWithClaude() streams from Claude API (Application → Infrastructure)
    ↓
-3. ClaudeClient.interpretResponse() times out after 30 seconds (Infrastructure)
+3. Stream interrupted (ECONNRESET, 529 overloaded, socket hang up)
    ↓
-4. Infrastructure catches timeout error (Infrastructure)
+4. ClaudeClientBase.isTransientError() detects transient failure (Infrastructure)
    ↓
-5. Retry Logic - Attempt 1 (Infrastructure)
+5. Retry Attempt 1 (Application)
    - Wait 2 seconds (exponential backoff)
-   - Retry same Claude API call
+   - Reset all accumulators (narrative, payload, usage)
+   - Full re-stream from Claude (idempotent)
    ↓
-6. If timeout again → Retry Logic - Attempt 2 (Infrastructure)
+6. If transient again → Retry Attempt 2 (Application)
    - Wait 4 seconds
-   - Retry with reduced token limit (faster response)
-   ↓
-7. If timeout again → Retry Logic - Attempt 3 (Infrastructure)
-   - Wait 8 seconds
    - Final attempt
    ↓
-8. All retries failed → Fallback strategy (Infrastructure → Application)
+7. If all retries fail → ScoringError('SCORING_FAILED') propagated
    ↓
-9. AnalysisService checks cache for previous analysis of similar vendor (Application → Infrastructure → Redis)
-   - Cache key: `analysis:vendor:${vendorName}:type:${solutionType}`
+8. ScoringPostProcessor.processFailure() emits scoring_error (Infrastructure)
    ↓
-10. If cached similar analysis exists:
-    - Return cached scores with confidence downgrade (Application)
-    - Add warning: "Using cached analysis. Recent assessment unavailable due to API timeout."
-    ↓
-11. If no cache → Use baseline risk scores (Application → Domain)
-    - Domain returns conservative default scores (all dimensions = 50/100 "Unknown")
-    - Warning: "Unable to complete analysis. API unavailable. Manual review required."
-    ↓
-12. AnalysisService queues assessment for retry (Application → Infrastructure → Database)
-    - Status: "Analysis Failed - Queued for Retry"
-    - Background job will retry when Claude API available
-    ↓
-13. Returns partial result with error context (Application → Infrastructure → Presentation)
-    ↓
-14. Frontend displays:
-    - Warning banner: "Analysis incomplete due to API timeout"
-    - Cached/baseline scores shown with low-confidence indicator
-    - Retry button available
-    - Assessment saved, can be re-analyzed later
+9. Frontend displays error with retry option (Presentation)
+```
+
+**2. Structural retry (ScoringRetryService)** - for rubric compliance failures:
+
+```
+1. Claude returns scoring_complete payload (Application)
+   ↓
+2. Normalize → Reconcile → Validate pipeline runs (Domain)
+   ↓
+3. Validation detects structural violations (Domain)
+   - Sub-score values not in allowed set (e.g., score 17 where only [0,10,20] allowed)
+   ↓
+4. ScoringRetryService.retryWithCorrection() (Application)
+   - Builds correction prompt listing specific violations
+   - Re-invokes Claude via ScoringLLMService
+   ↓
+5. Claude re-scores with violation feedback (Infrastructure)
+   ↓
+6. Re-validates retry response (Domain)
+   ↓
+7. If still failing → ScoringError('STRUCTURAL_VALIDATION_FAILED') (Application)
+   ↓
+8. Frontend displays error (Presentation)
 ```
 
 **Error Handling Strategy:**
-- Retry with exponential backoff (2s, 4s, 8s)
-- Fallback to cached data if available
-- Conservative defaults if no cache
-- Queue for background retry
-- User can manually retry anytime
+- Transport retry: exponential backoff (2s, 4s) for transient network/API failures
+- Structural retry: single retry with correction prompt for rubric violations
+- Abort support: user can cancel scoring at any point via abort controller
+- Rate limiting: 5 scoring attempts per assessment per day
+- Post-failure: file marked as 'failed', error persisted as system message
 
 ---
 
 ## Sequence Diagrams (Mermaid)
 
-### Diagram 1: Complete Analysis Workflow (Complex)
+### Diagram 1: Scoring Pipeline (Epics 37-40)
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant FE as Frontend
     participant WS as WebSocket
-    participant AC as AnalysisController
-    participant AS as AnalysisService
-    participant CC as ClaudeClient
-    participant SE as ScoringEngine
+    participant SS as ScoringService
+    participant ERS as ExtractionRoutingService
+    participant LLM as ScoringLLMService
+    participant REC as ScoringPayloadReconciler
+    participant VAL as ScoringPayloadValidator
+    participant STO as ScoringStorageService
     participant DB as Database
-    participant Cache as Redis
 
-    U->>FE: Clicks "Analyze Assessment"
-    FE->>WS: Send analyze request
-    WS->>AC: POST /api/assessments/:id/analyze
-    AC->>AS: analyzeAssessment(assessmentId)
+    U->>FE: Uploads completed questionnaire
+    FE->>WS: Send file + trigger scoring
+    WS->>SS: score(input, onProgress)
 
-    AS->>DB: Retrieve assessment + responses
-    DB-->>AS: Assessment data
+    Note over SS: 1. Verify file ownership + parse document
 
-    Note over AS,CC: For each of 10 dimensions (parallel)
-
-    par Privacy Dimension
-        AS->>CC: interpretResponse(privacyResponses, rubric)
-        CC->>Claude: API call (interpret privacy)
-        Claude-->>CC: Risk factors (PII handling, DPA, etc.)
-        CC-->>AS: PrivacyFactors
-        AS->>SE: calculatePrivacyScore(factors)
-        SE-->>AS: 75/100 (Critical)
-    and Security Dimension
-        AS->>CC: interpretResponse(securityResponses, rubric)
-        CC->>Claude: API call (interpret security)
-        Claude-->>CC: Risk factors (API key, pentesting, etc.)
-        CC-->>AS: SecurityFactors
-        AS->>SE: calculateSecurityScore(factors)
-        SE-->>AS: 65/100 (High)
-    and [8 more dimensions...]
-        Note over AS,SE: Remaining 8 dimensions processed in parallel
+    SS->>ERS: tryRegexExtraction(rawText, buffer, metadata)
+    alt Regex confident
+        ERS-->>SS: ScoringParseResult (fast path, ~10ms)
+    else Low confidence
+        ERS-->>SS: null (fall through)
+        SS->>LLM: Claude-based extraction (slow path)
+        LLM-->>SS: ScoringParseResult
     end
 
-    AS->>SE: calculateCompositeScore(allScores)
-    SE-->>AS: 58.5/100 (High Risk)
+    SS->>STO: storeResponses(parseResult, assessmentId, batchId, fileId)
+    STO->>DB: Insert extracted responses
+    DB-->>STO: Responses persisted
 
-    AS->>DB: Save analysis result
-    DB-->>AS: Analysis persisted
+    Note over SS,LLM: 2. Score with Claude (single LLM call, all 10 dimensions)
 
-    AS->>Cache: Cache analysis (24hr TTL)
-    Cache-->>AS: Cached
+    SS->>LLM: scoreWithClaude(parseResult, vendor, solutionType)
+    LLM->>Claude: Stream with scoring_complete tool
+    Claude-->>LLM: Narrative report + tool payload (10 dimension scores)
+    LLM-->>SS: { narrativeReport, payload }
 
-    AS-->>AC: AnalysisResult
-    AC->>WS: Stream result
-    WS->>FE: Emit 'analysis:complete' event
+    Note over SS,VAL: 3. Normalize → Reconcile → Validate → Store
+
+    SS->>VAL: normalizePayload(payload)
+    VAL-->>SS: Normalized payload (object → array coercion)
+
+    SS->>REC: reconcilePayload(normalized, solutionType)
+    Note over REC: Auto-correct arithmetic:<br/>1. dim score = sum(sub-scores)<br/>2. recommendation from disqualifier tiers<br/>3. composite = weighted average
+    REC-->>SS: { payload, corrections[] }
+
+    SS->>VAL: validate(reconciled, solutionType)
+    VAL-->>SS: { valid, errors, warnings, structuralViolations, sanitized }
+
+    alt Structural violations remain
+        SS->>LLM: Retry with correction prompt (once)
+        LLM->>Claude: Re-score with violation feedback
+        Claude-->>LLM: Corrected payload
+        LLM-->>SS: Retry result
+        SS->>VAL: Re-validate
+    end
+
+    SS->>STO: storeScores(assessmentId, batchId, sanitized, narrative)
+    STO->>DB: Transaction: dimension scores + assessment result
+    DB-->>STO: Scores persisted
+
+    SS->>WS: scoring_complete event + result data
+    WS->>FE: Emit scoring card + narrative
     FE->>U: Display risk dashboard
 ```
 
 **Key Points:**
-- 10 Claude API calls happen in parallel (faster analysis)
-- Scoring is deterministic (happens in ScoringEngine, no AI)
-- Result cached for 24 hours
-- WebSocket streams progress to frontend in real-time
+- Single Claude call scores all 10 dimensions (not 10 parallel calls)
+- Claude interprets qualitatively; code corrects arithmetic (reconciler)
+- Extraction uses fast regex path when confident, Claude fallback otherwise
+- Scores stored atomically in a DB transaction
+- WebSocket streams progress events throughout the pipeline
 
 ---
 
@@ -1532,6 +1654,270 @@ If WebSocket disconnects during generation:
 
 ---
 
+## Rubric v1.1 Scoring Domain (Epics 37-40)
+
+### Architecture Overview
+
+The scoring domain implements **weighted 10-dimension risk assessment** with sub-score
+granularity and two-tier disqualifying factors. The key design principle is
+**"Claude interprets, code calculates"** -- Claude applies the rubric qualitatively,
+and TypeScript auto-corrects arithmetic via the `ScoringPayloadReconciler`.
+
+### Scoring Pipeline Flow
+
+```
+Upload → Parse → Score (Claude) → Normalize → Reconcile → Validate → Store
+```
+
+Each step in detail:
+
+| Step | Component | Layer | Purpose |
+|------|-----------|-------|---------|
+| **Parse** | ExtractionRoutingService | Infrastructure | Extract responses from uploaded questionnaire |
+| **Score** | ScoringLLMService | Application | Single Claude call scores all 10 dimensions |
+| **Normalize** | ScoringPayloadValidator.normalizePayload() | Domain | Coerce object-keyed dimensions to array |
+| **Reconcile** | reconcilePayload() | Domain | Auto-correct arithmetic (sub-score sums, recommendation, composite) |
+| **Validate** | ScoringPayloadValidator.validate() | Domain | Schema + structural + ISO validation |
+| **Retry** | ScoringRetryService | Application | Single retry with correction prompt on structural violations |
+| **Store** | ScoringStorageService.storeScores() | Application | Atomic DB transaction for scores + result |
+
+### ScoringPayloadReconciler
+
+The reconciler is the primary implementation of the "Claude interprets, code calculates"
+pattern. It runs AFTER normalization and BEFORE validation, ensuring mathematical
+consistency without altering Claude's qualitative judgments.
+
+**Three corrections applied (in order):**
+
+1. **Dimension scores from sub-score sums** -- Each dimension score is set to the sum of
+   its valid sub-scores (from `subScoreRules.ts`). Only sub-scores with names matching
+   the rubric are included.
+
+2. **Recommendation from disqualifier tiers** -- If hard_decline disqualifiers are present,
+   recommendation is forced to `'decline'`. If only remediable_blocker disqualifiers are
+   present, recommendation cannot be `'approve'` (forced to `'conditional'`).
+
+3. **Composite score from weighted average** -- Recalculated using `DIMENSION_WEIGHTS[solutionType]`
+   with risk/capability dimension inversion (capability scores inverted as `100 - score`
+   before weighting).
+
+**Example correction log:**
+```
+[ScoringPayloadReconciler] Applied 2 correction(s):
+  dimensionScores.privacy_risk.score: 73 → 75 (dimension score adjusted to match sub-score sum)
+  compositeScore: 52 → 54 (recalculated weighted average (clinical_ai))
+```
+
+### Rubric Constants (rubric.ts)
+
+**Rubric version:** `guardian-v1.1` (stored with every result for auditability)
+
+**Solution types** determine dimension weighting:
+
+| Solution Type | Highest-Weighted Dimension | Weight |
+|--------------|---------------------------|--------|
+| `clinical_ai` | clinical_risk | 25% |
+| `administrative_ai` | privacy_risk | 20% |
+| `patient_facing` | privacy_risk | 20% |
+
+All 10 dimensions have non-zero weights for all 3 solution types.
+
+**Dimension types** affect composite score calculation:
+
+| Type | Dimensions | Composite Contribution |
+|------|-----------|----------------------|
+| `risk` | clinical_risk, privacy_risk, security_risk | Score used directly (higher = more risk) |
+| `capability` | technical_credibility, vendor_capability, ai_transparency, ethical_considerations, regulatory_compliance, operational_excellence, sustainability | Inverted: `100 - score` (higher capability = lower risk) |
+
+**Disqualifier tiers:**
+
+| Tier | Effect | Examples |
+|------|--------|---------|
+| `hard_decline` | Must recommend `'decline'` | no_encryption_for_phi, no_clinical_validation_for_diagnosis_treatment_ai |
+| `remediable_blocker` | Blocks `'approve'`, allows `'conditional'` | no_penetration_testing_ever_conducted, no_breach_notification_process |
+
+Unknown disqualifier keys are treated as structural violations (must use canonical keys).
+
+### Sub-Score Rules (subScoreRules.ts)
+
+All 10 dimensions have defined sub-score rules in v1.1. Each rule specifies:
+- `name`: The sub-score field name (e.g., `evidence_quality_score`)
+- `maxPoints`: Maximum points for this sub-score
+- `allowedValues`: Array of valid point values (e.g., `[0, 10, 20, 30, 40]`)
+
+Sub-score values not in the allowed set produce **structural violations** (triggers retry).
+Sub-score sum mismatches produce **soft warnings** (auto-corrected by reconciler).
+
+### Validation Layers
+
+The `ScoringPayloadValidator` delegates to specialized validators:
+
+| Validator | Validates | Failure Type |
+|-----------|----------|--------------|
+| Schema validation (inline) | 10 dimensions, score 0-100, enum values | Hard error (rejects payload) |
+| `SubScoreValidator` | Sub-score values in allowed sets | Structural violation (triggers retry) |
+| `CompositeScoreValidator` | Weighted average arithmetic | Soft warning (reconciler auto-corrects) |
+| `ScoringConfidenceValidator` | Confidence fields in findings | Soft warning (logged only) |
+| `ISOClauseValidator` | ISO reference format | Soft warning (logged only) |
+
+---
+
+## Document Extraction Pipeline (Epic 39)
+
+### Architecture Overview
+
+Guardian uses a **two-path extraction strategy** for parsing uploaded questionnaires:
+a fast regex path for Guardian-format documents and a Claude-based fallback for
+everything else.
+
+### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| ExtractionRoutingService | `infrastructure/extraction/` | Routes between regex and Claude extraction |
+| RegexResponseExtractor | `infrastructure/extraction/` | Fast-path regex extraction (~10ms) |
+| ExtractionConfidenceCalculator | `infrastructure/extraction/` | 5-check confidence evaluation |
+| TextExtractionService | `infrastructure/extraction/` | Raw text extraction (PDF, DOCX) |
+| TextPreprocessor | `infrastructure/extraction/` | Text normalization before extraction |
+| DocxImageDetector | `infrastructure/extraction/` | Detects image-only responses in DOCX |
+| DocumentClassifier | `infrastructure/extraction/` | Classifies questionnaire vs general document |
+
+### Extraction Flow
+
+```
+Upload → Text Extraction → Regex Extraction → Confidence Check → Route
+                                                    ↓
+                                    Confident? ─── YES → Use regex result
+                                                    ↓
+                                                   NO  → Claude fallback
+```
+
+### Confidence Evaluation (5 Checks)
+
+All 5 checks must pass for regex extraction to be used:
+
+| Check | Validates | Failure Behavior |
+|-------|----------|-----------------|
+| `assessmentId` | Valid UUID, matches expected ID | Fall through to Claude |
+| `duplicates` | No duplicate question markers | Fall through to Claude |
+| `responseFillRate` | >= 70% of responses have text or visual content | Fall through to Claude |
+| `countRatio` | Parsed count / DB expected count >= 0.9 | Fall through to Claude |
+| `dbKeyMapping` | All parsed keys match DB questions | Fall through to Claude |
+
+**Feature flag:** `ENABLE_REGEX_EXTRACTION=false` disables the regex path entirely.
+
+---
+
+## ClaudeClient Decomposition (Epic 39)
+
+### Architecture Overview
+
+The monolithic `ClaudeClient` was split into focused modules to respect the 300 LOC
+limit and improve testability:
+
+| Module | Location | Responsibility |
+|--------|----------|---------------|
+| `ClaudeClientBase` | `infrastructure/ai/` | Shared config, Anthropic SDK init, retry logic, stream processing, `toApiMessages()` |
+| `ClaudeStreamClient` | `infrastructure/ai/` | Streaming chat responses (extends Base) |
+| `ClaudeTextClient` | `infrastructure/ai/` | Single-shot text responses (extends Base) |
+| `ClaudeVisionClient` | `infrastructure/ai/` | Document analysis with Vision API (extends Base) |
+| `ClaudeClient` | `infrastructure/ai/` | Legacy facade for backward compatibility |
+
+**Shared via ClaudeClientBase:**
+- Anthropic SDK initialization (API key, model configuration)
+- Exponential backoff retry logic (2s, 4s, 8s delays)
+- `isTransientError()` detection (ECONNRESET, 529, socket hang up, etc.)
+- `processStreamEvents()` for tool use extraction from streams
+- `toApiMessages()` for domain → API message conversion with image blocks
+
+---
+
+## Scoring Exports (Epic 39)
+
+### Architecture Overview
+
+Scoring results can be exported in multiple formats via a dedicated export pipeline.
+
+### Key Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| ScoringExportController | `infrastructure/http/controllers/` | REST endpoints for export |
+| ScoringExportService | `application/services/` | Export orchestration |
+| ScoringPDFExporter | `infrastructure/export/` | Scoring report to PDF |
+| ScoringWordExporter | `infrastructure/export/` | Scoring report to DOCX |
+| ScoringExcelExporter | `infrastructure/export/` | Scoring data to XLSX |
+
+### Export Flow
+
+```
+GET /api/scoring/:assessmentId/export/:format
+    ↓
+ScoringExportController validates request
+    ↓
+ScoringExportService retrieves scoring data
+    ↓
+Routes to format-specific exporter:
+    ├── ScoringPDFExporter → PDF file
+    ├── ScoringWordExporter → DOCX file
+    └── ScoringExcelExporter → XLSX file
+    ↓
+File returned as download
+```
+
+---
+
+## ISO Compliance Domain (Epic 37)
+
+### Architecture Overview
+
+The compliance domain models ISO/regulatory framework data used to enrich scoring prompts.
+
+### Domain Entities
+
+| Entity | Location | Purpose |
+|--------|----------|---------|
+| ComplianceFramework | `domain/compliance/` | Top-level framework (e.g., ISO 27001) |
+| FrameworkVersion | `domain/compliance/` | Versioned release of a framework |
+| FrameworkControl | `domain/compliance/` | Individual control within a framework |
+| InterpretiveCriteria | `domain/compliance/` | Healthcare-specific interpretation of controls |
+| DimensionControlMapping | `domain/compliance/` | Maps controls to Guardian risk dimensions |
+
+### Integration with Scoring
+
+ISO controls are injected into scoring prompts via `IPromptBuilder`:
+1. `ScoringService` fetches ISO catalog via `ScoringLLMService.fetchISOCatalog()`
+2. `ScoringLLMService` proxies to `IPromptBuilder.fetchISOCatalog()`
+3. Controls included in user prompt alongside vendor responses
+4. Claude references ISO controls in narrative and findings
+5. `ISOClauseValidator` validates clause format in scoring output (soft warnings)
+
+---
+
+## ScoringPostProcessor (Epic 39)
+
+### Architecture Overview
+
+Extracted from the `ScoringHandler` to keep WebSocket handlers thin. Handles all
+post-scoring operations after the scoring pipeline completes.
+
+### Responsibilities
+
+**On success (`processSuccess`):**
+1. Build result data with batchId + assessmentId (required for frontend)
+2. Emit `scoring_complete` event via WebSocket
+3. Mark file as `'completed'`
+4. Persist narrative report as assistant message
+5. Link assessment to conversation (non-fatal on failure)
+6. Optionally stream follow-up query response (Epic 18.4.3)
+
+**On failure (`processFailure`):**
+1. Mark file as `'failed'`
+2. Emit `scoring_error` event with error code
+3. Persist error as system message
+
+---
+
 ## Document History
 
 | Version | Date | Changes |
@@ -1539,6 +1925,7 @@ If WebSocket disconnects during generation:
 | 1.0 | 2025-01-04 | Extracted from system-design.md v1.5 - Contains folder structure, tech stack, data flows, sequence diagrams, state machines, transaction boundaries, caching, testing strategies, and report formats |
 | 1.1 | 2026-01-26 | Epic 30: Enhanced Vision & Image Handling section with new types, ClaudeClient integration, cache cleanup, and frontend size limits |
 | 1.2 | 2026-01-29 | Epic 31-32: Added Parallel File Upload section (background extraction) and Questionnaire Progress Streaming section |
+| 1.3 | 2026-02-26 | Epics 37-40: Major update — Rubric v1.1 scoring domain, ScoringPayloadReconciler, scoring pipeline flow (normalize/reconcile/validate/store), ScoringService decomposition, ClaudeClient decomposition, extraction pipeline, ISO compliance domain, scoring exports, updated sequence diagrams and data flows |
 
 ---
 

@@ -55,25 +55,64 @@ package "Services" {
         -assessmentService: AssessmentService
         -vendorService: VendorService
         +checkReadiness(conversationId): ReadinessResult
-        +getVendorContext(): VendorContext
     }
 
-    class ScoringService {
-        -claudeClient: IClaudeClient
-        -validator: ScoringPayloadValidator
-        -resultRepo: IAssessmentResultRepository
-        -dimensionRepo: IDimensionScoreRepository
-        +scoreAssessment(assessmentId): ScoringResult
-        +streamProgress(callback): void
-        +persistResults(result): void
+    package "Scoring Services (Epic 39)" {
+        class ScoringService {
+            <<orchestrator>>
+            -llmService: ScoringLLMService
+            -storageService: ScoringStorageService
+            -queryService: ScoringQueryService
+            -retryService: ScoringRetryService
+            +scoreAssessment(input): ScoringOutput
+            +rehydrate(assessmentId): ScoringResult
+        }
+
+        class ScoringLLMService {
+            -claudeClient: IClaudeClient
+            -promptBuilder: ScoringPromptBuilder
+            +streamScoring(input): ScoringPayload
+        }
+
+        class ScoringStorageService {
+            -resultRepo: IAssessmentResultRepository
+            -dimensionRepo: IDimensionScoreRepository
+            -responseRepo: IResponseRepository
+            +persistResults(result): void
+        }
+
+        class ScoringQueryService {
+            -resultRepo: IAssessmentResultRepository
+            -dimensionRepo: IDimensionScoreRepository
+            +rehydrate(assessmentId): ScoringResult
+        }
+
+        class ScoringRetryService {
+            +retryWithBackoff(fn): Result
+        }
+
+        class ScoringMetricsCollector {
+            +startTimer(): Timer
+            +recordMetric(name, value): void
+        }
     }
 
     class ScoringExportService {
         -scoringService: ScoringService
         -pdfExporter: ScoringPDFExporter
         -wordExporter: ScoringWordExporter
+        -excelExporter: ScoringExcelExporter
         +exportToPDF(assessmentId): Buffer
         +exportToWord(assessmentId): Buffer
+        +exportToExcel(assessmentId): Buffer
+    }
+
+    class ISOControlRetrievalService {
+        -frameworkRepo: IComplianceFrameworkRepository
+        -controlRepo: IFrameworkControlRepository
+        -mappingRepo: IDimensionControlMappingRepository
+        -criteriaRepo: IInterpretiveCriteriaRepository
+        +getControlsForDimension(dim): ISOControlForPrompt[]
     }
 
     class ExportService {
@@ -87,114 +126,44 @@ package "Services" {
 
     class FileValidationService {
         +validateFile(file): ValidationResult
-        +getAllowedTypes(): string[]
-        +getMaxSize(): number
     }
 
-    class OrphanCleanupService {
-        -responseRepo: IResponseRepository
-        +cleanupOrphanedResponses(cutoff): number
-        +scheduleCleanup(): void
+    class WebSearchToolService {
+        -jinaClient: IJinaClient
+        +search(query): SearchResult
+        +read(url): string
     }
 
     class TitleGenerationService {
         -claudeClient: IClaudeClient
         +generateTitle(messages): string
-        +shouldUpdateTitle(conversation): boolean
     }
 }
 
 package "DTOs" {
-    class CreateUserDTO {
-        +email: string
-        +name: string
-        +password: string
-    }
-
-    class CreateAssessmentDTO {
-        +vendorId: string
-        +assessmentType: string
-        +solutionName: string
-    }
-
-    class CreateConversationDTO {
-        +userId: string
-        +mode: ConversationMode
-        +assessmentId?: string
-    }
-
-    class SendMessageDTO {
-        +conversationId: string
-        +content: string
-        +attachments?: FileAttachment[]
-    }
-
-    class ScoringResultDTO {
-        +compositeScore: number
-        +recommendation: Recommendation
-        +overallRiskRating: RiskRating
-        +dimensionScores: DimensionScoreDTO[]
-    }
+    class CreateUserDTO
+    class CreateAssessmentDTO
+    class CreateConversationDTO
+    class SendMessageDTO
+    class ScoringResultDTO
 }
 
 package "Interfaces (Ports)" {
-    interface IUserRepository {
-        +findById(id): User
-        +findByEmail(email): User
-        +save(user): User
-    }
-
-    interface IConversationRepository {
-        +findById(id): Conversation
-        +findByUserId(userId): Conversation[]
-        +save(conversation): Conversation
-        +updateTitle(id, title, manual): void
-    }
-
-    interface IAssessmentRepository {
-        +findById(id): Assessment
-        +findByVendorId(vendorId): Assessment[]
-        +save(assessment): Assessment
-    }
-
-    interface IResponseRepository {
-        +findByAssessmentId(id): Response[]
-        +saveBatch(responses): void
-        +deleteOrphans(cutoff): number
-    }
-
-    interface IDimensionScoreRepository {
-        +findByAssessmentId(id): DimensionScore[]
-        +saveBatch(scores): void
-    }
-
-    interface IAssessmentResultRepository {
-        +findByAssessmentId(id): AssessmentResult
-        +save(result): AssessmentResult
-        +claimNarrativeGeneration(id): boolean
-    }
-
-    interface IClaudeClient {
-        +chat(messages): Response
-        +streamChat(messages, callback): void
-        +streamMessage(messages, options, imageBlocks?): AsyncGenerator
-        +useTools(messages, tools): ToolResult
-    }
-
-    interface IVisionContentBuilder {
-        +buildImageContent(file, conversationId?): ImageContentBlock
-        +isImageFile(mimeType): boolean
-        +clearConversationCache(conversationId): void
-    }
-
-    interface ITokenProvider {
-        +sign(payload): string
-        +verify(token): TokenPayload
-    }
-
-    interface IPDFExporter {
-        +generate(data): Buffer
-    }
+    interface IUserRepository
+    interface IConversationRepository
+    interface IAssessmentRepository
+    interface IResponseRepository
+    interface IDimensionScoreRepository
+    interface IAssessmentResultRepository
+    interface IComplianceFrameworkRepository
+    interface IFrameworkControlRepository
+    interface IDimensionControlMappingRepository
+    interface IInterpretiveCriteriaRepository
+    interface IClaudeClient
+    interface IVisionContentBuilder
+    interface ITokenProvider
+    interface IPDFExporter
+    interface IJinaClient
 }
 
 ' Service dependencies on interfaces
@@ -204,12 +173,22 @@ ConversationService --> IConversationRepository
 ConversationService --> IClaudeClient
 AssessmentService --> IAssessmentRepository
 ScoringService --> IClaudeClient
-ScoringService --> IAssessmentResultRepository
-ScoringService --> IDimensionScoreRepository
+ScoringLLMService --> IClaudeClient
+ScoringStorageService --> IAssessmentResultRepository
+ScoringStorageService --> IDimensionScoreRepository
+ScoringStorageService --> IResponseRepository
+ScoringQueryService --> IAssessmentResultRepository
+ScoringQueryService --> IDimensionScoreRepository
 QuestionnaireGenerationService --> IClaudeClient
 ExportService --> IPDFExporter
-OrphanCleanupService --> IResponseRepository
+WebSearchToolService --> IJinaClient
 TitleGenerationService --> IClaudeClient
+
+' ISO service dependencies
+ISOControlRetrievalService --> IComplianceFrameworkRepository
+ISOControlRetrievalService --> IFrameworkControlRepository
+ISOControlRetrievalService --> IDimensionControlMappingRepository
+ISOControlRetrievalService --> IInterpretiveCriteriaRepository
 
 ' Services use DTOs
 AuthService ..> CreateUserDTO : uses
@@ -224,6 +203,10 @@ QuestionnaireGenerationService --> AssessmentService : uses
 QuestionnaireReadyService --> AssessmentService : uses
 QuestionnaireReadyService --> VendorService : uses
 ScoringService --> AssessmentService : uses
+ScoringService --> ScoringLLMService : delegates
+ScoringService --> ScoringStorageService : delegates
+ScoringService --> ScoringQueryService : delegates
+ScoringService --> ScoringRetryService : delegates
 ScoringExportService --> ScoringService : uses
 ConversationService --> TitleGenerationService : uses
 

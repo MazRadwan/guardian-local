@@ -1,7 +1,7 @@
 # Guardian Architecture - Layers & Modules
 
-**Version:** 1.2
-**Last Updated:** 2026-01-26
+**Version:** 1.3
+**Last Updated:** 2026-02-26
 **Architecture Pattern:** Lightweight Clean Architecture
 **Status:** Stable (foundational patterns); Module inventory updated to reflect implementation status
 
@@ -223,10 +223,13 @@ export function calculateSecurityScore(factors: SecurityFactors): number {
 **Technology:** Express, Drizzle ORM, Anthropic SDK (including Vision API), WebSocket libraries
 
 **Key Components:**
-- **ClaudeClient** - Wraps Anthropic SDK with retry logic, streaming, Vision API support
+- **ClaudeClient** - Facade wrapping ClaudeStreamClient, ClaudeTextClient, ClaudeVisionClient (all extend ClaudeClientBase)
 - **VisionContentBuilder** (Epic 30) - Converts image files to `ImageContentBlock` for Vision API
 - **FileContextBuilder** (Epic 30) - Builds text + image context for Claude via `buildWithImages()`
 - **DocumentParserService** - Extracts text from PDF/DOCX, uses Vision for images
+- **ScoringPromptBuilder** (Epic 37/38) - Assembles scoring prompts with ISO 27001 control references
+- **ExtractionRoutingService** (Epic 39) - Routes between regex fast-path and Claude extraction
+- **RegexResponseExtractor** (Epic 39) - Fast regex-based extraction for well-structured questionnaires
 
 **Example Repository Implementation:**
 ```typescript
@@ -293,10 +296,10 @@ Guardian is organized into **7 planned modules** plus shared infrastructure.
 | Module | Status | Notes |
 |--------|--------|-------|
 | Assessment | **Implemented** | Intake, questionnaire generation, export |
-| Conversation | **Implemented** | Chat, WebSocket, message streaming |
+| Conversation | **Implemented** | Chat, WebSocket, message streaming, web search |
 | Auth | **Implemented** | JWT auth, user management |
-| Export | **Implemented** | PDF/Word/Excel questionnaire export |
-| Analysis | **Epic 15** | Scoring, risk analysis - in planning |
+| Export | **Implemented** | PDF/Word/Excel questionnaire + scoring export (with ISO enrichment) |
+| Analysis | **Implemented** | Rubric v1.1 scoring, 10-dimension weighted analysis, ISO compliance, reconciliation |
 | Reporting | **Future** | Web view reports, dashboards |
 | Portfolio | **Future** | Vendor comparison, trends |
 
@@ -330,14 +333,16 @@ interface IAssessmentModule {
 
 ### Module 2: Analysis Module
 
-> **Status:** Planned for Epic 15 (Questionnaire Scoring & Analysis)
+> **Status:** Implemented (Epics 15, 20, 37-40)
 
-**Will Own:**
-- Risk scoring algorithms (10 dimensions)
-- Claude interpretation orchestration
-- Compliance framework evaluation (PIPEDA, ATIPP, NIST)
-- Gap analysis
-- Recommendation generation (Approve/Conditional/Decline)
+**Owns:**
+- Risk scoring algorithms (10 dimensions with weighted scoring per solution type)
+- Claude interpretation orchestration (ScoringLLMService)
+- Payload reconciliation (ScoringPayloadReconciler auto-corrects Claude arithmetic)
+- Sub-score validation (SubScoreValidator, CompositeScoreValidator)
+- ISO 27001 compliance evaluation (ISOControlRetrievalService)
+- Two-tier disqualifying factor system (hard_decline, remediable_blocker)
+- Recommendation generation (Approve/Conditional/Decline/More Info)
 
 **Public Interface:**
 ```typescript
@@ -701,6 +706,7 @@ useEffect(() => {
 | 1.0 | 2025-01-04 | Extracted from system-design.md v1.5 - Contains architecture overview, layer responsibilities, 7 module boundaries, dependency rules, and key design patterns |
 | 1.1 | 2025-12-22 | Added implementation status to modules (Assessment, Conversation, Auth, Export = implemented; Analysis = Epic 15; Reporting, Portfolio = future). Clarified this doc describes patterns/principles, C4 diagrams show actual implementation. |
 | 1.2 | 2026-01-26 | Epic 30: Added Vision API key components to Infrastructure Layer (VisionContentBuilder, FileContextBuilder, ClaudeClient Vision support). |
+| 1.3 | 2026-02-26 | Epic 37-40: Updated Analysis module status to Implemented. Added ISO compliance key components, ClaudeClient decomposition, extraction pipeline components. |
 
 ---
 

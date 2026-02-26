@@ -154,10 +154,77 @@ TABLE(dimension_scores) {
     score : integer
     risk_rating : text
     findings : jsonb
+    iso_clause_refs : jsonb
+    confidence_level : varchar
     created_at : timestamp
 }
 
-' Relationships
+' === ISO Compliance Tables (Epic 37) ===
+
+TABLE(compliance_frameworks) {
+    PK(id) : uuid <<PK>>
+    --
+    name : text
+    description : text
+    status : text
+    created_at : timestamp
+}
+
+TABLE(framework_versions) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(framework_id) : uuid <<FK>>
+    version : text
+    effective_date : date
+    is_current : boolean
+    created_at : timestamp
+}
+
+TABLE(framework_controls) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(version_id) : uuid <<FK>>
+    control_id : text
+    title : text
+    description : text
+    parent_control_id : text
+    created_at : timestamp
+}
+
+TABLE(interpretive_criteria) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(control_id) : uuid <<FK>>
+    interpretation : text
+    healthcare_context : text
+    review_status : text
+    created_at : timestamp
+    updated_at : timestamp
+}
+
+TABLE(dimension_control_mappings) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(control_id) : uuid <<FK>>
+    dimension : text
+    relevance_weight : real
+    rationale : text
+    created_at : timestamp
+}
+
+TABLE(assessment_compliance_results) {
+    PK(id) : uuid <<PK>>
+    --
+    FK(assessment_id) : uuid <<FK>>
+    FK(control_id) : uuid <<FK>>
+    batch_id : uuid
+    compliance_level : text
+    confidence : text
+    evidence_summary : text
+    created_at : timestamp
+}
+
+' Relationships - Core
 users ||--o{ conversations : "creates"
 users ||--o{ assessments : "creates"
 users ||--o{ files : "uploads"
@@ -169,10 +236,18 @@ assessments ||--o{ questions : "contains"
 assessments ||--o{ responses : "has"
 assessments ||--o{ assessment_results : "has"
 assessments ||--o{ dimension_scores : "has"
+assessments ||--o{ assessment_compliance_results : "has"
 
 conversations ||--o{ messages : "contains"
 conversations ||--o{ files : "has"
 
 files ||--o{ responses : "source for"
+
+' Relationships - ISO Compliance
+compliance_frameworks ||--o{ framework_versions : "has"
+framework_versions ||--o{ framework_controls : "contains"
+framework_controls ||--o{ interpretive_criteria : "interpreted by"
+framework_controls ||--o{ dimension_control_mappings : "mapped to"
+framework_controls ||--o{ assessment_compliance_results : "evaluated in"
 
 @enduml

@@ -2,18 +2,19 @@
 # Maps diagram nodes to actual code paths for validation
 # Used by diagram-updater-agent
 #
-# VALIDATED: 2026-01-27 - Paths verified against actual codebase
-# UPDATED: 2026-01-27 - Added Epic 31 Async Extraction (BackgroundExtractor, TextExtractionService)
-# UPDATED: 2026-01-26 - Added Epic 30 Vision API support (VisionContentBuilder, updated FileContextBuilder)
+# VALIDATED: 2026-02-26 - Paths verified against actual codebase
+# UPDATED: 2026-02-26 - Epic 37/38/39/40: ISO compliance domain + tables + repos,
+#   ScoringService decomposition (ScoringLLMService, ScoringStorageService,
+#   ScoringQueryService, ScoringRetryService, ScoringMetricsCollector),
+#   ScoringPayloadReconciler, SubScoreValidator, CompositeScoreValidator,
+#   subScoreRules, Rubric v1.1, ClaudeClient decomposition (Base/Stream/Text/Vision),
+#   Extraction pipeline (ExtractionRoutingService, RegexResponseExtractor,
+#   ExtractionConfidenceCalculator), ScoringPostProcessor, ScoringExcelExporter,
+#   ISO tables (6), ISO repos (4), ISOControlRetrievalService
 # UPDATED: 2026-02-09 - Epic 33/34/35/36: MessageHandler decomposition, web search, tool loop, title extraction
-#   - REMOVED: MessageHandler (replaced by SendMessageOrchestrator pipeline)
-#   - REMOVED: AssessmentModeStrategy, ConsultModeStrategy, ScoringModeStrategy (dead code)
-#   - ADDED: SendMessageOrchestrator, SendMessageValidator, ClaudeStreamingService,
-#            ConsultToolLoopService, TitleUpdateService, BackgroundEnrichmentService,
-#            ModeRouter, WebSearchToolService, JinaClient, JinaAPI
 
 diagram: architecture-latest.mmd
-last_verified: "2026-02-09"
+last_verified: "2026-02-26"
 
 # Subgraph to directory mappings
 subgraphs:
@@ -232,13 +233,13 @@ nodes:
     paths: ["packages/backend/src/infrastructure/http/routes/"]
     validation_strategy: directory
     status: EXISTS
-    note: "Multiple route files: auth, assessment, vendor, export, etc."
+    note: "Multiple route files: auth, assessment, vendor, export, scoring.export, etc."
 
   Controllers:
     paths: ["packages/backend/src/infrastructure/http/controllers/"]
     validation_strategy: directory
     status: EXISTS
-    note: "AuthController, AssessmentController, VendorController, ExportController, DocumentUploadController (Epic 31: uses BackgroundExtractor for async extraction)"
+    note: "AuthController, AssessmentController, VendorController, ExportController, DocumentUploadController, ScoringExportController"
 
   # === Backend Layer - WebSocket Handlers (Epic 28) ===
   ConnectionHandler:
@@ -246,42 +247,47 @@ nodes:
     exports: ["ConnectionHandler", "ConnectionResult", "ConnectionReadyPayload"]
     validation_strategy: export
     status: EXISTS
-    note: "Handles socket connection, authentication, and connection_ready events. Epic 30: Clears VisionContentBuilder cache on disconnect"
+    note: "Epic 30: Clears VisionContentBuilder cache on disconnect"
 
   ConversationHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ConversationHandler.ts"]
     exports: ["ConversationHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Handles conversation CRUD: create, list, delete, title generation"
 
   ModeSwitchHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeSwitchHandler.ts"]
     exports: ["ModeSwitchHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Handles mode switching between consult, assessment, scoring"
 
   QuestionnaireHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts"]
     exports: ["QuestionnaireHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Questionnaire generation, export status, export_ready events. Only remaining StreamingHandler consumer."
+    note: "Only remaining StreamingHandler consumer."
 
   ScoringHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ScoringHandler.ts"]
     exports: ["ScoringHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Scoring workflow, vendor clarifications, scoring progress. No longer uses StreamingHandler."
+    note: "Epic 39: Delegates post-processing to ScoringPostProcessor. Uses ExtractionRoutingService for regex vs Claude extraction routing."
+
+  ScoringPostProcessor:
+    paths: ["packages/backend/src/infrastructure/websocket/handlers/ScoringPostProcessor.ts"]
+    exports: ["ScoringPostProcessor"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Extracted from ScoringHandler. Handles narrative generation, title update, and export-ready notification after scoring completes."
 
   ModeRouter:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeRouter.ts"]
     exports: ["getModeConfig", "ModeConfig"]
     validation_strategy: export
     status: EXISTS
-    note: "Pure function module replacing mode strategy pattern. Returns config flags (enableTools, backgroundEnrich, bypassClaude) per mode."
+    note: "Pure function module. Returns config flags (enableTools, backgroundEnrich, bypassClaude) per mode."
 
   # === Backend Layer - Send Message Pipeline (Epic 36) ===
   SendMessageOrchestrator:
@@ -289,42 +295,36 @@ nodes:
     exports: ["SendMessageOrchestrator", "SendMessageOrchestratorDeps"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 36: Replaces MessageHandler. 7-step pipeline: validate, save, context, scoring bypass, file context, stream, post-stream."
 
   SendMessageValidator:
     paths: ["packages/backend/src/infrastructure/websocket/services/SendMessageValidator.ts"]
     exports: ["SendMessageValidator"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 36: Extracted validation from MessageHandler. Validates payload, conversation, file readiness."
 
   ClaudeStreamingService:
     paths: ["packages/backend/src/infrastructure/websocket/services/ClaudeStreamingService.ts"]
     exports: ["ClaudeStreamingService"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 36: Extracted streaming from MessageHandler. Claude API streaming with abort handling, tool loop delegation."
 
   ConsultToolLoopService:
     paths: ["packages/backend/src/infrastructure/websocket/services/ConsultToolLoopService.ts"]
     exports: ["ConsultToolLoopService"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 34: Tool loop execution for consult mode web search. Max 3 iterations, graceful degradation."
 
   TitleUpdateService:
     paths: ["packages/backend/src/infrastructure/websocket/services/TitleUpdateService.ts"]
     exports: ["TitleUpdateService"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 35: Title generation for consult/assessment modes, scoring title updates. Fire-and-forget."
 
   BackgroundEnrichmentService:
     paths: ["packages/backend/src/infrastructure/websocket/services/BackgroundEnrichmentService.ts"]
     exports: ["BackgroundEnrichmentService"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 36: File enrichment for assessment mode. Fire-and-forget after Claude response."
 
   # === Backend Layer - Context Builders (Epic 28) ===
   ConversationContextBuilder:
@@ -332,14 +332,13 @@ nodes:
     exports: ["ConversationContextBuilder"]
     validation_strategy: export
     status: EXISTS
-    note: "Builds conversation context for Claude API calls"
 
   FileContextBuilder:
     paths: ["packages/backend/src/infrastructure/websocket/context/FileContextBuilder.ts"]
     exports: ["FileContextBuilder", "FileContextResult", "FileContextOptions"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 30: Now has buildWithImages() returning FileContextResult with imageBlocks for Vision API"
+    note: "Epic 30: buildWithImages() returns FileContextResult with imageBlocks for Vision API"
 
   # === Backend Layer - Utilities (Epic 28) ===
   StreamingHandler:
@@ -347,29 +346,47 @@ nodes:
     exports: ["StreamingHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Simulated streaming for markdown content. Only used by QuestionnaireHandler (not MessageHandler or ScoringHandler since Epic 36)."
+    note: "Only used by QuestionnaireHandler."
 
   ToolUseRegistry:
     paths: ["packages/backend/src/infrastructure/websocket/ToolUseRegistry.ts"]
     exports: ["ToolUseRegistry"]
     validation_strategy: export
     status: EXISTS
-    note: "Strategy pattern registry for tool handlers. Dispatches to WebSearchToolService (Epic 33) and QuestionnaireReadyService."
 
-  # === Backend Layer - Extraction Infrastructure (Epic 31) ===
+  # === Backend Layer - Extraction Infrastructure (Epic 31/39) ===
   BackgroundExtractor:
     paths: ["packages/backend/src/infrastructure/extraction/BackgroundExtractor.ts"]
     exports: ["BackgroundExtractor"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 31: Fire-and-forget async text extraction service. Decouples upload from extraction for parallel performance."
 
   TextExtractionService:
     paths: ["packages/backend/src/infrastructure/extraction/TextExtractionService.ts"]
     exports: ["TextExtractionService"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 18/31: Fast text extraction from PDF/DOCX/images. Used by BackgroundExtractor for async extraction."
+
+  ExtractionRoutingService:
+    paths: ["packages/backend/src/infrastructure/extraction/ExtractionRoutingService.ts"]
+    exports: ["ExtractionRoutingService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Routes between regex fast-path and Claude extraction based on document structure confidence."
+
+  RegexResponseExtractor:
+    paths: ["packages/backend/src/infrastructure/extraction/RegexResponseExtractor.ts"]
+    exports: ["RegexResponseExtractor"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Fast regex-based extraction pipeline for well-structured questionnaires. Falls back to Claude for low-confidence extractions."
+
+  ExtractionConfidenceCalculator:
+    paths: ["packages/backend/src/infrastructure/extraction/ExtractionConfidenceCalculator.ts"]
+    exports: ["ExtractionConfidenceCalculator"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Calculates extraction confidence scores to determine regex vs Claude routing."
 
   # === Services Layer ===
   AuthService:
@@ -425,6 +442,42 @@ nodes:
     exports: ["ScoringService"]
     validation_strategy: export
     status: EXISTS
+    note: "Epic 39: Now an orchestrator delegating to ScoringLLMService, ScoringStorageService, ScoringQueryService, ScoringRetryService. Epic 40: Uses ScoringPayloadReconciler before validation."
+
+  ScoringLLMService:
+    paths: ["packages/backend/src/application/services/ScoringLLMService.ts"]
+    exports: ["ScoringLLMService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Extracted from ScoringService. Handles Claude streaming, tool-use scoring, prompt caching."
+
+  ScoringStorageService:
+    paths: ["packages/backend/src/application/services/ScoringStorageService.ts"]
+    exports: ["ScoringStorageService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Extracted from ScoringService. Persists dimension scores, assessment results, responses."
+
+  ScoringQueryService:
+    paths: ["packages/backend/src/application/services/ScoringQueryService.ts"]
+    exports: ["ScoringQueryService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Extracted from ScoringService. Handles rehydration and lookup queries."
+
+  ScoringRetryService:
+    paths: ["packages/backend/src/application/services/ScoringRetryService.ts"]
+    exports: ["ScoringRetryService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Fail-closed retry logic for transient Claude API failures."
+
+  ScoringMetricsCollector:
+    paths: ["packages/backend/src/application/services/ScoringMetricsCollector.ts"]
+    exports: ["ScoringMetricsCollector"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Timing and diagnostic metrics for scoring pipeline."
 
   ScoringExportService:
     paths: ["packages/backend/src/application/services/ScoringExportService.ts"]
@@ -432,14 +485,20 @@ nodes:
     validation_strategy: export
     status: EXISTS
 
+  ISOControlRetrievalService:
+    paths: ["packages/backend/src/application/services/ISOControlRetrievalService.ts"]
+    exports: ["ISOControlRetrievalService"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 37: Retrieves ISO 27001 controls, interpretive criteria, and dimension mappings for scoring prompt injection."
+
   WebSearchToolService:
     paths: ["packages/backend/src/application/services/WebSearchToolService.ts"]
     exports: ["WebSearchToolService"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 33: Handles web_search tool calls. Validates input, searches via Jina, reads top URLs, formats for Claude. Fail-soft behavior."
 
-  # === Domain Layer ===
+  # === Domain Layer - Entities ===
   User:
     paths: ["packages/backend/src/domain/entities/User.ts"]
     exports: ["User"]
@@ -476,13 +535,116 @@ nodes:
     validation_strategy: export
     status: EXISTS
 
+  # === Domain Layer - Scoring (Epic 39/40) ===
+  ScoringPayloadValidator:
+    paths: ["packages/backend/src/domain/scoring/ScoringPayloadValidator.ts"]
+    exports: ["ScoringPayloadValidator", "ValidationResult", "scoringPayloadValidator"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 40: Demoted sub-score sum, composite deviation, recommendation coherence from structural violations to warnings."
+
+  ScoringPayloadReconciler:
+    paths: ["packages/backend/src/domain/scoring/ScoringPayloadReconciler.ts"]
+    exports: ["reconcilePayload", "ReconciliationResult", "ReconciliationCorrection"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 40: Auto-corrects Claude's arithmetic. Reconciles dimension scores from sub-score sums, recommendation from disqualifiers, composite from weighted average."
+
+  SubScoreValidator:
+    paths: ["packages/backend/src/domain/scoring/SubScoreValidator.ts"]
+    exports: ["SubScoreValidator", "SubScoreValidationResult"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39/40: Validates sub-score names, maxScore, and sum invariants per dimension."
+
+  CompositeScoreValidator:
+    paths: ["packages/backend/src/domain/scoring/CompositeScoreValidator.ts"]
+    exports: ["CompositeScoreValidator", "CompositeValidationResult", "compositeScoreValidator"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39/40: Validates composite score matches weighted average of dimension scores."
+
+  subScoreRules:
+    paths: ["packages/backend/src/domain/scoring/subScoreRules.ts"]
+    exports: ["SUB_SCORE_RULES", "SubScoreRule", "getExpectedMaxTotal", "getValidSubScoreNames"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 40: All 10 dimensions have sub-score rules defining valid sub-score names and max scores."
+
+  Rubric:
+    paths: ["packages/backend/src/domain/scoring/rubric.ts"]
+    exports: ["RUBRIC_VERSION", "DIMENSION_WEIGHTS", "DIMENSION_CONFIG", "RISK_THRESHOLDS", "RECOMMENDATION_THRESHOLDS", "DISQUALIFYING_FACTORS", "DISQUALIFIER_TIER", "HARD_DISQUALIFIERS", "REMEDIABLE_BLOCKERS"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 40: Rubric v1.1 with dimension weights per solution type (clinical_ai, administrative_ai, patient_facing). Two-tier disqualifying factors (hard_decline, remediable_blocker)."
+
+  # === Domain Layer - Compliance (ISO 27001, Epic 37) ===
+  ComplianceFramework:
+    paths: ["packages/backend/src/domain/compliance/ComplianceFramework.ts"]
+    exports: ["ComplianceFramework"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 37: Domain entity for compliance frameworks (e.g., ISO 27001)."
+
+  FrameworkVersion:
+    paths: ["packages/backend/src/domain/compliance/FrameworkVersion.ts"]
+    exports: ["FrameworkVersion"]
+    validation_strategy: export
+    status: EXISTS
+
+  FrameworkControl:
+    paths: ["packages/backend/src/domain/compliance/FrameworkControl.ts"]
+    exports: ["FrameworkControl"]
+    validation_strategy: export
+    status: EXISTS
+
+  InterpretiveCriteria:
+    paths: ["packages/backend/src/domain/compliance/InterpretiveCriteria.ts"]
+    exports: ["InterpretiveCriteria"]
+    validation_strategy: export
+    status: EXISTS
+
+  DimensionControlMapping:
+    paths: ["packages/backend/src/domain/compliance/DimensionControlMapping.ts"]
+    exports: ["DimensionControlMapping"]
+    validation_strategy: export
+    status: EXISTS
+
   # === AI Layer ===
   ClaudeClient:
     paths: ["packages/backend/src/infrastructure/ai/ClaudeClient.ts"]
     exports: ["ClaudeClient", "ClaudeAPIError"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 30: streamMessage() now accepts optional imageBlocks parameter for Vision API"
+    note: "Epic 39: Now a facade implementing IClaudeClient + IVisionClient + ILLMClient. Delegates to ClaudeStreamClient, ClaudeTextClient, ClaudeVisionClient."
+
+  ClaudeClientBase:
+    paths: ["packages/backend/src/infrastructure/ai/ClaudeClientBase.ts"]
+    exports: ["ClaudeClientBase", "ClaudeAPIError"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Shared Anthropic SDK setup, retry logic, error handling. Base class for Stream/Text/Vision clients."
+
+  ClaudeStreamClient:
+    paths: ["packages/backend/src/infrastructure/ai/ClaudeStreamClient.ts"]
+    exports: ["ClaudeStreamClient"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Streaming response client. Extracted from monolithic ClaudeClient for 300 LOC compliance."
+
+  ClaudeTextClient:
+    paths: ["packages/backend/src/infrastructure/ai/ClaudeTextClient.ts"]
+    exports: ["ClaudeTextClient"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Single-shot response client for non-streaming calls."
+
+  ClaudeVisionClient:
+    paths: ["packages/backend/src/infrastructure/ai/ClaudeVisionClient.ts"]
+    exports: ["ClaudeVisionClient"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 39: Vision API client for image analysis."
 
   PromptCacheManager:
     paths: ["packages/backend/src/infrastructure/ai/PromptCacheManager.ts"]
@@ -490,13 +652,18 @@ nodes:
     validation_strategy: export
     status: EXISTS
 
-  # === AI Layer - Epic 30 Vision API ===
   VisionContentBuilder:
     paths: ["packages/backend/src/infrastructure/ai/VisionContentBuilder.ts"]
     exports: ["VisionContentBuilder", "MAX_IMAGE_SIZE", "WARN_IMAGE_SIZE", "SUPPORTED_MIME_TYPES"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 30: Converts image files to ImageContentBlock for Claude Vision API, with conversation-scoped caching"
+
+  ScoringPromptBuilder:
+    paths: ["packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts"]
+    exports: ["ScoringPromptBuilder"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 37/38: Now injects ISO 27001 control references and interpretive criteria into scoring prompts."
 
   assessmentModeTools:
     paths: ["packages/backend/src/infrastructure/ai/tools/questionnaireReadyTool.ts"]
@@ -522,22 +689,18 @@ nodes:
     exports: ["QuestionnaireSchemaAdapter"]
     validation_strategy: export
     status: EXISTS
-    note: "Located in application/adapters, not infrastructure/ai"
 
   questionnaireToMarkdown:
     paths: ["packages/backend/src/infrastructure/rendering/questionnaireToMarkdown.ts"]
     exports: ["questionnaireToMarkdown"]
     validation_strategy: export
     status: EXISTS
-    note: "Located in infrastructure/rendering, not infrastructure/ai"
 
-  # === AI Layer - Epic 33 Jina Client ===
   JinaClient:
     paths: ["packages/backend/src/infrastructure/ai/JinaClient.ts"]
     exports: ["JinaClient", "JINA_CONFIG"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 33: Wraps Jina AI Search and Reader APIs with retry logic, error handling, content truncation."
 
   # === Data Layer ===
   UserRepo:
@@ -545,7 +708,6 @@ nodes:
     exports: ["DrizzleUserRepository"]
     validation_strategy: export
     status: EXISTS
-    note: "Class name is DrizzleUserRepository"
 
   ConversationRepo:
     paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleConversationRepository.ts"]
@@ -577,21 +739,74 @@ nodes:
     validation_strategy: export
     status: EXISTS
 
-  Tables:
-    paths: ["packages/backend/src/infrastructure/database/schema/index.ts"]
-    exports: ["users", "conversations", "messages", "vendors", "assessments", "questions"]
+  ResponseRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts"]
+    exports: ["DrizzleResponseRepository"]
     validation_strategy: export
     status: EXISTS
-    note: "Schema spread across multiple files, re-exported from index"
+
+  DimensionScoreRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleDimensionScoreRepository.ts"]
+    exports: ["DrizzleDimensionScoreRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  AssessmentResultRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.ts"]
+    exports: ["DrizzleAssessmentResultRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  # === Data Layer - ISO Compliance Repos (Epic 37) ===
+  ComplianceFrameworkRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleComplianceFrameworkRepository.ts"]
+    exports: ["DrizzleComplianceFrameworkRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  FrameworkControlRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleFrameworkControlRepository.ts"]
+    exports: ["DrizzleFrameworkControlRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  DimensionControlMappingRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleDimensionControlMappingRepository.ts"]
+    exports: ["DrizzleDimensionControlMappingRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  InterpretiveCriteriaRepo:
+    paths: ["packages/backend/src/infrastructure/database/repositories/DrizzleInterpretiveCriteriaRepository.ts"]
+    exports: ["DrizzleInterpretiveCriteriaRepository"]
+    validation_strategy: export
+    status: EXISTS
+
+  Tables:
+    paths: ["packages/backend/src/infrastructure/database/schema/index.ts"]
+    exports: ["users", "conversations", "messages", "vendors", "assessments", "questions", "files", "responses", "dimensionScores", "assessmentResults"]
+    validation_strategy: export
+    status: EXISTS
+
+  ISOTables:
+    paths: ["packages/backend/src/infrastructure/database/schema/index.ts"]
+    exports: ["complianceFrameworks", "frameworkVersions", "frameworkControls", "interpretiveCriteria", "dimensionControlMappings", "assessmentComplianceResults"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Epic 37: 6 new ISO compliance tables re-exported from schema/index.ts"
 
   Exporters:
     paths:
       - "packages/backend/src/infrastructure/export/PDFExporter.ts"
       - "packages/backend/src/infrastructure/export/WordExporter.ts"
       - "packages/backend/src/infrastructure/export/ExcelExporter.ts"
-    exports: ["PDFExporter", "WordExporter", "ExcelExporter"]
+      - "packages/backend/src/infrastructure/export/ScoringPDFExporter.ts"
+      - "packages/backend/src/infrastructure/export/ScoringWordExporter.ts"
+      - "packages/backend/src/infrastructure/export/ScoringExcelExporter.ts"
+    exports: ["PDFExporter", "WordExporter", "ExcelExporter", "ScoringPDFExporter", "ScoringWordExporter", "ScoringExcelExporter"]
     validation_strategy: export
     status: EXISTS
+    note: "Epic 38: Added ScoringExcelExporter for ISO compliance Excel export."
 
   JWTProvider:
     paths: ["packages/backend/src/infrastructure/auth/JWTProvider.ts"]
@@ -604,13 +819,11 @@ nodes:
     paths: []
     validation_strategy: skip
     status: EXTERNAL
-    note: "External Anthropic API - not in codebase"
 
   JinaAPI:
     paths: []
     validation_strategy: skip
     status: EXTERNAL
-    note: "External Jina AI API (Search + Reader) - not in codebase. Epic 33."
 
 # === Items in code but NOT in diagram (potential additions) ===
 not_in_diagram:
@@ -619,6 +832,8 @@ not_in_diagram:
     - VendorValidationService: "packages/backend/src/application/services/VendorValidationService.ts"
     - FileValidationService: "packages/backend/src/application/services/FileValidationService.ts"
     - OrphanCleanupService: "packages/backend/src/application/services/OrphanCleanupService.ts"
+    - TitleGenerationService: "packages/backend/src/application/services/TitleGenerationService.ts"
+    - ScoringExportHelpers: "packages/backend/src/application/services/ScoringExportHelpers.ts"
 
   hooks:
     - useWebSocket: "apps/web/src/hooks/useWebSocket.ts"
@@ -628,7 +843,6 @@ not_in_diagram:
     - useDelayedLoading: "apps/web/src/hooks/useDelayedLoading.ts"
 
   components:
-    # UI helpers and minor components (not architecturally significant)
     - ScoringWarnings: "apps/web/src/components/chat/ScoringWarnings.tsx"
     - ScoringWelcome: "apps/web/src/components/chat/ScoringWelcome.tsx"
     - VendorClarificationCard: "apps/web/src/components/chat/VendorClarificationCard.tsx"
@@ -647,44 +861,59 @@ not_in_diagram:
   repositories:
     - DrizzleResponseRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleResponseRepository.ts"
     - DrizzleFileRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleFileRepository.ts"
-    - DrizzleDimensionScoreRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleDimensionScoreRepository.ts"
-    - DrizzleAssessmentResultRepository: "packages/backend/src/infrastructure/database/repositories/DrizzleAssessmentResultRepository.ts"
 
   ai:
-    - ScoringPromptBuilder: "packages/backend/src/infrastructure/ai/ScoringPromptBuilder.ts"
     - ExportNarrativeGenerator: "packages/backend/src/infrastructure/ai/ExportNarrativeGenerator.ts"
     - DocumentParserService: "packages/backend/src/infrastructure/ai/DocumentParserService.ts"
+    - IntakeDocumentParser: "packages/backend/src/infrastructure/ai/IntakeDocumentParser.ts"
+    - DocumentParserHelpers: "packages/backend/src/infrastructure/ai/DocumentParserHelpers.ts"
     - webSearchTool: "packages/backend/src/infrastructure/ai/tools/webSearchTool.ts"
 
-  # Epic 30: Vision API types (infrastructure-level, not architecturally significant)
   ai_types:
     - ImageContentBlock: "packages/backend/src/infrastructure/ai/types/vision.ts"
-    - TextContentBlock: "packages/backend/src/infrastructure/ai/types/vision.ts"
-    - ContentBlock: "packages/backend/src/infrastructure/ai/types/vision.ts"
-    - ImageMediaType: "packages/backend/src/infrastructure/ai/types/vision.ts"
-    - ImageSource: "packages/backend/src/infrastructure/ai/types/vision.ts"
     - ClaudeApiMessage: "packages/backend/src/infrastructure/ai/types/message.ts"
 
-  # Epic 30: Vision interface (application layer)
   interfaces:
     - IVisionContentBuilder: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
-    - VisionFileDTO: "packages/backend/src/application/interfaces/IVisionContentBuilder.ts"
     - IConsultToolLoopService: "packages/backend/src/infrastructure/websocket/services/IConsultToolLoopService.ts"
     - ITitleUpdateService: "packages/backend/src/infrastructure/websocket/services/ITitleUpdateService.ts"
     - IJinaClient: "packages/backend/src/application/interfaces/IJinaClient.ts"
     - IProgressEmitter: "packages/backend/src/application/interfaces/IProgressEmitter.ts"
     - IWebSearchTool: "packages/backend/src/application/interfaces/IWebSearchTool.ts"
+    - IComplianceFrameworkRepository: "packages/backend/src/application/interfaces/IComplianceFrameworkRepository.ts"
+    - IDimensionControlMappingRepository: "packages/backend/src/application/interfaces/IDimensionControlMappingRepository.ts"
+    - IFrameworkControlRepository: "packages/backend/src/application/interfaces/IFrameworkControlRepository.ts"
+    - IInterpretiveCriteriaRepository: "packages/backend/src/application/interfaces/IInterpretiveCriteriaRepository.ts"
+    - IScoringExcelExporter: "packages/backend/src/application/interfaces/IScoringExcelExporter.ts"
 
-  # Epic 31: Background extraction interface
   extraction_interfaces:
     - IBackgroundExtractor: "packages/backend/src/application/interfaces/IBackgroundExtractor.ts"
 
-  # Epic 36: Types and utilities (not architecturally significant)
+  extraction:
+    - TextPreprocessor: "packages/backend/src/infrastructure/extraction/TextPreprocessor.ts"
+    - DocxImageDetector: "packages/backend/src/infrastructure/extraction/DocxImageDetector.ts"
+    - DocumentClassifier: "packages/backend/src/infrastructure/extraction/DocumentClassifier.ts"
+
+  export_helpers:
+    - WordISOBuilders: "packages/backend/src/infrastructure/export/WordISOBuilders.ts"
+    - WordNarrativeParser: "packages/backend/src/infrastructure/export/WordNarrativeParser.ts"
+    - WordSectionBuilders: "packages/backend/src/infrastructure/export/WordSectionBuilders.ts"
+
+  domain_scoring:
+    - ScoringConfidenceValidator: "packages/backend/src/domain/scoring/ScoringConfidenceValidator.ts"
+    - ISOClauseValidator: "packages/backend/src/domain/scoring/ISOClauseValidator.ts"
+    - ScoringError: "packages/backend/src/domain/scoring/errors.ts"
+    - scoringCompleteTool: "packages/backend/src/domain/scoring/tools/scoringComplete.ts"
+
+  domain_compliance:
+    - isoMessagingTerms: "packages/backend/src/domain/compliance/isoMessagingTerms.ts"
+    - complianceDtos: "packages/backend/src/domain/compliance/dtos.ts"
+    - complianceTypes: "packages/backend/src/domain/compliance/types.ts"
+
   websocket_types:
     - SendMessage: "packages/backend/src/infrastructure/websocket/types/SendMessage.ts"
     - SocketProgressEmitter: "packages/backend/src/infrastructure/websocket/emitters/SocketProgressEmitter.ts"
 
-  # Epic 33: Config (not architecturally significant)
   config:
     - jinaConfig: "packages/backend/src/application/config/jinaConfig.ts"
 

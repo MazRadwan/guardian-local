@@ -98,7 +98,7 @@ package "Value Objects" {
     }
 }
 
-package "Scoring Domain" {
+package "Scoring Domain (Epic 39/40)" {
     class Response {
         +id: string
         +assessmentId: string
@@ -147,6 +147,49 @@ package "Scoring Domain" {
         +validate(): ValidationResult
     }
 
+    class ScoringPayloadReconciler {
+        +reconcilePayload(): ReconciliationResult
+        ---
+        Epic 40: Auto-corrects Claude arithmetic
+        (dimension sums, composite weighted avg,
+        recommendation from disqualifiers)
+    }
+
+    class SubScoreValidator {
+        +validate(): SubScoreValidationResult
+        ---
+        Validates sub-score names,
+        maxScore, sum invariants
+    }
+
+    class CompositeScoreValidator {
+        +validate(): CompositeValidationResult
+        ---
+        Validates composite matches
+        weighted average of dimensions
+    }
+
+    class SubScoreRules {
+        +SUB_SCORE_RULES: Map
+        +getExpectedMaxTotal(): number
+        +getValidSubScoreNames(): Set
+        ---
+        10-dimension sub-score definitions
+    }
+
+    class Rubric {
+        +RUBRIC_VERSION: "guardian-v1.1"
+        +DIMENSION_WEIGHTS: Map<SolutionType, Map>
+        +RISK_THRESHOLDS: Map
+        +RECOMMENDATION_THRESHOLDS: Map
+        +DISQUALIFYING_FACTORS: Map
+        +DISQUALIFIER_TIER: Map
+        ---
+        Weights per solution type:
+        clinical_ai, administrative_ai,
+        patient_facing
+    }
+
     enum RiskDimension {
         clinical_risk
         privacy_risk
@@ -165,6 +208,55 @@ package "Scoring Domain" {
         conditional
         decline
         more_info
+    }
+
+    enum SolutionType {
+        clinical_ai
+        administrative_ai
+        patient_facing
+    }
+
+    enum DisqualifierTier {
+        hard_decline
+        remediable_blocker
+    }
+}
+
+package "Compliance Domain (ISO 27001, Epic 37)" {
+    class ComplianceFramework {
+        +id: string
+        +name: string
+        +description: string
+        +status: FrameworkStatus
+    }
+
+    class FrameworkVersion {
+        +id: string
+        +frameworkId: string
+        +version: string
+        +effectiveDate: Date
+    }
+
+    class FrameworkControl {
+        +id: string
+        +versionId: string
+        +controlId: string
+        +title: string
+        +description: string
+    }
+
+    class InterpretiveCriteria {
+        +id: string
+        +controlId: string
+        +interpretation: string
+        +reviewStatus: ReviewStatus
+    }
+
+    class DimensionControlMapping {
+        +id: string
+        +dimension: RiskDimension
+        +controlId: string
+        +relevanceWeight: number
     }
 }
 
@@ -187,5 +279,20 @@ User --> Email : has
 ScoringCompletePayload --> "*" DimensionScoreData : contains
 DimensionScore --> RiskDimension : has
 AssessmentResult --> Recommendation : has
+Rubric --> SolutionType : weights per
+Rubric --> DisqualifierTier : categorizes
+ScoringPayloadReconciler --> SubScoreRules : uses
+ScoringPayloadReconciler --> Rubric : uses
+ScoringPayloadValidator --> SubScoreValidator : delegates
+ScoringPayloadValidator --> CompositeScoreValidator : delegates
+SubScoreValidator --> SubScoreRules : uses
+CompositeScoreValidator --> Rubric : uses
+
+' Compliance relationships
+ComplianceFramework "1" --> "*" FrameworkVersion : has
+FrameworkVersion "1" --> "*" FrameworkControl : contains
+FrameworkControl "1" --> "0..1" InterpretiveCriteria : interpreted by
+DimensionControlMapping --> RiskDimension : maps
+DimensionControlMapping --> FrameworkControl : maps to
 
 @enduml

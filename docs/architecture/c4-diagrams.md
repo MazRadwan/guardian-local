@@ -1,6 +1,6 @@
 # Guardian C4 Architecture Diagrams
 
-> **Last Updated:** 2026-01-26
+> **Last Updated:** 2026-02-26
 > **Mermaid Version:** 11.4.1+
 
 This document contains the C4 model diagrams for Guardian at four zoom levels.
@@ -71,7 +71,7 @@ flowchart TB
 
         api["API Server<br><br><i>Express 5 / Node.js 22</i><br><br>REST + WebSocket for chat,<br>document parsing, scoring, exports"]
 
-        db["Database<br><br><i>PostgreSQL 17</i><br><br>Stores users, conversations, messages,<br>vendors, assessments, questions, files,<br>responses, dimension scores, results"]
+        db["Database<br><br><i>PostgreSQL 17</i><br><br>Stores users, conversations, messages,<br>vendors, assessments, questions, files,<br>responses, dimension scores, results,<br>ISO compliance frameworks + controls"]
 
         storage["File Storage<br><br><i>Local (dev) / S3 (prod)</i><br><br>Stores uploaded vendor docs<br>and scoring response files"]
     end
@@ -107,7 +107,7 @@ flowchart TB
 |-----------|------------|----------------|
 | Web Application | Next.js 16 / React 19 | Chat UI, file uploads, questionnaire generation, scoring, export downloads |
 | API Server | Express 5 / Node.js 22 | REST + WebSocket, auth, business logic, document parsing, scoring analysis |
-| Database | PostgreSQL 17 + Drizzle | 10 tables: users, conversations, messages, vendors, assessments, questions, files, responses, dimension_scores, assessment_results |
+| Database | PostgreSQL 17 + Drizzle | 16 tables: 10 core (users, conversations, messages, vendors, assessments, questions, files, responses, dimension_scores, assessment_results) + 6 ISO compliance (compliance_frameworks, framework_versions, framework_controls, interpretive_criteria, dimension_control_mappings, assessment_compliance_results) |
 | File Storage | Local / AWS S3 | Uploaded intake + scoring documents |
 
 ### Protocols
@@ -260,29 +260,33 @@ flowchart TB
             assessmentController["AssessmentController<br><i>Assessment CRUD + status</i>"]
             questionController["QuestionController<br><i>Question CRUD</i>"]
             exportController["ExportController<br><i>Questionnaire export</i>"]
-            scoringExportController["ScoringExportController<br><i>Scoring report export</i>"]
+            scoringExportController["ScoringExportController<br><i>Scoring report export (PDF/Word/Excel)</i>"]
             documentController["DocumentUploadController<br><i>Upload, download, parse</i>"]
         end
 
-        subgraph websocket["WebSocket Layer (/chat) - Epic 28 Modular"]
+        subgraph websocket["WebSocket Layer (/chat)"]
             chatServer["ChatServer<br><i>Orchestrator</i>"]
 
             subgraph handlers["Handlers"]
                 connectionHandler["ConnectionHandler"]
-                messageHandler["MessageHandler"]
                 conversationHandler["ConversationHandler"]
                 modeSwitchHandler["ModeSwitchHandler"]
                 questionnaireHandler["QuestionnaireHandler"]
                 scoringHandler["ScoringHandler"]
+                scoringPostProcessor["ScoringPostProcessor<br><i>Narrative, title, export-ready</i>"]
+                modeRouter["ModeRouter<br><i>Config flags per mode</i>"]
             end
 
-            subgraph modeStrategies["Mode Strategies"]
-                consultStrategy["ConsultModeStrategy"]
-                assessmentStrategy["AssessmentModeStrategy"]
-                scoringStrategy["ScoringModeStrategy"]
+            subgraph messagePipeline["Send Message Pipeline (Epic 36)"]
+                sendMessageOrchestrator["SendMessageOrchestrator<br><i>7-step pipeline</i>"]
+                sendMessageValidator["SendMessageValidator"]
+                claudeStreamingService["ClaudeStreamingService<br><i>Streaming + abort</i>"]
+                consultToolLoopService["ConsultToolLoopService<br><i>Web search loop, max 3</i>"]
+                titleUpdateService["TitleUpdateService"]
+                backgroundEnrichmentService["BackgroundEnrichmentService"]
             end
 
-            subgraph contextBuilders["Context Builders (Epic 30 Vision)"]
+            subgraph contextBuilders["Context Builders"]
                 convContextBuilder["ConversationContextBuilder"]
                 fileContextBuilder["FileContextBuilder<br><i>buildWithImages() returns imageBlocks</i>"]
             end
@@ -294,29 +298,61 @@ flowchart TB
             end
         end
 
+        subgraph extraction["Extraction Infrastructure (Epic 31/39)"]
+            backgroundExtractor["BackgroundExtractor<br><i>Async text extraction</i>"]
+            textExtractionService["TextExtractionService"]
+            extractionRoutingService["ExtractionRoutingService<br><i>Regex vs Claude routing</i>"]
+            regexExtractor["RegexResponseExtractor<br><i>Fast regex pipeline</i>"]
+            extractionConfidence["ExtractionConfidenceCalculator"]
+        end
+
         subgraph services["Application Services"]
-            authService["AuthService<br><i>JWT auth, password hashing</i>"]
+            authService["AuthService<br><i>JWT auth</i>"]
             conversationService["ConversationService<br><i>Conversation lifecycle</i>"]
             assessmentService["AssessmentService<br><i>Assessment logic</i>"]
             vendorService["VendorService<br><i>Vendor management</i>"]
             questionService["QuestionService<br><i>Legacy question gen</i>"]
-            questionnaireReadyService["QuestionnaireReadyService<br><i>Tool call handler</i>"]
-            questionnaireGenService["QuestionnaireGenerationService<br><i>Structured generation</i>"]
+            questionnaireReadyService["QuestionnaireReadyService"]
+            questionnaireGenService["QuestionnaireGenerationService"]
             exportService["ExportService<br><i>Questionnaire export</i>"]
-            scoringService["ScoringService<br><i>Parse + score responses</i>"]
-            scoringExportService["ScoringExportService<br><i>Scoring report export</i>"]
-            fileValidationService["FileValidationService<br><i>Magic bytes, MIME, size</i>"]
+            scoringService["ScoringService<br><i>Orchestrator</i>"]
+            scoringLLMService["ScoringLLMService<br><i>Claude streaming + tool</i>"]
+            scoringStorageService["ScoringStorageService<br><i>Persist scores</i>"]
+            scoringQueryService["ScoringQueryService<br><i>Rehydration + lookups</i>"]
+            scoringRetryService["ScoringRetryService<br><i>Fail-closed retry</i>"]
+            scoringExportService["ScoringExportService"]
+            isoRetrievalService["ISOControlRetrievalService<br><i>ISO control lookups</i>"]
+            webSearchService["WebSearchToolService<br><i>Jina search + read</i>"]
         end
 
-        subgraph ai["AI & Parsing (Epic 30 Vision)"]
-            claudeClient["ClaudeClient<br><i>Anthropic SDK wrapper (LLM + Vision)</i>"]
-            promptCacheManager["PromptCacheManager<br><i>Tool-aware caching</i>"]
-            visionContentBuilder["VisionContentBuilder<br><i>Epic 30: Image → ImageContentBlock</i>"]
-            documentParser["DocumentParserService<br><i>Intake + scoring parsing</i>"]
-            scoringPromptBuilder["ScoringPromptBuilder<br><i>Scoring prompt assembly</i>"]
-            assessmentTools["assessmentModeTools<br><i>questionnaire_ready tool</i>"]
-            questionnaireSchema["QuestionnaireSchemaAdapter<br><i>Schema to Question mapping</i>"]
-            markdownConverter["questionnaireToMarkdown<br><i>Render for chat</i>"]
+        subgraph domainScoring["Domain - Scoring (Epic 39/40)"]
+            scoringPayloadValidator["ScoringPayloadValidator"]
+            scoringPayloadReconciler["ScoringPayloadReconciler<br><i>Auto-correct arithmetic</i>"]
+            subScoreValidator["SubScoreValidator"]
+            compositeScoreValidator["CompositeScoreValidator"]
+            subScoreRules["subScoreRules<br><i>10-dimension rules</i>"]
+            rubric["rubric.ts v1.1<br><i>Weights, thresholds, disqualifiers</i>"]
+        end
+
+        subgraph domainCompliance["Domain - Compliance (ISO 27001)"]
+            complianceFramework["ComplianceFramework"]
+            frameworkControl["FrameworkControl"]
+            interpretiveCriteria["InterpretiveCriteria"]
+            dimensionControlMapping["DimensionControlMapping"]
+        end
+
+        subgraph ai["AI & Parsing"]
+            claudeClient["ClaudeClient<br><i>Facade: IClaudeClient + IVisionClient + ILLMClient</i>"]
+            claudeClientBase["ClaudeClientBase<br><i>Shared SDK, retry, errors</i>"]
+            claudeStreamClient["ClaudeStreamClient"]
+            claudeTextClient["ClaudeTextClient"]
+            claudeVisionClient["ClaudeVisionClient"]
+            promptCacheManager["PromptCacheManager"]
+            visionContentBuilder["VisionContentBuilder"]
+            documentParser["DocumentParserService"]
+            scoringPromptBuilder["ScoringPromptBuilder<br><i>Rubric + ISO prompts</i>"]
+            questionnaireSchema["QuestionnaireSchemaAdapter"]
+            jinaClient["JinaClient<br><i>Search + Reader APIs</i>"]
         end
 
         subgraph data["Data Layer"]
@@ -330,6 +366,10 @@ flowchart TB
             responseRepo["ResponseRepository"]
             dimensionScoreRepo["DimensionScoreRepository"]
             assessmentResultRepo["AssessmentResultRepository"]
+            complianceFrameworkRepo["ComplianceFrameworkRepo"]
+            frameworkControlRepo["FrameworkControlRepo"]
+            dimensionControlMappingRepo["DimensionControlMappingRepo"]
+            interpretiveCriteriaRepo["InterpretiveCriteriaRepo"]
             jwtProvider["JWTProvider"]
         end
 
@@ -339,6 +379,7 @@ flowchart TB
             excelExporter["ExcelExporter"]
             scoringPdfExporter["ScoringPDFExporter"]
             scoringWordExporter["ScoringWordExporter"]
+            scoringExcelExporter["ScoringExcelExporter"]
         end
 
         subgraph storage["File Storage"]
@@ -352,6 +393,7 @@ flowchart TB
     subgraph external["External Systems"]
         db["PostgreSQL 17"]
         claudeApi["Anthropic Claude API"]
+        jinaApi["Jina AI API"]
         s3["AWS S3"]
     end
 
@@ -362,53 +404,95 @@ flowchart TB
     questionController --> questionService
     exportController --> exportService
     scoringExportController --> scoringExportService
-    documentController --> fileValidationService
-    documentController --> fileRepo
-    documentController --> storageFactory
-    documentController --> documentParser
+    documentController --> backgroundExtractor
     documentController --> scoringService
 
-    %% WebSocket relationships (Epic 28 modular)
+    %% WebSocket relationships
     chatServer --> connectionHandler
-    chatServer --> messageHandler
     chatServer --> conversationHandler
     chatServer --> modeSwitchHandler
     chatServer --> questionnaireHandler
     chatServer --> scoringHandler
     chatServer --> rateLimiter
+    chatServer --> sendMessageOrchestrator
 
-    messageHandler --> consultStrategy
-    messageHandler --> assessmentStrategy
-    messageHandler --> scoringStrategy
-    messageHandler --> convContextBuilder
-    messageHandler --> fileContextBuilder
-    messageHandler --> streamingHandler
-    messageHandler --> toolUseRegistry
-    messageHandler --> promptCacheManager
+    %% Send Message Pipeline
+    sendMessageOrchestrator --> sendMessageValidator
+    sendMessageOrchestrator --> claudeStreamingService
+    sendMessageOrchestrator --> convContextBuilder
+    sendMessageOrchestrator --> fileContextBuilder
+    sendMessageOrchestrator --> titleUpdateService
+    sendMessageOrchestrator --> backgroundEnrichmentService
+    sendMessageOrchestrator --> modeRouter
+
+    claudeStreamingService --> consultToolLoopService
+    claudeStreamingService --> claudeClient
+    consultToolLoopService --> toolUseRegistry
+    toolUseRegistry --> webSearchService
+    webSearchService --> jinaClient
+    titleUpdateService --> conversationService
+
+    %% Scoring Handler delegation
+    scoringHandler --> scoringService
+    scoringHandler --> scoringPostProcessor
+
+    %% Extraction pipeline
+    extractionRoutingService --> regexExtractor
+    extractionRoutingService --> extractionConfidence
+    backgroundExtractor --> textExtractionService
 
     conversationHandler --> conversationService
     questionnaireHandler --> questionnaireReadyService
     questionnaireHandler --> questionnaireGenService
-    scoringHandler --> scoringService
+    questionnaireHandler --> streamingHandler
 
-    %% Epic 30: Vision API relationships
+    %% Vision API
     fileContextBuilder --> visionContentBuilder
     connectionHandler --> visionContentBuilder
     visionContentBuilder --> storageFactory
 
-    %% Service to AI relationships
+    %% ScoringService decomposition
+    scoringService --> scoringLLMService
+    scoringService --> scoringStorageService
+    scoringService --> scoringQueryService
+    scoringService --> scoringRetryService
+    scoringService --> scoringPayloadReconciler
+    scoringService --> scoringPayloadValidator
+    scoringLLMService --> claudeClient
+    scoringLLMService --> scoringPromptBuilder
+    scoringPromptBuilder --> isoRetrievalService
+    scoringStorageService --> assessmentResultRepo
+    scoringStorageService --> dimensionScoreRepo
+    scoringStorageService --> responseRepo
+
+    %% Domain scoring relationships
+    scoringPayloadReconciler --> subScoreRules
+    scoringPayloadReconciler --> rubric
+    scoringPayloadValidator --> subScoreValidator
+    scoringPayloadValidator --> compositeScoreValidator
+    subScoreValidator --> subScoreRules
+    compositeScoreValidator --> rubric
+
+    %% ISO Compliance pipeline
+    isoRetrievalService --> complianceFrameworkRepo
+    isoRetrievalService --> frameworkControlRepo
+    isoRetrievalService --> dimensionControlMappingRepo
+    isoRetrievalService --> interpretiveCriteriaRepo
+
+    %% ClaudeClient decomposition
+    claudeClient --> claudeClientBase
+    claudeStreamClient --> claudeClientBase
+    claudeTextClient --> claudeClientBase
+    claudeVisionClient --> claudeClientBase
+
+    %% Service to AI
     promptCacheManager --> claudeClient
     questionnaireGenService --> claudeClient
     questionnaireGenService --> questionnaireSchema
     questionnaireGenService --> assessmentService
-    questionnaireGenService --> vendorService
-    questionnaireGenService --> markdownConverter
     documentParser --> claudeClient
-    scoringService --> documentParser
-    scoringService --> scoringPromptBuilder
-    scoringService --> claudeClient
 
-    %% Service to Repository relationships
+    %% Service to Repository
     authService --> userRepo
     authService --> jwtProvider
     conversationService --> conversationRepo
@@ -418,18 +502,9 @@ flowchart TB
     questionService --> questionRepo
     questionnaireSchema --> questionRepo
     exportService --> exporters
-    scoringExportService --> scoringPdfExporter
-    scoringExportService --> scoringWordExporter
-    scoringService --> responseRepo
-    scoringService --> dimensionScoreRepo
-    scoringService --> assessmentResultRepo
-    scoringService --> assessmentRepo
-    scoringService --> fileRepo
-    scoringExportService --> assessmentResultRepo
-    scoringExportService --> dimensionScoreRepo
-    scoringExportService --> assessmentRepo
+    scoringExportService --> exporters
 
-    %% Storage relationships
+    %% Storage
     storageFactory --> localStorage
     storageFactory --> s3Storage
 
@@ -444,13 +519,19 @@ flowchart TB
     responseRepo --> db
     dimensionScoreRepo --> db
     assessmentResultRepo --> db
+    complianceFrameworkRepo --> db
+    frameworkControlRepo --> db
+    dimensionControlMappingRepo --> db
+    interpretiveCriteriaRepo --> db
     claudeClient --> claudeApi
+    jinaClient --> jinaApi
     s3Storage --> s3
 
     style chatServer fill:#7B1FA2,stroke:#4A148C,color:#fff
     style claudeClient fill:#1976D2,stroke:#0D47A1,color:#fff
-    style promptCacheManager fill:#F9A825,stroke:#F57F17,color:#000
-    style documentParser fill:#43A047,stroke:#2E7D32,color:#fff
+    style scoringService fill:#E65100,stroke:#BF360C,color:#fff
+    style scoringPayloadReconciler fill:#F9A825,stroke:#F57F17,color:#000
+    style rubric fill:#F9A825,stroke:#F57F17,color:#000
 ```
 
 ### C3 API Server Summary
@@ -458,22 +539,26 @@ flowchart TB
 | Layer | Components | Responsibility |
 |-------|------------|----------------|
 | HTTP Controllers | Auth, Vendor, Assessment, Question, Export, ScoringExport, DocumentUpload | REST endpoint handlers |
-| WebSocket (Epic 28) | ChatServer → Handlers (6) + Mode Strategies (3) + Context Builders (2) + Utilities | Real-time chat, streaming, rate limiting |
-| Services | Auth, Conversation, Assessment, Vendor, Question, QuestionnaireGen, Export, Scoring, ScoringExport, FileValidation | Business logic orchestration |
-| AI & Parsing | ClaudeClient, PromptCacheManager, DocumentParser, ScoringPromptBuilder | LLM integration, document extraction |
-| Data Layer | 10 Repositories + JWTProvider | Database access via Drizzle ORM |
-| Exporters | PDF, Word, Excel, Scoring PDF/Word | Document generation |
-| Storage | Factory → Local/S3 | File persistence abstraction |
+| WebSocket | ChatServer -> Handlers (5 + PostProcessor + ModeRouter) + Send Message Pipeline (6) + Context Builders (2) + Utilities (3) | Real-time chat, streaming, rate limiting |
+| Extraction | BackgroundExtractor, TextExtractionService, ExtractionRoutingService, RegexResponseExtractor, ExtractionConfidenceCalculator | Document parsing and response extraction |
+| Services | Auth, Conversation, Assessment, Vendor, Question, QuestionnaireGen, Export, Scoring (5 sub-services), ScoringExport, ISOControlRetrieval, WebSearch | Business logic orchestration |
+| Domain - Scoring | ScoringPayloadValidator, ScoringPayloadReconciler, SubScoreValidator, CompositeScoreValidator, subScoreRules, rubric v1.1 | Scoring validation, reconciliation, weighted scoring rules |
+| Domain - Compliance | ComplianceFramework, FrameworkControl, InterpretiveCriteria, DimensionControlMapping | ISO 27001 compliance domain model |
+| AI & Parsing | ClaudeClient (facade -> Base/Stream/Text/Vision), PromptCacheManager, VisionContentBuilder, DocumentParser, ScoringPromptBuilder, JinaClient | LLM integration, document extraction, web search |
+| Data Layer | 14 Repositories + JWTProvider | Database access via Drizzle ORM (10 core + 4 ISO tables) |
+| Exporters | PDF, Word, Excel, Scoring PDF/Word/Excel | Document generation |
+| Storage | Factory -> Local/S3 | File persistence abstraction |
 
 ### Key Patterns
 
-- `ChatServer` is the **WebSocket orchestrator** - delegates to specialized handlers (Epic 28)
-- **Handlers** separate concerns: Connection, Message, Conversation, ModeSwitch, Questionnaire, Scoring
-- **Mode Strategies** encapsulate mode-specific behavior: Consult, Assessment, Scoring
-- **Context Builders** construct Claude API context: Conversation history, File attachments
-- `PromptCacheManager` optimizes Claude API calls with caching
-- `DocumentParserService` uses ClaudeClient for both text and vision parsing (intake + scoring)
-- `ScoringService` orchestrates parse -> LLM scoring -> persistence, triggered from uploads
+- `ChatServer` is the **WebSocket orchestrator** - delegates to specialized handlers
+- **SendMessageOrchestrator** handles the 7-step message pipeline (replaced MessageHandler in Epic 36)
+- **ModeRouter** is a pure function replacing Mode Strategies (config flags per mode)
+- **ScoringService** is an orchestrator delegating to ScoringLLMService, ScoringStorageService, ScoringQueryService, ScoringRetryService
+- **ScoringPayloadReconciler** auto-corrects Claude's arithmetic before validation
+- **ExtractionRoutingService** routes between fast regex extraction and Claude-based extraction based on confidence
+- **ISOControlRetrievalService** injects ISO 27001 control references into scoring prompts
+- **ClaudeClient** is a facade delegating to ClaudeStreamClient, ClaudeTextClient, ClaudeVisionClient (all extend ClaudeClientBase)
 - Storage factory pattern enables dev/prod environment switching
 
 ---
@@ -482,7 +567,9 @@ flowchart TB
 
 For complete database schema, see [database-schema.md](../design/data/database-schema.md).
 
-### Tables Overview
+### Tables Overview (16 Tables)
+
+**Core Tables (10):**
 
 | Table | Description |
 |-------|-------------|
@@ -496,6 +583,17 @@ For complete database schema, see [database-schema.md](../design/data/database-s
 | responses | Parsed questionnaire responses |
 | dimension_scores | Per-dimension scoring results |
 | assessment_results | Scoring report summaries |
+
+**ISO Compliance Tables (6, Epic 37):**
+
+| Table | Description |
+|-------|-------------|
+| compliance_frameworks | Registered frameworks (e.g., ISO 27001) |
+| framework_versions | Framework version tracking |
+| framework_controls | Individual controls per framework |
+| interpretive_criteria | Guardian's interpretation of controls |
+| dimension_control_mappings | Maps risk dimensions to framework controls |
+| assessment_compliance_results | Per-assessment compliance evaluation results |
 
 ---
 
@@ -584,22 +682,18 @@ WebSocket Events:
 
 **Major architectural refactor** decomposing monolithic ChatServer into modular components.
 
-Handlers (6):
+Handlers (5 + PostProcessor):
 | Handler | Responsibility |
 |---------|----------------|
 | `ConnectionHandler` | Socket connection, authentication, connection_ready events |
-| `MessageHandler` | Core message processing, streaming, tool use orchestration |
 | `ConversationHandler` | Conversation CRUD: create, list, delete, title generation |
 | `ModeSwitchHandler` | Mode switching between consult, assessment, scoring |
 | `QuestionnaireHandler` | Questionnaire generation, export status, export_ready events |
 | `ScoringHandler` | Scoring workflow, vendor clarifications, scoring progress |
+| `ScoringPostProcessor` | Post-scoring narrative generation, title update, export-ready (Epic 39) |
 
-Mode Strategies (3):
-| Strategy | Responsibility |
-|----------|----------------|
-| `ConsultModeStrategy` | Builds context for general Q&A mode |
-| `AssessmentModeStrategy` | Builds context for questionnaire generation mode |
-| `ScoringModeStrategy` | Builds context for response scoring mode |
+**Note:** `MessageHandler` was decomposed into `SendMessageOrchestrator` pipeline in Epic 36.
+`ModeStrategies` (ConsultModeStrategy, AssessmentModeStrategy, ScoringModeStrategy) replaced by `ModeRouter` pure function in Epic 36.
 
 Context Builders (2):
 | Builder | Responsibility |
@@ -688,3 +782,112 @@ Supported Image Formats:
 - JPEG (`image/jpeg`, `image/jpg` normalized)
 - GIF (`image/gif`) - first frame analyzed
 - WebP (`image/webp`)
+
+### Epic 36 - Send Message Pipeline
+
+**MessageHandler decomposition** into a 7-step pipeline.
+
+| Component | Responsibility |
+|-----------|----------------|
+| `SendMessageOrchestrator` | 7-step pipeline: validate, save, context, scoring bypass, file context, stream, post-stream |
+| `SendMessageValidator` | Validates payload, conversation existence, file readiness |
+| `ClaudeStreamingService` | Claude API streaming with abort handling, tool loop delegation |
+| `ConsultToolLoopService` | Web search tool loop (max 3 iterations) with graceful degradation |
+| `TitleUpdateService` | Title generation for consult/assessment modes, scoring title updates |
+| `BackgroundEnrichmentService` | File enrichment for assessment mode (fire-and-forget) |
+| `ModeRouter` | Pure function returning config flags per mode (replaces Mode Strategies) |
+
+### Epic 37/38 - ISO 27001 Compliance
+
+**ISO compliance framework** integrated into scoring pipeline.
+
+Domain Layer:
+| Entity | Responsibility |
+|--------|----------------|
+| `ComplianceFramework` | Framework metadata (e.g., ISO 27001) |
+| `FrameworkVersion` | Version tracking (e.g., 2022 edition) |
+| `FrameworkControl` | Individual controls (e.g., A.5.1 Information Security Policies) |
+| `InterpretiveCriteria` | Guardian's interpretation of controls for healthcare AI |
+| `DimensionControlMapping` | Maps risk dimensions to relevant framework controls |
+
+Database (6 new tables):
+- `compliance_frameworks`, `framework_versions`, `framework_controls`
+- `interpretive_criteria`, `dimension_control_mappings`, `assessment_compliance_results`
+
+Application Layer:
+- `ISOControlRetrievalService` - Retrieves ISO controls, interpretive criteria, and dimension mappings
+- `ScoringPromptBuilder` - Enhanced to inject ISO control references into scoring prompts
+
+Export Enrichment:
+- `ScoringPDFExporter` - ISO confidence badges and alignment section
+- `ScoringWordExporter` - ISO enrichment with confidence badges and Guardian labels
+- `ScoringExcelExporter` - NEW: Scoring summary and ISO control mapping sheets
+
+### Epic 39 - Scoring Calibration
+
+**Major decomposition** for 300 LOC compliance and improved reliability.
+
+ScoringService Decomposition:
+| Service | Responsibility |
+|---------|----------------|
+| `ScoringService` | Orchestrator - coordinates the scoring pipeline |
+| `ScoringLLMService` | Claude streaming, tool-use scoring, prompt caching |
+| `ScoringStorageService` | Persists dimension scores, assessment results, responses |
+| `ScoringQueryService` | Rehydration and lookup queries for scoring data |
+| `ScoringRetryService` | Fail-closed retry for transient Claude API failures |
+| `ScoringMetricsCollector` | Timing and diagnostic metrics for scoring pipeline |
+
+ScoringHandler Decomposition:
+| Component | Responsibility |
+|-----------|----------------|
+| `ScoringHandler` | Scoring workflow entry point (slimmed down) |
+| `ScoringPostProcessor` | Narrative generation, title update, export-ready notification |
+
+ClaudeClient Decomposition:
+| Component | Responsibility |
+|-----------|----------------|
+| `ClaudeClient` | Facade implementing IClaudeClient + IVisionClient + ILLMClient |
+| `ClaudeClientBase` | Shared Anthropic SDK setup, retry logic, error handling |
+| `ClaudeStreamClient` | Streaming response client (extends ClaudeClientBase) |
+| `ClaudeTextClient` | Single-shot response client (extends ClaudeClientBase) |
+| `ClaudeVisionClient` | Vision API client (extends ClaudeClientBase) |
+
+Extraction Pipeline (Epic 39):
+| Component | Responsibility |
+|-----------|----------------|
+| `ExtractionRoutingService` | Routes between regex fast-path and Claude extraction |
+| `RegexResponseExtractor` | Fast regex-based extraction for well-structured questionnaires |
+| `ExtractionConfidenceCalculator` | Calculates extraction confidence to determine routing |
+
+Domain Scoring Additions:
+| Component | Responsibility |
+|-----------|----------------|
+| `SubScoreValidator` | Validates sub-score names, maxScore, and sum invariants |
+| `CompositeScoreValidator` | Validates composite score matches weighted average |
+
+### Epic 40 - Rubric v1.1 (Full 10-Dimension Weighted Scoring)
+
+**Rubric upgrade** with dimension weights and auto-reconciliation.
+
+Domain Changes:
+| Component | Change |
+|-----------|--------|
+| `ScoringPayloadReconciler` | NEW: Auto-corrects Claude's arithmetic (dimension scores from sub-score sums, recommendation from disqualifiers, composite from weighted average) |
+| `subScoreRules` | NEW: All 10 dimensions have sub-score rules defining valid names and max scores |
+| `rubric.ts` | Updated to v1.1: dimension weights per solution type (clinical_ai, administrative_ai, patient_facing), two-tier disqualifying factors (hard_decline, remediable_blocker) |
+| `ScoringPayloadValidator` | Updated: Demoted sub-score sum mismatch, composite deviation, recommendation coherence from structural violations to warnings |
+| `SubScoreValidator` | Updated: Demoted sub-score sum violations to warnings |
+
+Data Flow:
+```
+Claude scoring_complete payload
+    |
+    v
+ScoringPayloadReconciler.reconcilePayload()
+    |  (auto-correct arithmetic)
+    v
+ScoringPayloadValidator.validate()
+    |  (validate structure + domain rules)
+    v
+ScoringStorageService.persist()
+```

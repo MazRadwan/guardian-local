@@ -1,8 +1,8 @@
 # Diagram Index - Auto-maintained by diagram-updater-agent
 # This file tracks all architecture diagrams and their validation status
 
-last_processed_commit: "9de57c4"
-last_updated: "2026-02-09"
+last_processed_commit: "5f668ef"
+last_updated: "2026-02-26"
 
 diagrams:
   - id: architecture-latest
@@ -24,6 +24,8 @@ diagrams:
       - web-search
       - tool-loop
       - message-pipeline
+      - scoring
+      - iso-compliance
     description: |
       Comprehensive flowchart showing Guardian's layered architecture:
       Presentation (Next.js/React) -> Hooks/State -> WebSocket -> Backend -> Services -> Domain -> Data
@@ -35,19 +37,26 @@ diagrams:
       ImageContentBlock, FileContextBuilder.buildWithImages() returns FileContextResult with
       imageBlocks, ClaudeClient.streamMessage() accepts imageBlocks parameter.
       Epic 31 update: Added async extraction infrastructure - BackgroundExtractor for
-      fire-and-forget text extraction, decouples upload from extraction for parallel
-      file upload performance.
-      Epic 33 update: Added web search capability - WebSearchToolService handles web_search
-      tool calls via Jina AI Search and Reader APIs. JinaClient wraps external API with
-      retry logic. ToolUseRegistry dispatches to WebSearchToolService.
-      Epic 34 update: Extracted ConsultToolLoopService from MessageHandler. Handles consult
-      mode tool loop execution (max 3 iterations) with graceful degradation.
-      Epic 35 update: Extracted TitleUpdateService for fire-and-forget title generation
-      and scoring title updates.
-      Epic 36 update: Decomposed MessageHandler into SendMessageOrchestrator (7-step pipeline),
-      SendMessageValidator, ClaudeStreamingService, BackgroundEnrichmentService, and ModeRouter.
-      Removed ModeStrategies subgraph (AssessmentModeStrategy, ConsultModeStrategy,
-      ScoringModeStrategy) - dead code replaced by ModeRouter pure function.
-      Added MessagePipeline subgraph containing the new send message services.
-      ScoringHandler no longer uses StreamingHandler. StreamingHandler only used by
-      QuestionnaireHandler. Added Jina API to External subgraph.
+      fire-and-forget text extraction.
+      Epic 33 update: Added web search capability - WebSearchToolService via Jina AI APIs.
+      Epic 34 update: Extracted ConsultToolLoopService from MessageHandler.
+      Epic 35 update: Extracted TitleUpdateService for fire-and-forget title generation.
+      Epic 36 update: Decomposed MessageHandler into SendMessageOrchestrator pipeline.
+      Epic 37/38 update (ISO Compliance): Added domain compliance module
+      (ComplianceFramework, FrameworkVersion, FrameworkControl, InterpretiveCriteria,
+      DimensionControlMapping), 6 new ISO database tables, 4 ISO repositories,
+      ISOControlRetrievalService, ScoringPromptBuilder ISO injection,
+      ScoringExcelExporter for ISO export.
+      Epic 39 update (Scoring Calibration): ScoringService decomposed into
+      ScoringLLMService, ScoringStorageService, ScoringQueryService,
+      ScoringRetryService, ScoringMetricsCollector for 300 LOC compliance.
+      ScoringHandler decomposed with ScoringPostProcessor extraction.
+      ClaudeClient decomposed into ClaudeClientBase + ClaudeStreamClient +
+      ClaudeTextClient + ClaudeVisionClient. Extraction pipeline expanded with
+      ExtractionRoutingService (regex vs Claude routing), RegexResponseExtractor,
+      ExtractionConfidenceCalculator. Added SubScoreValidator, CompositeScoreValidator.
+      Epic 40 update (Rubric v1.1): Added ScoringPayloadReconciler (auto-correct
+      Claude arithmetic), subScoreRules (10-dimension rules), Rubric v1.1 with
+      dimension weights per solution type and two-tier disqualifying factors.
+      Demoted sub-score sum, composite deviation, recommendation coherence from
+      structural violations to warnings in ScoringPayloadValidator.

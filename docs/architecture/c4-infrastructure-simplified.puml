@@ -44,13 +44,13 @@ package "HTTP / Controllers" {
         -scoringExportService: ScoringExportService
         +GET /scoring/:assessmentId/pdf
         +GET /scoring/:assessmentId/word
+        +GET /scoring/:assessmentId/excel
     }
 }
 
-package "WebSocket (Epic 28 Modular)" {
+package "WebSocket" {
     class ChatServer {
         -handlers: Handler[]
-        -modeStrategies: ModeStrategyFactory
         +initialize(io)
         +registerHandlers()
     }
@@ -60,13 +60,6 @@ package "WebSocket (Epic 28 Modular)" {
             +handleConnection(socket)
             +handleDisconnect(socket)
             +emitConnectionReady()
-        }
-
-        class MessageHandler {
-            -streamingHandler: StreamingHandler
-            -toolUseRegistry: ToolUseRegistry
-            +handleSendMessage(data)
-            +streamResponse(callback)
         }
 
         class ConversationHandler {
@@ -92,18 +85,43 @@ package "WebSocket (Epic 28 Modular)" {
             +handleVendorClarification()
             +emitScoringProgress()
         }
-    }
 
-    package "Mode Strategies" {
-        interface IModeStrategy {
-            +buildSystemPrompt(): string
-            +getTools(): Tool[]
-            +validateContext(): boolean
+        class ScoringPostProcessor {
+            +handlePostScoring()
+            +generateNarrative()
+            +updateTitle()
+            +emitExportReady()
         }
 
-        class ConsultModeStrategy
-        class AssessmentModeStrategy
-        class ScoringModeStrategy
+        class ModeRouter {
+            +getModeConfig(mode): ModeConfig
+        }
+    }
+
+    package "Send Message Pipeline (Epic 36)" {
+        class SendMessageOrchestrator {
+            +execute(data): void
+        }
+
+        class SendMessageValidator {
+            +validate(payload): ValidationResult
+        }
+
+        class ClaudeStreamingService {
+            +stream(messages, options): void
+        }
+
+        class ConsultToolLoopService {
+            +executeToolLoop(max: 3): void
+        }
+
+        class TitleUpdateService {
+            +updateTitle(conversationId): void
+        }
+
+        class BackgroundEnrichmentService {
+            +enrichFiles(conversationId): void
+        }
     }
 
     package "Context Builders" {
@@ -122,7 +140,6 @@ package "WebSocket (Epic 28 Modular)" {
     package "Utilities" {
         class StreamingHandler {
             +stream(response, callback)
-            +handleChunk(chunk)
         }
 
         class ToolUseRegistry {
@@ -132,19 +149,54 @@ package "WebSocket (Epic 28 Modular)" {
 
         class RateLimiter {
             +checkLimit(userId): boolean
-            +resetLimit(userId): void
         }
+    }
+}
+
+package "Extraction Infrastructure (Epic 31/39)" {
+    class BackgroundExtractor {
+        +processFile(file): void
+    }
+
+    class TextExtractionService {
+        +extract(file): string
+    }
+
+    class ExtractionRoutingService {
+        +route(document): ExtractionResult
+    }
+
+    class RegexResponseExtractor {
+        +extract(text): Response[]
+    }
+
+    class ExtractionConfidenceCalculator {
+        +calculate(text): ConfidenceScore
     }
 }
 
 package "AI / Claude Integration" {
     class ClaudeClient {
+        <<facade>>
+        implements IClaudeClient, IVisionClient, ILLMClient
+    }
+
+    class ClaudeClientBase {
         -client: Anthropic
-        -promptCache: PromptCacheManager
-        +chat(messages): Response
-        +streamChat(messages, onChunk): void
-        +streamMessage(messages, options, imageBlocks?): AsyncGenerator
-        +useTools(messages, tools): ToolResult
+        +retryWithBackoff()
+        +handleError()
+    }
+
+    class ClaudeStreamClient {
+        +streamMessage(msgs, opts): AsyncGenerator
+    }
+
+    class ClaudeTextClient {
+        +sendMessage(msgs, opts): Response
+    }
+
+    class ClaudeVisionClient {
+        +analyzeImage(file): VisionResult
     }
 
     class PromptCacheManager {
@@ -155,153 +207,123 @@ package "AI / Claude Integration" {
 
     class VisionContentBuilder {
         -imageCache: Map<string, ImageContentBlock>
-        +buildImageContent(file, conversationId?): ImageContentBlock
-        +isImageFile(mimeType): boolean
-        +clearConversationCache(conversationId): void
+        +buildImageContent(file): ImageContentBlock
+        +clearConversationCache(id): void
     }
 
     class DocumentParserService {
         +parseDocument(file): ParsedContent
-        +extractText(file): string
     }
 
     class ScoringPromptBuilder {
-        +buildPrompt(assessment, responses): string
-        +buildSystemPrompt(): string
+        +buildPrompt(assessment, responses, isoControls): string
     }
 
     class ExportNarrativeGenerator {
         +generateNarrative(result): string
-        +claimGeneration(resultId): boolean
+    }
+
+    class JinaClient {
+        +search(query): SearchResult[]
+        +readUrl(url): string
     }
 }
 
 package "Database / Repositories" {
-    class DrizzleUserRepository {
-        +findById(id): User
-        +findByEmail(email): User
-        +save(user): User
-    }
+    class DrizzleUserRepository
+    class DrizzleConversationRepository
+    class DrizzleAssessmentRepository
+    class DrizzleMessageRepository
+    class DrizzleResponseRepository
+    class DrizzleDimensionScoreRepository
+    class DrizzleAssessmentResultRepository
+    class DrizzleFileRepository
 
-    class DrizzleConversationRepository {
-        +findById(id): Conversation
-        +findByUserId(userId): Conversation[]
-        +save(conversation): Conversation
-        +updateTitle(id, title): void
-    }
-
-    class DrizzleAssessmentRepository {
-        +findById(id): Assessment
-        +findByVendorId(vendorId): Assessment[]
-        +save(assessment): Assessment
-    }
-
-    class DrizzleMessageRepository {
-        +findByConversationId(id): Message[]
-        +save(message): Message
-    }
-
-    class DrizzleResponseRepository {
-        +findByAssessmentId(id): Response[]
-        +saveBatch(responses): void
-        +deleteOrphans(cutoff): number
-    }
-
-    class DrizzleDimensionScoreRepository {
-        +findByAssessmentId(id): DimensionScore[]
-        +saveBatch(scores): void
-    }
-
-    class DrizzleAssessmentResultRepository {
-        +findByAssessmentId(id): AssessmentResult
-        +save(result): AssessmentResult
-        +claimNarrativeGeneration(id): boolean
-    }
-
-    class DrizzleFileRepository {
-        +findByConversationId(id): File[]
-        +save(file): File
+    package "ISO Compliance Repos (Epic 37)" {
+        class DrizzleComplianceFrameworkRepository
+        class DrizzleFrameworkControlRepository
+        class DrizzleDimensionControlMappingRepository
+        class DrizzleInterpretiveCriteriaRepository
     }
 }
 
 package "Export" {
-    class PDFExporter {
-        +generate(data): Buffer
-    }
-
-    class WordExporter {
-        +generate(data): Buffer
-    }
-
-    class ExcelExporter {
-        +generate(data): Buffer
-    }
+    class PDFExporter
+    class WordExporter
+    class ExcelExporter
 
     class ScoringPDFExporter {
-        +generate(result): Buffer
         +renderDimensionScores(scores)
-        +renderExecutiveSummary(summary)
+        +renderISOConfidence(badges)
     }
 
     class ScoringWordExporter {
         +generate(result): Buffer
     }
+
+    class ScoringExcelExporter {
+        +generate(result): Buffer
+        +renderISOControlMapping(mappings)
+    }
 }
 
 package "Storage" {
-    class LocalFileStorage {
-        -basePath: string
-        +save(file, path): string
-        +retrieve(path): Buffer
-        +delete(path): void
-    }
+    class LocalFileStorage
 }
 
 package "Auth" {
-    class JWTProvider {
-        -secret: string
-        +sign(payload): string
-        +verify(token): TokenPayload
-    }
+    class JWTProvider
 }
 
 database "PostgreSQL" as DB
 
 ' ChatServer -> Handlers
 ChatServer --> ConnectionHandler
-ChatServer --> MessageHandler
 ChatServer --> ConversationHandler
 ChatServer --> ModeSwitchHandler
 ChatServer --> QuestionnaireHandler
 ChatServer --> ScoringHandler
+ChatServer --> SendMessageOrchestrator
 
-' Handlers -> Mode Strategies
-MessageHandler --> IModeStrategy
-ConsultModeStrategy ..|> IModeStrategy
-AssessmentModeStrategy ..|> IModeStrategy
-ScoringModeStrategy ..|> IModeStrategy
+' Send Message Pipeline
+SendMessageOrchestrator --> SendMessageValidator
+SendMessageOrchestrator --> ClaudeStreamingService
+SendMessageOrchestrator --> ConversationContextBuilder
+SendMessageOrchestrator --> FileContextBuilder
+SendMessageOrchestrator --> TitleUpdateService
+SendMessageOrchestrator --> BackgroundEnrichmentService
+SendMessageOrchestrator --> ModeRouter
+
+ClaudeStreamingService --> ConsultToolLoopService
+ClaudeStreamingService --> ClaudeClient
+ConsultToolLoopService --> ToolUseRegistry
+
+' Scoring delegation
+ScoringHandler --> ScoringPostProcessor
 
 ' Handlers -> Context Builders
-MessageHandler --> ConversationContextBuilder
-MessageHandler --> FileContextBuilder
-
-' FileContextBuilder -> VisionContentBuilder (Epic 30)
 FileContextBuilder --> VisionContentBuilder
-
-' ConnectionHandler -> VisionContentBuilder (cache cleanup on disconnect)
 ConnectionHandler --> VisionContentBuilder
 
 ' Handlers -> Utilities
-MessageHandler --> StreamingHandler
-MessageHandler --> ToolUseRegistry
+QuestionnaireHandler --> StreamingHandler
 ChatServer --> RateLimiter
 
+' ClaudeClient decomposition
+ClaudeClient --> ClaudeClientBase
+ClaudeStreamClient --|> ClaudeClientBase
+ClaudeTextClient --|> ClaudeClientBase
+ClaudeVisionClient --|> ClaudeClientBase
+
 ' AI components
-MessageHandler --> ClaudeClient
-ClaudeClient --> PromptCacheManager
-VisionContentBuilder --> LocalFileStorage
-ScoringHandler --> ScoringPromptBuilder
+PromptCacheManager --> ClaudeClient
+ScoringPromptBuilder --> JinaClient
 ExportNarrativeGenerator --> ClaudeClient
+
+' Extraction
+ExtractionRoutingService --> RegexResponseExtractor
+ExtractionRoutingService --> ExtractionConfidenceCalculator
+BackgroundExtractor --> TextExtractionService
 
 ' Repositories -> DB
 DrizzleUserRepository --> DB
@@ -312,6 +334,10 @@ DrizzleResponseRepository --> DB
 DrizzleDimensionScoreRepository --> DB
 DrizzleAssessmentResultRepository --> DB
 DrizzleFileRepository --> DB
+DrizzleComplianceFrameworkRepository --> DB
+DrizzleFrameworkControlRepository --> DB
+DrizzleDimensionControlMappingRepository --> DB
+DrizzleInterpretiveCriteriaRepository --> DB
 
 ' Controllers -> Auth
 AuthController ..> JWTProvider
