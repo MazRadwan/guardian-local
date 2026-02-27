@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { db } from '../client.js';
 import { conversations } from '../schema/index.js';
@@ -57,7 +57,7 @@ export class DrizzleConversationRepository implements IConversationRepository {
       .select()
       .from(conversations)
       .where(and(...conditions))
-      .orderBy(conversations.lastActivityAt);
+      .orderBy(desc(conversations.lastActivityAt));
 
     return rows.map((row) => this.toDomain(row));
   }
