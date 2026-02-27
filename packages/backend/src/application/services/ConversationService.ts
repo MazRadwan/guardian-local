@@ -156,10 +156,12 @@ export class ConversationService {
     }
 
     if (this.fileRepo) {
+      // Delete responses referencing files first (responses.file_id → files.id FK)
+      await this.fileRepo.deleteResponsesByConversationFiles(conversationId);
       await this.fileRepo.deleteByConversationId(conversationId);
     }
 
-    // Delete all messages first (avoid FK issues and partial deletes)
+    // Delete all messages (avoid FK issues and partial deletes)
     await this.messageRepo.deleteByConversationId(conversationId);
 
     // Delete the conversation

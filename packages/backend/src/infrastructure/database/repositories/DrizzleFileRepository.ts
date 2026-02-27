@@ -1,4 +1,4 @@
-import { eq, and, isNotNull, asc, inArray } from 'drizzle-orm'
+import { eq, and, isNotNull, asc, inArray, sql } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import { db } from '../client.js'
 import { files } from '../schema/index.js'
@@ -230,6 +230,15 @@ export class DrizzleFileRepository implements IFileRepository {
       textExcerpt: row.textExcerpt ?? null,
       intakeContext: row.intakeContext as IntakeDocumentContext | null,
     }))
+  }
+
+  async deleteResponsesByConversationFiles(conversationId: string): Promise<void> {
+    await this.db.execute(sql`
+      DELETE FROM responses
+      WHERE file_id IN (
+        SELECT id FROM files WHERE conversation_id = ${conversationId}
+      )
+    `)
   }
 
   async deleteByConversationId(conversationId: string): Promise<void> {

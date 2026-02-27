@@ -170,4 +170,10 @@ export interface IFileRepository {
    * Used when removing a conversation to avoid FK conflicts
    */
   deleteByConversationId(conversationId: string): Promise<void>
+
+  /**
+   * Delete responses that reference files in a conversation.
+   * Must be called before deleteByConversationId to satisfy FK constraints.
+   */
+  deleteResponsesByConversationFiles(conversationId: string): Promise<void>
 }
