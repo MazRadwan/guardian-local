@@ -10,6 +10,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { getMaxTokens, getModelId } from '../../infrastructure/ai/ClaudeClientBase.js';
 import { ConversationMode } from '../../domain/entities/Conversation.js';
 
 /**
@@ -64,7 +65,7 @@ const MAX_TITLE_LENGTH = 50;
 /**
  * Claude Haiku model for fast, low-cost title generation
  */
-const HAIKU_MODEL = 'claude-3-haiku-20240307';
+const HAIKU_MODEL = getModelId('claude-3-haiku-20240307');
 
 /**
  * System prompt for title generation
@@ -107,7 +108,7 @@ export class TitleGenerationService {
 
       const response = await this.client.messages.create({
         model: HAIKU_MODEL,
-        max_tokens: 100, // Titles are short
+        max_tokens: getMaxTokens(100),
         system: TITLE_GENERATION_PROMPT,
         messages: [
           {

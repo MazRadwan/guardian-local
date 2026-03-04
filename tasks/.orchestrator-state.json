@@ -1,0 +1,73 @@
+{
+  "epic": 40,
+  "workflow": "opus-gpt",
+  "phase": "complete",
+  "status": "awaiting_gpt_review",
+  "targetScope": "epic",
+  "reviewScope": "epic",
+  "gptReviewPrompt": null,
+  "currentBatch": 5,
+  "totalBatches": 5,
+  "batches": [
+    {
+      "batch_num": 1,
+      "mode": "sequential",
+      "stories": [
+        "40.1.4",
+        "40.1.1"
+      ]
+    },
+    {
+      "batch_num": 2,
+      "mode": "sequential",
+      "stories": [
+        "40.1.2"
+      ]
+    },
+    {
+      "batch_num": 3,
+      "mode": "sequential",
+      "stories": [
+        "40.1.3"
+      ]
+    },
+    {
+      "batch_num": 4,
+      "mode": "parallel",
+      "stories": [
+        "40.1.5",
+        "40.1.6"
+      ]
+    },
+    {
+      "batch_num": 5,
+      "mode": "sequential",
+      "stories": [
+        "40.1.7"
+      ]
+    }
+  ],
+  "completedStories": [
+    "40.1.4",
+    "40.1.1",
+    "40.1.2",
+    "40.1.3",
+    "40.1.5",
+    "40.1.6",
+    "40.1.7"
+  ],
+  "skippedStories": [],
+  "reviewRounds": {
+    "code": 0,
+    "epicLevel": 1
+  },
+  "batchReview": {
+    "reReviewRequired": false,
+    "lastReviewConfidence": 0.95,
+    "fixesApplied": true
+  },
+  "epicReviewComplete": true,
+  "createdAt": "2026-02-24T00:00:00Z",
+  "verificationPassed": true,
+  "planCompleteAt": 1772565897.659528
+}

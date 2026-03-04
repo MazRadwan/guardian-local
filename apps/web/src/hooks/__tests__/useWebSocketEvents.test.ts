@@ -81,6 +81,11 @@ describe('useWebSocketEvents', () => {
     jest.clearAllMocks();
     sessionStorage.clear();
     mockStoreMessages = []; // Reset store messages
+    useChatStore.setState({
+      messages: [],
+      isStreaming: false,
+      currentStreamingMessage: null,
+    });
   });
 
   describe('Initialization', () => {
@@ -209,9 +214,10 @@ describe('useWebSocketEvents', () => {
 
       expect(mockStartStreaming).not.toHaveBeenCalled();
       expect(mockAppendToLastMessage).not.toHaveBeenCalled();
+      expect(useChatStore.getState().messages).toEqual([]);
     });
 
-    it('should start streaming on first chunk when no messages exist', () => {
+    it('should append first chunk by creating an assistant placeholder', () => {
       const { result } = renderHook(() => useWebSocketEvents({
         ...defaultParams,
         messages: [],
@@ -220,12 +226,21 @@ describe('useWebSocketEvents', () => {
 
       result.current.handleMessageStream('first chunk', 'conv-1');
 
-      expect(mockStartStreaming).toHaveBeenCalled();
       expect(mockSetLoading).toHaveBeenCalledWith(false);
-      expect(mockAppendToLastMessage).toHaveBeenCalledWith('first chunk');
+      expect(mockStartStreaming).not.toHaveBeenCalled();
+      expect(mockAppendToLastMessage).not.toHaveBeenCalled();
+      expect(useChatStore.getState().messages).toHaveLength(1);
+      expect(useChatStore.getState().messages[0].role).toBe('assistant');
+      expect(useChatStore.getState().messages[0].content).toBe('first chunk');
     });
 
-    it('should start streaming on first chunk when last message is not assistant', () => {
+    it('should append first chunk when last message is not assistant', () => {
+      useChatStore.setState({
+        messages: [
+          { role: 'user', content: 'Hello', timestamp: new Date() },
+        ],
+      });
+
       const { result } = renderHook(() => useWebSocketEvents({
         ...defaultParams,
         messages: [
@@ -236,20 +251,22 @@ describe('useWebSocketEvents', () => {
 
       result.current.handleMessageStream('first chunk', 'conv-1');
 
-      expect(mockStartStreaming).toHaveBeenCalled();
       expect(mockSetLoading).toHaveBeenCalledWith(false);
-      expect(mockAppendToLastMessage).toHaveBeenCalledWith('first chunk');
+      expect(mockStartStreaming).not.toHaveBeenCalled();
+      expect(mockAppendToLastMessage).not.toHaveBeenCalled();
+      expect(useChatStore.getState().messages).toHaveLength(2);
+      expect(useChatStore.getState().messages[1].role).toBe('assistant');
+      expect(useChatStore.getState().messages[1].content).toBe('first chunk');
     });
 
-    it('should append subsequent chunks without starting streaming again', () => {
-      // Mock getState to return existing messages
+    it('should append subsequent chunks without creating a new assistant message', () => {
       const messagesWithAssistant = [
         { role: 'user' as const, content: 'Hello', timestamp: new Date() },
         { role: 'assistant' as const, content: 'Partial', timestamp: new Date() },
       ];
-      const getStateSpy = jest.spyOn(useChatStore, 'getState').mockReturnValue({
+      useChatStore.setState({
         messages: messagesWithAssistant,
-      } as ReturnType<typeof useChatStore.getState>);
+      });
 
       const { result } = renderHook(() => useWebSocketEvents({
         ...defaultParams,
@@ -259,9 +276,9 @@ describe('useWebSocketEvents', () => {
       result.current.handleMessageStream('more text', 'conv-1');
 
       expect(mockStartStreaming).not.toHaveBeenCalled();
-      expect(mockAppendToLastMessage).toHaveBeenCalledWith('more text');
-
-      getStateSpy.mockRestore();
+      expect(mockAppendToLastMessage).not.toHaveBeenCalled();
+      expect(useChatStore.getState().messages).toHaveLength(2);
+      expect(useChatStore.getState().messages[1].content).toBe('Partialmore text');
     });
 
     it('should clear loading state when streaming starts', () => {

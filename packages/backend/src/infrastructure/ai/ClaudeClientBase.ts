@@ -19,10 +19,27 @@ import type {
   ContentBlock,
 } from './types/index.js';
 
+/**
+ * Returns LOCAL_MODEL_MAX_TOKENS if set, otherwise the provided default.
+ * Used to override token limits when running local models (tokens are free).
+ */
+export function getMaxTokens(defaultValue: number): number {
+  const override = parseInt(process.env.LOCAL_MODEL_MAX_TOKENS || '0', 10);
+  return override > 0 ? override : defaultValue;
+}
+
+/**
+ * Returns LOCAL_MODEL_NAME if set, otherwise the provided default.
+ * Used to override model identifier when running local models via LM Studio.
+ */
+export function getModelId(defaultValue: string): string {
+  return process.env.LOCAL_MODEL_NAME || defaultValue;
+}
+
 export class ClaudeClientBase {
   protected client: Anthropic;
-  protected readonly model = 'claude-sonnet-4-5-20250929';
-  protected readonly maxTokens = 4096;
+  protected readonly model = getModelId('claude-sonnet-4-5-20250929');
+  protected readonly maxTokens = getMaxTokens(4096);
   protected readonly retryAttempts = 3;
   protected readonly retryDelays = [2000, 4000, 8000]; // Exponential backoff
 

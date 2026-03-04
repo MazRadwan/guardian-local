@@ -81,6 +81,9 @@ tasks/epic-*/.orchestrator-state.json
 # Infrastructure docs (local/sensitive)
 docs/infrastructure/AWS_DEPLOYMENT_PLAN.md
 
+# Server startup scripts (contain infrastructure details)
+start-backend.sh
+
 # Local knowledge base docs
 .claude/documentation/kb/
 

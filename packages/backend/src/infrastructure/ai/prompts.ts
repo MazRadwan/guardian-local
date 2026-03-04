@@ -64,6 +64,13 @@ The wrong example is unreadable because it lacks blank lines between question bl
 `;
 
 function loadCustomPrompt(): string | null {
+  // Local-model smoke tests can opt out of the large custom prompt file
+  // when the loaded model/context window cannot accommodate it.
+  if (process.env.LOCAL_MODEL_USE_FALLBACK_PROMPT === 'true') {
+    console.log('[Prompts] Using built-in fallback prompts (LOCAL_MODEL_USE_FALLBACK_PROMPT=true)');
+    return null;
+  }
+
   // First check inline env var
   if (process.env.GUARDIAN_PROMPT_TEXT) {
     return process.env.GUARDIAN_PROMPT_TEXT;

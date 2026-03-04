@@ -14,6 +14,7 @@ import {
 } from '../../application/interfaces/IExportNarrativeGenerator.js';
 import { IExportNarrativePromptBuilder } from '../../application/interfaces/IExportNarrativePromptBuilder.js';
 import { IClaudeClient } from '../../application/interfaces/IClaudeClient.js';
+import { getMaxTokens } from '../ai/ClaudeClientBase.js';
 import { validateNarrativeMessaging } from '../../domain/compliance/isoMessagingTerms.js';
 
 /**
@@ -76,7 +77,7 @@ export class ExportNarrativeGenerator implements IExportNarrativeGenerator {
         systemPrompt,
         // Narrative includes detailed analysis for all 10 dimensions with evidence,
         // strengths/weaknesses, and recommendations. 16K tokens for comprehensive reports.
-        maxTokens: 16000,
+        maxTokens: getMaxTokens(16000),
       }
     );
 

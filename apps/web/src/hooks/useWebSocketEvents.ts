@@ -186,17 +186,12 @@ export function useWebSocketEvents({
         return;
       }
 
-      // If this is the first chunk, start a new streaming message
-      // IMPORTANT: Access messages directly from store to avoid infinite re-render loop
-      // (previously had `messages` in deps which caused Maximum update depth exceeded)
-      const currentMessages = useChatStore.getState().messages;
-      if (currentMessages.length === 0 || currentMessages[currentMessages.length - 1].role !== 'assistant') {
-        startStreaming();
-        setLoading(false); // Hide typing indicator, show streaming message instead
-      }
-      appendToLastMessage(chunk);
+      // Single store update per token avoids feedback loops between placeholder
+      // creation and token appends during high-frequency local-model streaming.
+      useChatStore.getState().appendStreamingChunk(chunk);
+      setLoading(false); // Hide typing indicator, show streaming message instead
     },
-    [activeConversationId, startStreaming, appendToLastMessage, setLoading]
+    [activeConversationId, setLoading]
   );
 
   // Handler 3: Handle WebSocket errors

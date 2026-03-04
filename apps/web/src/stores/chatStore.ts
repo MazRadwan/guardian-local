@@ -222,6 +222,7 @@ export interface ChatState {
   setMessages: (messages: ChatMessage[]) => void;
   updateLastMessage: (content: string) => void;
   appendToLastMessage: (chunk: string) => void;
+  appendStreamingChunk: (chunk: string) => void;
   appendComponentToLastAssistantMessage: (component: EmbeddedComponent) => void;
   startStreaming: () => void;
   finishStreaming: () => void;
@@ -437,6 +438,47 @@ export interface ChatState {
  */
 let toolStatusTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Streaming chunk buffer — batches rapid token deltas into fewer state updates.
+ * Prevents React "Maximum update depth exceeded" with fast-streaming local models.
+ */
+let streamChunkBuffer = '';
+let streamFlushRafId: number | null = null;
+
+function flushStreamBuffer(set: (partial: Partial<import('zustand').StateCreator<ChatState>> | ((state: ChatState) => Partial<ChatState>)) => void) {
+  streamFlushRafId = null;
+  const buffered = streamChunkBuffer;
+  streamChunkBuffer = '';
+  if (!buffered) return;
+
+  set((state: ChatState) => {
+    const messages = [...state.messages];
+    const needsAssistantPlaceholder =
+      messages.length === 0 || messages[messages.length - 1].role !== 'assistant';
+
+    if (needsAssistantPlaceholder) {
+      messages.push({
+        role: 'assistant',
+        content: '',
+        timestamp: new Date(),
+      });
+    }
+
+    const lastIndex = messages.length - 1;
+    const lastMessage = messages[lastIndex];
+    messages[lastIndex] = {
+      ...lastMessage,
+      content: lastMessage.content + buffered,
+    };
+
+    return {
+      messages,
+      currentStreamingMessage: (state.currentStreamingMessage ?? '') + buffered,
+      isStreaming: true,
+    };
+  });
+}
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
@@ -545,6 +587,14 @@ export const useChatStore = create<ChatState>()(
           return { messages };
         }),
 
+      appendStreamingChunk: (chunk) => {
+        if (!chunk) return;
+        streamChunkBuffer += chunk;
+        if (streamFlushRafId === null) {
+          streamFlushRafId = requestAnimationFrame(() => flushStreamBuffer(set));
+        }
+      },
+
       appendComponentToLastAssistantMessage: (component) =>
         set((state) => {
           const messages = [...state.messages];
@@ -586,11 +636,17 @@ export const useChatStore = create<ChatState>()(
           ],
         })),
 
-      finishStreaming: () =>
+      finishStreaming: () => {
+        if (streamFlushRafId !== null) {
+          cancelAnimationFrame(streamFlushRafId);
+          streamFlushRafId = null;
+        }
+        flushStreamBuffer(set);
         set({
           currentStreamingMessage: null,
           isStreaming: false,
-        }),
+        });
+      },
 
       setLoading: (isLoading) => set({ isLoading }),
 

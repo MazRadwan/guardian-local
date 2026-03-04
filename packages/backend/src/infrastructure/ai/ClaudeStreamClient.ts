@@ -17,7 +17,7 @@ import type {
   ILLMClient,
   StreamWithToolOptions,
 } from '../../application/interfaces/ILLMClient.js';
-import { ClaudeClientBase, ClaudeAPIError } from './ClaudeClientBase.js';
+import { ClaudeClientBase, ClaudeAPIError, getMaxTokens } from './ClaudeClientBase.js';
 
 export class ClaudeStreamClient extends ClaudeClientBase implements ILLMClient {
   /**
@@ -42,7 +42,7 @@ export class ClaudeStreamClient extends ClaudeClientBase implements ILLMClient {
       tools,
       tool_choice,
       usePromptCache,
-      maxTokens = 8192,
+      maxTokens = getMaxTokens(8192),
       temperature,
       abortSignal,
       onTextDelta,
