@@ -63,9 +63,13 @@ export interface TitleGenerationResult {
 const MAX_TITLE_LENGTH = 50;
 
 /**
- * Claude Haiku model for fast, low-cost title generation
+ * Claude Haiku model for fast, low-cost title generation.
+ * Lazy evaluation: getModelId reads LOCAL_MODEL_NAME env var which may not
+ * be set at module load time (before dotenv runs).
  */
-const HAIKU_MODEL = getModelId('claude-3-haiku-20240307');
+function getTitleModel(): string {
+  return getModelId('claude-3-haiku-20240307');
+}
 
 /**
  * System prompt for title generation
@@ -107,7 +111,7 @@ export class TitleGenerationService {
       const userPrompt = this.buildUserPrompt(context);
 
       const response = await this.client.messages.create({
-        model: HAIKU_MODEL,
+        model: getTitleModel(),
         max_tokens: getMaxTokens(100),
         system: TITLE_GENERATION_PROMPT,
         messages: [
