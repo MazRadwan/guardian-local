@@ -155,9 +155,10 @@ export class ScoringService implements IScoringService {
         );
       }
 
-      // 7. Rate limit (5 per day per assessment)
+      // 7. Rate limit (per day per assessment)
+      // TODO: Bumped from 5 to 50 for local model narrative tuning. Revert to 5 for production.
       const todayCount = await this.assessmentResultRepo.countTodayForAssessment(assessmentId);
-      if (todayCount >= 5) {
+      if (todayCount >= 50) {
         throw new ScoringError(
           'RATE_LIMITED',
           'Maximum 5 scoring attempts per day exceeded for this assessment'

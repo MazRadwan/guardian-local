@@ -108,14 +108,84 @@ ${disqualifyingList}
 ---
 
 ## Output Format
+${process.env.LOCAL_MODEL_NAME ? LOCAL_MODEL_OUTPUT_FORMAT : DEFAULT_OUTPUT_FORMAT}
+${CONFIDENCE_AND_ISO_INSTRUCTIONS}`;
+}
 
+/** Default output format for Claude */
+const DEFAULT_OUTPUT_FORMAT = `
 1. **First**: Stream narrative report in markdown:
    - Executive Summary (2-3 paragraphs)
    - Per-dimension analysis with sub-scores
    - Key risks and recommendations
 
-2. **Then**: Call \`scoring_complete\` tool with structured scores${CONFIDENCE_AND_ISO_INSTRUCTIONS}`;
-}
+2. **Then**: Call \`scoring_complete\` tool with structured scores`;
+
+/** Detailed output template for local models — concrete structure Qwen can follow */
+const LOCAL_MODEL_OUTPUT_FORMAT = `
+Stream a narrative report in markdown following this EXACT structure, then call \`scoring_complete\`.
+
+### Executive Summary
+Write 2-3 paragraphs. State the composite score, recommendation, and top concerns.
+
+### Per-Dimension Analysis
+For EACH dimension, write EXACTLY this format:
+
+---
+## [Dimension Name] (Score: XX/100 — [RATING])
+
+**Assessment Confidence:** [High/Medium/Low] — [one sentence rationale]
+
+[2-3 paragraphs of findings written as flowing prose. Describe each sub-score naturally in sentences. Cite evidence as [Section X, Q Y]. End with the dimension total.]
+
+**Specific Risks:**
+- [Risk described in plain English]
+
+**Recommended Mitigations:**
+1. [Action with timeline]
+
+---
+
+### EXAMPLE of one dimension written correctly:
+
+## Clinical Risk (Score: 75/100 — CRITICAL)
+
+**Assessment Confidence:** Medium — Evidence is based on vendor claims without independent verification.
+
+The vendor's evidence base presents significant concerns. Evidence Quality scored the maximum risk of 40, as ApolloChat relies entirely on an internal retrospective review of 12,000 patient interactions with no peer-reviewed studies or independent clinical validation. Prospective validation is expected in Q4 2026, but this remains unconfirmed [Section 1, Q 2].
+
+Regulatory Status scored 15, as no Health Canada Medical Device Licence or FDA 510(k) application has been submitted. The vendor claims the solution does not meet the medical device classification threshold, but this interpretation has not been independently verified [Section 8, Q 1]. Patient Safety scored 10, reflecting a tiered safety framework with escalation for high-risk symptoms and human-in-the-loop during operating hours [Section 3, Q 4].
+
+Population Relevance scored 5, with training data predominantly English and skewed toward UK/US populations, though Canadian-specific content has been added as fine-tuning [Section 6, Q 1]. Workflow Integration scored 5, as override capability requires a Premium tier while Standard tier receives read-only audit access [Section 4, Q 2]. Clinical Risk totaled 75 out of 100, placing it in the critical range.
+
+**Specific Risks:**
+- No independent clinical validation or peer-reviewed evidence
+- Unverified regulatory classification claim
+- Human oversight limited to operating hours only
+
+**Recommended Mitigations:**
+1. Require independent clinical validation study before deployment (0-6 months)
+2. Obtain formal Health Canada regulatory opinion on device classification (0-3 months)
+3. Implement 24/7 automated safety escalation for high-risk symptoms (0-3 months)
+
+### END EXAMPLE — Follow this style for ALL 10 dimensions.
+
+### Compliance Assessment
+Subsections for PIPEDA, Provincial Health Laws, Health Canada regulations.
+
+### Recommendations
+**Priority 1: Critical (Deployment Blockers)** → numbered items
+**Priority 2: High-Priority** → numbered items
+**Priority 3: Operational Enhancements** → numbered items
+
+### Conclusion
+Bold recommendation, brief justification, numbered next steps.
+
+### WRITING RULES (FOLLOW STRICTLY):
+- NEVER write underscore_names. Convert: evidence_quality_score → "Evidence Quality"
+- NEVER show arithmetic: ~~"40 + 15 + 10 + 5 + 5 = 75"~~
+- NEVER write parenthetical enums: ~~"(vendor_testing_only)"~~
+- Always cite evidence: [Section X, Q Y]`;
 
 /** User prompt params shared by buildScoringUserPrompt and buildScoringUserPromptParts */
 interface UserPromptParams {
