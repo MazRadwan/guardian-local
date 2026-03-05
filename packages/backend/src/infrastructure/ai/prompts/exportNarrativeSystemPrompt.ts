@@ -30,6 +30,46 @@ import {
  * Therefore, the narrative should NOT duplicate these sections.
  * It should START with detailed dimension analysis.
  */
+/**
+ * Additional narrative rules for local models.
+ * Local models (e.g. Qwen) tend to dump raw field names and arithmetic
+ * unless explicitly told not to. These rules + worked example ensure
+ * professional prose output.
+ */
+const LOCAL_MODEL_NARRATIVE_RULES = `
+
+## WRITING RULES (LOCAL MODEL — FOLLOW STRICTLY)
+
+- NEVER write underscore_names. Convert: evidence_quality_score → "Evidence Quality"
+- NEVER show arithmetic: ~~"40 + 15 + 10 + 5 + 5 = 75"~~
+- NEVER write parenthetical enums: ~~"(vendor_testing_only)"~~
+- Present sub-scores as flowing prose, not bullet-point lists
+- Write 2-3 paragraphs per dimension describing findings naturally
+- Always cite evidence: [Section X, Q Y]
+
+### EXAMPLE of one dimension written correctly:
+
+## Clinical Risk (Score: 75/100 — CRITICAL)
+
+**Assessment Confidence:** Medium — Evidence is based on vendor claims without independent verification.
+
+**Key Findings:**
+The vendor's evidence base presents significant concerns. Evidence Quality scored the maximum risk of 40, as the solution relies entirely on an internal retrospective review of 12,000 patient interactions with no peer-reviewed studies or independent clinical validation [Section 1, Q 2]. Regulatory Status scored 15, as no Health Canada Medical Device Licence or FDA 510(k) application has been submitted [Section 8, Q 1].
+
+Patient Safety scored 10, reflecting a tiered safety framework with escalation for high-risk symptoms and human-in-the-loop during operating hours [Section 3, Q 4]. Population Relevance scored 5, with training data predominantly English and skewed toward UK/US populations [Section 6, Q 1]. Clinical Risk totaled 75 out of 100, placing it in the critical range.
+
+**Specific Risks Identified:**
+- No independent clinical validation or peer-reviewed evidence
+- Unverified regulatory classification claim
+- Human oversight limited to operating hours only
+
+**Recommended Mitigations:**
+1. Require independent clinical validation study before deployment (0-6 months)
+2. Obtain formal Health Canada regulatory opinion on device classification (0-3 months)
+3. Implement 24/7 automated safety escalation for high-risk symptoms (0-3 months)
+
+### END EXAMPLE — Follow this style for ALL 10 dimensions.`;
+
 export function buildExportNarrativeSystemPrompt(): string {
   const dimensionList = ALL_DIMENSIONS.map(
     (d) => `- ${DIMENSION_CONFIG[d].label} (${DIMENSION_CONFIG[d].type})`
@@ -199,5 +239,6 @@ When confidence data is provided (High/Medium/Low):
 ## Guardian-Native Dimensions
 
 Some dimensions (Clinical Risk, Vendor Capability, Ethical Considerations, Sustainability) use Guardian healthcare-specific criteria without ISO mapping. When these appear, note: "Assessed using Guardian healthcare-specific criteria."
+${process.env.LOCAL_MODEL_NAME ? LOCAL_MODEL_NARRATIVE_RULES : ''}
 `;
 }
