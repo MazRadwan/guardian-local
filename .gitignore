@@ -76,7 +76,8 @@ packages/shared/src/**/*.js.map
 packages/shared/src/**/*.d.ts.map
 
 # Orchestrator state files (auto-generated workflow tracking)
-tasks/epic-*/.orchestrator-state.json
+tasks/**/.orchestrator-state.json
+.orchestrator-state.json
 
 # Infrastructure docs (local/sensitive)
 docs/infrastructure/AWS_DEPLOYMENT_PLAN.md
