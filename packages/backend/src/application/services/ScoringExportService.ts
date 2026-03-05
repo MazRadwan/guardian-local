@@ -194,10 +194,18 @@ export class ScoringExportService {
     solutionType: SolutionType
   ): Promise<string> {
     // 1. Check if narrative already complete
-    // GPT Review Fix: Also treat existing narrativeReport as complete when status is null
-    // This handles pre-existing scored assessments that have narrativeReport but no status
-    if (result.narrativeReport && (result.narrativeStatus === 'complete' || result.narrativeStatus === null || result.narrativeStatus === undefined)) {
-      return result.narrativeReport;
+    // For Claude: scoring-phase narrative (status=null) is high-quality, use it directly.
+    // For local models: scoring-phase narrative is a brief summary (two-phase strategy),
+    // so only use cached narrative if it was export-generated (status='complete').
+    const isLocalModel = !!process.env.LOCAL_MODEL_NAME;
+    if (result.narrativeReport) {
+      if (result.narrativeStatus === 'complete') {
+        return result.narrativeReport; // Export-generated narrative, use for all models
+      }
+      if (!isLocalModel && (result.narrativeStatus === null || result.narrativeStatus === undefined)) {
+        return result.narrativeReport; // Claude scoring-phase narrative is sufficient
+      }
+      // Local model + null/undefined status = scoring-phase brief summary, regenerate
     }
 
     // 2. Try to claim the generation (atomic UPDATE)
