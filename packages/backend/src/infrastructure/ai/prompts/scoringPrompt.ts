@@ -121,71 +121,35 @@ const DEFAULT_OUTPUT_FORMAT = `
 
 2. **Then**: Call \`scoring_complete\` tool with structured scores`;
 
-/** Detailed output template for local models — concrete structure Qwen can follow */
+/**
+ * Scoring-only output format for local models (two-phase narrative strategy).
+ *
+ * Phase 1 (this prompt): Model focuses entirely on accurate scoring. Produces
+ * a brief executive summary for the streaming UX, then calls scoring_complete.
+ * The full detailed narrative is generated separately at export/download time
+ * by ExportNarrativeGenerator, which has a dedicated prompt and full token
+ * budget for prose quality.
+ *
+ * Why: Local models (e.g. Qwen 3B active params) produce shallow narratives
+ * when asked to score AND write a 20-page report in one shot. Splitting the
+ * work lets each call focus on what it does best.
+ */
 const LOCAL_MODEL_OUTPUT_FORMAT = `
-Stream a narrative report in markdown following this EXACT structure, then call \`scoring_complete\`.
+Your PRIMARY job is accurate scoring. Follow these steps:
 
-### Executive Summary
-Write 2-3 paragraphs. State the composite score, recommendation, and top concerns.
+1. **First**: Write a brief executive summary (2-3 short paragraphs):
+   - State the composite score and recommendation
+   - List the top 2-3 concerns
+   - Mention any disqualifying factors
 
-### Per-Dimension Analysis
-For EACH dimension, write EXACTLY this format:
+2. **Then**: Call \`scoring_complete\` tool with ALL structured scores.
 
----
-## [Dimension Name] (Score: XX/100 — [RATING])
+**IMPORTANT:** Focus your effort on scoring accuracy — correct sub-scores, dimension totals, composite calculation, and disqualifying factor identification. The detailed narrative report will be generated separately.
 
-**Assessment Confidence:** [High/Medium/Low] — [one sentence rationale]
-
-[2-3 paragraphs of findings written as flowing prose. Describe each sub-score naturally in sentences. Cite evidence as [Section X, Q Y]. End with the dimension total.]
-
-**Specific Risks:**
-- [Risk described in plain English]
-
-**Recommended Mitigations:**
-1. [Action with timeline]
-
----
-
-### EXAMPLE of one dimension written correctly:
-
-## Clinical Risk (Score: 75/100 — CRITICAL)
-
-**Assessment Confidence:** Medium — Evidence is based on vendor claims without independent verification.
-
-The vendor's evidence base presents significant concerns. Evidence Quality scored the maximum risk of 40, as ApolloChat relies entirely on an internal retrospective review of 12,000 patient interactions with no peer-reviewed studies or independent clinical validation. Prospective validation is expected in Q4 2026, but this remains unconfirmed [Section 1, Q 2].
-
-Regulatory Status scored 15, as no Health Canada Medical Device Licence or FDA 510(k) application has been submitted. The vendor claims the solution does not meet the medical device classification threshold, but this interpretation has not been independently verified [Section 8, Q 1]. Patient Safety scored 10, reflecting a tiered safety framework with escalation for high-risk symptoms and human-in-the-loop during operating hours [Section 3, Q 4].
-
-Population Relevance scored 5, with training data predominantly English and skewed toward UK/US populations, though Canadian-specific content has been added as fine-tuning [Section 6, Q 1]. Workflow Integration scored 5, as override capability requires a Premium tier while Standard tier receives read-only audit access [Section 4, Q 2]. Clinical Risk totaled 75 out of 100, placing it in the critical range.
-
-**Specific Risks:**
-- No independent clinical validation or peer-reviewed evidence
-- Unverified regulatory classification claim
-- Human oversight limited to operating hours only
-
-**Recommended Mitigations:**
-1. Require independent clinical validation study before deployment (0-6 months)
-2. Obtain formal Health Canada regulatory opinion on device classification (0-3 months)
-3. Implement 24/7 automated safety escalation for high-risk symptoms (0-3 months)
-
-### END EXAMPLE — Follow this style for ALL 10 dimensions.
-
-### Compliance Assessment
-Subsections for PIPEDA, Provincial Health Laws, Health Canada regulations.
-
-### Recommendations
-**Priority 1: Critical (Deployment Blockers)** → numbered items
-**Priority 2: High-Priority** → numbered items
-**Priority 3: Operational Enhancements** → numbered items
-
-### Conclusion
-Bold recommendation, brief justification, numbered next steps.
-
-### WRITING RULES (FOLLOW STRICTLY):
+**WRITING RULES for the brief summary:**
 - NEVER write underscore_names. Convert: evidence_quality_score → "Evidence Quality"
-- NEVER show arithmetic: ~~"40 + 15 + 10 + 5 + 5 = 75"~~
-- NEVER write parenthetical enums: ~~"(vendor_testing_only)"~~
-- Always cite evidence: [Section X, Q Y]`;
+- NEVER show arithmetic formulas
+- NEVER write enum values in parentheses`;
 
 /** User prompt params shared by buildScoringUserPrompt and buildScoringUserPromptParts */
 interface UserPromptParams {
