@@ -27,6 +27,7 @@ import {
 import type { IJinaClient, JinaSearchResult, JinaReadResult } from '../interfaces/IJinaClient.js';
 import type { WebSearchInput } from '../interfaces/IWebSearchTool.js';
 import { JINA_CONFIG } from '../config/jinaConfig.js';
+import { enforceTopicScope, stripInjectionPatterns, sanitizeResultContent } from './SearchGuardrails.js';
 
 /**
  * Rate limit tracking per conversation
@@ -111,8 +112,23 @@ export class WebSearchToolService implements IToolUseHandler {
 
       const { query, max_results } = validationResult.input!;
 
-      // 5. PHI redaction: sanitize query before sending to external API
-      const sanitizedQuery = this.redactPHI(query);
+      // 5a. Topic guardrail: reject queries unrelated to healthcare/AI governance
+      const topicError = enforceTopicScope(query);
+      if (topicError) {
+        return {
+          handled: true,
+          toolResult: {
+            toolUseId: input.toolUseId,
+            content: topicError,
+          },
+        };
+      }
+
+      // 5b. Strip prompt injection patterns from query before sending to external API
+      const cleanedQuery = stripInjectionPatterns(query);
+
+      // 5c. PHI redaction: sanitize query before sending to external API
+      const sanitizedQuery = this.redactPHI(cleanedQuery);
 
       // 6. Update rate limit timestamp
       rateLimitMap.set(context.conversationId, Date.now());
@@ -142,8 +158,14 @@ export class WebSearchToolService implements IToolUseHandler {
       const urls = searchResults.slice(0, JINA_CONFIG.MAX_URLS_TO_READ).map(r => r.url);
       const readResults = await this.jinaClient.readUrls(urls);
 
-      // 10. Format results for Claude
-      const content = this.formatResults(searchResults, readResults);
+      // 10. Sanitize search results against indirect prompt injection
+      const sanitizedReadResults = readResults.map(r => ({
+        ...r,
+        content: sanitizeResultContent(r.content),
+      }));
+
+      // 11. Format results for Claude
+      const content = this.formatResults(searchResults, sanitizedReadResults);
 
       return {
         handled: true,
