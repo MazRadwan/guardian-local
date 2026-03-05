@@ -97,7 +97,8 @@ function formatDimensionScore(dimScore: DimensionScoreData): string {
     if (dimScore.findings.evidenceRefs && dimScore.findings.evidenceRefs.length > 0) {
       output += '\n**Evidence References:**\n';
       for (const ref of dimScore.findings.evidenceRefs) {
-        output += `- [Section ${ref.sectionNumber}, Q ${ref.questionNumber}]: "${truncateText(ref.quote, 100)}"\n`;
+        const quote = ref.quote ? truncateText(ref.quote, 100) : 'N/A';
+        output += `- [Section ${ref.sectionNumber}, Q ${ref.questionNumber}]: "${quote}"\n`;
       }
     }
   }

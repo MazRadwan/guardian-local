@@ -30,6 +30,75 @@ import {
  * Therefore, the narrative should NOT duplicate these sections.
  * It should START with detailed dimension analysis.
  */
+/**
+ * Additional narrative rules for local models.
+ * Local models (e.g. Qwen) tend to dump raw field names and arithmetic
+ * unless explicitly told not to. These rules + worked example ensure
+ * professional prose output.
+ */
+const LOCAL_MODEL_NARRATIVE_RULES = `
+
+## WRITING RULES (LOCAL MODEL — FOLLOW STRICTLY)
+
+- NEVER write underscore_names. Convert: evidence_quality_score → "Evidence Quality"
+- NEVER show arithmetic: ~~"40 + 15 + 10 + 5 + 5 = 75"~~
+- NEVER write parenthetical enums: ~~"(vendor_testing_only)"~~
+- Present sub-scores as flowing prose, not bullet-point lists
+- Always cite evidence: [Section X, Q Y]
+
+## MINIMUM DEPTH REQUIREMENTS (DO NOT CUT SHORT)
+
+Your report must be THOROUGH. Follow these minimums:
+
+**Per Dimension (10 dimensions × ~400 words each = ~4000 words minimum for dimension analysis):**
+- Key Findings: at least 2 full paragraphs (3-4 sentences each), referencing sub-scores as prose
+- Specific Risks Identified: at least 4-5 bullet points per dimension
+- Recommended Mitigations: at least 3-4 numbered items with timelines (e.g., "0-3 months", "3-6 months")
+- Include Assessment Confidence level and rationale
+- Cite at least 2 vendor responses per dimension using [Section X, Q Y] format
+
+**Compliance Assessment (~500 words minimum):**
+- PIPEDA Alignment: at least 4 gaps with specific remediation actions
+- Provincial Health Information Privacy Laws (ATIPP): at least 3 considerations
+- Health Canada Medical Devices Regulations: applicability analysis with specific requirements
+
+**Recommendations (~400 words minimum):**
+- Priority 1 (Critical): at least 4 items with explanations
+- Priority 2 (High): at least 5 items with explanations
+- Priority 3 (Operational): at least 4 items with explanations
+
+**Conclusion (~200 words minimum):**
+- Clear recommendation statement with justification
+- At least 4 next steps
+
+**IMPORTANT: Do NOT stop early. Write the COMPLETE report covering ALL 10 dimensions with full depth. The total report should be at least 5000 words. You have plenty of token budget — USE IT.**
+
+### EXAMPLE of one dimension written correctly:
+
+## Clinical Risk (Score: 75/100 — CRITICAL)
+
+**Assessment Confidence:** Medium — Evidence is based on vendor claims without independent verification.
+
+**Key Findings:**
+The vendor's evidence base presents significant concerns. Evidence Quality scored the maximum risk of 40, as the solution relies entirely on an internal retrospective review of 12,000 patient interactions with no peer-reviewed studies or independent clinical validation [Section 1, Q 2]. Regulatory Status scored 15, as no Health Canada Medical Device Licence or FDA 510(k) application has been submitted [Section 8, Q 1].
+
+Patient Safety scored 10, reflecting a tiered safety framework with escalation for high-risk symptoms and human-in-the-loop during operating hours [Section 3, Q 4]. Population Relevance scored 5, with training data predominantly English and skewed toward UK/US populations [Section 6, Q 1]. Clinical Risk totaled 75 out of 100, placing it in the critical range.
+
+**Specific Risks Identified:**
+- No independent clinical validation or peer-reviewed evidence
+- Unverified regulatory classification claim
+- Human oversight limited to operating hours only
+- Training data lacks Canadian population representation
+- No formal adverse event reporting framework described
+
+**Recommended Mitigations:**
+1. Require independent clinical validation study before deployment (0-6 months)
+2. Obtain formal Health Canada regulatory opinion on device classification (0-3 months)
+3. Implement 24/7 automated safety escalation for high-risk symptoms (0-3 months)
+4. Establish adverse event monitoring and reporting protocol aligned with CMDR (0-6 months)
+
+### END EXAMPLE — Follow this style for ALL 10 dimensions.`;
+
 export function buildExportNarrativeSystemPrompt(): string {
   const dimensionList = ALL_DIMENSIONS.map(
     (d) => `- ${DIMENSION_CONFIG[d].label} (${DIMENSION_CONFIG[d].type})`
@@ -70,18 +139,20 @@ For EACH of the 10 dimensions, create a subsection with:
 
 Structure each dimension analysis as:
 
-**Key Findings:** (2-3 sentence paragraph)
-Brief narrative of the main observations.
+**Key Findings:** (2-3 paragraphs of 3-4 sentences each)
+Detailed narrative of main observations, referencing sub-scores as prose and citing vendor responses.
 
 **Specific Risks Identified:**
 - Risk item 1
 - Risk item 2
 - Risk item 3
+- Risk item 4
+- Continue as needed (aim for 4-5 per dimension)
 
 **Recommended Mitigations:**
-1. Numbered mitigation with brief explanation
-2. Another mitigation
-3. Continue as needed
+1. Numbered mitigation with brief explanation and timeline
+2. Another mitigation with timeline
+3. Continue as needed (aim for 3-4 per dimension)
 
 Use horizontal rules (---) between dimensions for visual separation.
 
@@ -199,5 +270,6 @@ When confidence data is provided (High/Medium/Low):
 ## Guardian-Native Dimensions
 
 Some dimensions (Clinical Risk, Vendor Capability, Ethical Considerations, Sustainability) use Guardian healthcare-specific criteria without ISO mapping. When these appear, note: "Assessed using Guardian healthcare-specific criteria."
+${process.env.LOCAL_MODEL_NAME ? LOCAL_MODEL_NARRATIVE_RULES : ''}
 `;
 }
