@@ -38,6 +38,7 @@ import {
   RISK_DIMENSION_LABELS,
 } from '../../domain/types/QuestionnaireSchema.js';
 import { IClaudeClient } from '../interfaces/IClaudeClient.js';
+import { getMaxTokens } from '../../infrastructure/ai/ClaudeClientBase.js';
 import { IQuestionRepository } from '../interfaces/IQuestionRepository.js';
 import { AssessmentService } from './AssessmentService.js';
 import { VendorService } from './VendorService.js';
@@ -146,7 +147,7 @@ export class QuestionnaireGenerationService implements IQuestionnaireGenerationS
             'Use the output_questionnaire tool to return your questionnaire in structured JSON format.',
           tools: [questionnaireOutputTool],
           tool_choice: { type: 'tool', name: QUESTIONNAIRE_OUTPUT_TOOL_NAME },
-          maxTokens: 32768, // Comprehensive questionnaires (100 questions) need ~20K tokens
+          maxTokens: getMaxTokens(32768), // Comprehensive questionnaires (100 questions) need ~20K tokens
         }
       );
 

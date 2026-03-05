@@ -15,7 +15,7 @@ import { ScoringParseResult } from '../interfaces/IScoringDocumentParser.js';
 import type { ISOControlForPrompt } from '../../domain/compliance/types.js';
 import type { ScoringCallMetrics, ClaudeUsageData } from './ScoringMetricsCollector.js';
 import { ScoringMetricsCollector } from './ScoringMetricsCollector.js';
-import { ClaudeClientBase } from '../../infrastructure/ai/ClaudeClientBase.js';
+import { ClaudeClientBase, getMaxTokens } from '../../infrastructure/ai/ClaudeClientBase.js';
 
 /** Max transport-level retry attempts for transient stream failures */
 const TRANSIENT_RETRY_ATTEMPTS = 2;
@@ -132,7 +132,7 @@ export class ScoringLLMService {
           tools: [scoringCompleteTool],
           tool_choice: { type: 'any' },
           usePromptCache: true,
-          maxTokens: 16384,
+          maxTokens: getMaxTokens(16384),
           temperature: 0,
           abortSignal,
           onTextDelta: (delta) => {

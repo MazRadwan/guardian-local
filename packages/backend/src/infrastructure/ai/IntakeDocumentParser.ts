@@ -9,6 +9,7 @@
  */
 
 import type { IClaudeClient } from '../../application/interfaces/IClaudeClient.js';
+import { getMaxTokens } from './ClaudeClientBase.js';
 import type { IVisionClient } from '../../application/interfaces/IVisionClient.js';
 import {
   IIntakeDocumentParser,
@@ -67,13 +68,13 @@ export class IntakeDocumentParser implements IIntakeDocumentParser {
           images: visionContent,
           prompt: `${prompt}\n\nAnalyze the document shown in the image(s).`,
           systemPrompt: INTAKE_EXTRACTION_SYSTEM_PROMPT,
-          maxTokens: 4096,
+          maxTokens: getMaxTokens(4096),
         });
         responseContent = visionResponse.content;
       } else {
         const response = await this.claudeClient.sendMessage(
           [{ role: 'user', content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}` }],
-          { systemPrompt: INTAKE_EXTRACTION_SYSTEM_PROMPT, maxTokens: 4096, usePromptCache: true }
+          { systemPrompt: INTAKE_EXTRACTION_SYSTEM_PROMPT, maxTokens: getMaxTokens(4096), usePromptCache: true }
         );
         responseContent = response.content;
       }

@@ -17,7 +17,7 @@ import type {
   VisionRequest,
   VisionResponse,
 } from '../../application/interfaces/IVisionClient.js';
-import { ClaudeClientBase } from './ClaudeClientBase.js';
+import { ClaudeClientBase, getMaxTokens } from './ClaudeClientBase.js';
 
 export class ClaudeVisionClient extends ClaudeClientBase implements IVisionClient {
   /**
@@ -46,7 +46,7 @@ export class ClaudeVisionClient extends ClaudeClientBase implements IVisionClien
     const response = await this.client.messages.create(
       {
         model: this.model,
-        max_tokens: request.maxTokens || 4096,
+        max_tokens: request.maxTokens || getMaxTokens(4096),
         system: request.systemPrompt || 'You are a document analysis assistant.',
         messages,
       },

@@ -120,6 +120,16 @@ export class ConversationContextBuilder {
       });
     }
 
+    // Local model compatibility: Ensure first message is always 'user' role.
+    // Anthropic API spec requires this, and Qwen's jinja template enforces it strictly.
+    // Guidance messages (assistant role) persisted by ModeSwitchHandler may precede user messages.
+    // Drop leading assistant messages — their content is covered by the system prompt.
+    if (process.env.LOCAL_MODEL_NAME) {
+      while (messages.length > 0 && messages[0].role === 'assistant') {
+        messages.shift();
+      }
+    }
+
     // Get system prompt (and cache metadata) based on conversation mode
     // Always include tool instructions (tool-based trigger is now the only path)
     // Epic 33: Include web search instructions for consult mode

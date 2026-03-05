@@ -64,6 +64,13 @@ The wrong example is unreadable because it lacks blank lines between question bl
 `;
 
 function loadCustomPrompt(): string | null {
+  // Local-model smoke tests can opt out of the large custom prompt file
+  // when the loaded model/context window cannot accommodate it.
+  if (process.env.LOCAL_MODEL_USE_FALLBACK_PROMPT === 'true') {
+    console.log('[Prompts] Using built-in fallback prompts (LOCAL_MODEL_USE_FALLBACK_PROMPT=true)');
+    return null;
+  }
+
   // First check inline env var
   if (process.env.GUARDIAN_PROMPT_TEXT) {
     return process.env.GUARDIAN_PROMPT_TEXT;
@@ -523,6 +530,68 @@ Reply with: **1**, **2**, or **3**
 
 `;
 
+/**
+ * Local Model Assessment Prompt
+ *
+ * Deduplicated, non-contradictory prompt optimized for local models with
+ * smaller active parameter counts. Tested at 5/5 reliability on Qwen3.5-35B-A3B.
+ *
+ * Key differences from the Claude prompt:
+ * - Single source of truth (no preamble + fallback + tool instructions overlap)
+ * - No "ask if ready" instruction (contradicts "call tool immediately")
+ * - No "don't claim to trigger APIs" (contradicts tool calling)
+ * - Assessment type examples are neutral (not biased toward comprehensive)
+ * - Formatting rules are brief (not repeated)
+ */
+const LOCAL_MODEL_ASSESSMENT_PROMPT = `═══════════════════════════════════════════════════════════════
+CURRENT MODE: ASSESSMENT
+═══════════════════════════════════════════════════════════════
+
+You are Guardian in Assessment Mode - guiding structured AI vendor risk assessment.
+
+RULES:
+- Gather vendor/solution context conversationally (2-3 questions at a time)
+- Focus on: solution type, data sensitivity, users, risk profile, known concerns
+- RESPECT the user's chosen assessment type - do NOT suggest a different type
+- When user confirms they want a questionnaire, IMMEDIATELY call the questionnaire_ready tool
+- Do NOT generate questionnaire content directly
+- Do NOT answer general Q&A (redirect to Consult Mode)
+
+FIRST MESSAGE (always present this when assessment mode starts):
+
+🔍 **Assessment Mode Activated**
+
+Please select your assessment approach (reply with 1, 2, or 3):
+
+1️⃣ **Quick Assessment** (30-40 questions)
+   ↳ Fast red-flag screening, ~15 minutes
+
+2️⃣ **Comprehensive Assessment** (85-95 questions)
+   ↳ Full coverage across all 10 risk dimensions
+
+3️⃣ **Category-Focused Assessment**
+   ↳ Tailored to your AI solution type
+
+Reply with: **1**, **2**, or **3**
+
+FORMATTING:
+- Blank line between each question block
+- Bold question, then detail on next line
+
+## questionnaire_ready Tool
+
+Call this tool IMMEDIATELY when the user says to generate/create a questionnaire.
+
+Parameters:
+- assessment_type (required): Use EXACTLY what the user chose - "quick", "comprehensive", or "category_focused"
+- vendor_name: Vendor name from conversation
+- solution_name: Product name from conversation
+- context_summary: 1-2 sentence summary
+- estimated_questions: Count based on type (quick=35, comprehensive=90, category=60)
+
+After calling: announce "Click the Generate Questionnaire button when you're ready."
+Do NOT ask "are you ready?" - if the user said generate, call the tool.`;
+
 const SCORING_MODE_PREAMBLE = `═══════════════════════════════════════════════════════════════
 CURRENT MODE: SCORING
 MODE_LOCK: ACTIVE
@@ -573,8 +642,18 @@ export interface SystemPromptOptions {
 }
 
 /**
+ * Check if we're running against a local model
+ */
+function isLocalModel(): boolean {
+  return !!process.env.LOCAL_MODEL_NAME;
+}
+
+/**
  * Get the appropriate system prompt based on conversation mode
  * Mode preamble is ALWAYS prepended to ensure deterministic mode awareness
+ *
+ * For local models: uses deduplicated prompts that avoid instruction
+ * conflicts which cause tool call failures on smaller models.
  */
 export function getSystemPrompt(mode: ConversationMode, options?: SystemPromptOptions): string {
   // Handle scoring mode separately - uses specialized prompt from scoringPrompt.ts
@@ -582,6 +661,11 @@ export function getSystemPrompt(mode: ConversationMode, options?: SystemPromptOp
     // For scoring mode, return the preamble which directs to use the specialized service
     // The actual scoring prompt with rubric is built by ScoringService
     return `${SCORING_MODE_PREAMBLE}${FORMATTING_GUIDELINES}`;
+  }
+
+  // Local model path: deduplicated prompts (no preamble + fallback + tool instructions overlap)
+  if (isLocalModel() && mode === 'assessment') {
+    return LOCAL_MODEL_ASSESSMENT_PROMPT;
   }
 
   const modePreamble = mode === 'consult' ? CONSULT_MODE_PREAMBLE : ASSESSMENT_MODE_PREAMBLE;

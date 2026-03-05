@@ -10,6 +10,7 @@
  */
 
 import type { IClaudeClient } from '../../application/interfaces/IClaudeClient.js';
+import { getMaxTokens } from './ClaudeClientBase.js';
 import type {
   IVisionClient,
   VisionContent,
@@ -193,14 +194,14 @@ export class DocumentParserService implements IScoringDocumentParser {
         images: visionContent,
         prompt: `${prompt}\n\nAnalyze the questionnaire shown in the image(s).`,
         systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT,
-        maxTokens: 16384,
+        maxTokens: getMaxTokens(16384),
         abortSignal: options?.abortSignal,
       });
       responseContent = visionResponse.content;
     } else {
       const response = await this.claudeClient.sendMessage(
         [{ role: 'user', content: `${prompt}\n\nDOCUMENT CONTENT:\n${documentText}` }],
-        { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: 16384, abortSignal: options?.abortSignal, usePromptCache: true }
+        { systemPrompt: SCORING_EXTRACTION_SYSTEM_PROMPT, maxTokens: getMaxTokens(16384), abortSignal: options?.abortSignal, usePromptCache: true }
       );
       responseContent = response.content;
     }

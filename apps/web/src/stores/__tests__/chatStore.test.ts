@@ -131,6 +131,21 @@ describe('chatStore', () => {
     expect(result.current.messages[0].content).toBe('Hello world');
   });
 
+  it('appends streaming chunks and creates assistant placeholder when needed', () => {
+    const { result } = renderHook(() => useChatStore());
+
+    act(() => {
+      result.current.appendStreamingChunk('Hello');
+      result.current.appendStreamingChunk(' world');
+    });
+
+    expect(result.current.messages).toHaveLength(1);
+    expect(result.current.messages[0].role).toBe('assistant');
+    expect(result.current.messages[0].content).toBe('Hello world');
+    expect(result.current.isStreaming).toBe(true);
+    expect(result.current.currentStreamingMessage).toBe('Hello world');
+  });
+
   it('starts streaming by adding empty assistant message', () => {
     const { result } = renderHook(() => useChatStore());
 
