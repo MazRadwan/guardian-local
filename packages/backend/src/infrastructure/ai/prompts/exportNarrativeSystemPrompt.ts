@@ -44,8 +44,34 @@ const LOCAL_MODEL_NARRATIVE_RULES = `
 - NEVER show arithmetic: ~~"40 + 15 + 10 + 5 + 5 = 75"~~
 - NEVER write parenthetical enums: ~~"(vendor_testing_only)"~~
 - Present sub-scores as flowing prose, not bullet-point lists
-- Write 2-3 paragraphs per dimension describing findings naturally
 - Always cite evidence: [Section X, Q Y]
+
+## MINIMUM DEPTH REQUIREMENTS (DO NOT CUT SHORT)
+
+Your report must be THOROUGH. Follow these minimums:
+
+**Per Dimension (10 dimensions × ~400 words each = ~4000 words minimum for dimension analysis):**
+- Key Findings: at least 2 full paragraphs (3-4 sentences each), referencing sub-scores as prose
+- Specific Risks Identified: at least 4-5 bullet points per dimension
+- Recommended Mitigations: at least 3-4 numbered items with timelines (e.g., "0-3 months", "3-6 months")
+- Include Assessment Confidence level and rationale
+- Cite at least 2 vendor responses per dimension using [Section X, Q Y] format
+
+**Compliance Assessment (~500 words minimum):**
+- PIPEDA Alignment: at least 4 gaps with specific remediation actions
+- Provincial Health Information Privacy Laws (ATIPP): at least 3 considerations
+- Health Canada Medical Devices Regulations: applicability analysis with specific requirements
+
+**Recommendations (~400 words minimum):**
+- Priority 1 (Critical): at least 4 items with explanations
+- Priority 2 (High): at least 5 items with explanations
+- Priority 3 (Operational): at least 4 items with explanations
+
+**Conclusion (~200 words minimum):**
+- Clear recommendation statement with justification
+- At least 4 next steps
+
+**IMPORTANT: Do NOT stop early. Write the COMPLETE report covering ALL 10 dimensions with full depth. The total report should be at least 5000 words. You have plenty of token budget — USE IT.**
 
 ### EXAMPLE of one dimension written correctly:
 
@@ -62,11 +88,14 @@ Patient Safety scored 10, reflecting a tiered safety framework with escalation f
 - No independent clinical validation or peer-reviewed evidence
 - Unverified regulatory classification claim
 - Human oversight limited to operating hours only
+- Training data lacks Canadian population representation
+- No formal adverse event reporting framework described
 
 **Recommended Mitigations:**
 1. Require independent clinical validation study before deployment (0-6 months)
 2. Obtain formal Health Canada regulatory opinion on device classification (0-3 months)
 3. Implement 24/7 automated safety escalation for high-risk symptoms (0-3 months)
+4. Establish adverse event monitoring and reporting protocol aligned with CMDR (0-6 months)
 
 ### END EXAMPLE — Follow this style for ALL 10 dimensions.`;
 
@@ -110,18 +139,20 @@ For EACH of the 10 dimensions, create a subsection with:
 
 Structure each dimension analysis as:
 
-**Key Findings:** (2-3 sentence paragraph)
-Brief narrative of the main observations.
+**Key Findings:** (2-3 paragraphs of 3-4 sentences each)
+Detailed narrative of main observations, referencing sub-scores as prose and citing vendor responses.
 
 **Specific Risks Identified:**
 - Risk item 1
 - Risk item 2
 - Risk item 3
+- Risk item 4
+- Continue as needed (aim for 4-5 per dimension)
 
 **Recommended Mitigations:**
-1. Numbered mitigation with brief explanation
-2. Another mitigation
-3. Continue as needed
+1. Numbered mitigation with brief explanation and timeline
+2. Another mitigation with timeline
+3. Continue as needed (aim for 3-4 per dimension)
 
 Use horizontal rules (---) between dimensions for visual separation.
 
