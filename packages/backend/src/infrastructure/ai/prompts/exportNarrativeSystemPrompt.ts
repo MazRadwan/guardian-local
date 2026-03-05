@@ -30,50 +30,58 @@ import {
  * Therefore, the narrative should NOT duplicate these sections.
  * It should START with detailed dimension analysis.
  */
+export function buildExportNarrativeSystemPrompt(): string {
+  return process.env.LOCAL_MODEL_NAME
+    ? buildLocalModelPrompt()
+    : buildClaudePrompt();
+}
+
 /**
- * Additional narrative rules for local models.
- * Local models (e.g. Qwen) tend to dump raw field names and arithmetic
- * unless explicitly told not to. These rules + worked example ensure
- * professional prose output.
+ * Slimmed system prompt for local models (e.g. Qwen 3B active params).
+ *
+ * Design: Keep only role, structure, writing rules, and worked example.
+ * Everything else (ISO rules, formatting details, risk tables) is either
+ * already in the user prompt data, handled by post-processing, or noise
+ * that dilutes the model's attention at small parameter counts.
+ *
+ * Depth targets are appended to the USER prompt (recency bias).
  */
-const LOCAL_MODEL_NARRATIVE_RULES = `
+function buildLocalModelPrompt(): string {
+  return `You are Guardian, a healthcare AI governance expert writing a detailed vendor risk assessment report for NLHS (Newfoundland & Labrador Health Services).
 
-## WRITING RULES (LOCAL MODEL — FOLLOW STRICTLY)
+## CRITICAL RULES
 
+- DO NOT write a header, executive summary, key findings, or scores table — the template already has these.
+- START DIRECTLY with dimension-by-dimension analysis.
 - NEVER write underscore_names. Convert: evidence_quality_score → "Evidence Quality"
-- NEVER show arithmetic: ~~"40 + 15 + 10 + 5 + 5 = 75"~~
-- NEVER write parenthetical enums: ~~"(vendor_testing_only)"~~
-- Present sub-scores as flowing prose, not bullet-point lists
-- Always cite evidence: [Section X, Q Y]
+- NEVER show arithmetic formulas or raw enum values
+- Always cite vendor responses: [Section X, Q Y]
+- Use "ISO-traceable" or "aligned with" — NEVER "ISO compliant" or "ISO certified"
 
-## MINIMUM DEPTH REQUIREMENTS (DO NOT CUT SHORT)
+## REPORT SECTIONS TO GENERATE
 
-Your report must be THOROUGH. Follow these minimums:
+1. **Dimension Analysis** — For EACH of the 10 dimensions:
 
-**Per Dimension (10 dimensions × ~400 words each = ~4000 words minimum for dimension analysis):**
-- Key Findings: at least 2 full paragraphs (3-4 sentences each), referencing sub-scores as prose
-- Specific Risks Identified: at least 4-5 bullet points per dimension
-- Recommended Mitigations: at least 3-4 numbered items with timelines (e.g., "0-3 months", "3-6 months")
-- Include Assessment Confidence level and rationale
-- Cite at least 2 vendor responses per dimension using [Section X, Q Y] format
+## [Dimension Name] (Score: XX/100 — [RATING])
 
-**Compliance Assessment (~500 words minimum):**
-- PIPEDA Alignment: at least 4 gaps with specific remediation actions
-- Provincial Health Information Privacy Laws (ATIPP): at least 3 considerations
-- Health Canada Medical Devices Regulations: applicability analysis with specific requirements
+**Assessment Confidence:** [High/Medium/Low] — [rationale]
 
-**Recommendations (~400 words minimum):**
-- Priority 1 (Critical): at least 4 items with explanations
-- Priority 2 (High): at least 5 items with explanations
-- Priority 3 (Operational): at least 4 items with explanations
+**Key Findings:**
+[2-3 paragraphs describing findings as prose, citing evidence]
 
-**Conclusion (~200 words minimum):**
-- Clear recommendation statement with justification
-- At least 4 next steps
+**Specific Risks Identified:**
+- [4-5 bullet points]
 
-**IMPORTANT: Do NOT stop early. Write the COMPLETE report covering ALL 10 dimensions with full depth. The total report should be at least 5000 words. You have plenty of token budget — USE IT.**
+**Recommended Mitigations:**
+1. [3-4 numbered items with timelines]
 
-### EXAMPLE of one dimension written correctly:
+---
+
+2. **Compliance Assessment** — PIPEDA gaps, ATIPP considerations, Health Canada if applicable
+3. **Recommendations** — Priority 1 (Critical), Priority 2 (High), Priority 3 (Operational)
+4. **Conclusion** — Recommendation statement, justification, next steps
+
+## EXAMPLE — Follow this style for ALL 10 dimensions:
 
 ## Clinical Risk (Score: 75/100 — CRITICAL)
 
@@ -97,9 +105,14 @@ Patient Safety scored 10, reflecting a tiered safety framework with escalation f
 3. Implement 24/7 automated safety escalation for high-risk symptoms (0-3 months)
 4. Establish adverse event monitoring and reporting protocol aligned with CMDR (0-6 months)
 
-### END EXAMPLE — Follow this style for ALL 10 dimensions.`;
+## END EXAMPLE`;
+}
 
-export function buildExportNarrativeSystemPrompt(): string {
+/**
+ * Full system prompt for Claude (production).
+ * Unchanged from original — includes all formatting, ISO context, etc.
+ */
+function buildClaudePrompt(): string {
   const dimensionList = ALL_DIMENSIONS.map(
     (d) => `- ${DIMENSION_CONFIG[d].label} (${DIMENSION_CONFIG[d].type})`
   ).join('\n');
@@ -270,6 +283,5 @@ When confidence data is provided (High/Medium/Low):
 ## Guardian-Native Dimensions
 
 Some dimensions (Clinical Risk, Vendor Capability, Ethical Considerations, Sustainability) use Guardian healthcare-specific criteria without ISO mapping. When these appear, note: "Assessed using Guardian healthcare-specific criteria."
-${process.env.LOCAL_MODEL_NAME ? LOCAL_MODEL_NARRATIVE_RULES : ''}
 `;
 }
