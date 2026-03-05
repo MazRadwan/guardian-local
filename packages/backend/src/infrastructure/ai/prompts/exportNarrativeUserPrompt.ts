@@ -21,6 +21,28 @@ import {
 } from '../../../domain/scoring/types.js';
 
 /**
+ * Depth targets appended to the END of the user prompt for local models.
+ * Positioned last so the model sees these right before generating (recency bias).
+ */
+const LOCAL_MODEL_DEPTH_TARGETS = `
+
+## DEPTH REQUIREMENTS — READ THIS LAST, FOLLOW STRICTLY
+
+You MUST write a THOROUGH report. Do NOT stop early.
+
+**Per Dimension (write ALL 10):**
+- Key Findings: 2-3 paragraphs, 3-4 sentences each
+- Specific Risks: at least 4-5 bullet points
+- Mitigations: at least 3-4 numbered items with timelines
+
+**Compliance Assessment:** at least 4 PIPEDA gaps, 3 ATIPP items
+**Recommendations:** at least 4 items per priority tier (P1, P2, P3)
+**Conclusion:** recommendation + at least 4 next steps
+
+**TARGET: at least 5000 words total. You have 65,000 tokens of budget. USE IT. Keep writing until ALL 10 dimensions and ALL sections are complete.**
+`;
+
+/**
  * Maximum characters for individual vendor response truncation.
  * Keeps input within token budget while preserving evidence.
  */
@@ -249,5 +271,6 @@ Generate detailed analysis following the structure in the system prompt.
 - Use bullets for risks, numbered lists for mitigations
 - Cite vendor responses as evidence: [Section X, Q Y]
 - End with Compliance Assessment, Recommendations, and Conclusion
+${process.env.LOCAL_MODEL_NAME ? LOCAL_MODEL_DEPTH_TARGETS : ''}
 `;
 }
