@@ -77,8 +77,9 @@ export class ScoringPostProcessor {
       assessmentId,                     // CRITICAL: Include assessmentId
     };
 
-    // Emit scoring complete with results
-    socket.emit('scoring_complete', {
+    // Emit scoring complete to user room (survives disconnect/reconnect)
+    const userRoom = `user:${socket.userId}`;
+    socket.nsp.to(userRoom).emit('scoring_complete', {
       conversationId,
       result: resultData,
       narrativeReport: report.narrativeReport,
@@ -109,7 +110,7 @@ export class ScoringPostProcessor {
       },
     });
 
-    // 2. Emit the message for display (narrative only, card is from scoring_complete)
+    // 2. Emit narrative message to socket (persisted to DB, recoverable via history)
     socket.emit('message', {
       id: reportMessage.id,
       conversationId: reportMessage.conversationId,
@@ -161,8 +162,8 @@ export class ScoringPostProcessor {
     // 1. Update file parse status to 'failed'
     await this.fileRepository.updateParseStatus(fileId, 'failed');
 
-    // 2. Emit scoring_error with code field
-    socket.emit('scoring_error', {
+    // 2. Emit scoring_error to user room (survives disconnect/reconnect)
+    socket.nsp.to(`user:${socket.userId}`).emit('scoring_error', {
       conversationId,
       error,
       code,

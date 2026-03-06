@@ -67,6 +67,14 @@ export interface IAuthenticatedSocket {
    * @param room - Room name (e.g., "user:{userId}")
    */
   join(room: string): void;
+
+  /**
+   * Socket.IO namespace - used for room-based broadcasts
+   * Enables emitting to user rooms (survives disconnect/reconnect)
+   */
+  nsp: {
+    to(room: string): { emit(event: string, data: unknown): void };
+  };
 }
 
 /**

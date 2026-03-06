@@ -667,9 +667,12 @@ export function useWebSocketEvents({
 
   const handleScoringComplete = useCallback(
     (data: ScoringCompletePayload) => {
-      // Only process for active conversation
+      // Always cache result regardless of active conversation (survives chat switch)
+      useChatStore.getState().setScoringResultForConversation(data.conversationId, data.result);
+
+      // Only update UI if this is the active conversation
       if (data.conversationId !== activeConversationId) {
-        console.log('[useWebSocketEvents] Ignoring scoring_complete for inactive conversation');
+        console.log('[useWebSocketEvents] Cached scoring_complete for background conversation:', data.conversationId);
         return;
       }
 
@@ -684,9 +687,6 @@ export function useWebSocketEvents({
       // Store scoring results (in current display state)
       useChatStore.getState().setScoringResult(data.result);
 
-      // Story 5c: Also save to per-conversation cache for persistence across switches
-      useChatStore.getState().setScoringResultForConversation(data.conversationId, data.result);
-
       // Narrative report is sent as a separate message event, no need to handle it here
     },
     [activeConversationId]
@@ -694,13 +694,14 @@ export function useWebSocketEvents({
 
   const handleScoringError = useCallback(
     (data: ScoringErrorPayload) => {
-      // Only process for active conversation
+      // Always log errors regardless of active conversation
+      console.error('[useWebSocketEvents] Scoring error:', data.code, data.error);
+
+      // Only update UI if this is the active conversation
       if (data.conversationId !== activeConversationId) {
-        console.log('[useWebSocketEvents] Ignoring scoring_error for inactive conversation');
+        console.log('[useWebSocketEvents] Scoring error for background conversation:', data.conversationId);
         return;
       }
-
-      console.error('[useWebSocketEvents] Scoring error:', data.code, data.error);
 
       // Map error codes to user-friendly messages
       const errorMessages: Record<string, string> = {

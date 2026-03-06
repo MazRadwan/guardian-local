@@ -308,7 +308,8 @@ describe('useWebSocketEvents - Scoring Events', () => {
 
       expect(mockStore.updateScoringProgress).not.toHaveBeenCalled();
       expect(mockStore.setScoringResult).not.toHaveBeenCalled();
-      expect(mockStore.setScoringResultForConversation).not.toHaveBeenCalled();
+      // Should still cache result for background conversation (survives chat switch)
+      expect(mockStore.setScoringResultForConversation).toHaveBeenCalledWith('conv-999', payload.result);
     });
   });
 

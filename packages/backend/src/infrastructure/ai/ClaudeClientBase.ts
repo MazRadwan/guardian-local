@@ -48,7 +48,12 @@ export class ClaudeClientBase {
       throw new Error('ANTHROPIC_API_KEY is required');
     }
 
-    this.client = new Anthropic({ apiKey });
+    // Local models (LM Studio) need longer timeout — scoring can take 10+ min on Qwen
+    const isLocalModel = !!process.env.ANTHROPIC_BASE_URL;
+    this.client = new Anthropic({
+      apiKey,
+      timeout: isLocalModel ? 30 * 60 * 1000 : undefined, // 30 min for local, SDK default for cloud
+    });
   }
 
   protected sleep(ms: number): Promise<void> {

@@ -128,7 +128,7 @@ export class ScoringHandler {
           message: 'Analyzing questionnaire responses...',
         } as ScoringProgressEvent);
 
-        socket.emit('scoring_started', { fileId, conversationId });
+        socket.nsp.to(`user:${socket.userId}`).emit('scoring_started', { fileId, conversationId });
 
         const scoringInput: ScoringInput = { conversationId, fileId, userId };
         const scoringResult = await this.scoringService.score(
@@ -158,7 +158,7 @@ export class ScoringHandler {
       } catch (err) {
         console.error(`[ScoringHandler] Error during scoring for file ${fileId}:`, err);
         await this.fileRepository.updateParseStatus(fileId, 'failed').catch(() => {});
-        socket.emit('scoring_error', {
+        socket.nsp.to(`user:${socket.userId}`).emit('scoring_error', {
           conversationId,
           error: err instanceof Error ? err.message : 'Scoring failed',
           code: 'SCORING_FAILED',

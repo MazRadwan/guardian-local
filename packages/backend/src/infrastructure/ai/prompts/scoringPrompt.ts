@@ -135,21 +135,20 @@ const DEFAULT_OUTPUT_FORMAT = `
  * work lets each call focus on what it does best.
  */
 const LOCAL_MODEL_OUTPUT_FORMAT = `
-Your PRIMARY job is accurate scoring. Follow these steps:
+Your PRIMARY job is accurate scoring. Follow these steps IN THIS ORDER:
 
-1. **First**: Write a brief executive summary (2-3 short paragraphs):
-   - State the composite score and recommendation
-   - List the top 2-3 concerns
-   - Mention any disqualifying factors
+1. **FIRST**: Call \`scoring_complete\` tool with ALL structured scores immediately.
+2. **THEN**: Write a brief executive summary (2-3 short paragraphs max).
 
-2. **Then**: Call \`scoring_complete\` tool with ALL structured scores.
+You MUST call the tool BEFORE writing any narrative text. Do not write analysis, do not explain your reasoning — just call the tool first.
 
 **IMPORTANT:** Focus your effort on scoring accuracy — correct sub-scores, dimension totals, composite calculation, and disqualifying factor identification. The detailed narrative report will be generated separately.
 
-**WRITING RULES for the brief summary:**
+**WRITING RULES for the brief summary (AFTER the tool call):**
 - NEVER write underscore_names. Convert: evidence_quality_score → "Evidence Quality"
 - NEVER show arithmetic formulas
-- NEVER write enum values in parentheses`;
+- NEVER write enum values in parentheses
+- Keep the summary under 500 words`;
 
 /** User prompt params shared by buildScoringUserPrompt and buildScoringUserPromptParts */
 interface UserPromptParams {

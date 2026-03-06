@@ -132,7 +132,7 @@ export class ScoringLLMService {
           tools: [scoringCompleteTool],
           tool_choice: { type: 'any' },
           usePromptCache: true,
-          maxTokens: getMaxTokens(16384),
+          maxTokens: process.env.LOCAL_MODEL_NAME ? 24576 : getMaxTokens(16384),
           temperature: 0,
           abortSignal,
           onTextDelta: (delta) => {
