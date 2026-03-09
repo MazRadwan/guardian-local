@@ -11,6 +11,7 @@ import multer from 'multer';
 import { DocumentUploadController } from '../controllers/DocumentUploadController.js';
 import { AuthService } from '../../../application/services/AuthService.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { analystOrAdmin } from '../middleware/role.middleware.js';
 
 // Epic 17.1.1: Multi-file upload configuration
 const MAX_FILES = 10;
@@ -129,6 +130,7 @@ export function createDocumentRoutes(
   router.post(
     '/upload',
     authMiddleware(authService),
+    analystOrAdmin(),
     // Epic 17: Support both field names for backward compatibility
     // - 'file': Legacy single-file uploads (Epic 16 clients)
     // - 'files': New multi-file uploads (Epic 17 clients)
