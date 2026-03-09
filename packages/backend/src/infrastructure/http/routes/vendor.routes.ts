@@ -8,6 +8,7 @@ import { Router } from 'express'
 import { VendorController } from '../controllers/VendorController.js'
 import { AuthService } from '../../../application/services/AuthService.js'
 import { authMiddleware } from '../middleware/auth.middleware.js'
+import { analystOrAdmin } from '../middleware/role.middleware.js'
 
 export function createVendorRoutes(
   controller: VendorController,
@@ -18,8 +19,8 @@ export function createVendorRoutes(
   // All routes require authentication
   router.use(authMiddleware(authService))
 
-  // POST /api/vendors - Create vendor
-  router.post('/', controller.createVendor)
+  // POST /api/vendors - Create vendor (analyst/admin only)
+  router.post('/', analystOrAdmin(), controller.createVendor)
 
   // GET /api/vendors - List vendors
   router.get('/', controller.listVendors)
