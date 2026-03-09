@@ -6,13 +6,15 @@
 
 import { Router } from 'express'
 import { AuthController } from '../controllers/AuthController.js'
+import { AuthService } from '../../../application/services/AuthService.js'
+import { authMiddleware } from '../middleware/auth.middleware.js'
 import {
   validateBody,
   registerSchema,
   loginSchema,
 } from '../middleware/validation.middleware.js'
 
-export function createAuthRoutes(authController: AuthController): Router {
+export function createAuthRoutes(authController: AuthController, authService?: AuthService): Router {
   const router = Router()
 
   /**
@@ -26,6 +28,14 @@ export function createAuthRoutes(authController: AuthController): Router {
    * Login user
    */
   router.post('/login', validateBody(loginSchema), authController.login)
+
+  /**
+   * POST /api/auth/logout
+   * Revoke current token (requires valid auth)
+   */
+  if (authService) {
+    router.post('/logout', authMiddleware(authService), authController.logout)
+  }
 
   /**
    * POST /api/auth/dev-login

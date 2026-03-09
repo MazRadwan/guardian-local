@@ -87,6 +87,23 @@ export class AuthController {
   }
 
   /**
+   * Logout user (invalidate token server-side)
+   * POST /api/auth/logout
+   */
+  logout = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const authHeader = req.headers.authorization
+      const token = authHeader?.split(' ')[1]
+      if (token) {
+        this.authService.revokeToken(token)
+      }
+      res.status(200).json({ success: true })
+    } catch {
+      res.status(200).json({ success: true }) // Logout should always succeed from client perspective
+    }
+  }
+
+  /**
    * Dev mode quick login (development or when explicitly enabled)
    * POST /api/auth/dev-login
    */

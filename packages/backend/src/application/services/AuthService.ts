@@ -24,6 +24,8 @@ export interface AuthResult {
 
 export class AuthService {
   private readonly saltRounds = 10
+  /** In-memory revoked token set (cleared on restart). For production, use Redis. */
+  private readonly revokedTokens = new Set<string>()
 
   constructor(
     private readonly userRepository: IUserRepository,
@@ -129,6 +131,11 @@ export class AuthService {
    * @throws Error if token is invalid or user not found
    */
   async validateToken(token: string): Promise<User> {
+    // Check revocation list before expensive DB lookup
+    if (this.revokedTokens.has(token)) {
+      throw new Error('Token has been revoked')
+    }
+
     // Validate token
     const payload = this.tokenProvider.validateToken(token)
 
@@ -139,6 +146,20 @@ export class AuthService {
     }
 
     return user
+  }
+
+  /**
+   * Revoke a token (add to blacklist until it expires naturally)
+   */
+  revokeToken(token: string): void {
+    this.revokedTokens.add(token)
+  }
+
+  /**
+   * Check if a token has been revoked
+   */
+  isTokenRevoked(token: string): boolean {
+    return this.revokedTokens.has(token)
   }
 
   /**

@@ -70,7 +70,7 @@ const server = new Server({
 });
 
 // Register routes
-server.registerRoutes('/api/auth', createAuthRoutes(authController));
+server.registerRoutes('/api/auth', createAuthRoutes(authController, authService));
 server.registerRoutes('/api/vendors', createVendorRoutes(vendorController, authService));
 server.registerRoutes('/api/assessments', createAssessmentRoutes(assessmentController, authService));
 server.registerRoutes('/api/assessments', createExportRoutes(exportController, authService));
