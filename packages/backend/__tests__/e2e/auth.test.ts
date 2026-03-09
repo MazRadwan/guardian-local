@@ -31,7 +31,7 @@ describe('Auth API E2E Tests', () => {
 
     // Setup routes
     const authController = new AuthController(authService)
-    app.use('/api/auth', createAuthRoutes(authController))
+    app.use('/api/auth', createAuthRoutes(authController, authService))
 
     // Error handler
     app.use(errorHandler)
