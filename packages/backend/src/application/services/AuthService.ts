@@ -39,6 +39,16 @@ export class AuthService {
    * @throws Error if email already exists or validation fails
    */
   async register(data: CreateUserDTO): Promise<AuthResult> {
+    // Check domain restriction (env-gated, empty = open registration)
+    const allowedDomains = process.env.ALLOWED_REGISTRATION_DOMAINS;
+    if (allowedDomains) {
+      const domains = allowedDomains.split(',').map(d => d.trim().toLowerCase());
+      const emailDomain = data.email.split('@')[1]?.toLowerCase();
+      if (!emailDomain || !domains.includes(emailDomain)) {
+        throw new Error('Registration is restricted to approved email domains');
+      }
+    }
+
     // Check if user already exists
     const existingUser = await this.userRepository.findByEmail(data.email)
     if (existingUser) {
