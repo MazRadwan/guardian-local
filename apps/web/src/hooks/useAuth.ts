@@ -71,6 +71,8 @@ export function useAuth() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('guardian_token', token);
       localStorage.setItem('guardian_user', JSON.stringify(user));
+      // Set cookie for server middleware route protection
+      document.cookie = 'guardian_auth=1; path=/; SameSite=Lax';
     }
     setAuthState({
       user,
@@ -89,6 +91,8 @@ export function useAuth() {
 
       // Clear Zustand persisted state (chat store)
       localStorage.removeItem('guardian-chat-store');
+      // Clear server middleware auth cookie
+      document.cookie = 'guardian_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
 
     setAuthState({
