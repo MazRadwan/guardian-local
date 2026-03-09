@@ -187,6 +187,13 @@ export class AuthService {
   }
 
   /**
+   * Stop background cleanup timer (call in tests or on shutdown)
+   */
+  destroy(): void {
+    clearInterval(this.cleanupInterval)
+  }
+
+  /**
    * Evict expired entries from revoked tokens map (called by interval timer)
    */
   private evictExpiredTokens(): void {

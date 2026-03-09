@@ -88,6 +88,7 @@ describe('AuthService', () => {
 
   afterEach(() => {
     mockUserRepository.clear()
+    authService.destroy()
   })
 
   describe('register', () => {
