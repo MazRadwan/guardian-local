@@ -16,6 +16,16 @@ import {
 
 /** IP-based rate limiter for auth routes (prevents brute-force) */
 const authAttempts = new Map<string, { count: number; resetAt: number }>();
+
+/** Evict expired rate-limit entries every 5 minutes to prevent memory leak */
+const _rateLimitCleanup = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of authAttempts) {
+    if (now > entry.resetAt) authAttempts.delete(ip);
+  }
+}, 5 * 60_000);
+if (_rateLimitCleanup.unref) _rateLimitCleanup.unref();
+
 function authRateLimit(maxAttempts = 20, windowMs = 60_000) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown';
@@ -33,7 +43,7 @@ function authRateLimit(maxAttempts = 20, windowMs = 60_000) {
   };
 }
 
-export function createAuthRoutes(authController: AuthController, authService?: AuthService): Router {
+export function createAuthRoutes(authController: AuthController, authService: AuthService): Router {
   const router = Router()
 
   /**
@@ -52,9 +62,7 @@ export function createAuthRoutes(authController: AuthController, authService?: A
    * POST /api/auth/logout
    * Revoke current token (requires valid auth)
    */
-  if (authService) {
-    router.post('/logout', authMiddleware(authService), authController.logout)
-  }
+  router.post('/logout', authMiddleware(authService), authController.logout)
 
   /**
    * POST /api/auth/dev-login

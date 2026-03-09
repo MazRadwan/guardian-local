@@ -38,6 +38,9 @@ export class Server {
   }
 
   private setupMiddleware(): void {
+    // Trust first proxy (Tailscale, nginx, etc.) for correct req.ip in rate limiting
+    this.app.set('trust proxy', 1);
+
     // Parse CORS origins (comma-separated list supported)
     const allowedOrigins = this.config.corsOrigin.split(',').map(o => o.trim());
     const corsOrigin = allowedOrigins.length > 1 ? allowedOrigins : allowedOrigins[0];
