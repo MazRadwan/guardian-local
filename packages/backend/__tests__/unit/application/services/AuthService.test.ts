@@ -286,5 +286,47 @@ describe('AuthService', () => {
         'User not found'
       )
     })
+
+    it('should throw error for revoked token', async () => {
+      authService.revokeToken('valid-token')
+
+      await expect(authService.validateToken('valid-token')).rejects.toThrow(
+        'Token has been revoked'
+      )
+    })
+  })
+
+  describe('token revocation with TTL', () => {
+    it('should report freshly revoked token as revoked', () => {
+      authService.revokeToken('some-token')
+      expect(authService.isTokenRevoked('some-token')).toBe(true)
+    })
+
+    it('should report non-revoked token as not revoked', () => {
+      expect(authService.isTokenRevoked('unknown-token')).toBe(false)
+    })
+
+    it('should auto-expire revoked token after TTL', () => {
+      authService.revokeToken('expiring-token')
+      expect(authService.isTokenRevoked('expiring-token')).toBe(true)
+
+      // Fast-forward past the 24h TTL
+      jest.useFakeTimers()
+      jest.advanceTimersByTime(25 * 60 * 60_000) // 25 hours
+
+      expect(authService.isTokenRevoked('expiring-token')).toBe(false)
+      jest.useRealTimers()
+    })
+
+    it('should not expire token before TTL', () => {
+      jest.useFakeTimers()
+      authService.revokeToken('active-token')
+
+      // Advance 23 hours (under 24h TTL)
+      jest.advanceTimersByTime(23 * 60 * 60_000)
+      expect(authService.isTokenRevoked('active-token')).toBe(true)
+
+      jest.useRealTimers()
+    })
   })
 })

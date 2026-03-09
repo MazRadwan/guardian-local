@@ -40,6 +40,7 @@ import type { IAuthenticatedSocket } from '../../../../../src/infrastructure/web
 import type { ConversationService } from '../../../../../src/application/services/ConversationService.js';
 import type { Conversation } from '../../../../../src/domain/entities/Conversation.js';
 import type { IVisionContentBuilder } from '../../../../../src/application/interfaces/IVisionContentBuilder.js';
+import type { AuthService } from '../../../../../src/application/services/AuthService.js';
 
 /**
  * Create a mock ConversationService
@@ -99,7 +100,8 @@ describe('ConnectionHandler', () => {
     },
     emit: jest.fn(),
     join: jest.fn(),
-  });
+    nsp: { to: jest.fn().mockReturnValue({ emit: jest.fn() }) },
+  } as unknown as IAuthenticatedSocket);
 
   /**
    * Create a mock authenticated socket (for handleConnection tests)
@@ -403,6 +405,93 @@ describe('ConnectionHandler', () => {
         expect(nextFn).toHaveBeenCalledWith(expect.any(Error));
         const error = nextFn.mock.calls[0][0] as Error;
         expect(error.message).toBe('Invalid authentication token');
+      });
+    });
+
+    describe('DB validation with authService', () => {
+      let mockAuthService: jest.Mocked<AuthService>;
+
+      beforeEach(() => {
+        mockAuthService = {
+          validateToken: jest.fn().mockResolvedValue({ id: 'user-123' }),
+          revokeToken: jest.fn(),
+          isTokenRevoked: jest.fn(),
+        } as unknown as jest.Mocked<AuthService>;
+      });
+
+      it('should call next() after authService.validateToken resolves', async () => {
+        const handlerWithAuth = new ConnectionHandler(
+          mockConversationService, TEST_SECRET, undefined, mockAuthService
+        );
+        const token = createValidToken({ userId: 'user-123', email: 'test@example.com', role: 'analyst' });
+        mockSocket = createMockSocket(token);
+
+        const middleware = handlerWithAuth.createAuthMiddleware();
+        middleware(mockSocket, nextFn);
+
+        // Wait for promise to resolve
+        await new Promise(process.nextTick);
+
+        expect(mockAuthService.validateToken).toHaveBeenCalledWith(token);
+        expect(nextFn).toHaveBeenCalledTimes(1);
+        expect(nextFn).toHaveBeenCalledWith();
+        expect(mockSocket.userId).toBe('user-123');
+      });
+
+      it('should call next(error) when authService.validateToken rejects', async () => {
+        mockAuthService.validateToken.mockRejectedValue(new Error('User not found'));
+        const handlerWithAuth = new ConnectionHandler(
+          mockConversationService, TEST_SECRET, undefined, mockAuthService
+        );
+        const token = createValidToken({ userId: 'user-123' });
+        mockSocket = createMockSocket(token);
+
+        const middleware = handlerWithAuth.createAuthMiddleware();
+        middleware(mockSocket, nextFn);
+
+        await new Promise(process.nextTick);
+
+        expect(nextFn).toHaveBeenCalledTimes(1);
+        expect(nextFn).toHaveBeenCalledWith(expect.any(Error));
+        const error = nextFn.mock.calls[0][0] as Error;
+        expect(error.message).toBe('Invalid authentication token');
+      });
+
+      it('should reject revoked tokens via authService', async () => {
+        mockAuthService.validateToken.mockRejectedValue(new Error('Token has been revoked'));
+        const handlerWithAuth = new ConnectionHandler(
+          mockConversationService, TEST_SECRET, undefined, mockAuthService
+        );
+        const token = createValidToken({ userId: 'user-123' });
+        mockSocket = createMockSocket(token);
+
+        const middleware = handlerWithAuth.createAuthMiddleware();
+        middleware(mockSocket, nextFn);
+
+        await new Promise(process.nextTick);
+
+        expect(nextFn).toHaveBeenCalledWith(expect.any(Error));
+        const error = nextFn.mock.calls[0][0] as Error;
+        expect(error.message).toBe('Invalid authentication token');
+      });
+
+      it('should set socket properties before async validation resolves', () => {
+        mockAuthService.validateToken.mockReturnValue(new Promise(() => {})); // never resolves
+        const handlerWithAuth = new ConnectionHandler(
+          mockConversationService, TEST_SECRET, undefined, mockAuthService
+        );
+        const token = createValidToken({ userId: 'user-123', email: 'a@b.com', role: 'admin' });
+        mockSocket = createMockSocket(token);
+
+        const middleware = handlerWithAuth.createAuthMiddleware();
+        middleware(mockSocket, nextFn);
+
+        // Properties should be set synchronously before promise resolves
+        expect(mockSocket.userId).toBe('user-123');
+        expect(mockSocket.userEmail).toBe('a@b.com');
+        expect(mockSocket.userRole).toBe('admin');
+        // next() should NOT have been called yet
+        expect(nextFn).not.toHaveBeenCalled();
       });
     });
 
