@@ -125,18 +125,22 @@ export class ConnectionHandler {
         // Verify and decode JWT
         const decoded = jwt.verify(token, this.jwtSecret) as JWTPayload;
 
-        // Validate user still exists in DB (prevents deleted users from connecting)
-        if (this.authService) {
-          await this.authService.validateToken(token);
-        }
-
-        // Augment socket with user information
+        // Augment socket with user information (sync — always runs)
         socket.userId = decoded.userId;
         socket.userEmail = decoded.email;
         socket.userRole = decoded.role;
 
-        // Authentication successful
-        next();
+        // Validate user still exists in DB (prevents deleted/revoked users)
+        if (this.authService) {
+          this.authService.validateToken(token)
+            .then(() => next())
+            .catch((err) => {
+              console.error('[ConnectionHandler] DB validation failed:', err);
+              next(new Error('Invalid authentication token'));
+            });
+        } else {
+          next();
+        }
       } catch (error) {
         // Log for debugging (token errors include expired, invalid signature, malformed)
         console.error('[ConnectionHandler] Authentication failed:', error);
