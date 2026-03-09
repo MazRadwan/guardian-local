@@ -53,6 +53,7 @@ import type { IJinaClient } from '../../application/interfaces/IJinaClient.js';
 import type { VendorValidationService } from '../../application/services/VendorValidationService.js';
 import type { ITitleGenerationService } from '../../application/interfaces/ITitleGenerationService.js';
 import type { IVisionContentBuilder } from '../../application/interfaces/IVisionContentBuilder.js';
+import type { AuthService } from '../../application/services/AuthService.js';
 import { ConversationContextBuilder } from './context/ConversationContextBuilder.js';
 import { FileContextBuilder } from './context/FileContextBuilder.js';
 import { StreamingHandler } from './StreamingHandler.js';
@@ -112,7 +113,8 @@ export class ChatServer {
     vendorValidationService?: VendorValidationService,
     titleGenerationService?: ITitleGenerationService,  // Optional - TitleUpdateService handles absence gracefully
     visionContentBuilder?: IVisionContentBuilder,      // Epic 30 Sprint 3: Vision API for image files
-    jinaClient?: IJinaClient                          // Epic 33: Jina client for web search in consult mode
+    jinaClient?: IJinaClient,                         // Epic 33: Jina client for web search in consult mode
+    authService?: AuthService                          // Auth: DB validation for WebSocket connections
   ) {
     // Initialize shared state
     this.chatContext = createChatContext(rateLimiter, promptCacheManager);
@@ -125,7 +127,7 @@ export class ChatServer {
 
     // Initialize handlers
     // Epic 30: Pass visionContentBuilder to ConnectionHandler for cache cleanup on disconnect
-    this.connectionHandler = new ConnectionHandler(conversationService, jwtSecret, visionContentBuilder);
+    this.connectionHandler = new ConnectionHandler(conversationService, jwtSecret, visionContentBuilder, authService);
     this.conversationHandler = new ConversationHandler(conversationService);
     this.modeSwitchHandler = new ModeSwitchHandler(conversationService);
     this.scoringHandler = new ScoringHandler(scoringService, fileRepository, fileStorage, conversationService, claudeClient, vendorValidationService, this.contextBuilder);

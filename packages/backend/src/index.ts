@@ -105,7 +105,8 @@ const chatServer = new ChatServer(
   vendorValidationService,  // Epic 18.4: Vendor validation for multi-vendor clarification
   titleGenerationService,   // Story 28.11.1: LLM-based title generation
   visionContentBuilder,     // Epic 30 Sprint 3: Vision API for image files
-  jinaClient                // Epic 33: Jina client for web search
+  jinaClient,               // Epic 33: Jina client for web search
+  authService               // Auth: DB validation for WebSocket connections
 );
 
 console.log('[App] ChatServer initialized');

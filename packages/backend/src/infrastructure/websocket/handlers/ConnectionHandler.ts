@@ -20,6 +20,7 @@
 import jwt from 'jsonwebtoken';
 import type { IAuthenticatedSocket } from '../ChatContext.js';
 import type { ConversationService } from '../../../application/services/ConversationService.js';
+import type { AuthService } from '../../../application/services/AuthService.js';
 import type { Conversation } from '../../../domain/entities/Conversation.js';
 import type { IVisionContentBuilder } from '../../../application/interfaces/IVisionContentBuilder.js';
 
@@ -89,7 +90,8 @@ export class ConnectionHandler {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly jwtSecret: string,
-    private readonly visionContentBuilder?: IVisionContentBuilder
+    private readonly visionContentBuilder?: IVisionContentBuilder,
+    private readonly authService?: AuthService
   ) {}
 
   /**
@@ -122,6 +124,11 @@ export class ConnectionHandler {
       try {
         // Verify and decode JWT
         const decoded = jwt.verify(token, this.jwtSecret) as JWTPayload;
+
+        // Validate user still exists in DB (prevents deleted users from connecting)
+        if (this.authService) {
+          await this.authService.validateToken(token);
+        }
 
         // Augment socket with user information
         socket.userId = decoded.userId;
