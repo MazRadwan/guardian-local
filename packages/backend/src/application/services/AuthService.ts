@@ -24,13 +24,20 @@ export interface AuthResult {
 
 export class AuthService {
   private readonly saltRounds = 10
-  /** In-memory revoked token set (cleared on restart). For production, use Redis. */
-  private readonly revokedTokens = new Set<string>()
+  /** In-memory revoked token map with expiry (cleared on restart). For production, use Redis. */
+  private readonly revokedTokens = new Map<string, number>()
+  /** Cleanup interval handle for TTL-based eviction */
+  private readonly cleanupInterval: ReturnType<typeof setInterval>
 
   constructor(
     private readonly userRepository: IUserRepository,
     private readonly tokenProvider: ITokenProvider
-  ) {}
+  ) {
+    // Evict expired revoked tokens every 5 minutes
+    this.cleanupInterval = setInterval(() => this.evictExpiredTokens(), 5 * 60_000);
+    // Allow process to exit without waiting for this timer
+    if (this.cleanupInterval.unref) this.cleanupInterval.unref();
+  }
 
   /**
    * Register new user
@@ -142,7 +149,7 @@ export class AuthService {
    */
   async validateToken(token: string): Promise<User> {
     // Check revocation list before expensive DB lookup
-    if (this.revokedTokens.has(token)) {
+    if (this.isTokenRevoked(token)) {
       throw new Error('Token has been revoked')
     }
 
@@ -159,17 +166,34 @@ export class AuthService {
   }
 
   /**
-   * Revoke a token (add to blacklist until it expires naturally)
+   * Revoke a token (add to blacklist with TTL matching JWT expiry, default 24h)
    */
   revokeToken(token: string): void {
-    this.revokedTokens.add(token)
+    const ttlMs = 24 * 60 * 60_000; // 24 hours
+    this.revokedTokens.set(token, Date.now() + ttlMs)
   }
 
   /**
-   * Check if a token has been revoked
+   * Check if a token has been revoked (and not yet expired from the map)
    */
   isTokenRevoked(token: string): boolean {
-    return this.revokedTokens.has(token)
+    const expiresAt = this.revokedTokens.get(token)
+    if (!expiresAt) return false
+    if (Date.now() > expiresAt) {
+      this.revokedTokens.delete(token)
+      return false
+    }
+    return true
+  }
+
+  /**
+   * Evict expired entries from revoked tokens map (called by interval timer)
+   */
+  private evictExpiredTokens(): void {
+    const now = Date.now()
+    for (const [token, expiresAt] of this.revokedTokens) {
+      if (now > expiresAt) this.revokedTokens.delete(token)
+    }
   }
 
   /**
