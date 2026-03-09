@@ -94,6 +94,12 @@ import type { IJinaClient } from './application/interfaces/IJinaClient.js';
 export const PORT = parseInt(process.env.PORT || '8000', 10);
 export const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
 export const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-here';
+if (JWT_SECRET === 'your-jwt-secret-here') {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be set in production. Do not use the default fallback.');
+  }
+  console.warn('[Security] WARNING: Using default JWT_SECRET. Set JWT_SECRET in .env for production.');
+}
 const PROMPT_CACHE_ENABLED = process.env.CLAUDE_PROMPT_CACHE === 'true';
 const PROMPT_CACHE_PREFIX = process.env.CLAUDE_PROMPT_CACHE_PREFIX || 'guardian';
 
