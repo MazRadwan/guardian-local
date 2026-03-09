@@ -64,7 +64,7 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
 
     // Safe to parse success response
     const data = await response.json();
-    return data;
+    return data.data; // Extract from { success: true, data: { token, user } }
   } catch (error) {
     if (error instanceof AuthAPIError) {
       throw error;
@@ -108,7 +108,7 @@ export async function register(data: RegisterData): Promise<AuthResponse> {
 
     // Safe to parse success response
     const responseData = await response.json();
-    return responseData;
+    return responseData.data; // Extract from { success: true, data: { token, user } }
   } catch (error) {
     if (error instanceof AuthAPIError) {
       throw error;
