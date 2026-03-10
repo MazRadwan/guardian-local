@@ -640,6 +640,10 @@ Do NOT search for unrelated topics (food, entertainment, sports, etc.). Politely
 
 Call format: {"query": "your search terms"}
 
+BEFORE every search, ALWAYS write a brief announcement on its own line:
+*Searching for [topic]...*
+This text MUST appear before the tool call. NEVER call web_search without announcing first.
+
 After receiving search results:
 1. Base your answer on the results, NOT your training data
 2. Cite sources inline
