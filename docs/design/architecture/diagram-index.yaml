@@ -1,7 +1,7 @@
 # Diagram Index - Auto-maintained by diagram-updater-agent
 # This file tracks all architecture diagrams and their validation status
 
-last_processed_commit: "aa1354f"
+last_processed_commit: "fd9c92f"
 last_updated: "2026-03-10"
 
 diagrams:
@@ -70,3 +70,8 @@ diagrams:
       Scoring disconnect resilience (nsp room broadcasts).
       ServerEvents updated with scoring_started/progress/complete/error and
       vendor_clarification_needed. ClientEvents updated with vendor_selected.
+      Assessment UI update: AssessmentTypeSelector component replaces server-emitted
+      assessment guidance text. ModeSwitchHandler no longer emits ASSESSMENT_GUIDANCE
+      for assessment mode. Assessment prompts updated to reference UI selector.
+      chatStore no longer persists activeConversationId (security fix).
+      Search announcement instruction added to consult mode prompt.

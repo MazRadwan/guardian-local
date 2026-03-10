@@ -3,6 +3,10 @@
 # Used by diagram-updater-agent
 #
 # VALIDATED: 2026-03-10 - Paths verified against actual codebase
+# UPDATED: 2026-03-10 - Assessment UI: AssessmentTypeSelector added to not_in_diagram,
+#   ModeSwitchHandler no longer emits assessment guidance, chatStore localStorage fix,
+#   Added previously untracked components (ConfidenceBadge, ISOAlignmentSection,
+#   TitleLoadingCleanup, TypingWelcome) and hook (useStreamingText) to not_in_diagram.
 # UPDATED: 2026-03-10 - Auth hardening, local model support, search guardrails:
 #   Added SearchGuardrails (topic scope + injection defense for WebSearchToolService),
 #   Updated ServerEvents (scoring_started/progress/complete/error, vendor_clarification_needed),
@@ -265,6 +269,7 @@ nodes:
     exports: ["ModeSwitchHandler"]
     validation_strategy: export
     status: EXISTS
+    note: "Assessment guidance suppressed - frontend renders AssessmentTypeSelector inline. Only scoring guidance emitted."
 
   QuestionnaireHandler:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/QuestionnaireHandler.ts"]
@@ -854,8 +859,10 @@ not_in_diagram:
     - useMultiFileUpload: "apps/web/src/hooks/useMultiFileUpload.ts"
     - useUserAssessments: "apps/web/src/hooks/useUserAssessments.ts"
     - useDelayedLoading: "apps/web/src/hooks/useDelayedLoading.ts"
+    - useStreamingText: "apps/web/src/hooks/useStreamingText.ts"
 
   components:
+    - AssessmentTypeSelector: "apps/web/src/components/chat/AssessmentTypeSelector.tsx"
     - ScoringWarnings: "apps/web/src/components/chat/ScoringWarnings.tsx"
     - ScoringWelcome: "apps/web/src/components/chat/ScoringWelcome.tsx"
     - VendorClarificationCard: "apps/web/src/components/chat/VendorClarificationCard.tsx"
@@ -869,6 +876,10 @@ not_in_diagram:
     - RotatingStatus: "apps/web/src/components/chat/RotatingStatus.tsx"
     - SkeletonMessage: "apps/web/src/components/chat/SkeletonMessage.tsx"
     - LinkBadge: "apps/web/src/components/chat/LinkBadge.tsx"
+    - ConfidenceBadge: "apps/web/src/components/chat/ConfidenceBadge.tsx"
+    - ISOAlignmentSection: "apps/web/src/components/chat/ISOAlignmentSection.tsx"
+    - TitleLoadingCleanup: "apps/web/src/components/chat/TitleLoadingCleanup.tsx"
+    - TypingWelcome: "apps/web/src/components/chat/TypingWelcome.tsx"
     - HoverCard: "apps/web/src/components/ui/hover-card.tsx"
 
   repositories:
