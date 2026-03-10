@@ -58,7 +58,7 @@ export function AssessmentTypeSelector({
     <div
       data-testid="assessment-type-selector"
       className={cn(
-        'bg-slate-50 rounded-2xl rounded-tl-sm p-5 max-w-md border border-slate-100',
+        'bg-slate-50 rounded-2xl rounded-tl-sm p-5 max-w-md border border-slate-100 animate-fade-in',
         className
       )}
     >

@@ -103,10 +103,10 @@ export function ChatInterface() {
   // Assessment type selector: track whether user has made a selection this session
   const [assessmentTypeSelected, setAssessmentTypeSelected] = useState(false);
 
-  // Reset assessment type selection state when conversation changes
+  // Reset assessment type selection state when conversation or mode changes
   useEffect(() => {
     setAssessmentTypeSelected(false);
-  }, [activeConversationId]);
+  }, [activeConversationId, mode]);
 
   // Determine whether to show the assessment type selector:
   // - Mode is 'assessment'
