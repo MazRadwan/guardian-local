@@ -34,6 +34,17 @@ jest.mock('../ScoringResultCard', () => ({
   ),
 }));
 
+// Mock AssessmentTypeSelector
+jest.mock('../AssessmentTypeSelector', () => ({
+  AssessmentTypeSelector: ({ onSelect }: { onSelect: (value: string) => void }) => (
+    <div data-testid="assessment-type-selector">
+      <button data-testid="assessment-option-1" onClick={() => onSelect('1')}>Quick</button>
+      <button data-testid="assessment-option-2" onClick={() => onSelect('2')}>Comprehensive</button>
+      <button data-testid="assessment-option-3" onClick={() => onSelect('3')}>Category-Focused</button>
+    </div>
+  ),
+}));
+
 // Mock IntersectionObserver
 let mockIntersectionObserverCallback: IntersectionObserverCallback;
 const mockObserve = jest.fn();
@@ -989,6 +1000,49 @@ describe('MessageList', () => {
       );
 
       expect(screen.queryByTestId('scoring-progress')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Assessment Type Selector', () => {
+    const systemMessages: ChatMessageType[] = [
+      {
+        role: 'system',
+        content: 'Switched to assessment mode',
+        timestamp: new Date('2025-01-15T10:00:00'),
+      },
+    ];
+
+    it('renders assessment type selector when prop is provided', () => {
+      const mockOnSelect = jest.fn();
+      render(
+        <MessageList
+          messages={systemMessages}
+          assessmentTypeSelector={{ onSelect: mockOnSelect }}
+        />
+      );
+
+      expect(screen.getByTestId('assessment-type-selector-container')).toBeInTheDocument();
+      expect(screen.getByTestId('assessment-type-selector')).toBeInTheDocument();
+    });
+
+    it('does not render assessment type selector when prop is undefined', () => {
+      render(<MessageList messages={systemMessages} />);
+
+      expect(screen.queryByTestId('assessment-type-selector-container')).not.toBeInTheDocument();
+    });
+
+    it('calls onSelect when an assessment option is clicked', () => {
+      const mockOnSelect = jest.fn();
+      render(
+        <MessageList
+          messages={systemMessages}
+          assessmentTypeSelector={{ onSelect: mockOnSelect }}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('assessment-option-2'));
+
+      expect(mockOnSelect).toHaveBeenCalledWith('2');
     });
   });
 });

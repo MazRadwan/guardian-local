@@ -27,7 +27,6 @@ import {
   type SwitchModePayload,
   type ModeSwitchedPayload,
   type ChatMode,
-  ASSESSMENT_GUIDANCE,
   SCORING_GUIDANCE,
 } from '../../../../../src/infrastructure/websocket/handlers/ModeSwitchHandler.js';
 import type { IAuthenticatedSocket } from '../../../../../src/infrastructure/websocket/ChatContext.js';
@@ -759,70 +758,31 @@ describe('ModeSwitchHandler', () => {
    * Story 28.6.2: Guidance messages tests
    */
   describe('guidance messages', () => {
-    describe('assessment mode guidance', () => {
-      it('should persist guidance message for assessment mode', async () => {
-        const conversation = createMockConversation({
-          id: 'conv-1',
-          userId: 'user-123',
-          mode: 'consult', // Switching from consult
-        });
-
-        const guidanceMessage = createMockMessage(ASSESSMENT_GUIDANCE, 'conv-1');
-
-        mockConversationService.getConversation.mockResolvedValue(conversation);
-        mockConversationService.switchMode.mockResolvedValue();
-        mockConversationService.sendMessage.mockResolvedValue(guidanceMessage);
-
-        await handler.handleSwitchMode(mockSocket, {
-          conversationId: 'conv-1',
-          mode: 'assessment',
-        });
-
-        // Should persist guidance as assistant message
-        expect(mockConversationService.sendMessage).toHaveBeenCalledWith({
-          conversationId: 'conv-1',
-          role: 'assistant',
-          content: { text: ASSESSMENT_GUIDANCE },
-        });
-      });
-
-      it('should emit guidance via message event for assessment mode', async () => {
+    describe('assessment mode guidance (suppressed — UI handles via AssessmentTypeSelector)', () => {
+      it('should NOT send guidance message for assessment mode', async () => {
         const conversation = createMockConversation({
           id: 'conv-1',
           userId: 'user-123',
           mode: 'consult',
         });
 
-        const guidanceMessage = createMockMessage(ASSESSMENT_GUIDANCE, 'conv-1');
-
         mockConversationService.getConversation.mockResolvedValue(conversation);
         mockConversationService.switchMode.mockResolvedValue();
-        mockConversationService.sendMessage.mockResolvedValue(guidanceMessage);
 
         await handler.handleSwitchMode(mockSocket, {
           conversationId: 'conv-1',
           mode: 'assessment',
         });
 
-        // Should emit via 'message' event (NOT separate guidance event)
-        expect(mockSocket.emit).toHaveBeenCalledWith('message', {
-          id: guidanceMessage.id,
-          conversationId: guidanceMessage.conversationId,
-          role: guidanceMessage.role,
-          content: guidanceMessage.content,
-          createdAt: guidanceMessage.createdAt,
-        });
+        // Guidance suppressed — frontend renders AssessmentTypeSelector inline
+        expect(mockConversationService.sendMessage).not.toHaveBeenCalled();
+        const messageCall = mockSocket.emit.mock.calls.find(
+          (call) => call[0] === 'message'
+        );
+        expect(messageCall).toBeUndefined();
       });
 
-      it('should contain assessment options in guidance text', () => {
-        expect(ASSESSMENT_GUIDANCE).toContain('Assessment Mode Activated');
-        expect(ASSESSMENT_GUIDANCE).toContain('Quick Assessment');
-        expect(ASSESSMENT_GUIDANCE).toContain('Comprehensive Assessment');
-        expect(ASSESSMENT_GUIDANCE).toContain('Category-Focused Assessment');
-        expect(ASSESSMENT_GUIDANCE).toContain('1');
-        expect(ASSESSMENT_GUIDANCE).toContain('2');
-        expect(ASSESSMENT_GUIDANCE).toContain('3');
-      });
+      // ASSESSMENT_GUIDANCE constant is deprecated — UI renders AssessmentTypeSelector instead
     });
 
     describe('scoring mode guidance', () => {
@@ -999,14 +959,14 @@ describe('ModeSwitchHandler', () => {
     });
 
     describe('guidance message format', () => {
-      it('should emit guidance with correct message structure', async () => {
+      it('should emit scoring guidance with correct message structure', async () => {
         const conversation = createMockConversation({
           id: 'conv-1',
           userId: 'user-123',
           mode: 'consult',
         });
 
-        const guidanceMessage = createMockMessage(ASSESSMENT_GUIDANCE, 'conv-1');
+        const guidanceMessage = createMockMessage(SCORING_GUIDANCE, 'conv-1');
 
         mockConversationService.getConversation.mockResolvedValue(conversation);
         mockConversationService.switchMode.mockResolvedValue();
@@ -1014,7 +974,7 @@ describe('ModeSwitchHandler', () => {
 
         await handler.handleSwitchMode(mockSocket, {
           conversationId: 'conv-1',
-          mode: 'assessment',
+          mode: 'scoring',
         });
 
         // Verify message structure has all required fields

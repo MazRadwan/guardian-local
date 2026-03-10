@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageList } from './MessageList';
 import { Composer } from './Composer';
 import { ScoringResultCard } from './ScoringResultCard';
 import { TypingWelcome } from './TypingWelcome';
+import { AssessmentTypeSelector } from './AssessmentTypeSelector';
 import { AlertCircle, Shield } from 'lucide-react';
 import { useChatController } from '@/hooks/useChatController';
 import { useChatStore } from '@/stores/chatStore';
@@ -98,6 +99,29 @@ export function ChatInterface() {
 
   // Epic 32.2.3: Reconnection state
   const isReconnecting = useChatStore((state) => state.isReconnecting);
+
+  // Assessment type selector: track whether user has made a selection this session
+  const [assessmentTypeSelected, setAssessmentTypeSelected] = useState(false);
+
+  // Reset assessment type selection state when conversation changes
+  useEffect(() => {
+    setAssessmentTypeSelected(false);
+  }, [activeConversationId]);
+
+  // Determine whether to show the assessment type selector:
+  // - Mode is 'assessment'
+  // - Selector hasn't been used yet in this session (user clicked Start Assessment)
+  const showAssessmentTypeSelector =
+    mode === 'assessment' && !assessmentTypeSelected;
+
+  // Handler for assessment type selection
+  const handleAssessmentTypeSelect = useCallback(
+    (value: string) => {
+      setAssessmentTypeSelected(true);
+      handleSendMessage(value);
+    },
+    [handleSendMessage]
+  );
 
   // Get export data for active conversation
   const exportData = activeConversationId
@@ -452,11 +476,18 @@ export function ChatInterface() {
       {/* Empty state content (centered) - shown only when no messages */}
       {messages.length === 0 && !showDelayedLoading && (
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col items-center justify-center px-4">
-          {/* Welcome message - hidden when scoring result is present */}
-          {!(scoringResult && scoringResult.assessmentId) && (
+          {/* Welcome message - hidden when scoring result is present or assessment selector showing */}
+          {!(scoringResult && scoringResult.assessmentId) && !showAssessmentTypeSelector && (
             <div className="text-center mb-8">
               <h1 className="text-2xl font-semibold bg-gradient-to-r from-sky-700 via-sky-500 to-sky-700 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer mb-2">Welcome to Guardian</h1>
               <TypingWelcome className="bg-gradient-to-r from-sky-600 via-sky-400 to-sky-600 bg-[length:200%_100%] bg-clip-text text-transparent animate-shimmer" />
+            </div>
+          )}
+
+          {/* Assessment type selector - empty state (no messages yet) */}
+          {showAssessmentTypeSelector && (
+            <div className="w-full max-w-md mb-8">
+              <AssessmentTypeSelector onSelect={handleAssessmentTypeSelect} />
             </div>
           )}
 
@@ -514,6 +545,11 @@ export function ChatInterface() {
                   }
                 : undefined
             }
+            assessmentTypeSelector={
+              showAssessmentTypeSelector
+                ? { onSelect: handleAssessmentTypeSelect }
+                : undefined
+            }
           />
         </div>
       )}
@@ -531,7 +567,8 @@ export function ChatInterface() {
           <Composer
             ref={composerRef}
             onSendMessage={handleSendMessage}
-            disabled={!isConnected || isLoading || isStreaming}
+            disabled={!isConnected || isLoading || isStreaming || showAssessmentTypeSelector}
+            placeholder={showAssessmentTypeSelector ? 'Select an assessment type above to begin...' : undefined}
             currentMode={mode}
             onModeChange={handleModeChange}
             modeChangeDisabled={isChanging || !isConnected}

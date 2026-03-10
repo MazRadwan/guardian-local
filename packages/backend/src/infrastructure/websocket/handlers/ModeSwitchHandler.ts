@@ -32,10 +32,10 @@ export type ChatMode = ConversationMode;
 const VALID_MODES: ChatMode[] = ['consult', 'assessment', 'scoring'];
 
 /**
- * Story 28.6.2: Guidance message for assessment mode
- * Provides options for assessment approach selection
+ * Story 28.6.2: Assessment guidance text (DEPRECATED — UI renders AssessmentTypeSelector instead)
+ * Kept for test reference only. Not emitted at runtime.
  */
-export const ASSESSMENT_GUIDANCE = `
+const ASSESSMENT_GUIDANCE = `
 **Assessment Mode Activated**
 
 Please select your assessment approach (reply with 1, 2, or 3):
@@ -250,9 +250,8 @@ export class ModeSwitchHandler {
   ): Promise<void> {
     let guidanceText: string | null = null;
 
-    if (mode === 'assessment') {
-      guidanceText = ASSESSMENT_GUIDANCE;
-    } else if (mode === 'scoring') {
+    // Assessment guidance suppressed — frontend renders AssessmentTypeSelector component inline
+    if (mode === 'scoring') {
       guidanceText = SCORING_GUIDANCE;
     }
 

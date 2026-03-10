@@ -8,6 +8,7 @@ import { ScoringResultCard } from './ScoringResultCard';
 import { ProgressMessage } from './ProgressMessage';
 import { VendorClarificationCard } from './VendorClarificationCard';
 import { TypingWelcome } from './TypingWelcome';
+import { AssessmentTypeSelector } from './AssessmentTypeSelector';
 import { ChatMessage as ChatMessageType, QuestionnaireReadyPayload, VendorClarificationNeededPayload } from '@/lib/websocket';
 import { ChevronDown, ShieldCheck } from 'lucide-react';
 import type { Step } from '@/types/stepper';
@@ -57,6 +58,10 @@ export interface MessageListProps {
     payload: VendorClarificationNeededPayload;
     onSelectVendor: (vendorName: string) => void;
   };
+  /** Assessment type selector: shown inline when assessment mode is active and no user messages */
+  assessmentTypeSelector?: {
+    onSelect: (value: string) => void;
+  };
 }
 
 /**
@@ -74,7 +79,7 @@ function getIndicatorText(toolStatus: ToolStatus): string {
 }
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
-  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire, scoringResult, scoringProgress, vendorClarification }, ref) {
+  function MessageList({ messages, isLoading, isStreaming, onRegenerate, regeneratingMessageIndex, onDownloadAttachment, questionnaire, scoringResult, scoringProgress, vendorClarification, assessmentTypeSelector }, ref) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const bottomRef = useRef<HTMLDivElement>(null);
     const [showScrollButton, setShowScrollButton] = useState(false);
@@ -285,6 +290,18 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                 progress={questionnaire.progress}
                 isReconnecting={questionnaire.isReconnecting}
               />
+            )}
+
+            {/* Assessment type selector: inline in message list when assessment mode, no user messages */}
+            {assessmentTypeSelector && (
+              <div className="py-4" data-testid="assessment-type-selector-container">
+                <div className="flex gap-3">
+                  <div className="flex w-10 h-10 shrink-0 items-center justify-center rounded-full bg-sky-500">
+                    <ShieldCheck className="h-5 w-5 text-white" />
+                  </div>
+                  <AssessmentTypeSelector onSelect={assessmentTypeSelector.onSelect} />
+                </div>
+              </div>
             )}
 
             {/* Story 33.3.3: Show indicator when isLoading OR tool is active */}
