@@ -2,7 +2,12 @@
 # Maps diagram nodes to actual code paths for validation
 # Used by diagram-updater-agent
 #
-# VALIDATED: 2026-02-26 - Paths verified against actual codebase
+# VALIDATED: 2026-03-10 - Paths verified against actual codebase
+# UPDATED: 2026-03-10 - Auth hardening, local model support, search guardrails:
+#   Added SearchGuardrails (topic scope + injection defense for WebSearchToolService),
+#   Updated ServerEvents (scoring_started/progress/complete/error, vendor_clarification_needed),
+#   Updated ClientEvents (vendor_selected), ScoringHandler disconnect resilience (nsp room emit),
+#   AuthService TTL cleanup + token revocation, role middleware on write operations
 # UPDATED: 2026-02-26 - Epic 37/38/39/40: ISO compliance domain + tables + repos,
 #   ScoringService decomposition (ScoringLLMService, ScoringStorageService,
 #   ScoringQueryService, ScoringRetryService, ScoringMetricsCollector),
@@ -14,7 +19,7 @@
 # UPDATED: 2026-02-09 - Epic 33/34/35/36: MessageHandler decomposition, web search, tool loop, title extraction
 
 diagram: architecture-latest.mmd
-last_verified: "2026-02-26"
+last_verified: "2026-03-10"
 
 # Subgraph to directory mappings
 subgraphs:
@@ -207,13 +212,13 @@ nodes:
     paths: ["apps/web/src/lib/websocket.ts"]
     validation_strategy: pattern
     status: EXISTS
-    note: "Event names defined inline, not separate type"
+    note: "Event names defined inline, not separate type. Includes vendor_selected for scoring pipeline."
 
   ServerEvents:
     paths: ["packages/backend/src/infrastructure/websocket/ChatServer.ts"]
     validation_strategy: pattern
     status: EXISTS
-    note: "Event emissions defined in ChatServer and handler services"
+    note: "Event emissions defined in ChatServer and handler services. Includes scoring events (scoring_started/progress/complete/error) and vendor_clarification_needed. Scoring events use nsp room broadcast for disconnect resilience."
 
   # === Backend Layer ===
   ChatServer:
@@ -273,14 +278,14 @@ nodes:
     exports: ["ScoringHandler"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 39: Delegates post-processing to ScoringPostProcessor. Uses ExtractionRoutingService for regex vs Claude extraction routing."
+    note: "Epic 39: Delegates post-processing to ScoringPostProcessor. Uses ExtractionRoutingService for regex vs Claude extraction routing. Emits scoring_started/scoring_error to user rooms via socket.nsp.to() for disconnect resilience. Handles vendor_selected event."
 
   ScoringPostProcessor:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ScoringPostProcessor.ts"]
     exports: ["ScoringPostProcessor"]
     validation_strategy: export
     status: EXISTS
-    note: "Epic 39: Extracted from ScoringHandler. Handles narrative generation, title update, and export-ready notification after scoring completes."
+    note: "Epic 39: Extracted from ScoringHandler. Handles narrative generation, title update, and export-ready notification after scoring completes. Emits scoring_complete/scoring_error to user rooms via socket.nsp.to() for disconnect resilience."
 
   ModeRouter:
     paths: ["packages/backend/src/infrastructure/websocket/handlers/ModeRouter.ts"]
@@ -394,6 +399,7 @@ nodes:
     exports: ["AuthService"]
     validation_strategy: export
     status: EXISTS
+    note: "Auth hardening: server-side logout with token revocation, TTL-based eviction for revoked token store, env-gated registration domain restriction, destroy() for cleanup interval teardown."
 
   ConversationService:
     paths: ["packages/backend/src/application/services/ConversationService.ts"]
@@ -497,6 +503,13 @@ nodes:
     exports: ["WebSearchToolService"]
     validation_strategy: export
     status: EXISTS
+
+  SearchGuardrails:
+    paths: ["packages/backend/src/application/services/SearchGuardrails.ts"]
+    exports: ["enforceTopicScope", "stripInjectionPatterns", "sanitizeResultContent"]
+    validation_strategy: export
+    status: EXISTS
+    note: "Security guardrails for web search tool. Topic scope enforcement, prompt injection stripping, result content sanitization. Imported by WebSearchToolService."
 
   # === Domain Layer - Entities ===
   User:

@@ -1,8 +1,8 @@
 # Diagram Index - Auto-maintained by diagram-updater-agent
 # This file tracks all architecture diagrams and their validation status
 
-last_processed_commit: "5f668ef"
-last_updated: "2026-02-26"
+last_processed_commit: "aa1354f"
+last_updated: "2026-03-10"
 
 diagrams:
   - id: architecture-latest
@@ -26,6 +26,9 @@ diagrams:
       - message-pipeline
       - scoring
       - iso-compliance
+      - auth-hardening
+      - search-guardrails
+      - local-model
     description: |
       Comprehensive flowchart showing Guardian's layered architecture:
       Presentation (Next.js/React) -> Hooks/State -> WebSocket -> Backend -> Services -> Domain -> Data
@@ -60,3 +63,10 @@ diagrams:
       dimension weights per solution type and two-tier disqualifying factors.
       Demoted sub-score sum, composite deviation, recommendation coherence from
       structural violations to warnings in ScoringPayloadValidator.
+      Auth hardening update: Token revocation, TTL cleanup, role guards,
+      IP rate limiting, WebSocket auth DB validation.
+      Local model update: SearchGuardrails added to WebSearchToolService pipeline
+      (topic scope enforcement, injection pattern stripping, result sanitization).
+      Scoring disconnect resilience (nsp room broadcasts).
+      ServerEvents updated with scoring_started/progress/complete/error and
+      vendor_clarification_needed. ClientEvents updated with vendor_selected.

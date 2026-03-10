@@ -29,8 +29,8 @@ flowchart TB
 
   subgraph WebSocket["WebSocket Layer (Socket.IO /chat)"]
     WSClient["WebSocketClient"]
-    ClientEvents["Client emits:\nsend_message / start_new_conversation / switch_mode /\nget_history / get_conversations / delete_conversation /\nabort_stream / generate_questionnaire / get_export_status"]
-    ServerEvents["Server emits:\nmessage / assistant_token / assistant_done / generation_phase\nconnection_ready / history\nconversations_list / conversation_created\nconversation_title_updated / conversation_deleted\nconversation_mode_updated / stream_aborted\nquestionnaire_ready (with insert_index)\nexport_ready / export_status / export_status_not_found /\nexport_status_error / extraction_failed\ntool_status (searching/reading/idle)"]
+    ClientEvents["Client emits:\nsend_message / start_new_conversation / switch_mode /\nget_history / get_conversations / delete_conversation /\nabort_stream / generate_questionnaire / get_export_status /\nvendor_selected"]
+    ServerEvents["Server emits:\nmessage / assistant_token / assistant_done / generation_phase\nconnection_ready / history\nconversations_list / conversation_created\nconversation_title_updated / conversation_deleted\nconversation_mode_updated / stream_aborted\nquestionnaire_ready (with insert_index)\nexport_ready / export_status / export_status_not_found /\nexport_status_error / extraction_failed\ntool_status (searching/reading/idle)\nscoring_started / scoring_progress / scoring_complete /\nscoring_error / vendor_clarification_needed"]
   end
 
   subgraph Backend["Backend (Express 5 + Socket.IO)"]
@@ -94,6 +94,7 @@ flowchart TB
     ScoringExportService["ScoringExportService"]
     ISOControlRetrievalService["ISOControlRetrievalService\n(ISO control lookups)"]
     WebSearchToolService["WebSearchToolService\n(Jina search + read)"]
+    SearchGuardrails["SearchGuardrails\n(topic scope + injection defense)"]
   end
 
   subgraph Domain["Domain Layer"]
@@ -236,7 +237,8 @@ flowchart TB
   %% ToolUseRegistry to WebSearchToolService
   ToolUseRegistry --> WebSearchToolService
 
-  %% WebSearchToolService to JinaClient
+  %% WebSearchToolService to SearchGuardrails and JinaClient
+  WebSearchToolService --> SearchGuardrails
   WebSearchToolService --> JinaClient
 
   %% JinaClient to External
