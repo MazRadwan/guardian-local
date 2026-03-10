@@ -1127,12 +1127,11 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'guardian-chat-store',
-      // Persist sidebar preferences and active conversation ID only
+      // Persist sidebar preferences only
+      // activeConversationId NOT persisted - prevents cross-user conversation access on shared browsers
       // Conversations are NOT persisted - always fetched from backend per user
       partialize: (state) => ({
         sidebarMinimized: state.sidebarMinimized,
-        activeConversationId: state.activeConversationId,
-        // conversations NOT persisted - prevents showing other users' conversations
       }),
     }
   )
